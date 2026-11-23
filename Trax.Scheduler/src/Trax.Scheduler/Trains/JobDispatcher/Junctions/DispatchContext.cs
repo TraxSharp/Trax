@@ -5,7 +5,7 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// <summary>
 /// Carries dispatch capacity information between junctions in the JobDispatcher train.
 /// </summary>
-internal record DispatchContext(
+internal sealed record DispatchContext(
     List<WorkQueue> Entries,
     int ActiveMetadataCount,
     Dictionary<long, int> GroupActiveCounts,

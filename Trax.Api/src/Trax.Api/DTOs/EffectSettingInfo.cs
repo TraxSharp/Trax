@@ -32,33 +32,3 @@ public record EffectSettingInfo(
     string? Value,
     string Hint
 );
-
-/// <summary>One setting to write with <c>operations.configureEffect</c>.</summary>
-/// <param name="Name">The setting's name, as <see cref="EffectSettingInfo.Name"/> gives it.</param>
-/// <param name="Value">
-/// The value as text, read as the setting's type: numbers in invariant culture, a date or time
-/// with no offset as UTC, a boolean as <c>true</c> or <c>false</c>, an enum by member name. Null
-/// or blank is no value for a setting that accepts null and the empty string for a text setting
-/// that does not.
-/// </param>
-public record EffectSettingValueInput(string Name, string? Value);
-
-/// <summary>What <c>operations.configureEffect</c> did. Nothing is written unless every value is accepted.</summary>
-/// <param name="Success">Whether the settings were written.</param>
-/// <param name="Count">How many settings were written; 0 on failure.</param>
-/// <param name="Message">One line for an operator.</param>
-/// <param name="Errors">
-/// Why each refused setting was refused. Empty on success, and on a failure that is not one
-/// setting's, such as an unknown effect.
-/// </param>
-public record ConfigureEffectResponse(
-    bool Success,
-    int Count,
-    string Message,
-    IReadOnlyList<EffectSettingError> Errors
-);
-
-/// <summary>A setting <c>operations.configureEffect</c> refused, and why.</summary>
-/// <param name="Field">The setting's name, as it was given.</param>
-/// <param name="Message">Why it was refused.</param>
-public record EffectSettingError(string Field, string Message);

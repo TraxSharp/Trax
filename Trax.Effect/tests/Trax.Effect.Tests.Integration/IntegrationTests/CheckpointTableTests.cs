@@ -24,7 +24,8 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_checkpoint_round_trips_with_its_defaults()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var run = await NewRun(context);
         context.Checkpoints.Add(
             Row(run, "Parallel#0/embedding/Checkpoint<Scores>#0", "Parallel#0/embedding")
@@ -47,13 +48,15 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_second_row_for_one_run_and_node_is_refused()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var run = await NewRun(context);
-        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", null));
+        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
         await context.SaveChanges(CancellationToken.None);
 
-        using var other = (IDataContext)DataContextFactory.Create();
-        other.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", null));
+        var other = (IDataContext)DataContextFactory.Create();
+        await using var otherDisposal = other.ConfigureAwait(false);
+        other.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
         var second = () => other.SaveChanges(CancellationToken.None);
 
         await second.Should().ThrowAsync<DbUpdateException>();
@@ -64,11 +67,12 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_runs_checkpoints_are_deleted_with_it()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var run = await NewRun(context);
         var kept = await NewRun(context);
-        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", null));
-        context.Checkpoints.Add(Row(kept, "Checkpoint<Scores>#0", null));
+        context.Checkpoints.Add(Row(run, "Checkpoint<Scores>#0", branchPath: null));
+        context.Checkpoints.Add(Row(kept, "Checkpoint<Scores>#0", branchPath: null));
         await context.SaveChanges(CancellationToken.None);
 
         await DeleteRun(context, run);
@@ -86,7 +90,8 @@ public class CheckpointTableTests : TestSetup
     [Test]
     public async Task A_second_queued_resume_of_one_run_is_refused()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var source = await NewRun(context);
         await context.Track(Resuming(source));
         await context.SaveChanges(CancellationToken.None);
@@ -103,7 +108,8 @@ public class CheckpointTableTests : TestSetup
     )]
     public async Task A_dispatched_resume_does_not_count_against_a_queued_one()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var source = await NewRun(context);
         var dispatched = Resuming(source);
         dispatched.Status = WorkQueueStatus.Dispatched;
@@ -117,7 +123,10 @@ public class CheckpointTableTests : TestSetup
 
     private static WorkQueue Resuming(long source)
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "Resume.Unique.Train" });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "Resume.Unique.Train" },
+            TestTime.Clock
+        );
         entry.ResumeFrom = source;
         entry.ResumeAt = "Checkpoint<Scores>#0";
         return entry;
@@ -133,7 +142,7 @@ public class CheckpointTableTests : TestSetup
             State = """{"score": 3}""",
             ChainHash = new string('a', 64),
             StateFingerprint = "fp",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = TestTime.UtcDateTime,
         };
 
     private static async Task<long> NewRun(IDataContext context)
@@ -144,10 +153,11 @@ public class CheckpointTableTests : TestSetup
                 Name = "Checkpoint.Table.Train",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         context.Metadatas.Add(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
 

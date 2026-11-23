@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
 
@@ -12,7 +13,7 @@ namespace Trax.Client;
 /// the whole answer, and that value is written back as the name it was read from. <see cref="TraxEnum.IsUnknown"/> tells
 /// one apart.
 /// </summary>
-/// <remarks>Generated enums are <c>int</c> enums; one of another size is refused when the converter is first used.</remarks>
+/// <remarks>Generated enums are <see langword="int"/> enums; one of another size is refused when the converter is first used.</remarks>
 public sealed class TraxEnumConverter<
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] TEnum
 > : JsonConverter<TEnum>
@@ -33,7 +34,7 @@ public sealed class TraxEnumConverter<
         var lowest = 0;
         foreach (var field in typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static))
         {
-            var value = (TEnum)field.GetValue(null)!;
+            var value = (TEnum)field.GetValue(null).NotNull();
             var name =
                 field.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name ?? field.Name;
             ByName[name] = value;
@@ -52,7 +53,7 @@ public sealed class TraxEnumConverter<
     {
         if (reader.TokenType != JsonTokenType.String)
             throw new JsonException($"A {typeof(TEnum).Name} is written as a string.");
-        var name = reader.GetString()!;
+        var name = reader.GetString().NotNull();
         lock (Gate)
         {
             if (ByName.TryGetValue(name, out var value))
@@ -79,15 +80,4 @@ public sealed class TraxEnumConverter<
             name ?? throw new JsonException($"{value} is not a value of {typeof(TEnum).Name}.")
         );
     }
-}
-
-/// <summary>What a generated enum holds when the host sent a value it does not have.</summary>
-public static class TraxEnum
-{
-    /// <summary>
-    /// Whether <paramref name="value"/> is none of the enum's members: a name the host sent that this client's enum
-    /// lacks, read by <see cref="TraxEnumConverter{TEnum}"/>.
-    /// </summary>
-    public static bool IsUnknown<TEnum>(TEnum value)
-        where TEnum : struct, Enum => !Enum.IsDefined(value);
 }

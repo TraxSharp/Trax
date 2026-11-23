@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.E2E.Factories;
 
 // In the assembly root namespace so this [SetUpFixture] covers every test namespace.
@@ -10,7 +11,11 @@ namespace Trax.Samples.Auth.E2E;
 [SetUpFixture]
 public class SharedAuthSetup
 {
-    public static AuthApiFactory Factory { get; private set; } = null!;
+    public static AuthApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
     [OneTimeSetUp]
     public void OneTimeSetUp()

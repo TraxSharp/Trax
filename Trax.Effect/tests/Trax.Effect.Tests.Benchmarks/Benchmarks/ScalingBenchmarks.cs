@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Tests.Benchmarks.Serial;
 using Trax.Effect.Tests.Benchmarks.Trains;
@@ -14,7 +15,7 @@ namespace Trax.Effect.Tests.Benchmarks.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
 public class ScalingBenchmarks
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [Params(1, 3, 5, 10)]
     public int JunctionCount { get; set; }
@@ -32,7 +33,7 @@ public class ScalingBenchmarks
     }
 
     [GlobalCleanup]
-    public void Cleanup() => _provider.Dispose();
+    public void Cleanup() => _provider?.Dispose();
 
     [Benchmark(Baseline = true, Description = "Serial")]
     public Task<int> Serial() => SerialOperations.AddNSerial(0, JunctionCount);
@@ -45,20 +46,33 @@ public class ScalingBenchmarks
             3 => new AddOneX3Train().Run(0),
             5 => new AddOneX5Train().Run(0),
             10 => new AddOneX10Train().Run(0),
-            _ => throw new ArgumentOutOfRangeException(),
+            _ => throw new System.Diagnostics.UnreachableException(),
         };
 
     [Benchmark(Description = "EffectTrain_NoEffects")]
     public async Task<int> EffectTrain_NoEffects()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return JunctionCount switch
         {
-            1 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX1Train>().Run(0),
-            3 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX3Train>().Run(0),
-            5 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX5Train>().Run(0),
-            10 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX10Train>().Run(0),
-            _ => throw new ArgumentOutOfRangeException(),
+            1 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX1Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            3 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX3Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            5 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX5Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            10 => await scope
+                .ServiceProvider.GetRequiredService<IEffectAddOneX10Train>()
+                .Run(0)
+                .ConfigureAwait(false),
+            _ => throw new System.Diagnostics.UnreachableException(),
         };
     }
 }

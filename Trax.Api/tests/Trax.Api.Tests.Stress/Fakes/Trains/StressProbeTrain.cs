@@ -13,10 +13,3 @@ public class StressProbeTrain : ServiceTrain<StressProbeInput, Unit>, IStressPro
 {
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
-
-public record StressProbeInput : IManifestProperties
-{
-    public string Value { get; set; } = string.Empty;
-}
-
-public interface IStressProbeTrain : IServiceTrain<StressProbeInput, Unit> { }

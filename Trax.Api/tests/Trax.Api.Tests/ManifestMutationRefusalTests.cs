@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
@@ -32,9 +33,9 @@ public class ManifestMutationRefusalTests
 {
     private const string KnownId = "known-job";
 
-    private ITraxScheduler _scheduler = null!;
-    private ServiceProvider _provider = null!;
-    private IRequestExecutor _executor = null!;
+    private ITraxScheduler? _scheduler;
+    private ServiceProvider? _provider;
+    private IRequestExecutor? _executor;
 
     [SetUp]
     public async Task SetUp()
@@ -51,30 +52,7 @@ public class ManifestMutationRefusalTests
         }
 
         var discovery = Substitute.For<ITrainDiscoveryService>();
-        discovery
-            .DiscoverTrains()
-            .Returns([
-                new TrainRegistration
-                {
-                    ServiceType = typeof(IRefusalTrain),
-                    ImplementationType = typeof(RefusalTrain),
-                    InputType = typeof(RefusalInput),
-                    OutputType = typeof(Unit),
-                    Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = nameof(IRefusalTrain),
-                    ImplementationTypeName = nameof(RefusalTrain),
-                    HasAllowAnonymousAttribute = true,
-                    InputTypeName = nameof(RefusalInput),
-                    OutputTypeName = nameof(Unit),
-                    RequiredPolicies = [],
-                    RequiredRoles = [],
-                    IsQuery = false,
-                    IsMutation = true,
-                    IsRemote = false,
-                    IsBroadcastEnabled = false,
-                    GraphQLOperations = GraphQLOperation.Run,
-                },
-            ]);
+        discovery.DiscoverTrains().Returns([RefusalTrainRegistration()]);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -91,7 +69,7 @@ public class ManifestMutationRefusalTests
                     .AllowAnonymousOperations()
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
-        services.AddScoped(_ => _scheduler);
+        services.AddScoped(_ => _scheduler.NotNull());
         // The triggers go through the shared operations service, over the same store.
         services.AddScoped<IOperationsService>(sp => new OperationsService(
             discovery,
@@ -103,12 +81,39 @@ public class ManifestMutationRefusalTests
 
         _provider = services.BuildServiceProvider();
         _executor = await _provider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
     }
 
+    private static TrainRegistration RefusalTrainRegistration() =>
+        new TrainRegistration
+        {
+            ServiceType = typeof(IRefusalTrain),
+            ImplementationType = typeof(RefusalTrain),
+            InputType = typeof(RefusalInput),
+            OutputType = typeof(Unit),
+            Lifetime = ServiceLifetime.Scoped,
+            ServiceTypeName = nameof(IRefusalTrain),
+            ImplementationTypeName = nameof(RefusalTrain),
+            HasAllowAnonymousAttribute = true,
+            InputTypeName = nameof(RefusalInput),
+            OutputTypeName = nameof(Unit),
+            RequiredPolicies = [],
+            RequiredRoles = [],
+            IsQuery = false,
+            IsMutation = true,
+            IsRemote = false,
+            IsBroadcastEnabled = false,
+            GraphQLOperations = GraphQLOperation.Run,
+        };
+
     [TearDown]
-    public async Task TearDown() => await _provider.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     private static IEnumerable<TestCaseData> ManifestMutations() =>
         TriggerMutations().Concat(SchedulerMutations());
@@ -141,11 +146,14 @@ public class ManifestMutationRefusalTests
         string externalId
     )
     {
-        var result = await _executor.ExecuteAsync(
-            "mutation { operations { "
-                + string.Format(field, externalId)
-                + " { success message count } } }"
-        );
+        var result = await _executor
+            .NotNull()
+            .ExecuteAsync(
+                "mutation { operations { "
+                    + string.Format(field, externalId)
+                    + " { success message count } } }"
+            )
+            .ConfigureAwait(false);
         var operation = (OperationResult)result;
         var json = operation.ToJson();
         operation
@@ -165,7 +173,7 @@ public class ManifestMutationRefusalTests
             .Value;
         return (
             payload.GetProperty("success").GetBoolean(),
-            payload.GetProperty("message").GetString()!,
+            payload.GetProperty("message").GetString().NotNull(),
             json
         );
     }
@@ -177,7 +185,11 @@ public class ManifestMutationRefusalTests
 
         success.Should().BeFalse();
         message.Should().Be("Manifest 'no-such-job' not found.");
-        _scheduler.ReceivedCalls().Should().BeEmpty("a refusal asks nothing of the scheduler");
+        _scheduler
+            .NotNull()
+            .ReceivedCalls()
+            .Should()
+            .BeEmpty("a refusal asks nothing of the scheduler");
     }
 
     [TestCaseSource(nameof(SchedulerMutations))]
@@ -186,7 +198,7 @@ public class ManifestMutationRefusalTests
         var (success, _, _) = await RunAsync(field, KnownId);
 
         success.Should().BeTrue();
-        _scheduler.ReceivedCalls().Should().ContainSingle();
+        _scheduler.NotNull().ReceivedCalls().Should().ContainSingle();
     }
 
     [TestCaseSource(nameof(TriggerMutations))]
@@ -199,6 +211,7 @@ public class ManifestMutationRefusalTests
         success.Should().BeFalse("nothing dispatches a queued run on an in-memory store");
         message.Should().Be(OperationsService.NoDispatcherMessage);
         await using var db = await _provider
+            .NotNull()
             .GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(default);
         db.WorkQueues.Should().BeEmpty();
@@ -206,7 +219,7 @@ public class ManifestMutationRefusalTests
 
     private interface IRefusalTrain;
 
-    private class RefusalTrain;
+    private static class RefusalTrain;
 
     public record RefusalInput
     {

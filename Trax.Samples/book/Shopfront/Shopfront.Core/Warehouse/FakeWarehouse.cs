@@ -8,7 +8,7 @@ public class FakeWarehouse : IWarehouse
 
     public async Task<Box> ChooseBox(int items, CancellationToken cancellationToken)
     {
-        await Task.Delay(ChoosingTime, cancellationToken);
+        await Task.Delay(ChoosingTime, cancellationToken).ConfigureAwait(false);
         return items <= 2 ? new Box("Small", 1m) : new Box("Large", 3m);
     }
 

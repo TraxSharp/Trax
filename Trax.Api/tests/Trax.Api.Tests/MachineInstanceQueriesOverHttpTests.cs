@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectRegistry;
@@ -36,7 +37,20 @@ public class MachineInstanceQueriesOverHttpTests
     private const string UserKey = "machines-user-key-0123456789abcdefghijkl";
     private const string Machine = "Acme.Fulfilment";
 
-    private static readonly Guid InstanceId = Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff");
+    private static readonly Guid InstanceId = new Guid(
+        0x6f9619ff,
+        0x8b86,
+        0xd011,
+        0xb4,
+        0x2d,
+        0x0,
+        0xc0,
+        0x4f,
+        0xc9,
+        0x64,
+        0xff
+    ) /* 6f9619ff-8b86-d011-b42d-00c04fc964ff */
+    ;
     private static readonly DateTimeOffset Created = new(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly MachineInstanceRecord UserDraft = new(
@@ -76,57 +90,20 @@ public class MachineInstanceQueriesOverHttpTests
         "Acme.IShipTrain",
         Trax.Effect.Enums.TrainState.InProgress,
         new DateTime(2026, 10, 1, 9, 1, 0, DateTimeKind.Utc),
-        null,
+        EndTime: null,
         Trax.Core.Exceptions.FailureClass.Unclassified,
         CancellationRequested: false,
         IsLive: true
     );
 
-    private IHost _host = null!;
-    private IOperationsService _operations = null!;
+    private IHost? _host;
+    private IOperationsService? _operations;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
         _operations = Substitute.For<IOperationsService>();
-        _operations
-            .GetMachineInstancesAsync(Arg.Any<MachineInstanceQuery>(), Arg.Any<CancellationToken>())
-            .Returns(new MachineInstancePage([UserDraft], 0, 10));
-        _operations
-            .CountMachineInstancesAsync(
-                Arg.Any<MachineInstanceQuery>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(new MachineInstanceTotal(1, Capped: false));
-        _operations
-            .GetMachineInstanceAsync(Arg.Any<MachineInstanceKey>(), Arg.Any<CancellationToken>())
-            .Returns(UserDraft);
-        _operations
-            .GetMachineInstanceRunsAsync(
-                Arg.Any<MachineInstanceKey>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(new MachineInstanceRuns([LiveRun], Capped: false, QueuedEntryId: null));
-        _operations
-            .CancelMachineInstanceAsync(Arg.Any<MachineInstanceKey>(), Arg.Any<CancellationToken>())
-            .Returns(
-                new MachineInstanceCancelResult(
-                    MachineInstanceCancelOutcome.Moved,
-                    "moved",
-                    "Cancelled"
-                )
-            );
-        _operations
-            .GetMachineInstanceStateCountsAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns([
-                new MachineInstanceStateCount(
-                    Machine,
-                    "AwaitingPayment",
-                    SnapshotOwnerKind.User,
-                    7
-                ),
-                new MachineInstanceStateCount(Machine, "Shipped", SnapshotOwnerKind.System, 3),
-            ]);
+        StubOperations();
 
         _host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -150,7 +127,7 @@ public class MachineInstanceQueriesOverHttpTests
                                 .ExposeOperationMutations()
                                 .GateOperations(roles: "Operator")
                         );
-                        services.AddScoped(_ => _operations);
+                        services.AddScoped(_ => _operations.NotNull());
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                         services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
                         services.AddScoped(_ =>
@@ -167,14 +144,62 @@ public class MachineInstanceQueriesOverHttpTests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
+    }
+
+    private void StubOperations()
+    {
+        _operations
+            .NotNull()
+            .GetMachineInstancesAsync(Arg.Any<MachineInstanceQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new MachineInstancePage([UserDraft], 0, 10));
+        _operations
+            .NotNull()
+            .CountMachineInstancesAsync(
+                Arg.Any<MachineInstanceQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new MachineInstanceTotal(1, Capped: false));
+        _operations
+            .NotNull()
+            .GetMachineInstanceAsync(Arg.Any<MachineInstanceKey>(), Arg.Any<CancellationToken>())
+            .Returns(UserDraft);
+        _operations
+            .NotNull()
+            .GetMachineInstanceRunsAsync(
+                Arg.Any<MachineInstanceKey>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new MachineInstanceRuns([LiveRun], Capped: false, QueuedEntryId: null));
+        _operations
+            .NotNull()
+            .CancelMachineInstanceAsync(Arg.Any<MachineInstanceKey>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new MachineInstanceCancelResult(
+                    MachineInstanceCancelOutcome.Moved,
+                    "moved",
+                    "Cancelled"
+                )
+            );
+        _operations
+            .NotNull()
+            .GetMachineInstanceStateCountsAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns([
+                new MachineInstanceStateCount(
+                    Machine,
+                    "AwaitingPayment",
+                    SnapshotOwnerKind.User,
+                    7
+                ),
+                new MachineInstanceStateCount(Machine, "Shipped", SnapshotOwnerKind.System, 3),
+            ]);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     private static IEnumerable<TestCaseData> Documents()
@@ -234,6 +259,7 @@ public class MachineInstanceQueriesOverHttpTests
         item.GetProperty("version").GetInt32().Should().Be(2);
         item.GetProperty("hasLiveInvokedRun").GetBoolean().Should().BeTrue();
         await _operations
+            .NotNull()
             .Received()
             .GetMachineInstancesAsync(
                 new MachineInstanceQuery(Machine, "AwaitingPayment", SnapshotOwnerKind.User, 0, 10),
@@ -248,6 +274,7 @@ public class MachineInstanceQueriesOverHttpTests
 
         instance.GetProperty("rowId").GetInt64().Should().Be(42);
         await _operations
+            .NotNull()
             .Received()
             .GetMachineInstanceAsync(
                 new MachineInstanceKey(Machine, SnapshotOwnerKind.User, InstanceId, 42),
@@ -276,6 +303,7 @@ public class MachineInstanceQueriesOverHttpTests
         run.GetProperty("isLive").GetBoolean().Should().BeTrue();
         instance.GetProperty("isInvokedRunsCapped").GetBoolean().Should().BeFalse();
         await _operations
+            .NotNull()
             .Received()
             .GetMachineInstanceRunsAsync(
                 new MachineInstanceKey(Machine, SnapshotOwnerKind.User, InstanceId, 42),
@@ -300,6 +328,7 @@ public class MachineInstanceQueriesOverHttpTests
         result.GetProperty("message").GetString().Should().Be("moved");
         result.GetProperty("state").GetString().Should().Be("Cancelled");
         await _operations
+            .NotNull()
             .Received()
             .CancelMachineInstanceAsync(
                 new MachineInstanceKey(Machine, SnapshotOwnerKind.System, InstanceId),
@@ -311,13 +340,14 @@ public class MachineInstanceQueriesOverHttpTests
     [TestCase(UserKey)]
     public async Task A_caller_without_the_operations_role_cannot_cancel(string? apiKey)
     {
-        _operations.ClearReceivedCalls();
+        _operations.NotNull().ClearReceivedCalls();
 
         var doc = await PostAsync(Cancel, apiKey);
 
         doc.RootElement.TryGetProperty("errors", out _).Should().BeTrue();
         NoOperationsData(doc).Should().BeTrue(doc.RootElement.GetRawText());
         await _operations
+            .NotNull()
             .DidNotReceive()
             .CancelMachineInstanceAsync(
                 Arg.Any<MachineInstanceKey>(),
@@ -358,10 +388,13 @@ public class MachineInstanceQueriesOverHttpTests
     public async Task No_type_the_view_returns_has_a_context_or_an_owner_key(string typeName)
     {
         var executor = await _host
+            .NotNull()
             .Services.GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
 
-        var type = executor.Schema.Types.OfType<ObjectType>().Single(t => t.Name == typeName);
+        var type = executor
+            .Schema.Types.OfType<ObjectType>()
+            .Single(t => string.Equals(t.Name, typeName, StringComparison.Ordinal));
 
         type.Fields.Select(f => f.Name)
             .Should()
@@ -384,18 +417,23 @@ public class MachineInstanceQueriesOverHttpTests
     public async Task No_operator_feed_type_has_a_context_or_owner_key()
     {
         var executor = await _host
+            .NotNull()
             .Services.GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
         var subscriptions = executor.Schema.SubscriptionType;
         subscriptions.Should().NotBeNull();
 
-        var feed = subscriptions!.Fields.FirstOrDefault(f => f.Name == "onMachineInstanceChanged");
+        var feed = subscriptions
+            .NotNull()
+            .Fields.FirstOrDefault(f =>
+                string.Equals(f.Name, "onMachineInstanceChanged", StringComparison.Ordinal)
+            );
         feed.Should()
             .NotBeNull(
                 "operators watch instances live through the feed, per "
                     + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
             );
-        var type = (ObjectType)feed!.Type.NamedType();
+        var type = (ObjectType)feed.NotNull().Type.NamedType();
         type.Fields.Select(f => f.Name)
             .Should()
             .Contain(["state", "revision", "hasLiveInvokedRun"])
@@ -425,14 +463,14 @@ public class MachineInstanceQueriesOverHttpTests
 
     private async Task<JsonDocument> PostAsync(string query, string? apiKey)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),
         };
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

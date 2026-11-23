@@ -47,8 +47,11 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class ConfirmOrderJunction(IShopfrontDbContext db, ILogger<ConfirmOrderJunction> logger)
-    : EffectJunction<(Customer Customer, PricedCart Cart, Payment Payment), PlaceOrderOutput>
+internal sealed class ConfirmOrderJunction(
+    IShopfrontDbContext db,
+    ILogger<ConfirmOrderJunction> logger,
+    TimeProvider clock
+) : EffectJunction<(Customer Customer, PricedCart Cart, Payment Payment), PlaceOrderOutput>
 {
     public override async Task<PlaceOrderOutput> Run(
         (Customer Customer, PricedCart Cart, Payment Payment) input
@@ -60,7 +63,7 @@ internal class ConfirmOrderJunction(IShopfrontDbContext db, ILogger<ConfirmOrder
             CustomerId = input.Customer.Id,
             Total = input.Cart.Total,
             TransactionId = input.Payment.TransactionId,
-            PlacedAt = DateTime.UtcNow,
+            PlacedAt = clock.GetUtcNow().UtcDateTime,
             Items =
             [
                 .. input.Cart.Lines.Select(l => new OrderItem
@@ -72,7 +75,7 @@ internal class ConfirmOrderJunction(IShopfrontDbContext db, ILogger<ConfirmOrder
             ],
         };
         db.Orders.Add(order);
-        await db.SaveChangesAsync(CancellationToken);
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation("Confirmed order {OrderId}", order.Id);
         return new PlaceOrderOutput(order.Id, order.Total, order.TransactionId);
@@ -131,7 +134,8 @@ public sealed class TraxShopfrontCaller(TraxCaller caller, IServiceProvider serv
     : IShopfrontCaller
 {
     public string? CustomerId => caller.Principal?.Id ?? InvokedRuns.Current(services)?.UserKey;
-    public bool IsStaff => caller.Principal?.Roles.Contains(Roles.Staff) == true;
+    public bool IsStaff =>
+        caller.Principal?.Roles.Contains(Roles.Staff, StringComparer.Ordinal) == true;
 }
 ```
 
@@ -148,7 +152,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class IdentifyCustomerJunction(IShopfrontCaller caller)
+internal sealed class IdentifyCustomerJunction(IShopfrontCaller caller)
     : EffectJunction<PlaceOrderInput, Customer>
 {
     public override Task<Customer> Run(PlaceOrderInput input) =>
@@ -198,7 +202,7 @@ public class FakePaymentProvider : IPaymentProvider
 {
     public const string DeclinedToken = "tok_chargeDeclined";
 
-    private readonly ConcurrentDictionary<string, ChargeResult> byKey = new();
+    private readonly ConcurrentDictionary<string, ChargeResult> byKey = new(StringComparer.Ordinal);
     private int charges;
 
     public Task<ChargeResult> Charge(
@@ -212,7 +216,7 @@ public class FakePaymentProvider : IPaymentProvider
         if (idempotencyKey is not null && byKey.TryGetValue(idempotencyKey, out var earlier))
             return Task.FromResult(earlier);
 
-        if (paymentToken == DeclinedToken)
+        if (string.Equals(paymentToken, DeclinedToken, StringComparison.Ordinal))
             throw new PaymentDeclinedException("The card was declined.");
 
         if (Interlocked.Increment(ref charges) % 5 == 0)
@@ -242,7 +246,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class TakePaymentJunction(
+internal sealed class TakePaymentJunction(
     IPaymentProvider payments,
     Catalogue catalogue,
     IServiceProvider services,
@@ -270,22 +274,26 @@ internal class TakePaymentJunction(
         ChargeResult charge;
         try
         {
-            charge = await payments.Charge(
-                input.Customer.Id,
-                input.Order.PaymentToken,
-                input.Cart.Total,
-                idempotencyKey,
-                CancellationToken
-            );
+            charge = await payments
+                .Charge(
+                    input.Customer.Id,
+                    input.Order.PaymentToken,
+                    input.Cart.Total,
+                    idempotencyKey,
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             // However the charge failed, the order stops here, so its stock goes back, even when
             // the run itself was cancelled.
-            await catalogue.Release(
-                [.. input.Cart.Lines.Select(l => (l.Sku, l.Quantity))],
-                CancellationToken.None
-            );
+            await catalogue
+                .Release(
+                    [.. input.Cart.Lines.Select(l => (l.Sku, l.Quantity))],
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
             logger.LogInformation("Released reservation {ReservationId}", input.Reservation.Id);
 
             if (ex is PaymentDeclinedException)

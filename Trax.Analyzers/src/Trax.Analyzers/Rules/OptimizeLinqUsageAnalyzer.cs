@@ -1,0 +1,1085 @@
+using Trax.Analyzers.Configurations;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class OptimizeLinqUsageAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor ListMethodsRule = new(
+        RuleIdentifiers.UseListOfTMethodsInsteadOfEnumerableExtensionMethods,
+        title: "Use direct methods instead of LINQ methods",
+        messageFormat: "Use '{0}' instead of '{1}()'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseListOfTMethodsInsteadOfEnumerableExtensionMethods));
+
+    private static readonly DiagnosticDescriptor IndexerInsteadOfElementAtRule = new(
+        RuleIdentifiers.UseIndexerInsteadOfElementAt,
+        title: "Use indexer instead of LINQ methods",
+        messageFormat: "Use '{0}' instead of '{1}()'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseIndexerInsteadOfElementAt));
+
+    private static readonly DiagnosticDescriptor CombineLinqMethodsRule = new(
+        RuleIdentifiers.OptimizeEnumerable_CombineMethods,
+        title: "Combine LINQ methods",
+        messageFormat: "Combine '{0}' with '{1}'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.OptimizeEnumerable_CombineMethods));
+
+    private static readonly DiagnosticDescriptor DuplicateOrderByMethodsRule = new(
+        RuleIdentifiers.DuplicateEnumerable_OrderBy,
+        title: "Remove useless OrderBy call",
+        messageFormat: "Remove the first '{0}' method or use '{1}'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DuplicateEnumerable_OrderBy));
+
+    private static readonly DiagnosticDescriptor OptimizeCountRule = new(
+        RuleIdentifiers.OptimizeEnumerable_Count,
+        title: "Optimize Enumerable.Count() usage",
+        messageFormat: "{0}",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.OptimizeEnumerable_Count));
+
+    private static readonly DiagnosticDescriptor OptimizeWhereAndOrderByRule = new(
+        RuleIdentifiers.OptimizeEnumerable_WhereBeforeOrderBy,
+        title: "Use Where before OrderBy",
+        messageFormat: "Call 'Where' before '{0}'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.OptimizeEnumerable_WhereBeforeOrderBy));
+
+    private static readonly DiagnosticDescriptor UseCastInsteadOfSelect = new(
+        RuleIdentifiers.OptimizeEnumerable_CastInsteadOfSelect,
+        title: "Use 'Cast' instead of 'Select' to cast",
+        messageFormat: "Use 'Cast<{0}>' instead of 'Select' to cast",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.OptimizeEnumerable_CastInsteadOfSelect));
+
+    private static readonly DiagnosticDescriptor UseCountInsteadOfAny = new(
+        RuleIdentifiers.OptimizeEnumerable_UseCountInsteadOfAny,
+        title: "Use 'Count > 0' instead of 'Any()'",
+        messageFormat: "Use 'Count > 0' instead of 'Any()'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: false,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.OptimizeEnumerable_UseCountInsteadOfAny));
+
+    private static readonly DiagnosticDescriptor UseOrderRule = new(
+        RuleIdentifiers.OptimizeEnumerable_UseOrder,
+        title: "Use 'Order' instead of 'OrderBy'",
+        messageFormat: "Use '{0}' instead of '{1}'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.OptimizeEnumerable_UseOrder));
+
+    private static readonly ConfigurationDefinition<bool> ReportWhenConversionNeededConfiguration = new(ListMethodsRule.Id + ".report_when_conversion_needed", defaultValue: false);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(
+        ListMethodsRule,
+        IndexerInsteadOfElementAtRule,
+        CombineLinqMethodsRule,
+        DuplicateOrderByMethodsRule,
+        OptimizeCountRule,
+        OptimizeWhereAndOrderByRule,
+        UseCastInsteadOfSelect,
+        UseCountInsteadOfAny,
+        UseOrderRule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzerContext = new AnalyzerContext(ctx.Compilation);
+            if (analyzerContext.IsValid)
+            {
+                ctx.RegisterOperationAction(analyzerContext.AnalyzeInvocation, OperationKind.Invocation);
+            }
+        });
+    }
+
+    private sealed class AnalyzerContext
+    {
+        public AnalyzerContext(Compilation compilation)
+        {
+            EnumerableSymbol = compilation.GetTypeByMetadataName("System.Linq.Enumerable");
+            QueryableSymbol = compilation.GetTypeByMetadataName("System.Linq.Queryable");
+            ExtensionMethodOwnerTypes.AddIfNotNull(EnumerableSymbol);
+            ExtensionMethodOwnerTypes.AddIfNotNull(QueryableSymbol);
+
+            ExpressionOfTSymbol = compilation.GetTypeByMetadataName("System.Linq.Expressions.Expression`1");
+            ICollectionOfTSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.ICollection`1");
+            IReadOnlyCollectionOfTSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IReadOnlyCollection`1");
+            ListOfTSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.List`1");
+            IListOfTSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IList`1");
+            IReadOnlyListOfTSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IReadOnlyList`1");
+            ICollectionSymbol = compilation.GetTypeByMetadataName("System.Collections.ICollection");
+
+            HasEnumerableOrderMethod = DocumentationCommentId.GetFirstSymbolForDeclarationId("M:System.Linq.Enumerable.Order``1(System.Collections.Generic.IEnumerable{``0})", compilation) is not null;
+        }
+
+        public bool IsValid => ExtensionMethodOwnerTypes.Count > 0;
+
+        private List<INamedTypeSymbol> ExtensionMethodOwnerTypes { get; } = [];
+
+        /// <summary>
+        /// Indicates whether the type declares the LINQ extension methods. This runs for every invocation of the
+        /// compilation, so the two symbols are compared directly instead of enumerating the list, whose enumerator
+        /// would be boxed by <see cref="Enumerable.Contains{TSource}(IEnumerable{TSource}, TSource, IEqualityComparer{TSource}?)"/>.
+        /// </summary>
+        private bool IsExtensionMethodOwnerType(INamedTypeSymbol? type)
+        {
+            return type.IsEqualTo(EnumerableSymbol) || type.IsEqualTo(QueryableSymbol);
+        }
+
+        private INamedTypeSymbol? EnumerableSymbol { get; set; }
+        private INamedTypeSymbol? QueryableSymbol { get; set; }
+        private INamedTypeSymbol? ExpressionOfTSymbol { get; set; }
+        private INamedTypeSymbol? ICollectionOfTSymbol { get; set; }
+        private INamedTypeSymbol? IReadOnlyCollectionOfTSymbol { get; set; }
+        private INamedTypeSymbol? ListOfTSymbol { get; set; }
+        private INamedTypeSymbol? IListOfTSymbol { get; set; }
+        private INamedTypeSymbol? IReadOnlyListOfTSymbol { get; set; }
+        private INamedTypeSymbol? ICollectionSymbol { get; set; }
+        private bool HasEnumerableOrderMethod { get; set; }
+
+        public void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+            if (operation.Arguments.Length == 0)
+                return;
+
+            var method = operation.TargetMethod;
+            if (!IsExtensionMethodOwnerType(method.ContainingType))
+                return;
+
+            UseFindInsteadOfFirstOrDefault(context, operation);
+            UseTrueForAllInsteadOfAll(context, operation);
+            UseExistsInsteadOfAny(context, operation);
+            UseCountPropertyInsteadOfMethod(context, operation);
+            UseIndexerInsteadOfElementAt(context, operation);
+            CombineWhereWithNextMethod(context, operation);
+            RemoveTwoConsecutiveOrderBy(context, operation);
+            UseOrder(context, operation);
+            WhereShouldBeBeforeOrderBy(context, operation);
+            OptimizeCountUsage(context, operation);
+            UseCastInsteadOfSelect(context, operation);
+            UseCountInsteadOfAny(context, operation);
+        }
+
+        private static ImmutableDictionary<string, string?> CreateProperties(OptimizeLinqUsageData data)
+        {
+            var builder = ImmutableDictionary.CreateBuilder<string, string?>(StringComparer.Ordinal);
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.DataKey, data.ToString());
+            return builder.ToImmutable();
+        }
+
+        private static ImmutableDictionary<string, string?> CreateLinqChainProperties(OptimizeLinqUsageData data, IInvocationOperation firstOperation, IInvocationOperation lastOperation, string methodName)
+        {
+            var builder = ImmutableDictionary.CreateBuilder<string, string?>(StringComparer.Ordinal);
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.DataKey, data.ToString());
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.FirstOperationStartKey, firstOperation.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.FirstOperationLengthKey, firstOperation.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.LastOperationStartKey, lastOperation.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.LastOperationLengthKey, lastOperation.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.MethodNameKey, methodName);
+            return builder.ToImmutable();
+        }
+
+        private static ImmutableDictionary<string, string?> CreateSingleOperationProperties(OptimizeLinqUsageData data, IInvocationOperation operation)
+        {
+            var builder = ImmutableDictionary.CreateBuilder<string, string?>(StringComparer.Ordinal);
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.DataKey, data.ToString());
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.FirstOperationStartKey, operation.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.FirstOperationLengthKey, operation.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture));
+            return builder.ToImmutable();
+        }
+
+        private static ImmutableDictionary<string, string?> CreateDuplicateOrderByProperties(OptimizeLinqUsageData data, IInvocationOperation firstOperation, IInvocationOperation lastOperation, string expectedMethodName, string methodName)
+        {
+            var builder = ImmutableDictionary.CreateBuilder<string, string?>(StringComparer.Ordinal);
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.DataKey, data.ToString());
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.FirstOperationStartKey, firstOperation.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.FirstOperationLengthKey, firstOperation.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.LastOperationStartKey, lastOperation.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.LastOperationLengthKey, lastOperation.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture));
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.ExpectedMethodNameKey, expectedMethodName);
+            builder.Add(OptimizeLinqUsageAnalyzerCommon.MethodNameKey, methodName);
+            return builder.ToImmutable();
+        }
+
+        private void WhereShouldBeBeforeOrderBy(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name is nameof(Enumerable.OrderBy) or nameof(Enumerable.OrderByDescending) or "Order" or "OrderDescending")
+            {
+                var parent = GetParentLinqOperation(operation);
+                if (parent is not null && IsExtensionMethodOwnerType(parent.TargetMethod.ContainingType))
+                {
+                    if (parent.TargetMethod.Name == nameof(Enumerable.Where))
+                    {
+                        // Cannot move Where before OrderBy when using Func<TSource,int,bool> as the index would refer to the unsorted sequence
+                        if (IsIndexedPredicateOverload(parent.TargetMethod))
+                            return;
+
+                        var properties = CreateLinqChainProperties(OptimizeLinqUsageData.CombineWhereWithNextMethod, operation, parent, parent.TargetMethod.Name);
+
+                        context.ReportDiagnostic(OptimizeWhereAndOrderByRule, properties, parent, operation.TargetMethod.Name);
+                    }
+                }
+            }
+        }
+
+        private void UseCountPropertyInsteadOfMethod(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.Arguments.Length != 1)
+                return;
+
+            if (operation.TargetMethod.Name == nameof(Enumerable.Count))
+            {
+                if (ICollectionOfTSymbol is null && IReadOnlyCollectionOfTSymbol is null)
+                    return;
+
+                // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+                var actualType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+                if (actualType is null)
+                    return;
+
+                if (actualType.TypeKind == TypeKind.Array)
+                {
+                    var properties = CreateProperties(OptimizeLinqUsageData.UseLengthProperty);
+                    context.ReportDiagnostic(ListMethodsRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "Length", operation.TargetMethod.Name);
+                    return;
+                }
+
+                // The type itself is one of the interfaces when the expression is typed as ICollection<T> or IReadOnlyCollection<T>
+                if (actualType.GetAllInterfacesIncludingSelf().Any(i => i.OriginalDefinition.IsEqualTo(ICollectionOfTSymbol) || i.OriginalDefinition.IsEqualTo(IReadOnlyCollectionOfTSymbol)))
+                {
+                    // Ensure the Count property can be used, i.e. it is not an explicit implementation nor ambiguous
+                    if (HasCountProperty(operation, actualType))
+                    {
+                        var properties = CreateProperties(OptimizeLinqUsageData.UseCountProperty);
+                        context.ReportDiagnostic(ListMethodsRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "Count", operation.TargetMethod.Name);
+                        return;
+                    }
+                }
+            }
+            else if (operation.TargetMethod.Name == nameof(Enumerable.LongCount))
+            {
+                // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+                var actualType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+                if (actualType is not null && actualType.TypeKind == TypeKind.Array)
+                {
+                    var properties = CreateProperties(OptimizeLinqUsageData.UseLongLengthProperty);
+                    context.ReportDiagnostic(ListMethodsRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "LongLength", operation.TargetMethod.Name);
+                }
+            }
+        }
+
+        private void UseFindInsteadOfFirstOrDefault(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name != nameof(Enumerable.FirstOrDefault))
+                return;
+
+            if (operation.Arguments.Length != 2)
+                return;
+
+            // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+            var firstArgumentType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+            if (firstArgumentType is null)
+                return;
+
+            if (!firstArgumentType.OriginalDefinition.IsEqualTo(ListOfTSymbol))
+                return;
+
+            // https://github.com/dotnet/runtime/issues/108064
+            if (context.Compilation.IsNet9OrGreater())
+                return;
+
+            ImmutableDictionary<string, string?> properties;
+            var predicateArgument = operation.Arguments[1].Value;
+            if (predicateArgument is IDelegateCreationOperation)
+            {
+                properties = CreateProperties(OptimizeLinqUsageData.UseFindMethod);
+            }
+            else
+            {
+                if (!context.Options.GetConfigurationValue(operation, ReportWhenConversionNeededConfiguration))
+                    return;
+
+                properties = CreateProperties(OptimizeLinqUsageData.UseFindMethodWithConversion);
+            }
+
+            context.ReportDiagnostic(ListMethodsRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "Find()", operation.TargetMethod.Name);
+        }
+
+        private void UseTrueForAllInsteadOfAll(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name != nameof(Enumerable.All))
+                return;
+
+            if (operation.Arguments.Length != 2)
+                return;
+
+            // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+            var firstArgumentType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+            if (firstArgumentType is null)
+                return;
+
+            if (firstArgumentType.OriginalDefinition.IsEqualTo(ListOfTSymbol))
+            {
+                ImmutableDictionary<string, string?> properties;
+                var predicateArgument = operation.Arguments[1].Value;
+                if (predicateArgument is IDelegateCreationOperation)
+                {
+                    properties = CreateProperties(OptimizeLinqUsageData.UseTrueForAllMethod);
+                }
+                else
+                {
+                    if (!context.Options.GetConfigurationValue(operation, ReportWhenConversionNeededConfiguration))
+                        return;
+
+                    properties = CreateProperties(OptimizeLinqUsageData.UseTrueForAllMethodWithConversion);
+                }
+
+                context.ReportDiagnostic(ListMethodsRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "TrueForAll()", operation.TargetMethod.Name);
+            }
+        }
+
+        private void UseExistsInsteadOfAny(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name != nameof(Enumerable.Any))
+                return;
+
+            if (operation.Arguments.Length != 2)
+                return;
+
+            // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+            var firstArgumentType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+            if (firstArgumentType is null)
+                return;
+
+            if (firstArgumentType.OriginalDefinition.IsEqualTo(ListOfTSymbol))
+            {
+                ImmutableDictionary<string, string?> properties;
+                var predicateArgument = operation.Arguments[1].Value;
+                if (predicateArgument is IDelegateCreationOperation)
+                {
+                    properties = CreateProperties(OptimizeLinqUsageData.UseExistsMethod);
+                }
+                else
+                {
+                    if (!context.Options.GetConfigurationValue(operation, ReportWhenConversionNeededConfiguration))
+                        return;
+
+                    properties = CreateProperties(OptimizeLinqUsageData.UseExistsMethodWithConversion);
+                }
+
+                context.ReportDiagnostic(ListMethodsRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "Exists()", operation.TargetMethod.Name);
+            }
+        }
+
+        private void UseIndexerInsteadOfElementAt(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            ImmutableDictionary<string, string?>? properties = null;
+
+            var argCount = -1;
+            if (operation.TargetMethod.Name == nameof(Enumerable.ElementAt))
+            {
+                properties = CreateProperties(OptimizeLinqUsageData.UseIndexer);
+                argCount = 2;
+            }
+            else if (operation.TargetMethod.Name == nameof(Enumerable.First))
+            {
+                properties = CreateProperties(OptimizeLinqUsageData.UseIndexerFirst);
+                argCount = 1;
+            }
+            else if (operation.TargetMethod.Name == nameof(Enumerable.Last))
+            {
+                properties = CreateProperties(OptimizeLinqUsageData.UseIndexerLast);
+                argCount = 1;
+            }
+
+            if (argCount < 0)
+                return;
+
+            if (operation.Arguments.Length != argCount)
+                return;
+
+            if (IListOfTSymbol is null && IReadOnlyListOfTSymbol is null)
+                return;
+
+            // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+            var actualType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+            if (actualType is null)
+                return;
+
+            // The type itself is one of the interfaces when the expression is typed as IList<T> or IReadOnlyList<T>
+            if (!actualType.GetAllInterfacesIncludingSelf().Any(i => i.OriginalDefinition.IsEqualTo(IListOfTSymbol) || i.OriginalDefinition.IsEqualTo(IReadOnlyListOfTSymbol)))
+                return;
+
+            // Ensure the members used by the code fix can be used, i.e. they are not explicit implementations nor ambiguous
+            if (actualType.TypeKind != TypeKind.Array)
+            {
+                if (!HasInt32Indexer(operation, actualType))
+                    return;
+
+                // list[^1] and list[list.Count - 1] use the Count property
+                if (operation.TargetMethod.Name == nameof(Enumerable.Last) && !HasCountProperty(operation, actualType))
+                    return;
+            }
+
+            context.ReportDiagnostic(IndexerInsteadOfElementAtRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, "[]", operation.TargetMethod.Name);
+        }
+
+        private static readonly HashSet<string> CombinableLinqMethods = new(StringComparer.Ordinal)
+        {
+            nameof(Enumerable.First), nameof(Enumerable.FirstOrDefault),
+            nameof(Enumerable.Last), nameof(Enumerable.LastOrDefault),
+            nameof(Enumerable.Single), nameof(Enumerable.SingleOrDefault),
+            nameof(Enumerable.Any),
+            nameof(Enumerable.Count), nameof(Enumerable.LongCount),
+            nameof(Enumerable.Where),
+        };
+
+        private void CombineWhereWithNextMethod(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name == nameof(Enumerable.Where))
+            {
+                // Cannot replace Where when using Func<TSource,int,bool>
+                if (!IsPredicateOverload(operation))
+                    return;
+
+                // Check parent methods
+                var parent = GetParentLinqOperation(operation);
+                if (parent is not null && IsExtensionMethodOwnerType(parent.TargetMethod.ContainingType))
+                {
+                    if (CombinableLinqMethods.Contains(parent.TargetMethod.Name))
+                    {
+                        // The next method must only take the source, or the source and a predicate. The predicate cannot be combined
+                        // with the other overloads, such as FirstOrDefault(TSource defaultValue) or Where(Func<TSource,int,bool>).
+                        if (parent.Arguments.Length != 1 && !IsPredicateOverload(parent))
+                            return;
+
+                        // Do not report on IQueryable<T> since combining Where clauses has no performance benefit
+                        // (the generated query is identical) and splitting them can improve readability
+                        if (QueryableSymbol is not null && operation.TargetMethod.ContainingType.IsEqualTo(QueryableSymbol) && parent.TargetMethod.ContainingType.IsEqualTo(QueryableSymbol))
+                            return;
+
+                        var properties = CreateLinqChainProperties(OptimizeLinqUsageData.CombineWhereWithNextMethod, operation, parent, parent.TargetMethod.Name);
+
+                        if (parent.Arguments.Length > 1 && IsExpressionPredicateReference(parent.Arguments[1].Value))
+                            return;
+
+                        if (operation.Arguments.Length > 1 && IsExpressionPredicateReference(operation.Arguments[1].Value))
+                            return;
+
+                        context.ReportDiagnostic(CombineLinqMethodsRule, properties, parent, operation.TargetMethod.Name, parent.TargetMethod.Name);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Detects the overloads taking the source and a predicate, such as <c>Where(Func&lt;TSource,bool&gt;)</c> or <c>Any(Expression&lt;Func&lt;TSource,bool&gt;&gt;)</c>.
+        /// The parameters of the original definition are used, so <c>FirstOrDefault(TSource defaultValue)</c> is not a predicate overload even when <c>TSource</c> is a delegate type.
+        /// </summary>
+        private bool IsPredicateOverload(IInvocationOperation operation)
+        {
+            if (operation.Arguments.Length != 2)
+                return false;
+
+            var parameters = operation.TargetMethod.OriginalDefinition.Parameters;
+            if (parameters.Length != 2)
+                return false;
+
+            if (parameters[1].Type is not INamedTypeSymbol type)
+                return false;
+
+            // Queryable methods take an Expression<Func<...>>
+            if (type.OriginalDefinition.IsEqualTo(ExpressionOfTSymbol))
+            {
+                if (type.TypeArguments is not [INamedTypeSymbol delegateType])
+                    return false;
+
+                type = delegateType;
+            }
+
+            return type.DelegateInvokeMethod is { Parameters.Length: 1, ReturnType.SpecialType: SpecialType.System_Boolean };
+        }
+
+        /// <summary>
+        /// Detects the overloads taking a predicate with the index of the element, such as <c>Where(Func&lt;TSource,int,bool&gt;)</c>.
+        /// Returns <see langword="true" /> when the shape of the method is unknown, so the callers stay on the safe side.
+        /// </summary>
+        private bool IsIndexedPredicateOverload(IMethodSymbol method)
+        {
+            if (method.Parameters.Length != 2)
+                return true;
+
+            if (method.Parameters[1].Type is not INamedTypeSymbol type)
+                return true;
+
+            // Queryable methods take an Expression<Func<...>>
+            if (type.OriginalDefinition.IsEqualTo(ExpressionOfTSymbol))
+            {
+                if (type.TypeArguments is not [INamedTypeSymbol delegateType])
+                    return true;
+
+                type = delegateType;
+            }
+
+            return type.TypeArguments.Length == 3;
+        }
+
+        private bool IsExpressionPredicateReference(IOperation operation)
+        {
+            if (operation.Type is null || !operation.Type.OriginalDefinition.IsEqualTo(ExpressionOfTSymbol))
+                return false;
+
+            operation = operation.UnwrapImplicitConversions();
+
+            return operation.Kind is not OperationKind.AnonymousFunction;
+        }
+
+        private void RemoveTwoConsecutiveOrderBy(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name is nameof(Enumerable.OrderBy) or nameof(Enumerable.OrderByDescending) or nameof(Enumerable.ThenBy) or nameof(Enumerable.ThenByDescending) or "Order" or "OrderDescending")
+            {
+                var parent = GetParentLinqOperation(operation);
+                if (parent is not null && IsExtensionMethodOwnerType(parent.TargetMethod.ContainingType))
+                {
+                    if (parent.TargetMethod.Name is nameof(Enumerable.OrderBy) or nameof(Enumerable.OrderByDescending) or "Order" or "OrderDescending")
+                    {
+                        var expectedMethodName = parent.TargetMethod.Name switch
+                        {
+                            nameof(Enumerable.OrderBy) or "Order" => nameof(Enumerable.ThenBy),
+                            nameof(Enumerable.OrderByDescending) or "OrderDescending" => nameof(Enumerable.ThenByDescending),
+                            _ => parent.TargetMethod.Name,
+                        };
+                        var properties = CreateDuplicateOrderByProperties(OptimizeLinqUsageData.DuplicatedOrderBy, operation, parent, expectedMethodName, parent.TargetMethod.Name);
+
+                        context.ReportDiagnostic(DuplicateOrderByMethodsRule, properties, parent, operation.TargetMethod.Name, expectedMethodName);
+                    }
+                }
+            }
+        }
+
+        private void UseOrder(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (!HasEnumerableOrderMethod)
+                return;
+
+            if (operation.TargetMethod.Name is nameof(Enumerable.OrderBy) or nameof(Enumerable.OrderByDescending) && operation.TargetMethod.ContainingType.IsEqualTo(EnumerableSymbol) && operation.Arguments.Length > 0)
+            {
+                var arg = operation.Arguments[1].Value;
+
+                // x => x
+                if (arg is IDelegateCreationOperation { Target: IAnonymousFunctionOperation { Symbol.Parameters: [var delegateParameter], Body: IBlockOperation { Operations: [IReturnOperation { ReturnedValue: IParameterReferenceOperation parameterReference }] } } } && parameterReference.Parameter.IsEqualTo(delegateParameter))
+                {
+                    var properties = CreateSingleOperationProperties(OptimizeLinqUsageData.UseOrder, operation);
+
+                    var newMethodName = operation.TargetMethod.Name is "OrderBy" ? "Order" : "OrderDescending";
+
+                    context.ReportDiagnostic(UseOrderRule, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, newMethodName, operation.TargetMethod.Name);
+                }
+            }
+        }
+
+        private void OptimizeCountUsage(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name != nameof(Enumerable.Count))
+                return;
+
+            var binaryOperation = GetParentBinaryOperation(operation, out var countOperand);
+            if (binaryOperation is null)
+                return;
+
+            if (!IsSupportedOperator(binaryOperation.OperatorKind))
+                return;
+
+            if (!binaryOperation.LeftOperand.Type.IsInt32() || !binaryOperation.RightOperand.Type.IsInt32())
+                return;
+
+            var opKind = NormalizeOperator();
+            var otherOperand = binaryOperation.LeftOperand == countOperand ? binaryOperation.RightOperand : binaryOperation.LeftOperand;
+            if (otherOperand is null)
+                return;
+
+            string? message = null;
+            var properties = ImmutableDictionary<string, string?>.Empty;
+            if (otherOperand.ConstantValue.HasValue && otherOperand.ConstantValue.Value is int value)
+            {
+                switch (opKind)
+                {
+                    case BinaryOperatorKind.Equals:
+                        if (value < 0)
+                        {
+                            // expr.Count() == -1
+                            message = "Expression is always false";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseFalse);
+                        }
+                        else if (value == 0)
+                        {
+                            // expr.Count() == 0
+                            message = "Replace 'Count() == 0' with 'Any() == false'";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseNotAny);
+                        }
+                        else
+                        {
+                            // expr.Count() == 1
+                            if (!HasTake(operation))
+                            {
+                                message = string.Create(CultureInfo.InvariantCulture, $"Replace 'Count() == {value}' with 'Take({value + 1}).Count() == {value}'");
+                                properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount)
+                                    .Add(OptimizeLinqUsageAnalyzerCommon.TakePlusOneKey, value: "");
+                            }
+                        }
+
+                        break;
+
+                    case BinaryOperatorKind.NotEquals:
+                        if (value < 0)
+                        {
+                            // expr.Count() != -1 is always true
+                            message = "Expression is always true";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseTrue);
+                        }
+                        else if (value == 0)
+                        {
+                            // expr.Count() != 0
+                            message = "Replace 'Count() != 0' with 'Any()'";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseAny);
+                        }
+                        else
+                        {
+                            // expr.Count() != 1
+                            if (!HasTake(operation))
+                            {
+                                message = string.Create(CultureInfo.InvariantCulture, $"Replace 'Count() != {value}' with 'Take({value + 1}).Count() != {value}'");
+                                properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount)
+                                    .Add(OptimizeLinqUsageAnalyzerCommon.TakePlusOneKey, value: "");
+                            }
+                        }
+
+                        break;
+
+                    case BinaryOperatorKind.LessThan:
+                        if (value <= 0)
+                        {
+                            // expr.Count() < 0
+                            message = "Expression is always false";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseFalse);
+                        }
+                        else if (value == 1)
+                        {
+                            // expr.Count() < 1 ==> expr.Count() == 0
+                            message = "Replace 'Count() < 1' with 'Any() == false'";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseNotAny);
+                        }
+                        else
+                        {
+                            // expr.Count() < 10
+                            message = string.Create(CultureInfo.InvariantCulture, $"Replace 'Count() < {value}' with 'Skip({value - 1}).Any() == false'");
+                            properties = CreateProperties(OptimizeLinqUsageData.UseSkipAndNotAny)
+                                .Add(OptimizeLinqUsageAnalyzerCommon.SkipMinusOneKey, value: "");
+                        }
+
+                        break;
+
+                    case BinaryOperatorKind.LessThanOrEqual:
+                        if (value < 0)
+                        {
+                            // expr.Count() <= -1
+                            message = "Expression is always false";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseFalse);
+                        }
+                        else if (value == 0)
+                        {
+                            // expr.Count() <= 0
+                            message = "Replace 'Count() <= 0' with 'Any() == false'";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseNotAny);
+                        }
+                        else
+                        {
+                            // expr.Count() < 10
+                            message = string.Create(CultureInfo.InvariantCulture, $"Replace 'Count() <= {value}' with 'Skip({value}).Any() == false'");
+                            properties = CreateProperties(OptimizeLinqUsageData.UseSkipAndNotAny);
+                        }
+
+                        break;
+
+                    case BinaryOperatorKind.GreaterThan:
+                        if (value < 0)
+                        {
+                            // expr.Count() > -1
+                            message = "Expression is always true";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseTrue);
+                        }
+                        else if (value == 0)
+                        {
+                            // expr.Count() > 0
+                            message = "Replace 'Count() > 0' with 'Any()'";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseAny);
+                        }
+                        else
+                        {
+                            // expr.Count() > 1
+                            message = string.Create(CultureInfo.InvariantCulture, $"Replace 'Count() > {value}' with 'Skip({value}).Any()'");
+                            properties = CreateProperties(OptimizeLinqUsageData.UseSkipAndAny);
+                        }
+
+                        break;
+
+                    case BinaryOperatorKind.GreaterThanOrEqual:
+                        if (value <= 0)
+                        {
+                            // expr.Count() >= 0
+                            message = "Expression is always true";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseTrue);
+                        }
+                        else if (value == 1)
+                        {
+                            // expr.Count() >= 1
+                            message = "Replace 'Count() >= 1' with 'Any()'";
+                            properties = CreateProperties(OptimizeLinqUsageData.UseAny);
+                        }
+                        else
+                        {
+                            // expr.Count() >= 2
+                            message = string.Create(CultureInfo.InvariantCulture, $"Replace 'Count() >= {value}' with 'Skip({value - 1}).Any()'");
+                            properties = CreateProperties(OptimizeLinqUsageData.UseSkipAndAny)
+                                .Add(OptimizeLinqUsageAnalyzerCommon.SkipMinusOneKey, value: "");
+                        }
+
+                        break;
+                }
+            }
+            else if (!HasTake(operation))
+            {
+                // The value of the operand is not known, so it may be negative or 0. 'Skip(n).Any()' cannot be used as 'Skip' considers
+                // a negative value as 0: 'Count() >= n' is true when 'n' is 0, whereas 'Skip(n - 1).Any()' is false for an empty sequence.
+                // 'Take' also considers a negative value as 0, but the result is still compared to the operand.
+                switch (opKind)
+                {
+                    case BinaryOperatorKind.Equals:
+                        // expr.Count() == n
+                        message = "Replace 'Count() == n' with 'Take(n + 1).Count() == n'";
+                        properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount)
+                            .Add(OptimizeLinqUsageAnalyzerCommon.TakePlusOneKey, value: "");
+                        break;
+
+                    case BinaryOperatorKind.NotEquals:
+                        // expr.Count() != n
+                        message = "Replace 'Count() != n' with 'Take(n + 1).Count() != n'";
+                        properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount)
+                            .Add(OptimizeLinqUsageAnalyzerCommon.TakePlusOneKey, value: "");
+                        break;
+
+                    case BinaryOperatorKind.LessThan:
+                        // expr.Count() < n
+                        message = "Replace 'Count() < n' with 'Take(n).Count() < n'";
+                        properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount);
+                        break;
+
+                    case BinaryOperatorKind.LessThanOrEqual:
+                        // expr.Count() <= n
+                        message = "Replace 'Count() <= n' with 'Take(n + 1).Count() <= n'";
+                        properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount)
+                            .Add(OptimizeLinqUsageAnalyzerCommon.TakePlusOneKey, value: "");
+                        break;
+
+                    case BinaryOperatorKind.GreaterThan:
+                        // expr.Count() > n
+                        message = "Replace 'Count() > n' with 'Take(n + 1).Count() > n'";
+                        properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount)
+                            .Add(OptimizeLinqUsageAnalyzerCommon.TakePlusOneKey, value: "");
+                        break;
+
+                    case BinaryOperatorKind.GreaterThanOrEqual:
+                        // expr.Count() >= n
+                        message = "Replace 'Count() >= n' with 'Take(n).Count() >= n'";
+                        properties = CreateProperties(OptimizeLinqUsageData.UseTakeAndCount);
+                        break;
+                }
+            }
+
+            if (message is not null)
+            {
+                properties = properties
+                       .Add(OptimizeLinqUsageAnalyzerCommon.OperandOperationStartKey, otherOperand.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture))
+                       .Add(OptimizeLinqUsageAnalyzerCommon.OperandOperationLengthKey, otherOperand.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture))
+                       .Add(OptimizeLinqUsageAnalyzerCommon.CountOperationStartKey, operation.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture))
+                       .Add(OptimizeLinqUsageAnalyzerCommon.CountOperationLengthKey, operation.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture));
+
+                context.ReportDiagnostic(OptimizeCountRule, properties, binaryOperation, message);
+            }
+
+            static bool IsSupportedOperator(BinaryOperatorKind operatorKind)
+            {
+                switch (operatorKind)
+                {
+                    case BinaryOperatorKind.Equals:
+                    case BinaryOperatorKind.NotEquals:
+                    case BinaryOperatorKind.LessThan:
+                    case BinaryOperatorKind.LessThanOrEqual:
+                    case BinaryOperatorKind.GreaterThanOrEqual:
+                    case BinaryOperatorKind.GreaterThan:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            BinaryOperatorKind NormalizeOperator()
+            {
+                var isCountLeftOperand = binaryOperation.LeftOperand == countOperand;
+                return binaryOperation.OperatorKind switch
+                {
+                    BinaryOperatorKind.LessThan => isCountLeftOperand ? BinaryOperatorKind.LessThan : BinaryOperatorKind.GreaterThan,
+                    BinaryOperatorKind.LessThanOrEqual => isCountLeftOperand ? BinaryOperatorKind.LessThanOrEqual : BinaryOperatorKind.GreaterThanOrEqual,
+                    BinaryOperatorKind.GreaterThanOrEqual => isCountLeftOperand ? BinaryOperatorKind.GreaterThanOrEqual : BinaryOperatorKind.LessThanOrEqual,
+                    BinaryOperatorKind.GreaterThan => isCountLeftOperand ? BinaryOperatorKind.GreaterThan : BinaryOperatorKind.LessThan,
+                    _ => binaryOperation.OperatorKind,
+                };
+            }
+
+            bool HasTake(IInvocationOperation operation)
+            {
+                var op = GetChildLinqOperation(operation);
+                if (op is null)
+                    return false;
+
+                return op.TargetMethod.Name == nameof(Enumerable.Take) && IsExtensionMethodOwnerType(op.TargetMethod.ContainingType);
+            }
+        }
+
+        private static void UseCastInsteadOfSelect(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            var semanticModel = operation.SemanticModel!;
+
+            if (operation.TargetMethod.Name != nameof(Enumerable.Select))
+                return;
+
+            // A valid 'Select' operation always has 2 arguments, regardless of whether the underlying code syntax is
+            // that of a call to an extension method:   source.Select(selector);
+            // or to a static method:                   Enumerable.Select(source, selector);
+            //  Operation's first argument  -> 'source'
+            //  Operation's second argument -> 'selector'
+            if (operation.Arguments.Length != 2)
+                return;
+
+            if (operation.Arguments[1].Value is not IDelegateCreationOperation { Target: IAnonymousFunctionOperation selectorLambda })
+                return;
+
+            // The selector must only return the cast value. Cast<T>() would remove any other statement of the selector.
+            if (selectorLambda.Body.Operations is not [IReturnOperation { ReturnedValue: IConversionOperation castOp }])
+                return;
+
+            // If the cast is done by 'as' operator
+            if (castOp.IsTryCast || castOp.Type is null)
+                return;
+
+            // If the cast is not applied directly to the source element (the first parameter of the selector)
+            if (castOp.Operand is not IParameterReferenceOperation parameterReference)
+                return;
+
+            if (selectorLambda.Symbol.Parameters.Length == 0 || !parameterReference.Parameter.IsEqualTo(selectorLambda.Symbol.Parameters[0]))
+                return;
+
+            // Ensure the code is valid after replacement. The semantic may be different if you use Cast<T>() instead of Select(x => (T)x).
+            // Current conversion: (Type)value
+            // Cast<T>() conversion: (Type)(object)value
+            if (!CanReplaceByCast(castOp))
+                return;
+
+            // Determine if we're casting to a nullable type.
+            var selectMethodSymbol = semanticModel.GetSymbolInfo(operation.Syntax, context.CancellationToken).Symbol as IMethodSymbol;
+            var nullableFlowState = selectMethodSymbol?.TypeArgumentNullableAnnotations[1] == NullableAnnotation.Annotated ?
+                NullableFlowState.MaybeNull :
+                NullableFlowState.None;
+
+            var typeSyntax = castOp.Syntax;
+            if (typeSyntax is CastExpressionSyntax castSyntax)
+            {
+                typeSyntax = castSyntax.Type;
+            }
+
+            // Get the cast type's minimally qualified name, in the current context
+            var properties = CreateProperties(OptimizeLinqUsageData.UseCastInsteadOfSelect);
+
+            var castType = castOp.Type.ToMinimalDisplayString(semanticModel, nullableFlowState, operation.Syntax.SpanStart);
+            context.ReportDiagnostic(OptimizeLinqUsageAnalyzer.UseCastInsteadOfSelect, properties, operation, DiagnosticInvocationReportOptions.ReportOnMember, castType);
+
+            static bool CanReplaceByCast(IConversionOperation op)
+            {
+                // Cast<T>() boxes the value and casts the object to T, so it only supports the conversions
+                // that do not change the representation of the value
+                var conversion = op.GetConversion();
+                if (conversion.IsUserDefined)
+                    return false;
+
+                if (conversion.IsIdentity || conversion.IsReference || conversion.IsBoxing || conversion.IsUnboxing)
+                    return true;
+
+                // Unboxing supports the conversions between an enum, its underlying type, and their nullable types:
+                // source.Select<MyEnum, byte>(item => (byte)item) or source.Select<int, int?>(item => (int?)item);
+                if (conversion.IsNullable || conversion.IsEnumeration)
+                    return GetUnboxingType(op.Operand.Type).IsEqualTo(GetUnboxingType(op.Type));
+
+                return false;
+
+                static ITypeSymbol? GetUnboxingType(ITypeSymbol? type)
+                {
+                    if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T, TypeArguments: [var underlyingType] })
+                    {
+                        type = underlyingType;
+                    }
+
+                    return type.GetEnumUnderlyingType() ?? type;
+                }
+            }
+        }
+
+        private void UseCountInsteadOfAny(OperationAnalysisContext context, IInvocationOperation operation)
+        {
+            if (operation.TargetMethod.Name == "Any" && operation.TargetMethod.ContainingType.IsEqualTo(EnumerableSymbol))
+            {
+                // Any(_ => true)
+                if (operation.Arguments.Length >= 2)
+                    return;
+
+                // The reported member must be available on the type of the expression as written in the source code (IEnumerable<int> a = new List<int>())
+                var operandType = operation.Arguments[0].Value.GetActualType(useDataFlowAnalysis: false, context.CancellationToken);
+                if (operandType is null)
+                    return;
+
+                var implementedInterfaces = operandType.GetAllInterfacesIncludingSelf().Select(i => i.OriginalDefinition);
+                if (implementedInterfaces.Any(i => i.IsEqualTo(ICollectionOfTSymbol) || i.IsEqualTo(ICollectionSymbol) || i.IsEqualTo(IReadOnlyCollectionOfTSymbol)))
+                {
+                    // The code fix uses the Length property of arrays, and the Count property of the other types,
+                    // which may be an explicit implementation of the interface or be ambiguous
+                    if (operandType.TypeKind != TypeKind.Array && !HasCountProperty(operation, operandType))
+                        return;
+
+                    context.ReportDiagnostic(OptimizeLinqUsageAnalyzer.UseCountInsteadOfAny, operation);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Indicates whether <c>expression.Count</c> binds to an accessible <see cref="int"/> property of the type. The member lookup
+        /// finds the members inherited from the base types and the base interfaces, and excludes the explicit implementations.
+        /// </summary>
+        private static bool HasCountProperty(IOperation operation, ITypeSymbol type)
+        {
+            var semanticModel = operation.SemanticModel;
+            if (semanticModel is null)
+                return false;
+
+            var position = operation.Syntax.SpanStart;
+            return semanticModel.LookupSymbols(position, type, "Count") is [IPropertySymbol { IsStatic: false, IsIndexer: false, Type.SpecialType: SpecialType.System_Int32, GetMethod: { } getMethod }]
+                && semanticModel.IsAccessible(position, getMethod);
+        }
+
+        /// <summary>
+        /// Indicates whether <c>expression[int]</c> binds to a single accessible indexer of the type.
+        /// </summary>
+        private static bool HasInt32Indexer(IOperation operation, ITypeSymbol type)
+        {
+            var semanticModel = operation.SemanticModel;
+            if (semanticModel is null)
+                return false;
+
+            var position = operation.Syntax.SpanStart;
+            IPropertySymbol? result = null;
+            foreach (var symbol in semanticModel.LookupSymbols(position, type, WellKnownMemberNames.Indexer))
+            {
+                if (symbol is not IPropertySymbol { IsIndexer: true, IsStatic: false, Parameters: [{ Type.SpecialType: SpecialType.System_Int32 }], GetMethod: { } getMethod } indexer)
+                    continue;
+
+                if (result is not null || !semanticModel.IsAccessible(position, getMethod))
+                    return false;
+
+                result = indexer;
+            }
+
+            return result is not null;
+        }
+
+        private static IInvocationOperation? GetParentLinqOperation(IOperation op)
+        {
+            var parent = op.Parent;
+            if (parent is IConversionOperation)
+            {
+                parent = parent.Parent;
+            }
+
+            if (parent is IInvocationOperation invocationOperation)
+                return invocationOperation;
+
+            // Only follow the source of the extension method: 'items.Where(...).Any()', but not 'seqs.FirstOrDefault(items.Where(...))'
+            if (parent is IArgumentOperation { Parameter.Ordinal: 0, Parent: IInvocationOperation { TargetMethod.IsExtensionMethod: true } parentInvocation })
+                return parentInvocation;
+
+            return null;
+        }
+
+        private static IInvocationOperation? GetChildLinqOperation(IInvocationOperation op)
+        {
+            if (op.Arguments.Length == 0)
+                return null;
+
+            var argument = op.Arguments[0].Value;
+            if (argument is IInvocationOperation invocationOperation)
+                return invocationOperation;
+
+            return null;
+        }
+
+        private static IBinaryOperation? GetParentBinaryOperation(IOperation op, out IOperation? operand)
+        {
+            var parent = op.Parent;
+            if (parent is IConversionOperation)
+            {
+                op = parent;
+                parent = parent.Parent;
+            }
+
+            if (parent is IBinaryOperation binaryOperation)
+            {
+                operand = op;
+                return binaryOperation;
+            }
+
+            operand = null;
+            return null;
+        }
+    }
+}

@@ -71,23 +71,22 @@ internal static class GlossaryWriter
         ["system"] = ["keyedBy"],
     };
 
-    private static readonly JsonWriterOptions Options = new()
+    // The writer these options make is the one a Utf8JsonWriter with the same settings would be; MaxDepth is the
+    // writer's own default, not the serializer's.
+    private static readonly JsonSerializerOptions Options = new()
     {
-        Indented = true,
+        WriteIndented = true,
         IndentSize = 2,
         NewLine = "\n",
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        MaxDepth = 1000,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     /// <summary>The glossary's canonical text.</summary>
-    internal static string Write(JsonObject glossary)
-    {
-        var ordered = Root(glossary);
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, Options))
-            ordered.WriteTo(writer);
-        return Encoding.UTF8.GetString(stream.ToArray()) + "\n";
-    }
+    internal static string Write(JsonObject glossary) =>
+        Root(glossary).ToJsonString(Options) + "\n";
 
     private static JsonObject Kind(
         JsonObject node,
@@ -159,7 +158,15 @@ internal static class GlossaryWriter
     private static JsonNode? Rule(JsonNode? node) =>
         As(
             node,
-            r => Kind(r, "rule", (key, value) => key == "rules" ? List(value, Rule) : Copy(value))
+            r =>
+                Kind(
+                    r,
+                    "rule",
+                    (key, value) =>
+                        string.Equals(key, "rules", StringComparison.Ordinal)
+                            ? List(value, Rule)
+                            : Copy(value)
+                )
         );
 
     private static JsonNode? Reduction(JsonNode? node) =>
@@ -170,7 +177,7 @@ internal static class GlossaryWriter
                     r,
                     "reduction",
                     (key, value) =>
-                        key == "steps"
+                        string.Equals(key, "steps", StringComparison.Ordinal)
                             ? List(value, s => As(s, o => Kind(o, "step", (_, v) => Copy(v))))
                             : Copy(value)
                 )
@@ -189,7 +196,19 @@ internal static class GlossaryWriter
                     "triggers" => Map(value, t => As(t, Trigger)),
                     "guards" => Map(
                         value,
-                        g => As(g, o => Kind(o, "guard", (k, v) => k == "rule" ? Rule(v) : Copy(v)))
+                        g =>
+                            As(
+                                g,
+                                o =>
+                                    Kind(
+                                        o,
+                                        "guard",
+                                        (k, v) =>
+                                            string.Equals(k, "rule", StringComparison.Ordinal)
+                                                ? Rule(v)
+                                                : Copy(v)
+                                    )
+                            )
                     ),
                     "invokes" => Map(value, i => As(i, Invoke)),
                     "links" => Map(value, l => As(l, o => Kind(o, "link", (_, v) => Copy(v)))),

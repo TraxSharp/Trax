@@ -26,7 +26,7 @@ public class ManifestGroupOperationsTests
                 Arg.Any<UpdateManifestGroupInput>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(true, Id: 42, Count: 2, Message: "updated"));
+            .Returns(new OperationResult(Success: true, Id: 42, Count: 2, Message: "updated"));
         var mutations = new ManifestGroupMutations();
         var input = new UpdateManifestGroupInput(Priority: 5, IsEnabled: false);
 
@@ -47,7 +47,7 @@ public class ManifestGroupOperationsTests
                 Arg.Any<UpdateManifestGroupInput>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(false, Message: "Manifest group 999 not found."));
+            .Returns(new OperationResult(Success: false, Message: "Manifest group 999 not found."));
         var mutations = new ManifestGroupMutations();
 
         var response = await mutations.UpdateManifestGroup(
@@ -66,7 +66,7 @@ public class ManifestGroupOperationsTests
     {
         var ops = Substitute.For<IOperationsService>();
         var graph = new ManifestGroupDependencyGraph(
-            new[] { new DependencyGraphNode(7, "focal", true) },
+            new[] { new DependencyGraphNode(7, "focal", IsHighlighted: true) },
             Array.Empty<DependencyGraphEdge>()
         );
         ops.GetManifestGroupDependencyGraphAsync(7, Arg.Any<CancellationToken>()).Returns(graph);

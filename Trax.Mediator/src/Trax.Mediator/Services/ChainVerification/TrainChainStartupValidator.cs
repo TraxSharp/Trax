@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.ClientExport;
@@ -69,12 +71,7 @@ internal sealed class TrainChainStartupValidator(
 
         if (configuration.SkipChainVerification)
         {
-            logger?.LogWarning(
-                "Chain verification is off, so a train whose chain cannot run will not be found "
-                    + "until something runs it. The check of each train's [Inject] properties is "
-                    + "off with it, so one the container cannot fill is null on every run instead "
-                    + "of stopping the host."
-            );
+            LogVerificationOff();
 
             return;
         }
@@ -84,51 +81,76 @@ internal sealed class TrainChainStartupValidator(
         // disposed asynchronously, so such a train runs fine — disposing this one synchronously
         // would refuse the host over a disposal problem, reported as a chain problem, with
         // SkipChainVerification() the only way past it.
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var problems = new List<string>();
-        var failedTrains = 0;
-        var checkedTrains = 0;
-
-        foreach (var registration in discoveryService.DiscoverTrains())
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var problems = new List<string>();
+            var failedTrains = 0;
+            var checkedTrains = 0;
 
-            var warnings = new List<string>();
-            var problem = Check(scope.ServiceProvider, registration, warnings, out var skipped);
-
-            foreach (var warning in warnings)
-                logger?.LogWarning("{TrainName}: {Warning}", registration.ServiceTypeName, warning);
-
-            if (skipped is not null)
+            foreach (var registration in discoveryService.DiscoverTrains())
             {
-                logger?.LogWarning(
-                    "The chain of {TrainName} was not verified at startup: {Reason}",
-                    registration.ServiceTypeName,
-                    skipped
-                );
-                continue;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var warnings = new List<string>();
+                var problem = Check(scope.ServiceProvider, registration, warnings, out var skipped);
+
+                foreach (var warning in warnings)
+                    logger?.LogWarning(
+                        "{TrainName}: {Warning}",
+                        registration.ServiceTypeName,
+                        warning
+                    );
+
+                if (skipped is not null)
+                {
+                    logger?.LogWarning(
+                        "The chain of {TrainName} was not verified at startup: {Reason}",
+                        registration.ServiceTypeName,
+                        skipped
+                    );
+                    continue;
+                }
+
+                checkedTrains++;
+
+                if (problem is not null)
+                {
+                    failedTrains++;
+                    problems.AddRange(problem);
+                }
             }
 
-            checkedTrains++;
+            if (failedTrains > 0)
+                throw Refusal(failedTrains, checkedTrains, problems);
 
-            if (problem is not null)
-            {
-                failedTrains++;
-                problems.AddRange(problem);
-            }
+            logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);
         }
-
-        if (failedTrains > 0)
-            throw new TrainException(
-                $"{failedTrains} of {checkedTrains} registered trains cannot run:"
-                    + Environment.NewLine
-                    + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
-                    + Environment.NewLine
-                    + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
-            );
-
-        logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);
     }
+
+    private void LogVerificationOff() =>
+        logger?.LogWarning(
+            "Chain verification is off, so a train whose chain cannot run will not be found "
+                + "until something runs it. The check of each train's [Inject] properties is "
+                + "off with it, so one the container cannot fill is null on every run instead "
+                + "of stopping the host."
+        );
+
+    private static TrainException Refusal(
+        int failedTrains,
+        int checkedTrains,
+        List<string> problems
+    ) =>
+        new(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{failedTrains} of {checkedTrains} registered trains cannot run:"
+            )
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
+                + Environment.NewLine
+                + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
+        );
 
     public Task StartAsync(CancellationToken cancellationToken) =>
         _checked ? Task.CompletedTask : StartingAsync(cancellationToken);
@@ -163,31 +185,7 @@ internal sealed class TrainChainStartupValidator(
         }
         catch (Exception ex)
         {
-            // A constructor argument the container does not register at all fails every run of
-            // the train, so it is refused here, naming the type, rather than surfacing as the raw
-            // DI error on the first run.
-            if (CannotEverBeBuilt(services, registration) is { } reason)
-                return [$"{registration.ServiceTypeName} cannot be built: {reason}"];
-
-            // The class without its [Inject] properties filled. When it builds, what failed was
-            // filling them, and the instance shows which of them its constructor or initializers
-            // already set, which filling skips.
-            if (
-                UnfilledInjectProperties(
-                    services,
-                    registration,
-                    warnings,
-                    BareTrain(services, registration)
-                ) is
-                { Count: > 0 } unbuildable
-            )
-                return unbuildable.Select(r => $"{registration.ServiceTypeName}: {r}").ToList();
-
-            // A train whose constructor needs something only a request provides, a current user
-            // read from HttpContext say, cannot be built at boot and still runs fine. Refusing
-            // to start over it would make the upgrade that adds this check break such hosts.
-            skipped = $"it could not be constructed outside a request ({ex.Message})";
-            return null;
+            return Unconstructed(services, registration, warnings, ex, out skipped);
         }
 
         // An [Inject] property is filled by GetService, so a type nothing registers leaves it null
@@ -216,7 +214,7 @@ internal sealed class TrainChainStartupValidator(
 
         try
         {
-            chain = (ChainRecorder)declaredChain.Invoke(train, null)!;
+            chain = (ChainRecorder)declaredChain.Invoke(train, parameters: null).NotNull();
         }
         catch (Exception ex) when (ex.InnerException is ChainDeclarationException declaration)
         {
@@ -235,6 +233,60 @@ internal sealed class TrainChainStartupValidator(
             ];
         }
 
+        return VerifyDeclaredChain(services, registration, warnings, train, chain);
+    }
+
+    /// <summary>
+    /// What <see cref="Check"/> returns for a train the container failed to build.
+    /// </summary>
+    private static IReadOnlyList<string>? Unconstructed(
+        IServiceProvider services,
+        TrainRegistration registration,
+        List<string> warnings,
+        Exception ex,
+        out string? skipped
+    )
+    {
+        skipped = null;
+
+        // A constructor argument the container does not register at all fails every run of
+        // the train, so it is refused here, naming the type, rather than surfacing as the raw
+        // DI error on the first run.
+        if (CannotEverBeBuilt(services, registration) is { } reason)
+            return [$"{registration.ServiceTypeName} cannot be built: {reason}"];
+
+        // The class without its [Inject] properties filled. When it builds, what failed was
+        // filling them, and the instance shows which of them its constructor or initializers
+        // already set, which filling skips.
+        if (
+            UnfilledInjectProperties(
+                services,
+                registration,
+                warnings,
+                BareTrain(services, registration)
+            ) is
+            { Count: > 0 } unbuildable
+        )
+            return unbuildable.Select(r => $"{registration.ServiceTypeName}: {r}").ToList();
+
+        // A train whose constructor needs something only a request provides, a current user
+        // read from HttpContext say, cannot be built at boot and still runs fine. Refusing
+        // to start over it would make the upgrade that adds this check break such hosts.
+        skipped = $"it could not be constructed outside a request ({ex.Message})";
+        return null;
+    }
+
+    /// <summary>
+    /// The rest of <see cref="Check"/>, once the train's chain is read.
+    /// </summary>
+    private static IReadOnlyList<string>? VerifyDeclaredChain(
+        IServiceProvider services,
+        TrainRegistration registration,
+        List<string> warnings,
+        object train,
+        ChainRecorder chain
+    )
+    {
         warnings.AddRange(BuiltJunctionsWithInjectProperties(chain));
 
         // A run takes its chain from here rather than calling Junctions() again (Trax.Docs/adr/0047).
@@ -278,7 +330,9 @@ internal sealed class TrainChainStartupValidator(
             ];
         }
 
-        var refused = Describe(chain, faults).Concat(RefusedCheckpoints(chain, false)).ToList();
+        var refused = Describe(chain, faults)
+            .Concat(RefusedCheckpoints(chain, inWithheldTrack: false))
+            .ToList();
 
         return refused.Count == 0
             ? null
@@ -365,21 +419,27 @@ internal sealed class TrainChainStartupValidator(
 
             // A refusal's reason already names the step's junction.
             if (fault.IsRefusal)
-                return $"step {fault.StepIndex + 1}: {fault.Reason}";
+                return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"step {fault.StepIndex + 1}: {fault.Reason}"
+                );
 
             // The one fault Verify reports about the train's input rather than a step. A recorded
             // Seed step never faults except by refusal, so every other Seed fault is this one.
             if (fault.Kind == ChainStepKind.Seed)
                 return fault.Reason;
 
-            return $"step {fault.StepIndex + 1} ({StepName(fault)}) {fault.Reason}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"step {fault.StepIndex + 1} ({StepName(fault)}) {fault.Reason}"
+            );
         }
 
         return faults
             .Where(f => f.IsRefusal)
             .Concat(faults.Where(f => !f.IsRefusal && !IsCascade(f)))
             .Select(Line)
-            .Distinct();
+            .Distinct(StringComparer.Ordinal);
     }
 
     private static string StepName(ChainFault fault) =>
@@ -448,21 +508,13 @@ internal sealed class TrainChainStartupValidator(
 
             try
             {
-                registered = isService.IsService(type);
-                reason = registered
-                    ? new DependencyWalk(
-                        isService,
-                        services.GetService<IServiceCollection>(),
-                        $"the train's [Inject] property '{property.Name}'"
-                    ).WhyNotRegistered(type)
-                    : $"its [Inject] property '{property.Name}' needs '{Readable(type)}', which "
-                        + "is not registered, so the property is null on every run."
-                        + (
-                            optional
-                                ? ""
-                                : " Register it before building the host, or declare the "
-                                    + "property nullable if the train runs without it."
-                        );
+                reason = WhyPropertyUnfilled(
+                    isService,
+                    services,
+                    property,
+                    optional,
+                    out registered
+                );
             }
             catch (Exception)
             {
@@ -473,23 +525,62 @@ internal sealed class TrainChainStartupValidator(
             if (reason is null)
                 continue;
 
-            // A registered type that cannot be built throws out of GetService, which fails the
-            // train's resolution on every run however the property is declared.
-            if (optional && !registered)
-                warnings.Add(
-                    reason + " It is declared nullable, so the train is taken to cope without it."
-                );
-            else if (instance is null)
-                warnings.Add(
-                    reason
-                        + " The train could not be built here, so whether its constructor or an "
-                        + "initializer sets the property could not be checked."
-                );
-            else
-                faults.Add(reason);
+            ReportUnfilled(reason, optional, registered, instance, warnings, faults);
         }
 
         return faults;
+    }
+
+    private static string? WhyPropertyUnfilled(
+        IServiceProviderIsService isService,
+        IServiceProvider services,
+        PropertyInfo property,
+        bool optional,
+        out bool registered
+    )
+    {
+        var type = property.PropertyType;
+
+        registered = isService.IsService(type);
+        return registered
+            ? new DependencyWalk(
+                isService,
+                services.GetService<IServiceCollection>(),
+                $"the train's [Inject] property '{property.Name}'"
+            ).WhyNotRegistered(type)
+            : $"its [Inject] property '{property.Name}' needs '{Readable(type)}', which "
+                + "is not registered, so the property is null on every run."
+                + (
+                    optional
+                        ? ""
+                        : " Register it before building the host, or declare the "
+                            + "property nullable if the train runs without it."
+                );
+    }
+
+    private static void ReportUnfilled(
+        string reason,
+        bool optional,
+        bool registered,
+        object? instance,
+        List<string> warnings,
+        List<string> faults
+    )
+    {
+        // A registered type that cannot be built throws out of GetService, which fails the
+        // train's resolution on every run however the property is declared.
+        if (optional && !registered)
+            warnings.Add(
+                reason + " It is declared nullable, so the train is taken to cope without it."
+            );
+        else if (instance is null)
+            warnings.Add(
+                reason
+                    + " The train could not be built here, so whether its constructor or an "
+                    + "initializer sets the property could not be checked."
+            );
+        else
+            faults.Add(reason);
     }
 
     /// <summary>
@@ -815,7 +906,7 @@ internal sealed class TrainChainStartupValidator(
         }
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
 
         if (tick >= 0)
             name = name[..tick];

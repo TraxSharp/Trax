@@ -1,4 +1,5 @@
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -25,36 +26,7 @@ public class RestartTests
     [Test]
     public async Task AHostKilledMidBuild_FailsTheRunOnTheNextStart_AndTheDraftIsRebuiltFromBuildFailed()
     {
-        Guid draftId;
-        await using (
-            var first = await RecoveryHostProcess.StartAsync(
-                TimeSpan.FromSeconds(2),
-                requirePersistedOperations: false
-            )
-        )
-        {
-            await TopicMapDrafts.ClearAsync(RecoveryHostProcess.ConnectionString);
-            var draft = new TopicMapDraft(new GraphQLClient(first.Http), DemoKeys.Operator);
-            await draft.CreateAsync();
-            draftId = draft.Id;
-            (await draft.BuildAsync(CorpusFixture.Fields, 2016, 2025))
-                .State.Should()
-                .Be(nameof(TopicMapState.Building));
-
-            (
-                await Polling.WaitUntilAsync(
-                    async () => await RunStateAsync(draftId) == "in_progress",
-                    TopicMapDraft.Patience,
-                    TimeSpan.FromMilliseconds(100)
-                )
-            )
-                .Should()
-                .BeTrue(
-                    $"the build should be running on the first host. It wrote:\n{first.Output}"
-                );
-
-            await first.KillAsync();
-        }
+        var draftId = await KillTheFirstHostMidBuildAsync();
 
         (await RunStateAsync(draftId))
             .Should()
@@ -69,7 +41,7 @@ public class RestartTests
 
         var failed = await resumed.WaitForStateAsync(nameof(TopicMapState.BuildFailed));
         (await RunStateAsync(draftId)).Should().Be("failed", "the restarted host reaped it");
-        failed.Context["fields"]!.AsArray().Should().HaveCount(CorpusFixture.Fields.Count);
+        failed.Context["fields"].NotNull().AsArray().Should().HaveCount(CorpusFixture.Fields.Count);
 
         // The seeded data is still there.
         (await CountAsync("topic_map.works"))
@@ -82,35 +54,89 @@ public class RestartTests
             .State.Should()
             .Be(nameof(TopicMapState.Building));
         var built = await resumed.WaitForStateAsync(nameof(TopicMapState.Built));
-        built.Context["topicPairs"]!.GetValue<int>().Should().Be(32);
+        built.Context["topicPairs"].NotNull().GetValue<int>().Should().Be(32);
+    }
+
+    // Starts a build on a first host and kills the host while the build's run is in progress.
+    private static async Task<Guid> KillTheFirstHostMidBuildAsync()
+    {
+        Guid draftId;
+        var first = await RecoveryHostProcess
+            .StartAsync(TimeSpan.FromSeconds(2), requirePersistedOperations: false)
+            .ConfigureAwait(false);
+        await using (first.ConfigureAwait(false))
+        {
+            await TopicMapDrafts
+                .ClearAsync(RecoveryHostProcess.ConnectionString)
+                .ConfigureAwait(false);
+            var draft = new TopicMapDraft(new GraphQLClient(first.Http), DemoKeys.Operator);
+            await draft.CreateAsync().ConfigureAwait(false);
+            draftId = draft.Id;
+            (await draft.BuildAsync(CorpusFixture.Fields, 2016, 2025).ConfigureAwait(false))
+                .State.Should()
+                .Be(nameof(TopicMapState.Building));
+
+            (
+                await Polling
+                    .WaitUntilAsync(
+                        async () =>
+                            string.Equals(
+                                await RunStateAsync(draftId).ConfigureAwait(false),
+                                "in_progress",
+                                StringComparison.Ordinal
+                            ),
+                        TopicMapDraft.Patience,
+                        TimeSpan.FromMilliseconds(100)
+                    )
+                    .ConfigureAwait(false)
+            )
+                .Should()
+                .BeTrue(
+                    $"the build should be running on the first host. It wrote:\n{first.Output}"
+                );
+
+            await first.KillAsync().ConfigureAwait(false);
+        }
+
+        return draftId;
     }
 
     // The state of the latest run the draft's Building state queued, as Postgres spells it.
     private static async Task<string?> RunStateAsync(Guid draftId) =>
         await ScalarAsync<string>(
-            """
-            SELECT train_state::text FROM trax.metadata
-            WHERE invoking_instance_id = @id ORDER BY id DESC LIMIT 1
-            """,
-            draftId
-        );
+                """
+                SELECT train_state::text FROM trax.metadata
+                WHERE invoking_instance_id = @id ORDER BY id DESC LIMIT 1
+                """,
+                draftId
+            )
+            .ConfigureAwait(false);
 
     private static async Task<string?> DraftStateAsync(Guid draftId) =>
         await ScalarAsync<string>(
-            "SELECT state FROM trax.snapshot_draft WHERE id = @id AND machine = 'topic-map'",
-            draftId
-        );
+                "SELECT state FROM trax.snapshot_draft WHERE id = @id AND machine = 'topic-map'",
+                draftId
+            )
+            .ConfigureAwait(false);
 
     private static async Task<long> CountAsync(string table) =>
-        await ScalarAsync<long>($"SELECT count(*) FROM {table}", null);
+        await ScalarAsync<long>($"SELECT count(*) FROM {table}", id: null).ConfigureAwait(false);
 
     private static async Task<T?> ScalarAsync<T>(string sql, Guid? id)
     {
-        await using var connection = new NpgsqlConnection(RecoveryHostProcess.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        if (id is { } value)
-            command.Parameters.AddWithValue("id", value);
-        return await command.ExecuteScalarAsync() is T result ? result : default;
+        var connection = new NpgsqlConnection(RecoveryHostProcess.ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(sql, connection);
+            await using (command.ConfigureAwait(false))
+            {
+                if (id is { } value)
+                    command.Parameters.AddWithValue("id", value);
+                return await command.ExecuteScalarAsync().ConfigureAwait(false) is T result
+                    ? result
+                    : default;
+            }
+        }
     }
 }

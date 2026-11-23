@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http.Connections;
 
 namespace Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions;
 
-public partial class TraxTrainEventHubOptions
+public sealed partial class TraxTrainEventHubOptions
 {
     /// <summary>
     /// Admits only callers the host's authorization accepts. With no arguments a caller must
@@ -63,7 +63,7 @@ public partial class TraxTrainEventHubOptions
                 );
             }
 
-            if (role.Contains(','))
+            if (role.Contains(',', StringComparison.Ordinal))
             {
                 throw new ArgumentException(
                     $"RequireRoles() takes each role as its own argument; '{role}' contains a comma. "

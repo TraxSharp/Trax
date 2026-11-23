@@ -7,7 +7,9 @@ nav_order: 4
 source:
   - Trax.Api/src/Trax.Api.GraphQL/Startup
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/ExposureAuthorizationRule.cs
+  - Trax.Api/src/Trax.Api.GraphQL/Configuration/ExposureViolation.cs
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/TypeExtensionExposureRule.cs
+  - Trax.Api/src/Trax.Api.GraphQL/Configuration/TypeExtensionParentPosture.cs
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/TraxGraphQLBuilder/TraxGraphQLBuilder.Build.cs
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/TraxGraphQLBuilder/TraxGraphQLBuilder.Operations.cs
   - Trax.Api/src/Trax.Api.GraphQL/Authorization/TraxGraphQLAuthPolicyValidator.cs

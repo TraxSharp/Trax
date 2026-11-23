@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.RunStarters;
@@ -29,7 +31,7 @@ public class RunStarterTests : TestSetup
         SHA256.HashData(Encoding.UTF8.GetBytes("p\0" + Principal))
     );
 
-    private static string Train => typeof(QueueInputTests.IOptionalInputTrain).FullName!;
+    private static string Train => typeof(QueueInputTests.IOptionalInputTrain).FullName.NotNull();
 
     private ITrainExecutionService Execution =>
         Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
@@ -42,10 +44,14 @@ public class RunStarterTests : TestSetup
     {
         var recorded = await Execution.QueueAsync(
             Train,
-            null,
+            inputJson: null,
             new QueueTrainOptions { RecordCaller = true }
         );
-        var unrecorded = await Execution.QueueAsync(Train, null, new QueueTrainOptions());
+        var unrecorded = await Execution.QueueAsync(
+            Train,
+            inputJson: null,
+            new QueueTrainOptions()
+        );
 
         (await QueuedStarterAsync(recorded.WorkQueueId))
             .Should()
@@ -75,7 +81,7 @@ public class RunStarterTests : TestSetup
         var starters = Scope.ServiceProvider.GetRequiredService<IRunStarters>();
         var queued = await Execution.QueueAsync(
             Train,
-            null,
+            inputJson: null,
             new QueueTrainOptions { RecordCaller = true }
         );
         var ran = await Execution.RunAsync(
@@ -107,7 +113,7 @@ public class RunStarterTests : TestSetup
         var theirs = await Execution.RunAsync(Train, "{}");
         await ExecuteAsync(
             $"UPDATE trax.metadata SET external_id = '{mine.ExternalId}', starter_hash = 'someone-else' "
-                + $"WHERE id = {theirs.MetadataId}"
+                + string.Create(CultureInfo.InvariantCulture, $"WHERE id = {theirs.MetadataId}")
         );
 
         (await starters.LatestExecutionStartedByCurrentCallerAsync(mine.ExternalId))
@@ -124,28 +130,33 @@ public class RunStarterTests : TestSetup
 
     private async Task ExecuteAsync(string sql)
     {
-        using var context = await ContextAsync();
-        await ((DbContext)context).Database.ExecuteSqlRawAsync(sql);
+        var context = await ContextAsync().ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        await ((DbContext)context).Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
     }
 
     private async Task<string?> QueuedStarterAsync(long id)
     {
-        using var context = await ContextAsync();
+        var context = await ContextAsync().ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await ((DbContext)context)
             .Database.SqlQuery<string?>(
                 $"SELECT starter_hash AS \"Value\" FROM trax.work_queue WHERE id = {id}"
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<string?> RunStarterAsync(long id)
     {
-        using var context = await ContextAsync();
+        var context = await ContextAsync().ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await ((DbContext)context)
             .Database.SqlQuery<string?>(
                 $"SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {id}"
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     private Task<Trax.Effect.Data.Services.DataContext.IDataContext> ContextAsync() =>

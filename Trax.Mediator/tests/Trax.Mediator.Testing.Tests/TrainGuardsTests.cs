@@ -2,26 +2,6 @@ using Trax.Mediator.Testing;
 
 namespace Trax.Mediator.Testing.Tests;
 
-// Test-local stand-ins matching the Trax base type names ("ServiceTrain`2" / "IServiceTrain`2"),
-// which the guard matches by name. Used to exercise the reflection guard without the real framework.
-public interface IServiceTrain<TIn, TOut>;
-
-public abstract class ServiceTrain<TIn, TOut>;
-
-public interface IGoodTrain : IServiceTrain<int, int>;
-
-public sealed class GoodTrain : ServiceTrain<int, int>, IGoodTrain;
-
-/// <summary>A train interface not named after its class, which the registry accepts.</summary>
-public interface IRenamedContract : IServiceTrain<string, int>;
-
-public sealed class DifferentlyNamedTrain : ServiceTrain<string, int>, IRenamedContract;
-
-/// <summary>A train that implements its interface directly, with no ServiceTrain base.</summary>
-public interface IDirectTrain : IServiceTrain<long, int>;
-
-public sealed class DirectTrain : IDirectTrain;
-
 [TestFixture]
 public class TrainGuardsTests
 {

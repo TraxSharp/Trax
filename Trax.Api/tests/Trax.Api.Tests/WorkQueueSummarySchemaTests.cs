@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -63,7 +64,7 @@ public class WorkQueueSummarySchemaTests
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
 
         using var document = JsonDocument.Parse(operationResult.ToJson());
         var fields = document
@@ -72,8 +73,9 @@ public class WorkQueueSummarySchemaTests
             .GetProperty("fields")
             .EnumerateArray()
             .ToDictionary(
-                f => f.GetProperty("name").GetString()!,
-                f => f.GetProperty("type").Clone()
+                f => f.GetProperty("name").GetString().NotNull(),
+                f => f.GetProperty("type").Clone(),
+                StringComparer.Ordinal
             );
 
         fields

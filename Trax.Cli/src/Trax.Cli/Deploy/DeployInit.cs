@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -13,8 +14,7 @@ internal static partial class DeployInit
     {
         var projects = Directory
             .EnumerateFiles(directory, "*.csproj", SearchOption.AllDirectories)
-            .Where(p => !InBuildOutputOrTests(directory, p))
-            .Where(IsDeployableTraxHost)
+            .Where(p => !InBuildOutputOrTests(directory, p) && IsDeployableTraxHost(p))
             .Order(StringComparer.Ordinal)
             .ToList();
         if (projects.Count == 0)
@@ -24,7 +24,7 @@ internal static partial class DeployInit
             );
 
         var file = new DeployFile { App = app ?? AppName(directory) };
-        if (!DeployFile.Name().IsMatch(file.App))
+        if (!DeployFile.Name.IsMatch(file.App))
             throw new InvalidOperationException(
                 $"'{file.App}' is not an app name: lower case, a letter first, then letters, digits or dashes. "
                     + "Give one with --app."
@@ -33,7 +33,10 @@ internal static partial class DeployInit
         {
             var name = projects.Count == 1 ? "hub" : ServiceName(project);
             if (file.Services.ContainsKey(name))
-                name = $"{name}-{file.Services.Count + 1}";
+                name = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{name}-{file.Services.Count + 1}"
+                );
             file.Services[name] = new DeployService
             {
                 Project = Path.GetRelativePath(directory, project).Replace('\\', '/'),
@@ -92,12 +95,12 @@ internal static partial class DeployInit
 
     private static string Slug(string name)
     {
-        var slug = NotNameChars().Replace(name.ToLowerInvariant(), "-").Trim('-');
+        var slug = NotNameChars.Replace(name.ToLowerInvariant(), "-").Trim('-');
         return slug.Length > 0 && char.IsLetter(slug[0])
             ? slug
             : $"app{(slug.Length > 0 ? "-" : "")}{slug}";
     }
 
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex NotNameChars();
+    [GeneratedRegex("[^a-z0-9]+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NotNameChars { get; }
 }

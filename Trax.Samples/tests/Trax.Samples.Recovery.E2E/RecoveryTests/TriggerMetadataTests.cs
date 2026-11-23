@@ -34,15 +34,15 @@ public class TriggerMetadataTests
                         typeof(FieldsChoice)
                     ),
                     new(nameof(TopicMapTrigger.Build), TriggerKind.Client, typeof(RangeChoice)),
-                    new(nameof(TopicMapTrigger.Back), TriggerKind.Client, null),
-                    new(nameof(TopicMapTrigger.CancelBuild), TriggerKind.Client, null),
-                    new(nameof(TopicMapTrigger.Rebuild), TriggerKind.Client, null),
-                    new(nameof(TopicMapTrigger.Edit), TriggerKind.Client, null),
-                    new(nameof(TopicMapTrigger.StartOver), TriggerKind.Client, null),
+                    new(nameof(TopicMapTrigger.Back), TriggerKind.Client, InputType: null),
+                    new(nameof(TopicMapTrigger.CancelBuild), TriggerKind.Client, InputType: null),
+                    new(nameof(TopicMapTrigger.Rebuild), TriggerKind.Client, InputType: null),
+                    new(nameof(TopicMapTrigger.Edit), TriggerKind.Client, InputType: null),
+                    new(nameof(TopicMapTrigger.StartOver), TriggerKind.Client, InputType: null),
                     new("Building.done", TriggerKind.Outcome, typeof(TopicMap)),
-                    new("Building.failed", TriggerKind.Outcome, null),
-                    new("Building.cancelled", TriggerKind.Outcome, null),
-                    new("Built.after", TriggerKind.Timer, null),
+                    new("Building.failed", TriggerKind.Outcome, InputType: null),
+                    new("Building.cancelled", TriggerKind.Outcome, InputType: null),
+                    new("Built.after", TriggerKind.Timer, InputType: null),
                 },
                 "the typed surface is built from each trigger's kind and input record "
                     + "(Trax.Docs/adr/0048), and only client triggers become mutations"

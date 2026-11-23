@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AwesomeAssertions;
 using Trax.Cli.Generator;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -22,40 +23,42 @@ internal sealed class TemplateHive : IDisposable
         _hive = hive;
     }
 
-    public static TemplateHive Install()
+    public static async Task<TemplateHive> InstallAsync()
     {
         var root = Path.Combine(Path.GetTempPath(), $"trax-cli-hive-{Guid.NewGuid():N}");
         var hive = Path.Combine(root, "hive");
         Directory.CreateDirectory(hive);
 
-        var install = Dotnet(
-            root,
-            "new",
-            "install",
-            "Trax.Samples.Templates",
-            "--debug:custom-hive",
-            hive
-        );
+        var install = await DotnetAsync(
+                root,
+                "new",
+                "install",
+                "Trax.Samples.Templates",
+                "--debug:custom-hive",
+                hive
+            )
+            .ConfigureAwait(false);
         install.ExitCode.Should().Be(0, $"the template package installs:\n{install.Output}");
         return new TemplateHive(root, hive);
     }
 
     /// <summary>A generator whose hub step is <c>dotnet new trax-hub</c> from this hive.</summary>
-    public TraxProjectGenerator Generator() => new(ScaffoldHub);
+    public TraxProjectGenerator Generator() => new(ScaffoldHubAsync);
 
-    private void ScaffoldHub(string name, string dir)
+    private async Task ScaffoldHubAsync(string name, string dir)
     {
-        var scaffold = Dotnet(
-            _root,
-            "new",
-            "trax-hub",
-            "-n",
-            name,
-            "-o",
-            dir,
-            "--debug:custom-hive",
-            _hive
-        );
+        var scaffold = await DotnetAsync(
+                _root,
+                "new",
+                "trax-hub",
+                "-n",
+                name,
+                "-o",
+                dir,
+                "--debug:custom-hive",
+                _hive
+            )
+            .ConfigureAwait(false);
         if (scaffold.ExitCode != 0)
             throw new InvalidOperationException(
                 TraxProjectGenerator.DotnetNewFailure(scaffold.ExitCode, scaffold.Output)
@@ -68,7 +71,7 @@ internal sealed class TemplateHive : IDisposable
             Directory.Delete(_root, recursive: true);
     }
 
-    private static (int ExitCode, string Output) Dotnet(
+    private static async Task<(int ExitCode, string Output)> DotnetAsync(
         string workingDirectory,
         params string[] args
     )
@@ -83,14 +86,22 @@ internal sealed class TemplateHive : IDisposable
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        using var process = Process.Start(psi)!;
+        using var process = Process.Start(psi).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(Timeout))
+        using var timeout = new CancellationTokenSource(Timeout);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
             Assert.Fail($"dotnet {string.Join(' ', args)} did not finish within {Timeout}.");
         }
-        return (process.ExitCode, stdout.Result + stderr.Result);
+        return (
+            process.ExitCode,
+            await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false)
+        );
     }
 }

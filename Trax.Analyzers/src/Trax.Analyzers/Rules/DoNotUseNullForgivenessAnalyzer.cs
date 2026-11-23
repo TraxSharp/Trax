@@ -1,0 +1,39 @@
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class DoNotUseNullForgivenessAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DoNotUseNullForgiveness,
+        title: "Do not use the null-forgiving operator",
+        messageFormat: "Do not use the null-forgiving operator",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: false,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotUseNullForgiveness));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterSyntaxNodeAction(AnalyzeSyntax, SyntaxKind.SuppressNullableWarningExpression);
+    }
+
+    private static void AnalyzeSyntax(SyntaxNodeAnalysisContext context)
+    {
+        var node = (PostfixUnaryExpressionSyntax)context.Node;
+        if (!node.Operand.IsKind(SyntaxKind.NullLiteralExpression) &&
+            !node.Operand.IsKind(SyntaxKind.DefaultLiteralExpression) &&
+            !node.Operand.IsKind(SyntaxKind.DefaultExpression))
+            return;
+
+        context.ReportDiagnostic(Rule, node);
+    }
+}

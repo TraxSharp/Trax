@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using CsCheck;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Clients;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -152,9 +154,9 @@ public partial class GeneratedNamesPropertyTests
 
                 type Run { id: ID! state: {{Enum}}! other: {{OtherEnum}} }
 
-                enum {{Enum}} { {{string.Join(" ", EnumValues)}} }
+                enum {{Enum}} { {{string.Join(' ', EnumValues)}} }
 
-                enum {{OtherEnum}} { {{string.Join(" ", OtherValues)}} }
+                enum {{OtherEnum}} { {{string.Join(' ', OtherValues)}} }
 
                 input {{Input}} { {{InputField}}: {{OtherEnum}} }
                 """;
@@ -237,49 +239,8 @@ public partial class GeneratedNamesPropertyTests
                             Document = $"query {{ views {{ {view} {{ externalId other }} }} }}",
                         },
                     ],
-                Trains =
-                [
-                    new Trax.StateMachine.ClientManifestTrain
-                    {
-                        Field = field,
-                        Root = "mutation",
-                        Answer = "Started!",
-                        Arguments =
-                        [
-                            new Trax.StateMachine.ClientManifestArgument
-                            {
-                                Name = "input",
-                                Type = $"{c.Input}!",
-                            },
-                            new Trax.StateMachine.ClientManifestArgument
-                            {
-                                Name = "mode",
-                                Type = c.Enum,
-                            },
-                        ],
-                    },
-                ],
-                Types =
-                    $$"""
-                    type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
-
-                    enum {{c.Enum}} { {{string.Join(" ", c.EnumValues)}} }
-
-                    enum {{c.OtherEnum}} { {{string.Join(" ", c.OtherValues)}} }
-
-                    input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
-                    """
-                    + (
-                        view is null
-                            ? ""
-                            : $$"""
-
-
-                            type {{TypeScript.Upper(
-                                view
-                            )}}View { externalId: String! other: {{c.OtherEnum}} }
-                            """
-                    ),
+                Trains = ManifestTrains(c, field),
+                Types = ManifestTypes(c, view),
             },
             Documents:
             [
@@ -294,19 +255,67 @@ public partial class GeneratedNamesPropertyTests
             ]
         );
 
+    // The manifest's one train: the field a frontend's document sends, with its input and mode arguments.
+    private static IReadOnlyList<Trax.StateMachine.ClientManifestTrain> ManifestTrains(
+        Case c,
+        string field
+    ) =>
+        [
+            new Trax.StateMachine.ClientManifestTrain
+            {
+                Field = field,
+                Root = "mutation",
+                Answer = "Started!",
+                Arguments =
+                [
+                    new Trax.StateMachine.ClientManifestArgument
+                    {
+                        Name = "input",
+                        Type = $"{c.Input}!",
+                    },
+                    new Trax.StateMachine.ClientManifestArgument { Name = "mode", Type = c.Enum },
+                ],
+            },
+        ];
+
+    // The manifest's types: the train's answer, its two enums and its input, and the view's type when there is one.
+    private static string ManifestTypes(Case c, string? view) =>
+        $$"""
+            type Started { externalId: String! mode: {{c.Enum}} other: {{c.OtherEnum}} }
+
+            enum {{c.Enum}} { {{string.Join(' ', c.EnumValues)}} }
+
+            enum {{c.OtherEnum}} { {{string.Join(' ', c.OtherValues)}} }
+
+            input {{c.Input}} { {{c.InputField}}: {{c.OtherEnum}} }
+            """
+        + (
+            view is null
+                ? ""
+                : $$"""
+
+
+                type {{TypeScript.Upper(
+                    view
+                )}}View { externalId: String! other: {{c.OtherEnum}} }
+                """
+        );
+
     [Test]
-    public void The_manifest_client_is_refused_or_declares_each_name_once_as_an_identifier()
+    public async Task The_manifest_client_is_refused_or_declares_each_name_once_as_an_identifier()
     {
         var written = 0;
-        Gen.Select(Cases, Name, Name)
-            .Sample(
-                (c, field, view) =>
+        await Gen.Select(Cases, Name, Name)
+            .SampleAsync(
+                async (c, field, view) =>
                 {
                     IReadOnlyList<ClientFile> files;
                     try
                     {
-                        files = new ClientGenerator(new Fakes.FakeNodeRunner()).Render(
-                            ManifestOptions(c, field, view)
+                        files = (
+                            await new ClientGenerator(new Fakes.FakeNodeRunner())
+                                .RenderAsync(ManifestOptions(c, field, view))
+                                .ConfigureAwait(false)
                         );
                     }
                     catch (InvalidOperationException)
@@ -317,7 +326,8 @@ public partial class GeneratedNamesPropertyTests
                     Interlocked.Increment(ref written);
                 },
                 iter: 2000
-            );
+            )
+            .ConfigureAwait(false);
         written
             .Should()
             .BePositive("some of the cases are written, or the property holds of nothing");
@@ -365,120 +375,48 @@ public partial class GeneratedNamesPropertyTests
     // compiler over what is written, so a module that does not parse or names a type it does not declare or import
     // fails here rather than in a consumer's build.
     [Test]
-    public void A_sample_of_the_typescript_clients_typechecks()
+    public async Task A_sample_of_the_typescript_clients_typechecks()
     {
         var engine = TypeScriptEngine();
         var root = Directory.CreateTempSubdirectory("trax-ts-names-");
         try
         {
-            var random = new System.Random(20261105);
-            // Views are drawn apart, so adding them left the other names each seed draws as they were.
-            var views = new System.Random(20261107);
-            string Pick() =>
-                random.Next(4) == 0
-                    ? "abAB_"[random.Next(5)]
-                        + new string(
-                            Enumerable
-                                .Range(0, random.Next(5))
-                                .Select(_ => "abAB_09"[random.Next(7)])
-                                .ToArray()
-                        )
-                    : Hostile[random.Next(Hostile.Length)];
-            var operations = 0;
-            var manifests = 0;
-            for (var i = 0; i < 4000 && (operations < 40 || manifests < 40); i++)
-            {
-                var c = new Case(
-                    Pick(),
-                    [Pick(), Pick()],
-                    Pick(),
-                    Pick(),
-                    Pick(),
-                    [Pick()],
-                    Pick(),
-                    Pick(),
-                    Pick()
-                );
-                var fragment = Pick();
-                if (
-                    operations < 40
-                    && TryWrite(root, $"operations-{i}", OperationsWithFragment(c, fragment))
-                )
-                    operations++;
-                if (
-                    manifests < 40
-                    && TryWrite(
-                        root,
-                        $"manifest-{i}",
-                        ManifestWithProgress(
-                            c,
-                            Pick(),
-                            fragment,
-                            Hostile[views.Next(Hostile.Length)]
-                        )
-                    )
-                )
-                    manifests++;
-            }
+            var (operations, manifests) = await WriteSampleAsync(root).ConfigureAwait(false);
             operations.Should().Be(40, "the seed writes enough operations clients to check");
             manifests.Should().Be(40, "the seed writes enough manifest clients to check");
-
-            File.WriteAllText(
-                Path.Combine(root.FullName, "tsconfig.json"),
-                $$"""
-                {
-                  "compilerOptions": {
-                    "target": "es2022",
-                    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-                    "module": "esnext",
-                    "moduleResolution": "bundler",
-                    "moduleDetection": "force",
-                    "jsx": "react-jsx",
-                    "verbatimModuleSyntax": true,
-                    "strict": true,
-                    "noUnusedLocals": true,
-                    "noUnusedParameters": true,
-                    "noFallthroughCasesInSwitch": true,
-                    "skipLibCheck": true,
-                    "types": ["node"],
-                    "noEmit": true,
-                    "paths": {
-                      "@traxsharp/state-machine": [{{Json(
-                    Path.Combine(engine, "src", "index.ts")
-                )}}],
-                      "@traxsharp/state-machine/client": [{{Json(
-                    Path.Combine(engine, "src", "client", "index.ts")
-                )}}],
-                      "@traxsharp/state-machine/react": [{{Json(
-                    Path.Combine(engine, "src", "react.ts")
-                )}}]
-                    }
-                  },
-                  "include": ["cases"]
-                }
-                """
-            );
+            await File.WriteAllTextAsync(
+                    Path.Combine(root.FullName, "tsconfig.json"),
+                    SampleTsConfig(engine)
+                )
+                .ConfigureAwait(false);
             Directory.CreateSymbolicLink(
                 Path.Combine(root.FullName, "node_modules"),
                 Path.Combine(engine, "node_modules")
             );
 
-            var (code, output) = Node(
-                root.FullName,
-                Path.Combine(engine, "node_modules", "typescript", "bin", "tsc"),
-                "-p",
-                "tsconfig.json"
-            );
+            var (code, output) = await NodeAsync(
+                    root.FullName,
+                    Path.Combine(engine, "node_modules", "typescript", "bin", "tsc"),
+                    "-p",
+                    "tsconfig.json"
+                )
+                .ConfigureAwait(false);
 
-            var failing = CaseFolder()
-                .Matches(output)
-                .Select(m => m.Groups[1].Value)
-                .Distinct()
-                .Select(folder =>
-                    File.ReadAllText(Path.Combine(root.FullName, "cases", folder, "case.graphql"))
+            var failing = new List<string>();
+            foreach (
+                var folder in CaseFolder
+                    .Matches(output)
+                    .Select(m => m.Groups["folder"].Value)
+                    .Distinct(StringComparer.Ordinal)
+            )
+                failing.Add(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(root.FullName, "cases", folder, "case.graphql")
+                        )
+                        .ConfigureAwait(false)
                 );
             code.Should()
-                .Be(0, $"every sampled client typechecks:\n{output}\n{string.Join("\n", failing)}");
+                .Be(0, $"every sampled client typechecks:\n{output}\n{string.Join('\n', failing)}");
         }
         finally
         {
@@ -486,18 +424,115 @@ public partial class GeneratedNamesPropertyTests
         }
     }
 
+    // Draws cases from the fixed seeds and writes up to 40 operations clients and 40 manifest clients under root;
+    // returns how many of each were written.
+    private static async Task<(int Operations, int Manifests)> WriteSampleAsync(DirectoryInfo root)
+    {
+        var random = new System.Random(20261105);
+        // Views are drawn apart, so adding them left the other names each seed draws as they were.
+        var views = new System.Random(20261107);
+        string Pick() =>
+            random.Next(4) == 0
+                ? "abAB_"[random.Next(5)]
+                    + new string(
+                        Enumerable
+                            .Range(0, random.Next(5))
+                            .Select(_ => "abAB_09"[random.Next(7)])
+                            .ToArray()
+                    )
+                : Hostile[random.Next(Hostile.Length)];
+        var operations = 0;
+        var manifests = 0;
+        for (var i = 0; i < 4000 && (operations < 40 || manifests < 40); i++)
+        {
+            var c = new Case(
+                Pick(),
+                [Pick(), Pick()],
+                Pick(),
+                Pick(),
+                Pick(),
+                [Pick()],
+                Pick(),
+                Pick(),
+                Pick()
+            );
+            var fragment = Pick();
+            if (
+                operations < 40
+                && await TryWriteAsync(
+                        root,
+                        string.Create(CultureInfo.InvariantCulture, $"operations-{i}"),
+                        OperationsWithFragment(c, fragment)
+                    )
+                    .ConfigureAwait(false)
+            )
+                operations++;
+            if (
+                manifests < 40
+                && await TryWriteAsync(
+                        root,
+                        string.Create(CultureInfo.InvariantCulture, $"manifest-{i}"),
+                        ManifestWithProgress(
+                            c,
+                            Pick(),
+                            fragment,
+                            Hostile[views.Next(Hostile.Length)]
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )
+                manifests++;
+        }
+        return (operations, manifests);
+    }
+
+    // The compiler options the sampled clients are checked under, with the engine's modules mapped to its sources.
+    private static string SampleTsConfig(string engine) =>
+        $$"""
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "lib": ["ES2022", "DOM", "DOM.Iterable"],
+            "module": "esnext",
+            "moduleResolution": "bundler",
+            "moduleDetection": "force",
+            "jsx": "react-jsx",
+            "verbatimModuleSyntax": true,
+            "strict": true,
+            "noUnusedLocals": true,
+            "noUnusedParameters": true,
+            "noFallthroughCasesInSwitch": true,
+            "skipLibCheck": true,
+            "types": ["node"],
+            "noEmit": true,
+            "paths": {
+              "@traxsharp/state-machine": [{{Json(
+            Path.Combine(engine, "src", "index.ts")
+        )}}],
+              "@traxsharp/state-machine/client": [{{Json(
+            Path.Combine(engine, "src", "client", "index.ts")
+        )}}],
+              "@traxsharp/state-machine/react": [{{Json(
+            Path.Combine(engine, "src", "react.ts")
+        )}}]
+            }
+          },
+          "include": ["cases"]
+        }
+        """;
+
     // Writes the client `render` makes under cases/<folder>, beside the schema and documents it was made from; false
     // when the generator refuses them.
-    private static bool TryWrite(
+    private static async Task<bool> TryWriteAsync(
         DirectoryInfo root,
         string folder,
-        (Func<IReadOnlyList<ClientFile>> Render, string Source) client
+        (Func<Task<IReadOnlyList<ClientFile>>> Render, string Source) client
     )
     {
         IReadOnlyList<ClientFile> files;
         try
         {
-            files = client.Render();
+            files = await client.Render().ConfigureAwait(false);
         }
         catch (InvalidOperationException)
         {
@@ -507,14 +542,18 @@ public partial class GeneratedNamesPropertyTests
         foreach (var file in files)
         {
             var path = Path.Combine(dir, file.Path);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, file.Text);
+            Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
+            await File.WriteAllTextAsync(path, file.Text).ConfigureAwait(false);
         }
-        File.WriteAllText(Path.Combine(dir, "case.graphql"), $"# {folder}\n{client.Source}\n");
+        await File.WriteAllTextAsync(
+                Path.Combine(dir, "case.graphql"),
+                $"# {folder}\n{client.Source}\n"
+            )
+            .ConfigureAwait(false);
         return true;
     }
 
-    private static (Func<IReadOnlyList<ClientFile>>, string) OperationsWithFragment(
+    private static (Func<Task<IReadOnlyList<ClientFile>>>, string) OperationsWithFragment(
         Case c,
         string fragment
     )
@@ -528,17 +567,19 @@ public partial class GeneratedNamesPropertyTests
             """;
         return (
             () =>
-                ClientGenerator.Render(
-                    new OperationsGenerateOptions(
-                        c.Schema,
-                        [new ClientDocumentFile("src/graphql/Runs.graphql", document)]
+                Task.FromResult(
+                    ClientGenerator.Render(
+                        new OperationsGenerateOptions(
+                            c.Schema,
+                            [new ClientDocumentFile("src/graphql/Runs.graphql", document)]
+                        )
                     )
                 ),
             $"{c.Schema}\n{document}"
         );
     }
 
-    private static (Func<IReadOnlyList<ClientFile>>, string) ManifestWithProgress(
+    private static (Func<Task<IReadOnlyList<ClientFile>>>, string) ManifestWithProgress(
         Case c,
         string field,
         string fragment,
@@ -562,7 +603,7 @@ public partial class GeneratedNamesPropertyTests
         };
         return (
             () =>
-                new ClientGenerator(new Fakes.FakeNodeRunner()).Render(
+                new ClientGenerator(new Fakes.FakeNodeRunner()).RenderAsync(
                     options with
                     {
                         Manifest = manifest,
@@ -580,8 +621,12 @@ public partial class GeneratedNamesPropertyTests
 
     private static string Json(string text) => System.Text.Json.JsonSerializer.Serialize(text);
 
-    [GeneratedRegex(@"cases/([^/(]+)/")]
-    private static partial Regex CaseFolder();
+    [GeneratedRegex(
+        @"cases/(?<folder>[^/(]+)/",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CaseFolder { get; }
 
     // Trax.StateMachine/ts with its npm packages, whose TypeScript, graphql-ws and React the check compiles against.
     private static string TypeScriptEngine()
@@ -608,7 +653,10 @@ public partial class GeneratedNamesPropertyTests
         return "";
     }
 
-    private static (int ExitCode, string Output) Node(string workingDirectory, params string[] args)
+    private static async Task<(int ExitCode, string Output)> NodeAsync(
+        string workingDirectory,
+        params string[] args
+    )
     {
         var start = new System.Diagnostics.ProcessStartInfo("node")
         {
@@ -622,7 +670,7 @@ public partial class GeneratedNamesPropertyTests
         System.Diagnostics.Process process;
         try
         {
-            process = System.Diagnostics.Process.Start(start)!;
+            process = System.Diagnostics.Process.Start(start).NotNull();
         }
         catch (System.ComponentModel.Win32Exception)
         {
@@ -635,12 +683,20 @@ public partial class GeneratedNamesPropertyTests
         {
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(TimeSpan.FromMinutes(5)))
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
             {
                 process.Kill(entireProcessTree: true);
                 return (-1, "tsc did not finish within five minutes.");
             }
-            return (process.ExitCode, stdout.Result + stderr.Result);
+            return (
+                process.ExitCode,
+                await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false)
+            );
         }
     }
 
@@ -748,11 +804,11 @@ public partial class GeneratedNamesPropertyTests
     private static List<(string Name, bool IsType)> TypeScriptNames(string text)
     {
         var names = new List<(string, bool)>();
-        foreach (Match m in Declaration().Matches(text))
-            names.Add((m.Groups[2].Value, m.Groups[1].Value is "type" or "interface"));
-        foreach (Match m in ImportOrExport().Matches(text))
+        foreach (Match m in Declaration.Matches(text))
+            names.Add((m.Groups["name"].Value, m.Groups["kind"].Value is "type" or "interface"));
+        foreach (Match m in ImportOrExport.Matches(text))
         foreach (
-            var name in m.Groups[2]
+            var name in m.Groups["names"]
                 .Value.Split(
                     ',',
                     StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
@@ -761,19 +817,24 @@ public partial class GeneratedNamesPropertyTests
             names.Add(
                 name.StartsWith("type ", StringComparison.Ordinal)
                     ? (name[5..], true)
-                    : (name, m.Groups[1].Value.Length > 0)
+                    : (name, m.Groups["type"].Value.Length > 0)
             );
         return names;
     }
 
     [GeneratedRegex(
-        @"^(?:export )?(?:declare )?(?:async )?(type|interface|const|let|function|class) (?!\* )([^\s<=:({]+)",
-        RegexOptions.Multiline
+        @"^(?:export )?(?:declare )?(?:async )?(?<kind>type|interface|const|let|function|class) (?!\* )(?<name>[^\s<=:({]+)",
+        RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex Declaration();
+    private static partial Regex Declaration { get; }
 
-    [GeneratedRegex(@"^(?:import|export)( type)? \{ ([^}]*) \} from", RegexOptions.Multiline)]
-    private static partial Regex ImportOrExport();
+    [GeneratedRegex(
+        @"^(?:import|export)(?<type> type)? \{ (?<names>[^}]*) \} from",
+        RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ImportOrExport { get; }
 
     // Compiles a C# client against Trax.Client and everything deployed with the tests.
     private static IEnumerable<Diagnostic> Compile(IReadOnlyList<ClientFile> files) =>
@@ -790,7 +851,7 @@ public partial class GeneratedNamesPropertyTests
             .GetDiagnostics();
 
     private static readonly Lazy<List<MetadataReference>> References = new(() =>
-        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
             .ToList()

@@ -7,6 +7,13 @@
     folders, so it is never scaffolded and never packed.
     Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md
   -->
+  <!-- A scaffold made with the templates' strict option references Trax.Analyzers. Here every
+       project is already under the profile (Directory.Build.props imports it), so the reference
+       goes before the swap below, which would otherwise take the analyzer for a library. -->
+  <ItemGroup>
+    <PackageReference Remove="Trax.Analyzers" />
+  </ItemGroup>
+
   <ItemGroup>
     <_TraxSourceProject
       Include="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/*.csproj;$(MSBuildThisFileDirectory)../../../Trax.*/dotnet/src/**/*.csproj"

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
 namespace Trax.Effect.Tests.Broadcaster.UnitTests;
@@ -27,7 +28,7 @@ public class TrainLifecycleEventMessageTests
         var deserialized = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(42);
+        deserialized.NotNull().MetadataId.Should().Be(42);
         deserialized.ExternalId.Should().Be("ext-123");
         deserialized.TrainName.Should().Be("MyTrain");
         deserialized.TrainState.Should().Be("Completed");
@@ -46,7 +47,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "fail-ext",
             TrainName: "FailingTrain",
             TrainState: "Failed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: "JunctionA",
             FailureReason: "Something went wrong",
             EventType: "Failed",
@@ -57,7 +58,7 @@ public class TrainLifecycleEventMessageTests
         var json = JsonSerializer.Serialize(message);
         var deserialized = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json);
 
-        deserialized!.FailureJunction.Should().Be("JunctionA");
+        deserialized.NotNull().FailureJunction.Should().Be("JunctionA");
         deserialized.FailureReason.Should().Be("Something went wrong");
     }
 
@@ -69,7 +70,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "no-exec",
             TrainName: "OrphanTrain",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -80,7 +81,7 @@ public class TrainLifecycleEventMessageTests
         var json = JsonSerializer.Serialize(message);
         var deserialized = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json);
 
-        deserialized!.Executor.Should().BeNull();
+        deserialized.NotNull().Executor.Should().BeNull();
     }
 
     [Test]
@@ -91,7 +92,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "test",
             TrainName: "Train",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -132,7 +133,10 @@ public class TrainLifecycleEventMessageTests
         json.Should().Contain("\"changeDomain\":\"WorkQueue\"");
 
         var deserialized = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json);
-        deserialized!.EventType.Should().Be(TrainLifecycleEventMessage.DataChangedEventType);
+        deserialized
+            .NotNull()
+            .EventType.Should()
+            .Be(TrainLifecycleEventMessage.DataChangedEventType);
         deserialized.ChangeDomain.Should().Be("WorkQueue");
     }
 
@@ -146,7 +150,7 @@ public class TrainLifecycleEventMessageTests
             ExternalId: "ext",
             TrainName: "Train",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
@@ -159,24 +163,24 @@ public class TrainLifecycleEventMessageTests
         var roundTripped = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
             JsonSerializer.Serialize(message)
         );
-        roundTripped!.ChangeDomain.Should().BeNull();
+        roundTripped.NotNull().ChangeDomain.Should().BeNull();
     }
 
     [Test]
     public void RecordEquality_WorksCorrectly()
     {
-        var timestamp = DateTime.UtcNow;
+        var timestamp = TestTime.UtcDateTime;
         var msg1 = new TrainLifecycleEventMessage(
             1,
             "ext",
             "Train",
             "Completed",
             timestamp,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         );
         var msg2 = new TrainLifecycleEventMessage(
             1,
@@ -184,11 +188,11 @@ public class TrainLifecycleEventMessageTests
             "Train",
             "Completed",
             timestamp,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         );
         var msg3 = new TrainLifecycleEventMessage(
             2,
@@ -196,11 +200,11 @@ public class TrainLifecycleEventMessageTests
             "Train",
             "Completed",
             timestamp,
-            null,
-            null,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         );
 
         msg1.Should().Be(msg2);
@@ -215,12 +219,12 @@ public class TrainLifecycleEventMessageTests
             "ext",
             "Train",
             "Completed",
-            DateTime.UtcNow,
-            null,
-            null,
+            TestTime.UtcDateTime,
+            FailureJunction: null,
+            FailureReason: null,
             "Completed",
             "Worker",
-            null
+            Output: null
         )
         {
             InstanceId = "host-a",
@@ -229,7 +233,8 @@ public class TrainLifecycleEventMessageTests
         var json = JsonSerializer.Serialize(message);
         json.Should().Contain("\"instanceId\":\"host-a\"");
         JsonSerializer
-            .Deserialize<TrainLifecycleEventMessage>(json)!
+            .Deserialize<TrainLifecycleEventMessage>(json)
+            .NotNull()
             .InstanceId.Should()
             .Be("host-a");
     }
@@ -240,7 +245,7 @@ public class TrainLifecycleEventMessageTests
         const string json =
             """{"metadataId":1,"externalId":"e","trainName":"T","trainState":"Completed","timestamp":"2026-09-29T00:00:00Z","failureJunction":null,"failureReason":null,"eventType":"Completed","executor":"Worker","output":null}""";
 
-        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!;
+        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json).NotNull();
 
         message.InstanceId.Should().BeNull();
         message.ExternalId.Should().Be("e");
@@ -254,12 +259,12 @@ public class TrainLifecycleEventMessageTests
             "ext",
             "Train",
             "Failed",
-            DateTime.UtcNow,
+            TestTime.UtcDateTime,
             "Junction",
             "The card was declined.",
             "Failed",
             "Worker",
-            null
+            Output: null
         )
         {
             FailureException = "TrainException",
@@ -268,7 +273,8 @@ public class TrainLifecycleEventMessageTests
         var json = JsonSerializer.Serialize(message);
         json.Should().Contain("\"failureException\":\"TrainException\"");
         JsonSerializer
-            .Deserialize<TrainLifecycleEventMessage>(json)!
+            .Deserialize<TrainLifecycleEventMessage>(json)
+            .NotNull()
             .FailureException.Should()
             .Be("TrainException");
     }
@@ -279,7 +285,7 @@ public class TrainLifecycleEventMessageTests
         const string json =
             """{"metadataId":1,"externalId":"e","trainName":"T","trainState":"Failed","timestamp":"2026-09-29T00:00:00Z","failureJunction":"J","failureReason":"r","eventType":"Failed","executor":"Worker","output":null}""";
 
-        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!;
+        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json).NotNull();
 
         message.FailureException.Should().BeNull();
         message.FailureReason.Should().Be("r");

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -13,21 +14,38 @@ namespace Trax.StateMachine.Tests.Client;
 /// </summary>
 public class DefaultsParityTests
 {
-    private static readonly JsonObject Defaults = Read("client", "defaults.json");
-    private static readonly JsonObject Limits = Read("limits.json");
+    // Read once for the fixture, before any test runs.
+    private static JsonObject? _defaults;
+    private static JsonObject? _limits;
 
-    private static JsonObject Read(params string[] parts) =>
+    private static JsonObject Defaults => _defaults.NotNull();
+    private static JsonObject Limits => _limits.NotNull();
+
+    [OneTimeSetUp]
+    public async Task ReadKit()
+    {
+        _defaults = await Read("client", "defaults.json").ConfigureAwait(false);
+        _limits = await Read("limits.json").ConfigureAwait(false);
+    }
+
+    private static async Task<JsonObject> Read(params string[] parts) =>
         (JsonObject)
-            JsonNode.Parse(
-                File.ReadAllText(Path.Combine([FixturePaths.ConformanceRoot, .. parts]))
-            )!;
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine([FixturePaths.ConformanceRoot, .. parts])
+                        )
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
 
     private static TimeSpan Ms(JsonNode? node) =>
-        TimeSpan.FromMilliseconds(node!.GetValue<double>());
+        TimeSpan.FromMilliseconds(node.NotNull().GetValue<double>());
 
-    private static TimeSpan[] MsList(string key) => Defaults[key]!.AsArray().Select(Ms).ToArray();
+    private static TimeSpan[] MsList(string key) =>
+        Defaults[key].NotNull().AsArray().Select(Ms).ToArray();
 
-    private static long Bytes(JsonNode? node) => node!.GetValue<long>();
+    private static long Bytes(JsonNode? node) => node.NotNull().GetValue<long>();
 
     // Built without any of the options, so each default is the one in force.
     private static GraphQLMachineServerOptions Unset() =>
@@ -69,16 +87,16 @@ public class DefaultsParityTests
     [Test]
     public void A_resubscribe_wait_is_jittered_between_the_kits_bounds()
     {
-        var jitter = Defaults["resubscribeJitter"]!;
+        var jitter = Defaults["resubscribeJitter"].NotNull();
         var step = TimeSpan.FromSeconds(1);
         Backoff
             .Delay([step], 0, () => 0.0)
             .Should()
-            .Be(step * jitter["mostFraction"]!.GetValue<double>());
+            .Be(step * jitter["mostFraction"].NotNull().GetValue<double>());
         Backoff
             .Delay([step], 0, () => 1.0)
             .Should()
-            .Be(step * jitter["leastFraction"]!.GetValue<double>());
+            .Be(step * jitter["leastFraction"].NotNull().GetValue<double>());
     }
 
     [Test]
@@ -96,13 +114,13 @@ public class DefaultsParityTests
         Unset().MaxResponseSize.Should().Be(response);
         new GraphQLSubscriptionSocketOptions { Endpoint = new Uri("wss://h/graphql") }
             .MaxMessageSize.Should()
-            .Be((int)Bytes(Defaults["maxSocketMessageBytes"]!["dotnet"]));
+            .Be((int)Bytes(Defaults["maxSocketMessageBytes"].NotNull()["dotnet"]));
     }
 
     [Test]
     public void The_sockets_timing_is_the_kits()
     {
-        var timing = Defaults["socket"]!["dotnet"]!;
+        var timing = Defaults["socket"].NotNull()["dotnet"].NotNull();
         var socket = new GraphQLSubscriptionSocketOptions { Endpoint = new Uri("wss://h/graphql") };
         socket.ConnectTimeout.Should().Be(Ms(timing["connectTimeoutMs"]));
         socket.KeepAliveInterval.Should().Be(Ms(timing["keepAliveIntervalMs"]));
@@ -112,13 +130,16 @@ public class DefaultsParityTests
     [Test]
     public void Only_the_kits_refused_close_codes_turn_the_caller_away()
     {
-        var codes = Defaults["closeCodes"]!;
-        foreach (var refused in codes["refused"]!.AsObject())
-            new SocketClosedException("closed", int.Parse(refused.Key))
+        var codes = Defaults["closeCodes"].NotNull();
+        foreach (var refused in codes["refused"].NotNull().AsObject())
+            new SocketClosedException(
+                "closed",
+                int.Parse(refused.Key, System.Globalization.CultureInfo.InvariantCulture)
+            )
                 .Refused.Should()
                 .BeTrue(refused.Key);
-        foreach (var transient in codes["transient"]!.AsArray())
-            new SocketClosedException("closed", transient!.GetValue<int>())
+        foreach (var transient in codes["transient"].NotNull().AsArray())
+            new SocketClosedException("closed", transient.NotNull().GetValue<int>())
                 .Refused.Should()
                 .BeFalse(transient.ToString());
     }
@@ -126,8 +147,10 @@ public class DefaultsParityTests
     [Test]
     public void The_shared_limits_are_the_kits()
     {
-        EventPlanner.MaxNesting.Should().Be(Limits["maxValueDepth"]!.GetValue<int>());
-        EventPlanner.MaxExpansions.Should().Be(Limits["maxPlanExpansions"]!.GetValue<int>());
+        EventPlanner.MaxNesting.Should().Be(Limits["maxValueDepth"].NotNull().GetValue<int>());
+        EventPlanner
+            .MaxExpansions.Should()
+            .Be(Limits["maxPlanExpansions"].NotNull().GetValue<int>());
         TraxHttpTransport.MaxTimeout.Should().Be(Ms(Limits["maxTimerMs"]));
     }
 }

@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
+using Trax.Testing;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -23,7 +25,7 @@ public class MachineBuilderTests
         Other,
     }
 
-    private interface IFakeEffect { }
+    private interface IFakeEffect;
 
     private static BuiltMachine<S, T> Minimal()
     {
@@ -66,7 +68,11 @@ public class MachineBuilderTests
 
         var result = built.Engine.Advance(snapshot, "Go");
 
-        result.Should().BeOfType<AdvanceResult.Transitioned>().Which.Snapshot.Context["x"]!
+        result
+            .Should()
+            .BeOfType<AdvanceResult.Transitioned>()
+            .Which.Snapshot.Context["x"]
+            .NotNull()
             .GetValue<int>()
             .Should()
             .Be(1);
@@ -118,7 +124,7 @@ public class MachineBuilderTests
 
         var ok = result.Should().BeOfType<RehydrationResult.Ok>().Which;
         ok.Snapshot.Version.Should().Be(2);
-        ok.Snapshot.Context["migrated"]!.GetValue<bool>().Should().BeTrue();
+        ok.Snapshot.Context["migrated"].NotNull().GetValue<bool>().Should().BeTrue();
     }
 
     [TestCase("")]
@@ -144,7 +150,7 @@ public class MachineBuilderTests
     {
         var b = new MachineBuilder<S, T>();
 
-        var act = () => b.Id(null!);
+        var act = () => b.Id(Null.Of<string>());
 
         act.Should().Throw<ArgumentException>();
     }

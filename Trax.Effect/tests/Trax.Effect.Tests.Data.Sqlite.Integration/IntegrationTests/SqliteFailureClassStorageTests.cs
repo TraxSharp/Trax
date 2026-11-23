@@ -27,10 +27,10 @@ public class SqliteFailureClassStorageTests : TestSetup
     public void Every_FailureClass_member_keeps_its_stored_integer()
     {
         Enum.GetValues<FailureClass>()
-            .ToDictionary(value => value.ToString(), value => (int)value)
+            .ToDictionary(value => value.ToString(), value => (int)value, StringComparer.Ordinal)
             .Should()
             .BeEquivalentTo(
-                new Dictionary<string, int>
+                new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["Unclassified"] = 0,
                     ["Transient"] = 1,
@@ -46,7 +46,8 @@ public class SqliteFailureClassStorageTests : TestSetup
     public async Task A_failure_class_is_written_as_its_integer()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = Metadata.Create(
             new CreateMetadata
@@ -54,7 +55,8 @@ public class SqliteFailureClassStorageTests : TestSetup
                 Name = "Sqlite.FailureClass",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         var failure = new InvalidOperationException("conflict");
         failure.Data["TrainExceptionData"] = new TrainExceptionData

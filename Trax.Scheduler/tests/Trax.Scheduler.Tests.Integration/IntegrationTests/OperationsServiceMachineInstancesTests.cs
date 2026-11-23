@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Scheduler.Services.Operations;
@@ -23,12 +24,12 @@ public class OperationsServiceMachineInstancesTests : TestSetup
 {
     private const string SecretContext = """{"cardNumber":"4111-1111-1111-1111"}""";
 
-    private IOperationsService _operations = null!;
-    private string _machine = null!;
+    private IOperationsService? _operations;
+    private string? _machine;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
         _machine = $"ops-machine-{Guid.NewGuid():N}";
     }
@@ -36,7 +37,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [TearDown]
     public async Task DeleteDrafts() =>
         await DataContext
-            .SnapshotDrafts.Where(x => x.Machine.StartsWith(_machine))
+            .SnapshotDrafts.Where(x => x.Machine.StartsWith(_machine.NotNull()))
             .ExecuteDeleteAsync();
 
     [Test]
@@ -51,14 +52,16 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             invokeToken: $"run-{Guid.NewGuid():N}"
         );
 
-        var page = await _operations.GetMachineInstancesAsync(
-            new MachineInstanceQuery(Machine: _machine),
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
+                new MachineInstanceQuery(Machine: _machine.NotNull()),
+                CancellationToken.None
+            );
 
         page.Items.Select(i => i.RowId).Should().Equal(newer.RowId, older.RowId);
         var first = page.Items[0];
-        first.Machine.Should().Be(_machine);
+        first.Machine.Should().Be(_machine.NotNull());
         first.Id.Should().Be(newer.Id);
         first.OwnerKind.Should().Be(SnapshotOwnerKind.User);
         first.State.Should().Be("Waiting");
@@ -95,20 +98,24 @@ public class OperationsServiceMachineInstancesTests : TestSetup
         await Seed(SnapshotOwnerKind.User, "Running", at.AddSeconds(10));
         await Seed(SnapshotOwnerKind.System, "Done", at.AddSeconds(20));
 
-        var running = await _operations.GetMachineInstancesAsync(
-            new MachineInstanceQuery(
-                _machine,
-                "Running",
-                SnapshotOwnerKind.System,
-                Skip: 1,
-                Take: 2
-            ),
-            CancellationToken.None
-        );
-        var all = await _operations.GetMachineInstancesAsync(
-            new MachineInstanceQuery(_machine, "Running", SnapshotOwnerKind.System),
-            CancellationToken.None
-        );
+        var running = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
+                new MachineInstanceQuery(
+                    _machine.NotNull(),
+                    "Running",
+                    SnapshotOwnerKind.System,
+                    Skip: 1,
+                    Take: 2
+                ),
+                CancellationToken.None
+            );
+        var all = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
+                new MachineInstanceQuery(_machine.NotNull(), "Running", SnapshotOwnerKind.System),
+                CancellationToken.None
+            );
 
         all.Items.Should().HaveCount(5);
         all.Items.Should()
@@ -121,10 +128,12 @@ public class OperationsServiceMachineInstancesTests : TestSetup
         running.Take.Should().Be(2);
 
         (
-            await _operations.CountMachineInstancesAsync(
-                new MachineInstanceQuery(_machine, "Running"),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountMachineInstancesAsync(
+                    new MachineInstanceQuery(_machine.NotNull(), "Running"),
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(new MachineInstanceTotal(6, Capped: false));
@@ -133,23 +142,27 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task A_page_deeper_than_the_count_cap_is_refused_as_the_api_refuses_it()
     {
-        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        await Seed(SnapshotOwnerKind.System, "Running", TimeProvider.System.GetUtcNow());
 
-        var deepest = await _operations.GetMachineInstancesAsync(
-            new MachineInstanceQuery(
-                Machine: _machine,
-                Skip: OperationsService.MachineInstanceCountCap
-            ),
-            CancellationToken.None
-        );
-        var tooDeep = () =>
-            _operations.GetMachineInstancesAsync(
+        var deepest = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
                 new MachineInstanceQuery(
-                    Machine: _machine,
-                    Skip: OperationsService.MachineInstanceCountCap + 1
+                    Machine: _machine.NotNull(),
+                    Skip: OperationsService.MachineInstanceCountCap
                 ),
                 CancellationToken.None
             );
+        var tooDeep = () =>
+            _operations
+                .NotNull()
+                .GetMachineInstancesAsync(
+                    new MachineInstanceQuery(
+                        Machine: _machine.NotNull(),
+                        Skip: OperationsService.MachineInstanceCountCap + 1
+                    ),
+                    CancellationToken.None
+                );
 
         deepest.Items.Should().BeEmpty();
         deepest.Skip.Should().Be(OperationsService.MachineInstanceCountCap);
@@ -163,7 +176,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task The_state_counts_are_read_once_for_every_caller_within_a_few_seconds()
     {
-        var clock = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var clock = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         var operations = new OperationsService(
             Scope.ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>(),
             Scope.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>(),
@@ -171,20 +184,20 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>(),
             new ServiceCollection().AddSingleton<TimeProvider>(clock).BuildServiceProvider()
         );
-        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        await Seed(SnapshotOwnerKind.System, "Running", TimeProvider.System.GetUtcNow());
 
         var first = await operations.GetMachineInstanceStateCountsAsync(
-            _machine,
+            _machine.NotNull(),
             CancellationToken.None
         );
-        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        await Seed(SnapshotOwnerKind.System, "Running", TimeProvider.System.GetUtcNow());
         var cached = await operations.GetMachineInstanceStateCountsAsync(
-            _machine,
+            _machine.NotNull(),
             CancellationToken.None
         );
         clock.Advance(OperationsService.MachineInstanceCountCacheDuration);
         var fresh = await operations.GetMachineInstanceStateCountsAsync(
-            _machine,
+            _machine.NotNull(),
             CancellationToken.None
         );
 
@@ -211,45 +224,58 @@ public class OperationsServiceMachineInstancesTests : TestSetup
         await ((DbContext)DataContext).Database.ExecuteSqlInterpolatedAsync(
             $$"""
             INSERT INTO trax.snapshot_draft (id, user_key, owner_kind, machine, version, state, context, concurrency_token, updated_at)
-            SELECT gen_random_uuid(), NULL, 'system', {{_machine}}, 1, 'Bulk', '{}', gen_random_uuid(), now()
+            SELECT gen_random_uuid(), NULL, 'system', {{_machine.NotNull()}}, 1, 'Bulk', '{}', gen_random_uuid(), now()
             FROM generate_series(1, {{OperationsService.MachineInstanceCountCap + 1}})
             """
         );
 
-        var total = await _operations.CountMachineInstancesAsync(
-            new MachineInstanceQuery(Machine: _machine),
-            CancellationToken.None
-        );
+        var total = await _operations
+            .NotNull()
+            .CountMachineInstancesAsync(
+                new MachineInstanceQuery(Machine: _machine.NotNull()),
+                CancellationToken.None
+            );
 
         total
             .Should()
-            .Be(new MachineInstanceTotal(OperationsService.MachineInstanceCountCap, true));
+            .Be(new MachineInstanceTotal(OperationsService.MachineInstanceCountCap, Capped: true));
     }
 
     [Test]
     public async Task A_lookup_names_the_owner_kind_so_a_users_draft_never_answers_for_a_system_instance()
     {
         var id = Guid.NewGuid();
-        var at = DateTimeOffset.UtcNow;
+        var at = TimeProvider.System.GetUtcNow();
         var system = await Seed(SnapshotOwnerKind.System, "Running", at, id: id);
         var user = await Seed(SnapshotOwnerKind.User, "Draft", at, id: id);
 
-        var asSystem = await _operations.GetMachineInstanceAsync(
-            new MachineInstanceKey(_machine, SnapshotOwnerKind.System, id),
-            CancellationToken.None
-        );
-        var asUser = await _operations.GetMachineInstanceAsync(
-            new MachineInstanceKey(_machine, SnapshotOwnerKind.User, id, user.RowId),
-            CancellationToken.None
-        );
-        var crossed = await _operations.GetMachineInstanceAsync(
-            new MachineInstanceKey(_machine, SnapshotOwnerKind.User, id, system.RowId),
-            CancellationToken.None
-        );
+        var asSystem = await _operations
+            .NotNull()
+            .GetMachineInstanceAsync(
+                new MachineInstanceKey(_machine.NotNull(), SnapshotOwnerKind.System, id),
+                CancellationToken.None
+            );
+        var asUser = await _operations
+            .NotNull()
+            .GetMachineInstanceAsync(
+                new MachineInstanceKey(_machine.NotNull(), SnapshotOwnerKind.User, id, user.RowId),
+                CancellationToken.None
+            );
+        var crossed = await _operations
+            .NotNull()
+            .GetMachineInstanceAsync(
+                new MachineInstanceKey(
+                    _machine.NotNull(),
+                    SnapshotOwnerKind.User,
+                    id,
+                    system.RowId
+                ),
+                CancellationToken.None
+            );
 
-        asSystem!.RowId.Should().Be(system.RowId);
+        asSystem.NotNull().RowId.Should().Be(system.RowId);
         asSystem.State.Should().Be("Running");
-        asUser!.RowId.Should().Be(user.RowId);
+        asUser.NotNull().RowId.Should().Be(user.RowId);
         asUser.State.Should().Be("Draft");
         crossed.Should().BeNull("the system's row is not a user's draft, whatever its row id");
     }
@@ -258,10 +284,16 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     public async Task A_users_draft_is_not_looked_up_without_its_row_id()
     {
         var act = () =>
-            _operations.GetMachineInstanceAsync(
-                new MachineInstanceKey(_machine, SnapshotOwnerKind.User, Guid.NewGuid()),
-                CancellationToken.None
-            );
+            _operations
+                .NotNull()
+                .GetMachineInstanceAsync(
+                    new MachineInstanceKey(
+                        _machine.NotNull(),
+                        SnapshotOwnerKind.User,
+                        Guid.NewGuid()
+                    ),
+                    CancellationToken.None
+                );
 
         await act.Should().ThrowAsync<ArgumentException>().WithMessage("*row id*");
     }
@@ -270,10 +302,16 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     public async Task A_users_drafts_runs_are_not_read_without_its_row_id()
     {
         var act = () =>
-            _operations.GetMachineInstanceRunsAsync(
-                new MachineInstanceKey(_machine, SnapshotOwnerKind.User, Guid.NewGuid()),
-                CancellationToken.None
-            );
+            _operations
+                .NotNull()
+                .GetMachineInstanceRunsAsync(
+                    new MachineInstanceKey(
+                        _machine.NotNull(),
+                        SnapshotOwnerKind.User,
+                        Guid.NewGuid()
+                    ),
+                    CancellationToken.None
+                );
 
         await act.Should()
             .ThrowAsync<ArgumentException>()
@@ -283,30 +321,44 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     [Test]
     public async Task Counts_each_state_per_machine_and_owner_kind()
     {
-        var at = DateTimeOffset.UtcNow;
+        var at = TimeProvider.System.GetUtcNow();
         await Seed(SnapshotOwnerKind.System, "Running", at);
         await Seed(SnapshotOwnerKind.System, "Running", at);
         await Seed(SnapshotOwnerKind.User, "Running", at);
         await Seed(SnapshotOwnerKind.System, "Done", at);
 
-        var counts = await _operations.GetMachineInstanceStateCountsAsync(
-            _machine,
-            CancellationToken.None
-        );
+        var counts = await _operations
+            .NotNull()
+            .GetMachineInstanceStateCountsAsync(_machine.NotNull(), CancellationToken.None);
 
         counts
             .Should()
             .Equal(
-                new MachineInstanceStateCount(_machine, "Done", SnapshotOwnerKind.System, 1),
-                new MachineInstanceStateCount(_machine, "Running", SnapshotOwnerKind.User, 1),
-                new MachineInstanceStateCount(_machine, "Running", SnapshotOwnerKind.System, 2)
+                new MachineInstanceStateCount(
+                    _machine.NotNull(),
+                    "Done",
+                    SnapshotOwnerKind.System,
+                    1
+                ),
+                new MachineInstanceStateCount(
+                    _machine.NotNull(),
+                    "Running",
+                    SnapshotOwnerKind.User,
+                    1
+                ),
+                new MachineInstanceStateCount(
+                    _machine.NotNull(),
+                    "Running",
+                    SnapshotOwnerKind.System,
+                    2
+                )
             );
     }
 
     [Test]
     public async Task An_instance_waiting_on_a_failed_or_cancelled_run_or_an_overdue_timer_is_stuck()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         var failedToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
         var runningToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
         var cancelledToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
@@ -326,90 +378,156 @@ public class OperationsServiceMachineInstancesTests : TestSetup
         var overdue = await Seed(SnapshotOwnerKind.System, "Timed", now);
         var notYetDue = await Seed(SnapshotOwnerKind.System, "Timed", now);
         var db = (DbContext)DataContext;
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, failure_class)
-            VALUES ({failedToken}, 'Ops.IWaitedTrain', 'failed', now() - interval '2 minutes', now() - interval '1 minute', 'unclassified'),
-                   ({runningToken}, 'Ops.IWaitedTrain', 'in_progress', now() - interval '2 minutes', NULL, 'unclassified')
-            """
-        );
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at)
-            VALUES ({cancelledToken}, 'Ops.IWaitedTrain', 'cancelled', 0, now())
-            """
-        );
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE trax.snapshot_draft SET due_at = now() - interval '1 hour' WHERE row_id = {overdue.RowId}"
-        );
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE trax.snapshot_draft SET due_at = now() + interval '1 hour' WHERE row_id = {notYetDue.RowId}"
+        await SeedWaitedRunsAndDueTimes(
+            db,
+            failedToken,
+            runningToken,
+            cancelledToken,
+            overdue,
+            notYetDue
         );
 
         try
         {
-            var page = await _operations.GetMachineInstancesAsync(
-                new MachineInstanceQuery(Machine: _machine),
-                CancellationToken.None
-            );
+            var page = await _operations
+                .NotNull()
+                .GetMachineInstancesAsync(
+                    new MachineInstanceQuery(Machine: _machine.NotNull()),
+                    CancellationToken.None
+                );
             var byRow = page.Items.ToDictionary(i => i.RowId);
 
-            byRow[failed.RowId]
-                .Stuck.Should()
-                .BeTrue("its run failed and the outcome never moved it");
-            byRow[failed.RowId].WaitingOn!.TrainState.Should().Be(TrainState.Failed);
-            byRow[failed.RowId].WaitingOn!.ExecutionId.Should().NotBeNull();
-            byRow[running.RowId].Stuck.Should().BeFalse("its run is still in progress");
-            byRow[running.RowId].WaitingOn!.TrainState.Should().Be(TrainState.InProgress);
-            byRow[cancelled.RowId]
-                .Stuck.Should()
-                .BeTrue("its entry was cancelled before it started");
-            byRow[cancelled.RowId].WaitingOn!.TrainState.Should().Be(TrainState.Cancelled);
-            byRow[cancelled.RowId].WaitingOn!.ExecutionId.Should().BeNull();
-            byRow[cancelled.RowId].WaitingOn!.WorkQueueEntryId.Should().NotBeNull();
-            byRow[overdue.RowId].Overdue.Should().BeTrue();
-            byRow[overdue.RowId].Stuck.Should().BeTrue();
-            byRow[overdue.RowId].WaitingOn.Should().BeNull();
-            byRow[notYetDue.RowId].Overdue.Should().BeFalse();
-            byRow[notYetDue.RowId].DueAt.Should().NotBeNull();
-            byRow[notYetDue.RowId].Stuck.Should().BeFalse();
-            byRow[notYetDue.RowId].InStateSince.Should().Be(byRow[notYetDue.RowId].UpdatedAt);
+            AssertWaitingAndOverdue(byRow, failed, running, cancelled, overdue, notYetDue);
 
-            var stuck = await _operations.GetMachineInstancesAsync(
-                new MachineInstanceQuery(Machine: _machine) { Stuck = true },
-                CancellationToken.None
-            );
-            stuck
-                .Items.Select(i => i.RowId)
-                .Should()
-                .BeEquivalentTo([failed.RowId, cancelled.RowId, overdue.RowId]);
-            (
-                await _operations.CountMachineInstancesAsync(
-                    new MachineInstanceQuery(Machine: _machine) { Stuck = false },
-                    CancellationToken.None
-                )
-            )
-                .Count.Should()
-                .Be(2);
-
-            var counts = await _operations.GetMachineInstanceStateCountsAsync(
-                _machine,
-                CancellationToken.None
-            );
-            counts
-                .Select(c => (c.State, c.Count, c.Stuck))
-                .Should()
-                .Equal(("Timed", 2L, 1L), ("Waiting", 3L, 2L));
+            await AssertStuckFilterAndStateCounts(failed.RowId, cancelled.RowId, overdue.RowId);
         }
         finally
         {
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM trax.metadata WHERE external_id IN ({failedToken}, {runningToken})"
-            );
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM trax.work_queue WHERE external_id = {cancelledToken}"
-            );
+            await DeleteWaitedRuns(db, failedToken, runningToken, cancelledToken);
         }
+    }
+
+    private static void AssertWaitingAndOverdue(
+        Dictionary<long, MachineInstanceRecord> byRow,
+        SnapshotDraft failed,
+        SnapshotDraft running,
+        SnapshotDraft cancelled,
+        SnapshotDraft overdue,
+        SnapshotDraft notYetDue
+    )
+    {
+        byRow[failed.RowId].Stuck.Should().BeTrue("its run failed and the outcome never moved it");
+        byRow[failed.RowId].WaitingOn.NotNull().TrainState.Should().Be(TrainState.Failed);
+        byRow[failed.RowId].WaitingOn.NotNull().ExecutionId.Should().NotBeNull();
+        byRow[running.RowId].Stuck.Should().BeFalse("its run is still in progress");
+        byRow[running.RowId].WaitingOn.NotNull().TrainState.Should().Be(TrainState.InProgress);
+        byRow[cancelled.RowId].Stuck.Should().BeTrue("its entry was cancelled before it started");
+        byRow[cancelled.RowId].WaitingOn.NotNull().TrainState.Should().Be(TrainState.Cancelled);
+        byRow[cancelled.RowId].WaitingOn.NotNull().ExecutionId.Should().BeNull();
+        byRow[cancelled.RowId].WaitingOn.NotNull().WorkQueueEntryId.Should().NotBeNull();
+        byRow[overdue.RowId].Overdue.Should().BeTrue();
+        byRow[overdue.RowId].Stuck.Should().BeTrue();
+        byRow[overdue.RowId].WaitingOn.Should().BeNull();
+        byRow[notYetDue.RowId].Overdue.Should().BeFalse();
+        byRow[notYetDue.RowId].DueAt.Should().NotBeNull();
+        byRow[notYetDue.RowId].Stuck.Should().BeFalse();
+        byRow[notYetDue.RowId].InStateSince.Should().Be(byRow[notYetDue.RowId].UpdatedAt);
+    }
+
+    private static async Task SeedWaitedRunsAndDueTimes(
+        DbContext db,
+        string failedToken,
+        string runningToken,
+        string cancelledToken,
+        SnapshotDraft overdue,
+        SnapshotDraft notYetDue
+    )
+    {
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, failure_class)
+                VALUES ({failedToken}, 'Ops.IWaitedTrain', 'failed', now() - interval '2 minutes', now() - interval '1 minute', 'unclassified'),
+                       ({runningToken}, 'Ops.IWaitedTrain', 'in_progress', now() - interval '2 minutes', NULL, 'unclassified')
+                """
+            )
+            .ConfigureAwait(false);
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at)
+                VALUES ({cancelledToken}, 'Ops.IWaitedTrain', 'cancelled', 0, now())
+                """
+            )
+            .ConfigureAwait(false);
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE trax.snapshot_draft SET due_at = now() - interval '1 hour' WHERE row_id = {overdue.RowId}"
+            )
+            .ConfigureAwait(false);
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE trax.snapshot_draft SET due_at = now() + interval '1 hour' WHERE row_id = {notYetDue.RowId}"
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task AssertStuckFilterAndStateCounts(
+        long failedRowId,
+        long cancelledRowId,
+        long overdueRowId
+    )
+    {
+        var stuck = await _operations
+            .NotNull()
+            .GetMachineInstancesAsync(
+                new MachineInstanceQuery(Machine: _machine.NotNull()) { Stuck = true },
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        stuck
+            .Items.Select(i => i.RowId)
+            .Should()
+            .BeEquivalentTo([failedRowId, cancelledRowId, overdueRowId]);
+        (
+            await _operations
+                .NotNull()
+                .CountMachineInstancesAsync(
+                    new MachineInstanceQuery(Machine: _machine.NotNull()) { Stuck = false },
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false)
+        )
+            .Count.Should()
+            .Be(2);
+
+        var counts = await _operations
+            .NotNull()
+            .GetMachineInstanceStateCountsAsync(_machine.NotNull(), CancellationToken.None)
+            .ConfigureAwait(false);
+        counts
+            .Select(c => (c.State, c.Count, c.Stuck))
+            .Should()
+            .Equal(("Timed", 2L, 1L), ("Waiting", 3L, 2L));
+    }
+
+    private static async Task DeleteWaitedRuns(
+        DbContext db,
+        string failedToken,
+        string runningToken,
+        string cancelledToken
+    )
+    {
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM trax.metadata WHERE external_id IN ({failedToken}, {runningToken})"
+            )
+            .ConfigureAwait(false);
+        await db
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM trax.work_queue WHERE external_id = {cancelledToken}"
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<SnapshotDraft> Seed(
@@ -425,7 +543,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             Id = id ?? Guid.NewGuid(),
             OwnerKind = owner,
             UserKey = owner == SnapshotOwnerKind.User ? $"user-{Guid.NewGuid():N}" : null,
-            Machine = _machine,
+            Machine = _machine.NotNull(),
             Version = 3,
             State = state,
             Context = SecretContext,
@@ -435,7 +553,7 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             InvokeToken = invokeToken,
         };
         DataContext.SnapshotDrafts.Add(row);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return row;
     }

@@ -97,7 +97,7 @@ public partial class TraxMediatorBuilder
     /// Caps the number of concurrent RUN executions for a single authenticated
     /// principal (keyed by the <c>trax:principal-id</c> claim). Prevents a single
     /// authenticated caller from saturating the global or per-train concurrency
-    /// budget via request fan-out. Default is <c>null</c> (no cap).
+    /// budget via request fan-out. Default is <see langword="null"/> (no cap).
     /// </summary>
     /// <remarks>
     /// Requires <c>IHttpContextAccessor</c> in DI (registered automatically by

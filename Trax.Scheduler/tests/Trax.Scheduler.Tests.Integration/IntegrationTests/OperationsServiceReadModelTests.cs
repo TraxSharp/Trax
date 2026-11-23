@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -27,11 +28,11 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceReadModelTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
@@ -54,10 +55,9 @@ public class OperationsServiceReadModelTests : TestSetup
         var other = await SeedManifest(group);
         await SeedRun(other, TrainState.Completed, t0.AddDays(1), t0.AddDays(1).AddMinutes(1));
 
-        var stats = await _operations.GetManifestExecutionStatsAsync(
-            manifest.Id,
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestExecutionStatsAsync(manifest.Id, CancellationToken.None);
 
         stats
             .Should()
@@ -79,12 +79,25 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Manifest_stats_for_a_manifest_with_no_runs_are_zero()
     {
-        var stats = await _operations.GetManifestExecutionStatsAsync(
-            424242,
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestExecutionStatsAsync(424242, CancellationToken.None);
 
-        stats.Should().Be(new ManifestExecutionStats(424242, 0, 0, 0, 0, 0, 0, null, null));
+        stats
+            .Should()
+            .Be(
+                new ManifestExecutionStats(
+                    424242,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    LastRun: null,
+                    LastSuccessfulRun: null
+                )
+            );
     }
 
     #endregion
@@ -108,15 +121,17 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedRun(b, TrainState.InProgress, t0.AddHours(2));
         await SeedRun(b, TrainState.Pending, t0.AddHours(3));
 
-        var stats = await _operations.GetManifestGroupExecutionStatsAsync(
-            [empty.Id, busy.Id, idle.Id, busy.Id],
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestGroupExecutionStatsAsync(
+                [empty.Id, busy.Id, idle.Id, busy.Id],
+                CancellationToken.None
+            );
 
         stats
             .Should()
             .Equal(
-                new ManifestGroupExecutionStats(empty.Id, 0, 0, 0, 0, 0, null),
+                new ManifestGroupExecutionStats(empty.Id, 0, 0, 0, 0, 0, LastRun: null),
                 new ManifestGroupExecutionStats(
                     busy.Id,
                     ManifestCount: 2,
@@ -130,7 +145,7 @@ public class OperationsServiceReadModelTests : TestSetup
                     // Of its ended runs, the failure started last; the later two have not ended.
                     LastEndedRunFailed = true,
                 },
-                new ManifestGroupExecutionStats(idle.Id, 1, 0, 0, 0, 0, null)
+                new ManifestGroupExecutionStats(idle.Id, 1, 0, 0, 0, 0, LastRun: null)
             );
     }
 
@@ -154,16 +169,18 @@ public class OperationsServiceReadModelTests : TestSetup
 
     private async Task<ManifestGroupExecutionStats> StatsOf(long groupId) =>
         (
-            await _operations.GetManifestGroupExecutionStatsAsync([groupId], CancellationToken.None)
+            await _operations
+                .NotNull()
+                .GetManifestGroupExecutionStatsAsync([groupId], CancellationToken.None)
+                .ConfigureAwait(false)
         ).Single();
 
     [Test]
     public async Task Group_stats_for_no_ids_are_empty()
     {
-        var stats = await _operations.GetManifestGroupExecutionStatsAsync(
-            [],
-            CancellationToken.None
-        );
+        var stats = await _operations
+            .NotNull()
+            .GetManifestGroupExecutionStatsAsync([], CancellationToken.None);
 
         stats.Should().BeEmpty();
     }
@@ -174,7 +191,9 @@ public class OperationsServiceReadModelTests : TestSetup
         var ids = Enumerable.Range(1, OperationsService.MaxBatchSize + 1).Select(i => (long)i);
 
         var act = () =>
-            _operations.GetManifestGroupExecutionStatsAsync(ids.ToList(), CancellationToken.None);
+            _operations
+                .NotNull()
+                .GetManifestGroupExecutionStatsAsync(ids.ToList(), CancellationToken.None);
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -204,26 +223,19 @@ public class OperationsServiceReadModelTests : TestSetup
                 m.DependsOnManifestId = every.Id;
             }
         );
-        await DataContext.Track(
-            Trax.Effect.Models.DeadLetter.DeadLetter.Create(
-                new Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter
-                {
-                    Manifest = deadLettered,
-                    Reason = "test",
-                    RetryCount = 1,
-                }
-            )
-        );
+        await TrackDeadLetterFor(deadLettered);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var before = DateTime.UtcNow;
-        var upcoming = await _operations.GetUpcomingRunsAsync(
-            [dependent.Id, every.Id, inPausedGroup.Id, deadLettered.Id, every.Id, 424242],
-            3,
-            CancellationToken.None
-        );
-        var after = DateTime.UtcNow;
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var upcoming = await _operations
+            .NotNull()
+            .GetUpcomingRunsAsync(
+                [dependent.Id, every.Id, inPausedGroup.Id, deadLettered.Id, every.Id, 424242],
+                3,
+                CancellationToken.None
+            );
+        var after = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         upcoming
             .Select(u => u.ManifestId)
@@ -256,12 +268,12 @@ public class OperationsServiceReadModelTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
         var manifest = await SeedManifest(group);
 
-        (await _operations.GetUpcomingRunsAsync([], 3, CancellationToken.None)).Should().BeEmpty();
-        var upcoming = await _operations.GetUpcomingRunsAsync(
-            [manifest.Id],
-            1_000,
-            CancellationToken.None
-        );
+        (await _operations.NotNull().GetUpcomingRunsAsync([], 3, CancellationToken.None))
+            .Should()
+            .BeEmpty();
+        var upcoming = await _operations
+            .NotNull()
+            .GetUpcomingRunsAsync([manifest.Id], 1_000, CancellationToken.None);
         upcoming.Single().NextRuns.Should().HaveCount(OperationsService.MaxUpcomingRuns);
     }
 
@@ -272,17 +284,29 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_are_newest_first_and_filter_by_run_level_and_category()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
-        var otherRun = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
+        var otherRun = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, 3, LogLevel.Information, "Alpha");
         await SeedLogs(run.Id, 2, LogLevel.Error, "Alpha");
         await SeedLogs(run.Id, 1, LogLevel.Error, "Beta");
         await SeedLogs(otherRun.Id, 4, LogLevel.Error, "Alpha");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, MinimumLevel: LogLevel.Warning, Category: "Alpha"),
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, MinimumLevel: LogLevel.Warning, Category: "Alpha"),
+                CancellationToken.None
+            );
 
         page.Items.Should().HaveCount(2);
         page.Items.Should().OnlyContain(l => l.MetadataId == run.Id);
@@ -291,10 +315,16 @@ public class OperationsServiceReadModelTests : TestSetup
         page.NextCursor.Should().Be(page.Items[^1].Id);
 
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id, MinimumLevel: LogLevel.Warning, Category: "Alpha"),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(
+                        MetadataId: run.Id,
+                        MinimumLevel: LogLevel.Warning,
+                        Category: "Alpha"
+                    ),
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(2);
@@ -303,27 +333,35 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_page_by_cursor_without_overlap()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Paged");
 
-        var first = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 4),
-            CancellationToken.None
-        );
-        var second = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Skip: 99, Take: 4),
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: 4), CancellationToken.None);
+        var second = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Skip: 99, Take: 4),
+                CancellationToken.None
+            );
 
         first.Items.Should().HaveCount(4);
         second.Items.Should().HaveCount(3, "a cursor ignores the offset");
         second.Skip.Should().Be(0);
         first.Items.Select(l => l.Id).Should().NotIntersectWith(second.Items.Select(l => l.Id));
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 1),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 1),
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(7, "the count covers the filter, not the page or the cursor");
@@ -332,17 +370,23 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_page_by_offset()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, 5, LogLevel.Information, "Offset");
 
-        var all = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 5),
-            CancellationToken.None
-        );
-        var skipped = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Skip: 2, Take: 5),
-            CancellationToken.None
-        );
+        var all = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: 5), CancellationToken.None);
+        var skipped = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Skip: 2, Take: 5),
+                CancellationToken.None
+            );
 
         skipped.Skip.Should().Be(2);
         skipped.Items.Select(l => l.Id).Should().Equal(all.Items.Skip(2).Select(l => l.Id));
@@ -353,13 +397,17 @@ public class OperationsServiceReadModelTests : TestSetup
     [TestCase(-5, 1, TestName = "A_negative_take_reads_one")]
     public async Task Log_page_size_is_clamped(int take, int expected)
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, OperationsService.MaxPageSize + 1, LogLevel.Information, "Clamp");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: take),
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: take), CancellationToken.None);
 
         page.Take.Should().Be(expected);
         page.Items.Should().HaveCount(expected, "one call never materialises the whole table");
@@ -368,19 +416,28 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_filter_by_text_the_message_contains_ignoring_case()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLog(run.Id, "Payment REFUSED for order 7", "Shop.Payments");
         await SeedLog(run.Id, "payment accepted", "Shop.Payments");
         await SeedLog(run.Id, "refused: no stock", "Shop.Stock");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id) { MessageContains = "refused" },
-            CancellationToken.None
-        );
-        var count = await _operations.CountLogsAsync(
-            new LogQuery(MetadataId: run.Id) { MessageContains = "REFUSED" },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id) { MessageContains = "refused" },
+                CancellationToken.None
+            );
+        var count = await _operations
+            .NotNull()
+            .CountLogsAsync(
+                new LogQuery(MetadataId: run.Id) { MessageContains = "REFUSED" },
+                CancellationToken.None
+            );
 
         page.Items.Select(l => l.Message)
             .Should()
@@ -391,26 +448,35 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_filter_by_text_the_category_contains_ignoring_case()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLog(run.Id, "one", "Shop.Payments.Gateway");
         await SeedLog(run.Id, "two", "Shop.Stock");
         await SeedLog(run.Id, "three", "shop.payments");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id) { CategoryContains = "PAYMENTS" },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id) { CategoryContains = "PAYMENTS" },
+                CancellationToken.None
+            );
 
         page.Items.Select(l => l.Message).Should().BeEquivalentTo(["one", "three"]);
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id)
-                {
-                    CategoryContains = "payments",
-                    MessageContains = "three",
-                },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(MetadataId: run.Id)
+                    {
+                        CategoryContains = "payments",
+                        MessageContains = "three",
+                    },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(1, "both text filters apply together");
@@ -421,7 +487,12 @@ public class OperationsServiceReadModelTests : TestSetup
     [TestCase(@"C:\temp", @"wrote C:\temp\out.txt", TestName = "A_backslash_matches_itself")]
     public async Task Log_text_filters_match_wildcards_literally(string term, string expected)
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLog(run.Id, "Disk at 50% capacity", "Wildcards");
         await SeedLog(run.Id, "Disk at 500 MB", "Wildcards");
         await SeedLog(run.Id, "key a_b missing", "Wildcards");
@@ -429,10 +500,12 @@ public class OperationsServiceReadModelTests : TestSetup
         await SeedLog(run.Id, @"wrote C:\temp\out.txt", "Wildcards");
         await SeedLog(run.Id, @"wrote C:temp", "Wildcards");
 
-        var page = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id) { MessageContains = term },
-            CancellationToken.None
-        );
+        var page = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id) { MessageContains = term },
+                CancellationToken.None
+            );
 
         page.Items.Select(l => l.Message).Should().Equal(expected);
     }
@@ -440,24 +513,32 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_read_oldest_first_and_page_forward_by_cursor()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, 7, LogLevel.Information, "Ascending");
 
-        var first = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 4) { Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
-        var second = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 4)
-            {
-                Order = LogOrder.OldestFirst,
-            },
-            CancellationToken.None
-        );
-        var newestFirst = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 10),
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: 4) { Order = LogOrder.OldestFirst },
+                CancellationToken.None
+            );
+        var second = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 4)
+                {
+                    Order = LogOrder.OldestFirst,
+                },
+                CancellationToken.None
+            );
+        var newestFirst = await _operations
+            .NotNull()
+            .GetLogsAsync(new LogQuery(MetadataId: run.Id, Take: 10), CancellationToken.None);
 
         first.Items.Select(l => l.Id).Should().BeInAscendingOrder();
         second.Items.Should().HaveCount(3);
@@ -471,17 +552,26 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task Logs_read_oldest_first_page_by_offset()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, 5, LogLevel.Information, "AscendingOffset");
 
-        var all = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: 5) { Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
-        var skipped = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Skip: 3, Take: 5) { Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
+        var all = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: 5) { Order = LogOrder.OldestFirst },
+                CancellationToken.None
+            );
+        var skipped = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Skip: 3, Take: 5) { Order = LogOrder.OldestFirst },
+                CancellationToken.None
+            );
 
         skipped.Items.Select(l => l.Id).Should().Equal(all.Items.Skip(3).Select(l => l.Id));
     }
@@ -490,18 +580,25 @@ public class OperationsServiceReadModelTests : TestSetup
     [TestCase(null, TestName = "A_null_text_filter_matches_everything")]
     public async Task An_empty_text_filter_is_no_filter(string? term)
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, 3, LogLevel.Information, "Empty");
 
         (
-            await _operations.CountLogsAsync(
-                new LogQuery(MetadataId: run.Id)
-                {
-                    MessageContains = term,
-                    CategoryContains = term,
-                },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery(MetadataId: run.Id)
+                    {
+                        MessageContains = term,
+                        CategoryContains = term,
+                    },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(3);
@@ -515,19 +612,14 @@ public class OperationsServiceReadModelTests : TestSetup
     {
         // More rows than the window, with matches near each end and in the middle, so a page
         // starts in the window and finishes past it, whichever end it reads from.
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
-        var rows = OperationsService.LogTextWindow + 20_000;
-        var ctx = (DbContext)DataContext;
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO trax.log (metadata_id, event_id, level, message, category)
-            SELECT {run.Id}, 0, 'information'::trax.log_level,
-                   'line ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
-                - 2}) THEN ' Needle' ELSE '' END,
-                   'Window'
-            FROM generate_series(1, {rows}) g
-            """
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
+        var rows = OperationsService.LogTextWindow + 20_000;
+        await SeedNeedleLogs(run.Id, rows);
         var matching = await DataContext
             .Logs.AsNoTracking()
             .Where(l => l.MetadataId == run.Id && l.Message.EndsWith(" Needle"))
@@ -538,28 +630,32 @@ public class OperationsServiceReadModelTests : TestSetup
                 ? matching.Order().ToList()
                 : matching.OrderDescending().ToList();
 
-        var whole = await _operations.GetLogsAsync(
-            new LogQuery(MetadataId: run.Id, Take: OperationsService.MaxPageSize)
-            {
-                MessageContains = "needle",
-                Order = order,
-            },
-            CancellationToken.None
-        );
-        whole.Items.Select(l => l.Id).Should().Equal(expected);
-
-        var paged = new List<long>();
-        long? cursor = null;
-        do
-        {
-            var page = await _operations.GetLogsAsync(
-                new LogQuery(MetadataId: run.Id, Take: 7, AfterId: cursor)
+        var whole = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: OperationsService.MaxPageSize)
                 {
                     MessageContains = "needle",
                     Order = order,
                 },
                 CancellationToken.None
             );
+        whole.Items.Select(l => l.Id).Should().Equal(expected);
+
+        var paged = new List<long>();
+        long? cursor = null;
+        do
+        {
+            var page = await _operations
+                .NotNull()
+                .GetLogsAsync(
+                    new LogQuery(MetadataId: run.Id, Take: 7, AfterId: cursor)
+                    {
+                        MessageContains = "needle",
+                        Order = order,
+                    },
+                    CancellationToken.None
+                );
             paged.AddRange(page.Items.Select(l => l.Id));
             cursor = page.Items.Count == 7 ? page.NextCursor : null;
         } while (cursor is not null);
@@ -570,6 +666,40 @@ public class OperationsServiceReadModelTests : TestSetup
     #endregion
 
     #region Helpers
+
+    private async Task TrackDeadLetterFor(Manifest deadLettered)
+    {
+        await DataContext
+            .Track(
+                Trax.Effect.Models.DeadLetter.DeadLetter.Create(
+                    new Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter
+                    {
+                        Manifest = deadLettered,
+                        Reason = "test",
+                        RetryCount = 1,
+                    },
+                    TimeProvider.System
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task SeedNeedleLogs(long runId, int rows)
+    {
+        var ctx = (DbContext)DataContext;
+        await ctx
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"""
+            INSERT INTO trax.log (metadata_id, event_id, level, message, category)
+            SELECT {runId}, 0, 'information'::trax.log_level,
+                   'line ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
+                - 2}) THEN ' Needle' ELSE '' END,
+                   'Window'
+            FROM generate_series(1, {rows}) g
+            """
+            )
+            .ConfigureAwait(false);
+    }
 
     private async Task<Manifest> SeedManifest(
         ManifestGroup group,
@@ -588,8 +718,8 @@ public class OperationsServiceReadModelTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         configure?.Invoke(manifest);
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -604,17 +734,18 @@ public class OperationsServiceReadModelTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest?.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
         metadata.StartTime = start;
         metadata.EndTime = end;
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return metadata;
     }
@@ -627,15 +758,20 @@ public class OperationsServiceReadModelTests : TestSetup
         bool expectedCapped
     )
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, matching, LogLevel.Information, "Shop.Capped");
         await SeedLogs(run.Id, 5, LogLevel.Information, "Shop.Other");
         var query = new LogQuery(MetadataId: run.Id) { CategoryContains = "capped" };
 
-        var count = await _operations.CountLogsCappedAsync(query, CancellationToken.None);
+        var count = await _operations.NotNull().CountLogsCappedAsync(query, CancellationToken.None);
 
         count.Should().Be(new LogCount(expectedCount, expectedCapped));
-        (await _operations.CountLogsAsync(query, CancellationToken.None))
+        (await _operations.NotNull().CountLogsAsync(query, CancellationToken.None))
             .Should()
             .Be(matching, "the exact count is not capped");
     }
@@ -643,13 +779,20 @@ public class OperationsServiceReadModelTests : TestSetup
     [Test]
     public async Task A_count_without_a_text_filter_is_exact_past_the_cap()
     {
-        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var run = await SeedRun(
+            manifest: null,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         await SeedLogs(run.Id, OperationsService.LogCountCap + 1, LogLevel.Information, "Wide");
 
-        var count = await _operations.CountLogsCappedAsync(
-            new LogQuery(MetadataId: run.Id, Category: "Wide"),
-            CancellationToken.None
-        );
+        var count = await _operations
+            .NotNull()
+            .CountLogsCappedAsync(
+                new LogQuery(MetadataId: run.Id, Category: "Wide"),
+                CancellationToken.None
+            );
 
         count.Should().Be(new LogCount(OperationsService.LogCountCap + 1, Capped: false));
     }
@@ -657,9 +800,11 @@ public class OperationsServiceReadModelTests : TestSetup
     private async Task SeedLog(long metadataId, string message, string category)
     {
         var ctx = (DbContext)DataContext;
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, 'information'::trax.log_level, {message}, {category})"
-        );
+        await ctx
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, 'information'::trax.log_level, {message}, {category})"
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task SeedLogs(long metadataId, int count, LogLevel level, string category)
@@ -668,9 +813,11 @@ public class OperationsServiceReadModelTests : TestSetup
         // directly, so seed the same way.
         var ctx = (DbContext)DataContext;
         var levelName = level.ToString().ToLowerInvariant();
-        await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, {levelName}::trax.log_level, 'msg-' || g, {category} FROM generate_series(1, {count}) g"
-        );
+        await ctx
+            .Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, {levelName}::trax.log_level, 'msg-' || g, {category} FROM generate_series(1, {count}) g"
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion

@@ -49,6 +49,7 @@ internal sealed class SignalRTrainEventDispatcher
     private readonly DeliveryQueue _queue;
     private readonly CancellationTokenSource _abandon = new();
     private readonly Task _sender;
+    private readonly TimeProvider _clock;
 
     private long _dropped;
     private long _droppedSinceReport;
@@ -57,9 +58,11 @@ internal sealed class SignalRTrainEventDispatcher
     public SignalRTrainEventDispatcher(
         IHubContext<TraxTrainEventHub, ITraxTrainEventClient> hub,
         SignalRSinkConfiguration config,
-        ILogger<SignalRTrainEventDispatcher>? logger = null
+        ILogger<SignalRTrainEventDispatcher>? logger = null,
+        TimeProvider? timeProvider = null
     )
     {
+        _clock = timeProvider ?? TimeProvider.System;
         _hub = hub;
         _config = config;
         _logger = logger;
@@ -67,7 +70,7 @@ internal sealed class SignalRTrainEventDispatcher
         // The dispatcher is often first resolved on a train run's flow. Its loop outlives that run,
         // so it must not carry the run's ambient state (its own log lines would name the run).
         using (ExecutionContext.SuppressFlow())
-            _sender = Task.Run(SendLoopAsync);
+            _sender = Task.Run(SendLoopAsync, CancellationToken.None);
     }
 
     /// <summary>
@@ -97,7 +100,11 @@ internal sealed class SignalRTrainEventDispatcher
     /// <c>WithJunctionEvents()</c>.
     /// </summary>
     public Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct) =>
-        message.EventType == TrainLifecycleEventMessage.DataChangedEventType
+        string.Equals(
+            message.EventType,
+            TrainLifecycleEventMessage.DataChangedEventType,
+            StringComparison.Ordinal
+        )
             ? Task.CompletedTask
             : DispatchAsync(message, ct);
 
@@ -135,9 +142,9 @@ internal sealed class SignalRTrainEventDispatcher
     {
         try
         {
-            while (await _queue.ReadAsync(_abandon.Token) is { } message)
+            while (await _queue.ReadAsync(_abandon.Token).ConfigureAwait(false) is { } message)
             {
-                await SendAsync(message);
+                await SendAsync(message).ConfigureAwait(false);
 
                 if (_queue.Count == 0)
                 {
@@ -167,12 +174,14 @@ internal sealed class SignalRTrainEventDispatcher
                 // Matches already refused it unless junction events were asked for; one with no
                 // step has nothing to send.
                 if (message.Junction is not null)
-                    await _hub.Clients.All.JunctionEvent(_config.JunctionProjection(message));
+                    await _hub
+                        .Clients.All.JunctionEvent(_config.JunctionProjection(message))
+                        .ConfigureAwait(false);
                 return;
             }
 
             var payload = _config.Projection(message);
-            await _hub.Clients.All.TrainEvent(payload);
+            await _hub.Clients.All.TrainEvent(payload).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -200,11 +209,11 @@ internal sealed class SignalRTrainEventDispatcher
 
         try
         {
-            await _sender.WaitAsync(cancellationToken);
+            await _sender.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await _abandon.CancelAsync();
+            await _abandon.CancelAsync().ConfigureAwait(false);
             _logger?.LogWarning(
                 "SignalR sink stopped before its delivery queue drained; {Remaining} events were not sent.",
                 _queue.Count
@@ -216,7 +225,7 @@ internal sealed class SignalRTrainEventDispatcher
     {
         using (var timeout = new CancellationTokenSource(DisposeDrainTimeout))
         {
-            await StopAsync(timeout.Token);
+            await StopAsync(timeout.Token).ConfigureAwait(false);
         }
 
         _abandon.Dispose();
@@ -234,13 +243,13 @@ internal sealed class SignalRTrainEventDispatcher
             _abandon.Cancel();
     }
 
-    private static TrainLifecycleEventMessage BuildMessage(Metadata metadata, string eventType) =>
+    private TrainLifecycleEventMessage BuildMessage(Metadata metadata, string eventType) =>
         new(
             MetadataId: metadata.Id,
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
             TrainState: metadata.TrainState.ToString(),
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? _clock.GetUtcNow().UtcDateTime,
             FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             EventType: eventType,

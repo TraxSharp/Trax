@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Trax.Core.Functional;
 using Trax.Core.Train;
 
@@ -39,7 +40,8 @@ public partial class Monad<TInput, TReturn>
     /// <summary>
     /// The value to return when short-circuiting the chain.
     /// </summary>
-    internal TReturn ShortCircuitValue { get; set; } = default!;
+    [AllowNull]
+    internal TReturn ShortCircuitValue { get; set; }
 
     /// <summary>
     /// Indicates whether a short-circuit value has been set.

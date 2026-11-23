@@ -23,7 +23,8 @@ public class JunctionRunWriterFlowTests
         var factory = new ObservingFactory();
 
         Ambient.Value = "the creating run";
-        await using var writer = new JunctionRunWriter(factory);
+        var writer = new JunctionRunWriter(factory);
+        await using var writerDisposal = writer.ConfigureAwait(false);
         Ambient.Value = null;
 
         writer.Write(
@@ -33,11 +34,13 @@ public class JunctionRunWriterFlowTests
                 JunctionRunKind.Junction,
                 "J",
                 JunctionRunState.InProgress,
-                DateTime.UtcNow
+                TestTime.UtcDateTime
             )
         );
 
-        (await factory.Seen.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull();
+        (await factory.Seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System))
+            .Should()
+            .BeNull();
     }
 
     private sealed class ObservingFactory : IDataContextProviderFactory

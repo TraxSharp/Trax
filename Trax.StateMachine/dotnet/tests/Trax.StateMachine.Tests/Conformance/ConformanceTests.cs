@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -18,11 +19,7 @@ public class ConformanceTests
     public static IEnumerable<TestCaseData> AdvanceFixtures()
     {
         var dir = FixturePaths.AdvanceDir("turnstile");
-        foreach (
-            var path in Directory
-                .EnumerateFiles(dir, "*.json")
-                .OrderBy(p => p, StringComparer.Ordinal)
-        )
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json").Order(StringComparer.Ordinal))
             yield return new TestCaseData(path).SetName(
                 $"advance/{Path.GetFileNameWithoutExtension(path)}"
             );
@@ -31,11 +28,7 @@ public class ConformanceTests
     public static IEnumerable<TestCaseData> RehydrateFixtures()
     {
         var dir = FixturePaths.RehydrateDir("turnstile");
-        foreach (
-            var path in Directory
-                .EnumerateFiles(dir, "*.json")
-                .OrderBy(p => p, StringComparer.Ordinal)
-        )
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json").Order(StringComparer.Ordinal))
             yield return new TestCaseData(path).SetName(
                 $"rehydrate/{Path.GetFileNameWithoutExtension(path)}"
             );
@@ -48,22 +41,29 @@ public class ConformanceTests
     }
 
     [TestCaseSource(nameof(AdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path) => Replay(path);
+    public Task Advance_matches_the_shared_fixture(string path) => Replay(path);
 
-    private static void Replay(string path)
+    private static async Task Replay(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
-        var given = ToSnapshot((JsonObject)fixture["given"]!);
-        var when = (JsonObject)fixture["when"]!;
-        var trigger = when["trigger"]!.GetValue<string>();
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
+        var given = ToSnapshot((JsonObject)fixture["given"].NotNull());
+        var when = (JsonObject)fixture["when"].NotNull();
+        var trigger = when["trigger"].NotNull().GetValue<string>();
         var input = when["input"]?.DeepClone();
-        var expect = (JsonObject)fixture["expect"]!;
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = DeclarativeTurnstile.Machine.Advance(given, trigger, input);
 
-        if (expect["outcome"]!.GetValue<string>() == "transitioned")
+        if (
+            string.Equals(
+                expect["outcome"].NotNull().GetValue<string>(),
+                "transitioned",
+                StringComparison.Ordinal
+            )
+        )
         {
-            var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
+            var expected = ToSnapshot((JsonObject)expect["snapshot"].NotNull());
             result
                 .Should()
                 .BeOfType<AdvanceResult.Transitioned>()
@@ -77,25 +77,32 @@ public class ConformanceTests
                 .BeOfType<AdvanceResult.Rejected>()
                 .Which.Reason.ToWire()
                 .Should()
-                .Be(expect["reason"]!.GetValue<string>());
+                .Be(expect["reason"].NotNull().GetValue<string>());
         }
     }
 
     [TestCaseSource(nameof(RehydrateFixtures))]
-    public void Rehydrate_matches_the_shared_fixture(string path)
+    public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()
-                : fixture["json"]!.ToJsonString();
-        var expect = (JsonObject)fixture["expect"]!;
+                : fixture["json"].NotNull().ToJsonString();
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = TestTurnstile.Machine.Rehydrate(json);
 
-        if (expect["result"]!.GetValue<string>() == "ok")
+        if (
+            string.Equals(
+                expect["result"].NotNull().GetValue<string>(),
+                "ok",
+                StringComparison.Ordinal
+            )
+        )
         {
-            var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
+            var expected = ToSnapshot((JsonObject)expect["snapshot"].NotNull());
             result.Should().BeOfType<RehydrationResult.Ok>().Which.Snapshot.Should().Be(expected);
         }
         else
@@ -105,16 +112,16 @@ public class ConformanceTests
                 .BeOfType<RehydrationResult.Error>()
                 .Which.Code.ToWire()
                 .Should()
-                .Be(expect["code"]!.GetValue<string>());
+                .Be(expect["code"].NotNull().GetValue<string>());
         }
     }
 
     private static Snapshot ToSnapshot(JsonObject o) =>
         new()
         {
-            Machine = o["machine"]!.GetValue<string>(),
-            Version = o["version"]!.GetValue<int>(),
-            State = o["state"]!.GetValue<string>(),
-            Context = (JsonObject)o["context"]!.DeepClone(),
+            Machine = o["machine"].NotNull().GetValue<string>(),
+            Version = o["version"].NotNull().GetValue<int>(),
+            State = o["state"].NotNull().GetValue<string>(),
+            Context = (JsonObject)o["context"].NotNull().DeepClone(),
         };
 }

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
@@ -41,28 +42,44 @@ public class JunctionMetadata : IModel
     /// FullName.
     /// </summary>
     [Column("train_name")]
-    public string TrainName { get; private set; } = null!;
+    public string TrainName
+    {
+        get => field.NotNull(nameof(TrainName));
+        private set;
+    }
 
     /// <summary>
     /// The junction class's short name (<c>GetType().Name</c>, no namespace). The same value is
     /// written to the run's <c>CurrentlyRunningJunction</c> by the progress provider.
     /// </summary>
     [Column("name")]
-    public string Name { get; private set; } = null!;
+    public string Name
+    {
+        get => field.NotNull(nameof(Name));
+        private set;
+    }
 
     /// <summary>
     /// A fresh 32-digit GUID (<c>"N"</c> format) for this one execution of the junction. Nothing
     /// else stores it; use it to correlate the before and after log lines of one execution.
     /// </summary>
     [Column("external_id")]
-    public string ExternalId { get; private set; } = null!;
+    public string ExternalId
+    {
+        get => field.NotNull(nameof(ExternalId));
+        private set;
+    }
 
     /// <summary>
     /// The owning run's <c>Metadata.ExternalId</c>. Not unique across rows of <c>trax.metadata</c>;
     /// prefer <see cref="TrainMetadataId"/> to identify the run.
     /// </summary>
     [Column("train_external_id")]
-    public string TrainExternalId { get; private set; } = null!;
+    public string TrainExternalId
+    {
+        get => field.NotNull(nameof(TrainExternalId));
+        private set;
+    }
 
     /// <summary>
     /// The id of the <c>trax.metadata</c> row for the run this junction is executing in, so a
@@ -109,11 +126,19 @@ public class JunctionMetadata : IModel
 
     /// <summary>The junction's <c>TIn</c> type argument.</summary>
     [Column("input_type")]
-    public Type InputType { get; private set; } = null!;
+    public Type InputType
+    {
+        get => field.NotNull(nameof(InputType));
+        private set;
+    }
 
     /// <summary>The junction's <c>TOut</c> type argument.</summary>
     [Column("output_type")]
-    public Type OutputType { get; private set; } = null!;
+    public Type OutputType
+    {
+        get => field.NotNull(nameof(OutputType));
+        private set;
+    }
 
     /// <summary>
     /// The railway's state: on creation, the state arriving from the previous junction; once the

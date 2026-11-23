@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -235,17 +236,18 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await ((TraxScheduler)scheduler).ScheduleManyAsyncUntyped(
-                        trainType,
-                        inputType,
-                        itemList,
-                        item => (item.Id, item.Input),
-                        schedule,
-                        options,
-                        configureEach: null,
-                        ct
-                    );
-                    return results.FirstOrDefault()!;
+                    var results = await ((TraxScheduler)scheduler)
+                        .ScheduleManyAsyncUntyped(
+                            trainType,
+                            inputType,
+                            itemList,
+                            item => (item.Id, item.Input),
+                            schedule,
+                            options,
+                            configureEach: null,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );
@@ -295,7 +297,7 @@ public partial class SchedulerConfigurationBuilder
         ValidateBatchInputType(itemList, inputType, typeof(TTrain));
 
         // Only require _rootScheduledExternalId when at least one item lacks DependsOn
-        var needsRoot = itemList.Any(item => item.DependsOn is null);
+        var needsRoot = itemList.Exists(item => item.DependsOn is null);
         string? rootExternalId = null;
 
         if (needsRoot)
@@ -315,7 +317,7 @@ public partial class SchedulerConfigurationBuilder
 
         foreach (var item in itemList)
         {
-            var parentExtId = item.DependsOn ?? rootExternalId!;
+            var parentExtId = item.DependsOn ?? rootExternalId.NotNull();
             _externalIdToGroupId[item.Id] = resolved._groupId ?? item.Id;
             _dependencyEdges.Add((parentExtId, item.Id));
         }
@@ -329,19 +331,18 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await (
-                        (TraxScheduler)scheduler
-                    ).ScheduleManyDependentAsyncUntyped(
-                        trainType,
-                        inputType,
-                        itemList,
-                        item => (item.Id, item.Input),
-                        item => item.DependsOn ?? rootExternalId!,
-                        options,
-                        configureEach: null,
-                        ct
-                    );
-                    return results.FirstOrDefault()!;
+                    var results = await ((TraxScheduler)scheduler)
+                        .ScheduleManyDependentAsyncUntyped(
+                            trainType,
+                            inputType,
+                            itemList,
+                            item => (item.Id, item.Input),
+                            item => item.DependsOn ?? rootExternalId.NotNull(),
+                            options,
+                            configureEach: null,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );
@@ -412,19 +413,18 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await (
-                        (TraxScheduler)scheduler
-                    ).ScheduleManyDependentAsyncUntyped(
-                        trainType,
-                        inputType,
-                        itemList,
-                        item => (item.Id, item.Input),
-                        item => item.DependsOn!,
-                        options,
-                        configureEach: null,
-                        ct
-                    );
-                    return results.FirstOrDefault()!;
+                    var results = await ((TraxScheduler)scheduler)
+                        .ScheduleManyDependentAsyncUntyped(
+                            trainType,
+                            inputType,
+                            itemList,
+                            item => (item.Id, item.Input),
+                            item => item.DependsOn.NotNull(),
+                            options,
+                            configureEach: null,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );

@@ -10,12 +10,31 @@ package: Trax.Client
 namespace: Trax.Client
 source:
   - Trax.StateMachine/dotnet/src/Trax.Client/TraxClient.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxClientOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxStreamEvent.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/Backoff.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/TraxDocument.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxOperationKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxNoVariables.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/TraxHttpTransport.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxRequest.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/ITraxTransport.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxHttpTransportOptions.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/TraxAnswer.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxGraphQLError.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxTransportFailure.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/Optional.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/IOptional.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/OptionalJsonConverterFactory.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/OptionalJsonConverter.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/TraxJson.cs
   - Trax.StateMachine/dotnet/src/Trax.Client/GraphQLSubscriptionSocket.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/ISubscriptionSink.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/ISubscriptionSocket.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/GraphQLSubscriptionSocketOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/SubscriptionErrorException.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/SocketClosedException.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/SocketUnavailableException.cs
 ---
 
 # .NET client

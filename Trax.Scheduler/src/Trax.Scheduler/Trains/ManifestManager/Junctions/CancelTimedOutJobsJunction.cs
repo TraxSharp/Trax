@@ -34,18 +34,68 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 ///
 /// This junction runs first in the ManifestManagerTrain chain, before the manifests are loaded.
 /// </remarks>
-internal class CancelTimedOutJobsJunction(
+internal sealed class CancelTimedOutJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ICancellationRegistry cancellationRegistry,
-    ILogger<CancelTimedOutJobsJunction> logger
+    ILogger<CancelTimedOutJobsJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<Unit, Unit>
 {
     public override async Task<Unit> Run(Unit input)
     {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var adminTrainNames = AdminTrains.FullNames.ToList();
 
+        var inProgressMetadata = await ReadInProgressRunsAsync(adminTrainNames)
+            .ConfigureAwait(false);
+
+        if (inProgressMetadata.Count == 0)
+        {
+            logger.LogDebug("CancelTimedOutJobsJunction: no in-progress runs to check");
+            return Unit.Default;
+        }
+
+        var bounds = await RunTimeouts
+            .ResolveAsync(dataContext, config, inProgressMetadata, CancellationToken)
+            .ConfigureAwait(false);
+
+        var metadataIdsToCancel = TimedOutRunIds(inProgressMetadata, bounds, now);
+
+        if (metadataIdsToCancel.Count == 0)
+        {
+            logger.LogDebug("CancelTimedOutJobsJunction: no timed-out jobs found");
+            return Unit.Default;
+        }
+
+        await dataContext
+            .Metadatas.Where(m => metadataIdsToCancel.Contains(m.Id))
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
+                CancellationToken
+            )
+            .ConfigureAwait(false);
+
+        foreach (var metadataId in metadataIdsToCancel)
+        {
+            var cancelled = cancellationRegistry.TryCancel(metadataId);
+            if (cancelled)
+                logger.LogDebug(
+                    "Same-server instant cancel succeeded for Metadata {MetadataId}",
+                    metadataId
+                );
+        }
+
+        logger.LogInformation(
+            "CancelTimedOutJobsJunction completed: {CancelledCount} timed-out job(s) cancelled",
+            metadataIdsToCancel.Count
+        );
+
+        return Unit.Default;
+    }
+
+    private async Task<List<TimedRun>> ReadInProgressRunsAsync(List<string> adminTrainNames)
+    {
         var inProgressMetadata = await dataContext
             .Metadatas.Where(m =>
                 m.TrainState == TrainState.InProgress
@@ -62,21 +112,18 @@ internal class CancelTimedOutJobsJunction(
                 m.Manifest != null ? m.Manifest.TimeoutSeconds : null
             ))
             .AsNoTracking()
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
-        if (inProgressMetadata.Count == 0)
-        {
-            logger.LogDebug("CancelTimedOutJobsJunction: no in-progress runs to check");
-            return Unit.Default;
-        }
+        return inProgressMetadata;
+    }
 
-        var bounds = await RunTimeouts.ResolveAsync(
-            dataContext,
-            config,
-            inProgressMetadata,
-            CancellationToken
-        );
-
+    private List<long> TimedOutRunIds(
+        List<TimedRun> inProgressMetadata,
+        Dictionary<long, RunBound> bounds,
+        DateTime now
+    )
+    {
         var metadataIdsToCancel = new List<long>();
 
         foreach (var md in inProgressMetadata)
@@ -100,34 +147,6 @@ internal class CancelTimedOutJobsJunction(
             }
         }
 
-        if (metadataIdsToCancel.Count == 0)
-        {
-            logger.LogDebug("CancelTimedOutJobsJunction: no timed-out jobs found");
-            return Unit.Default;
-        }
-
-        await dataContext
-            .Metadatas.Where(m => metadataIdsToCancel.Contains(m.Id))
-            .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
-                CancellationToken
-            );
-
-        foreach (var metadataId in metadataIdsToCancel)
-        {
-            var cancelled = cancellationRegistry.TryCancel(metadataId);
-            if (cancelled)
-                logger.LogDebug(
-                    "Same-server instant cancel succeeded for Metadata {MetadataId}",
-                    metadataId
-                );
-        }
-
-        logger.LogInformation(
-            "CancelTimedOutJobsJunction completed: {CancelledCount} timed-out job(s) cancelled",
-            metadataIdsToCancel.Count
-        );
-
-        return Unit.Default;
+        return metadataIdsToCancel;
     }
 }

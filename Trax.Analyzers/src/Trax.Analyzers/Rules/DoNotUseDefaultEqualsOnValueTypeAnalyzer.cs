@@ -1,0 +1,189 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class DoNotUseDefaultEqualsOnValueTypeAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DoNotUseDefaultEqualsOnValueType,
+        title: "Default ValueType.Equals or HashCode is used for struct equality",
+        messageFormat: "Default ValueType.Equals or HashCode is used for struct equality",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotUseDefaultEqualsOnValueType));
+
+    private static readonly DiagnosticDescriptor Rule2 = new(
+        RuleIdentifiers.StructWithDefaultEqualsImplementationUsedAsAKey,
+        title: "Hash table unfriendly type is used in a hash table",
+        messageFormat: "Hash table unfriendly type is used in a hash table",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.StructWithDefaultEqualsImplementationUsedAsAKey));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule, Rule2);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzeContext = new Context(ctx.Compilation);
+            ctx.RegisterOperationAction(analyzeContext.AnalyzeInvocationOperation, OperationKind.Invocation);
+            ctx.RegisterOperationAction(analyzeContext.AnalyzeFieldReferenceOperation, OperationKind.FieldReference);
+            ctx.RegisterOperationAction(analyzeContext.AnalyzeObjectCreationOperation, OperationKind.ObjectCreation);
+        });
+    }
+
+    private sealed class Context
+    {
+        public Compilation Compilation { get; }
+        private INamedTypeSymbol? IEqualityComparerSymbol { get; }
+        private ITypeSymbol? ValueTypeSymbol { get; }
+        private ITypeSymbol? ImmutableDictionarySymbol { get; }
+        private ITypeSymbol? ImmutableHashSetSymbol { get; }
+        private IMethodSymbol? ValueTypeEqualsSymbol { get; }
+        private IMethodSymbol? ValueTypeGetHashCodeSymbol { get; }
+        private ITypeSymbol[] HashSetSymbols { get; }
+
+        public Context(Compilation compilation)
+        {
+            IEqualityComparerSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IEqualityComparer`1");
+            ValueTypeSymbol = compilation.GetTypeByMetadataName("System.ValueType");
+            if (ValueTypeSymbol is not null)
+            {
+                ValueTypeEqualsSymbol = ValueTypeSymbol.GetMembers(nameof(ValueType.Equals)).OfType<IMethodSymbol>().FirstOrDefault();
+                ValueTypeGetHashCodeSymbol = ValueTypeSymbol.GetMembers(nameof(ValueType.GetHashCode)).OfType<IMethodSymbol>().FirstOrDefault();
+            }
+
+            ImmutableDictionarySymbol = compilation.GetTypeByMetadataName("System.Collections.Immutable.ImmutableDictionary");
+            ImmutableHashSetSymbol = compilation.GetTypeByMetadataName("System.Collections.Immutable.ImmutableHashSet");
+
+            var types = new List<ITypeSymbol>();
+            types.AddIfNotNull(compilation.GetTypeByMetadataName("System.Collections.Generic.HashSet`1"));
+            types.AddIfNotNull(compilation.GetTypeByMetadataName("System.Collections.Generic.Dictionary`2"));
+            types.AddIfNotNull(compilation.GetTypesByMetadataName("System.Collections.Concurrent.ConcurrentDictionary`2"));
+            types.AddIfNotNull(compilation.GetTypesByMetadataName("System.Collections.Immutable.ImmutableHashSet`1"));
+            types.AddIfNotNull(compilation.GetTypesByMetadataName("System.Collections.Immutable.ImmutableDictionary`2"));
+            HashSetSymbols = [.. types];
+            Compilation = compilation;
+        }
+
+        public void AnalyzeInvocationOperation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+
+            if (operation.TargetMethod.Name is nameof(ValueType.GetHashCode) or nameof(ValueType.Equals))
+            {
+                // The invoked method is the default implementation only when the type does not override it.
+                // An override, an overload such as Equals(T), or a method hiding the default implementation is invoked instead.
+                var defaultImplementation = operation.TargetMethod.Name is nameof(ValueType.GetHashCode) ? ValueTypeGetHashCodeSymbol : ValueTypeEqualsSymbol;
+                if (!operation.TargetMethod.IsEqualTo(defaultImplementation))
+                    return;
+
+                var actualType = operation.GetChildOperations().FirstOrDefault()?.GetActualType(context.CancellationToken);
+                if (actualType is null)
+                    return;
+
+                if (IsStruct(actualType))
+                {
+                    context.ReportDiagnostic(Rule, operation);
+                }
+            }
+            else if (IsImmutableCreateMethod(operation.TargetMethod))
+            {
+                var type = operation.TargetMethod.TypeArguments[0];
+                if (IsStruct(type) && HasDefaultEqualsOrHashCodeImplementations(type))
+                {
+                    if (operation.TargetMethod.Parameters.Any(arg => arg.Type.IsEqualTo(IEqualityComparerSymbol?.Construct(type))))
+                        return;
+
+                    context.ReportDiagnostic(Rule2, operation);
+                }
+            }
+
+            // This runs for every invocation of the compilation, so the cheap checks come first and the
+            // method allocates nothing.
+            bool IsImmutableCreateMethod(IMethodSymbol methodSymbol)
+            {
+                if (methodSymbol.Arity < 1)
+                    return false;
+
+                if (methodSymbol.Name is not ("Create" or "CreateBuilder" or "CreateRange"))
+                    return false;
+
+                var containingType = methodSymbol.ContainingType.OriginalDefinition;
+                return ImmutableDictionarySymbol.IsEqualTo(containingType) || ImmutableHashSetSymbol.IsEqualTo(containingType);
+            }
+        }
+
+        private static bool IsStruct(ITypeSymbol typeSymbol)
+        {
+            return typeSymbol is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsValueType && namedTypeSymbol.EnumUnderlyingType is null;
+        }
+
+        public void AnalyzeFieldReferenceOperation(OperationAnalysisContext context)
+        {
+            var operation = (IFieldReferenceOperation)context.Operation;
+            if (operation.Field.Name is "Empty")
+            {
+                var type = operation.Field.ContainingType;
+                if ((type?.OriginalDefinition) is null)
+                    return;
+
+                if (HashSetSymbols.Any(type.OriginalDefinition.IsEqualTo))
+                {
+                    if (IsStruct(type.TypeArguments[0]) && HasDefaultEqualsOrHashCodeImplementations(type.TypeArguments[0]))
+                    {
+                        if (operation.Parent is IInvocationOperation { TargetMethod.Name: "WithComparer" or "WithComparers" })
+                            return;
+
+                        context.ReportDiagnostic(Rule2, operation);
+                    }
+                }
+            }
+        }
+
+        public void AnalyzeObjectCreationOperation(OperationAnalysisContext context)
+        {
+            var operation = (IObjectCreationOperation)context.Operation;
+            var type = operation.Type as INamedTypeSymbol;
+            if ((type?.OriginalDefinition) is null)
+                return;
+
+            if (operation.Constructor is null)
+                return;
+
+            if (HashSetSymbols.Any(type.OriginalDefinition.IsEqualTo))
+            {
+                if (operation.Constructor.Parameters.Any(arg => arg.Type.IsEqualTo(IEqualityComparerSymbol?.Construct(type.TypeArguments[0]))))
+                    return;
+
+                if (IsStruct(type.TypeArguments[0]) && HasDefaultEqualsOrHashCodeImplementations(type.TypeArguments[0]))
+                {
+                    context.ReportDiagnostic(Rule2, operation);
+                }
+            }
+        }
+
+        private bool HasDefaultEqualsOrHashCodeImplementations(ITypeSymbol typeSymbol)
+        {
+            if (ValueTypeEqualsSymbol is not null && !HasOverride(typeSymbol, ValueTypeEqualsSymbol))
+                return true;
+
+            if (ValueTypeGetHashCodeSymbol is not null && !HasOverride(typeSymbol, ValueTypeGetHashCodeSymbol))
+                return true;
+
+            return false;
+        }
+
+        private static bool HasOverride(ITypeSymbol typeSymbol, IMethodSymbol overriddenMethod)
+        {
+            return typeSymbol.GetMembers(overriddenMethod.Name).OfType<IMethodSymbol>().Any(member => member.IsOverride && overriddenMethod.IsEqualTo(member.OverriddenMethod));
+        }
+    }
+}

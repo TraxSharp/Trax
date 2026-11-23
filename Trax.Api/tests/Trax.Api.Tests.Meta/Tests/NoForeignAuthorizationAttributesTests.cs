@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.Meta.Tests;
@@ -21,7 +22,7 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// </remarks>
 [Property("adr", "Trax.Docs/adr/0013-trax-owns-the-vocabulary-for-its-own-concepts.md")]
 [TestFixture]
-public class NoForeignAuthorizationAttributesTests
+public partial class NoForeignAuthorizationAttributesTests
 {
     private const string Adr =
         "Trax.Docs/adr/0013-trax-owns-the-vocabulary-for-its-own-concepts.md";
@@ -30,11 +31,6 @@ public class NoForeignAuthorizationAttributesTests
     /// An <c>[Authorize]</c> or <c>[AllowAnonymous]</c> attribute in attribute position, with or
     /// without arguments, alone or combined with others.
     /// </summary>
-    private static readonly Regex ForeignAttribute = new(
-        @"(?:\[|,)\s*(?:HotChocolate\.Authorization\.)?(Authorize|AllowAnonymous)\s*(?:\(|\])",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// Files that name the banned attributes for a reason, each of which has to justify itself.
     /// </summary>
@@ -53,7 +49,13 @@ public class NoForeignAuthorizationAttributesTests
             "reads directives off the built schema",
         // The tests that pin the refusal have to write the thing being refused.
         ["tests/Trax.Api.Tests/TypeExtensionExposureTests.cs"] =
-            "fixtures proving the foreign attributes are refused",
+            "tests proving the foreign attributes are refused",
+        ["tests/Trax.Api.Tests/ForeignAnonymousOnPublicThing.cs"] =
+            "fixture proving the foreign attributes are refused",
+        ["tests/Trax.Api.Tests/ForeignGatedOnGatedThing.cs"] =
+            "fixture proving the foreign attributes are refused",
+        ["tests/Trax.Api.Tests/ForeignGatedOnPublicThing.cs"] =
+            "fixture proving the foreign attributes are refused",
         ["tests/Trax.Api.Tests/QueryModelAllowAnonymousSchemaValidatorTests.cs"] =
             "builds schemas directly to drive the schema validator",
         // Builds a raw AddGraphQLServer schema to exercise HotChocolate's own validator. Trax's
@@ -85,7 +87,12 @@ public class NoForeignAuthorizationAttributesTests
             foreach (Match match in ForeignAttribute.Matches(text))
             {
                 var line = text.Take(match.Index).Count(c => c == '\n') + 1;
-                offenders.Add($"{relative}:{line} ({match.Value.Trim()})");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{relative}:{line} ({match.Value.Trim()})"
+                    )
+                );
             }
         }
 
@@ -116,4 +123,11 @@ public class NoForeignAuthorizationAttributesTests
                 .BeTrue($"'{relative}' is allowlisted ({reason}) but does not exist. See {Adr}.");
         }
     }
+
+    [GeneratedRegex(
+        @"(?:\[|,)\s*(?:HotChocolate\.Authorization\.)?(Authorize|AllowAnonymous)\s*(?:\(|\])",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ForeignAttribute { get; }
 }

@@ -37,7 +37,11 @@ public class DisposableConverterTests
     public void Write_DisposableObject_WritesPlaceholder()
     {
         // Arrange
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         options.Converters.Add(new DisposableConverter());
         using var stream = new MemoryStream();
 

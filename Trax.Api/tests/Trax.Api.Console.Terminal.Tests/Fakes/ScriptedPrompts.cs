@@ -15,7 +15,7 @@ internal sealed class ScriptedPrompts : IPrompts
 
     public int? Ask(string title, string message, params string[] buttons)
     {
-        Asked.Add($"{title}: {message} [{string.Join("|", buttons)}]");
+        Asked.Add($"{title}: {message} [{string.Join('|', buttons)}]");
         return Choices.Count > 0 ? Choices.Dequeue() : null;
     }
 

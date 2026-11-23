@@ -39,7 +39,7 @@ public static class TraxPrincipalId
     {
         ArgumentException.ThrowIfNullOrEmpty(scheme);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        if (scheme.Contains(Separator))
+        if (scheme.Contains(Separator, StringComparison.Ordinal))
             throw new ArgumentException(
                 $"An authentication scheme name used for a Trax principal cannot contain '{Separator}': "
                     + $"'{scheme}' would make qualified principal ids ambiguous.",

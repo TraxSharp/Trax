@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -5,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Train;
 using Trax.Effect.Decisions.SystemOne;
 
@@ -23,7 +25,7 @@ public class SystemOneDeciderTests
             new ChoiceQuestion(
                 "TicketTrack",
                 "Which team should handle this ticket?",
-                [new("Refund", "Money back for an order."), new("Escalate", null)]
+                [new("Refund", "Money back for an order."), new("Escalate", Description: null)]
             ),
             new ScoreQuestion(
                 "Urgency",
@@ -34,7 +36,7 @@ public class SystemOneDeciderTests
                 "ContainsThreat",
                 "Does it threaten anyone?",
                 "It threatens harm.",
-                null
+                No: null
             ),
         ]
     );
@@ -77,23 +79,49 @@ public class SystemOneDeciderTests
 
         var sent = model.Requests.Should().ContainSingle().Subject;
         sent.Authorization.Should().Be("Bearer sk-test");
-        sent.Body["model"]!.GetValue<string>().Should().Be("jev-1.13.0");
-        sent.Body["state"]!["customerId"]!.GetValue<string>().Should().Be("cus_1");
+        sent.Body["model"].NotNull().GetValue<string>().Should().Be("jev-1.13.0");
+        sent.Body["state"]
+            .NotNull()["customerId"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("cus_1");
 
-        var questions = sent.Body["questions"]!;
-        questions["TicketTrack"]!["type"]!.GetValue<string>().Should().Be("choice");
-        questions["TicketTrack"]!["instructions"]!
+        var questions = sent.Body["questions"].NotNull();
+        questions["TicketTrack"]
+            .NotNull()["type"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("choice");
+        questions["TicketTrack"]
+            .NotNull()["instructions"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("Which team should handle this ticket?");
-        questions["TicketTrack"]!["criteria"]!
+        questions["TicketTrack"]
+            .NotNull()["criteria"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Refund":"Money back for an order.","Escalate":"Escalate"}""");
-        questions["Urgency"]!["type"]!.GetValue<string>().Should().Be("score");
-        questions["Urgency"]!["criteria"]!.ToJsonString().Should().Be("""["Whenever.","Now."]""");
-        questions["ContainsThreat"]!["type"]!.GetValue<string>().Should().Be("noul");
-        questions["ContainsThreat"]!["criteria"]!
+        questions["Urgency"].NotNull()["type"].NotNull().GetValue<string>().Should().Be("score");
+        questions["Urgency"]
+            .NotNull()["criteria"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("""["Whenever.","Now."]""");
+        questions["ContainsThreat"]
+            .NotNull()["type"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("noul");
+        questions["ContainsThreat"]
+            .NotNull()["criteria"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"true":"It threatens harm.","false":"No"}""");
@@ -116,7 +144,11 @@ public class SystemOneDeciderTests
                 new ChoiceAnswer(
                     "Refund",
                     0.8,
-                    new Dictionary<string, double> { ["Refund"] = 0.87, ["Escalate"] = 0.13 }
+                    new Dictionary<string, double>(StringComparer.Ordinal)
+                    {
+                        ["Refund"] = 0.87,
+                        ["Escalate"] = 0.13,
+                    }
                 )
                 {
                     Model = "jev-1.13.0",
@@ -183,7 +215,7 @@ public class SystemOneDeciderTests
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("502").And.Contain("after 2 attempts");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Transient);
         model.Requests.Should().HaveCount(2);
@@ -200,8 +232,10 @@ public class SystemOneDeciderTests
         var decide = () => decider.Decide(Ticket, CancellationToken.None);
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
-        failure.Message.Should().Contain(((int)status).ToString());
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        failure
+            .Message.Should()
+            .Contain(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
         model.Requests.Should().ContainSingle();
@@ -285,7 +319,11 @@ public class SystemOneDeciderTests
                 new ChoiceQuestion(
                     "Lane",
                     "Which lane?",
-                    [new("A", null), new("B", null), new("C", null)]
+                    [
+                        new("A", Description: null),
+                        new("B", Description: null),
+                        new("C", Description: null),
+                    ]
                 ),
             ],
         };
@@ -294,7 +332,7 @@ public class SystemOneDeciderTests
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("offers 3 options");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
     }
@@ -307,7 +345,7 @@ public class SystemOneDeciderTests
         using var decider = new SystemOneDecider(Options(), new HttpClient(model));
         var single = Ticket with
         {
-            Questions = [new ChoiceQuestion("Lane", "Which lane?", [new("A", null)])],
+            Questions = [new ChoiceQuestion("Lane", "Which lane?", [new("A", Description: null)])],
         };
 
         var decide = () => decider.Decide(single, CancellationToken.None);
@@ -326,7 +364,10 @@ public class SystemOneDeciderTests
     {
         var model = new FakeModel(_ => Ok(Answered));
         using var decider = new SystemOneDecider(Options(), new HttpClient(model));
-        var blank = Ticket with { Questions = [new YesNoQuestion("Q", instructions, null, null)] };
+        var blank = Ticket with
+        {
+            Questions = [new YesNoQuestion("Q", instructions, Yes: null, No: null)],
+        };
 
         var decide = () => decider.Decide(blank, CancellationToken.None);
 
@@ -366,7 +407,11 @@ public class SystemOneDeciderTests
 
         await decider.Decide(Ticket with { State = state }, CancellationToken.None);
 
-        model.Requests.Should().ContainSingle().Which.Body["state"]!
+        model
+            .Requests.Should()
+            .ContainSingle()
+            .Which.Body["state"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be(state);
@@ -385,7 +430,7 @@ public class SystemOneDeciderTests
 
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("asks 3 questions").And.Contain("at most 2");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Permanent);
         model.Requests.Should().BeEmpty("it is refused before it is sent");
@@ -492,7 +537,7 @@ public class SystemOneDeciderTests
         var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
         failure.Message.Should().Contain("422").And.Contain("refused as invalid");
         failure.Message.Should().NotContain("cus_secret_7").And.NotContain("detail");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .Message.Should()
             .NotContain("cus_secret_7");
         ClassOf(failure).Should().Be(FailureClass.Permanent);
@@ -873,7 +918,11 @@ public class SystemOneDeciderTests
         var result = await new RefundTrain(decider).RunEither("order 42");
 
         result.IsRight.Should().BeTrue();
-        model.Requests.Should().ContainSingle().Which.Body["questions"]!
+        model
+            .Requests.Should()
+            .ContainSingle()
+            .Which.Body["questions"]
+            .NotNull()
             .AsObject()
             .Select(q => q.Key)
             .Should()
@@ -894,8 +943,8 @@ public class SystemOneDeciderTests
         {
             Questions =
             [
-                new YesNoQuestion("Q", "One?", null, null),
-                new YesNoQuestion("Q", "Two?", null, null),
+                new YesNoQuestion("Q", "One?", Yes: null, No: null),
+                new YesNoQuestion("Q", "Two?", Yes: null, No: null),
             ],
         };
 
@@ -1029,7 +1078,7 @@ public class SystemOneDeciderTests
     }
 
     private static FailureClass? ClassOf(Exception failure) =>
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!).FailureClass;
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull()).FailureClass;
 
     /// <summary>Records each wait before a retry instead of waiting, with the jitter fixed.</summary>
     private static List<TimeSpan> Record(SystemOneDecider decider, double jitter)
@@ -1114,8 +1163,12 @@ public class SystemOneDeciderTests
             var port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
 
-            Endpoint = new Uri($"http://127.0.0.1:{port}/v1/systemone");
-            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            Endpoint = new Uri(
+                string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/v1/systemone")
+            );
+            _listener.Prefixes.Add(
+                string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/")
+            );
             _listener.Start();
             _ = Serve(answer);
         }
@@ -1132,14 +1185,20 @@ public class SystemOneDeciderTests
 
                 try
                 {
-                    context = await _listener.GetContextAsync();
+                    context = await _listener.GetContextAsync().ConfigureAwait(false);
                 }
                 catch (Exception e) when (e is HttpListenerException or ObjectDisposedException)
                 {
                     return;
                 }
 
-                if (context.Request.Url!.AbsolutePath == "/v1/systemone")
+                if (
+                    string.Equals(
+                        context.Request.Url.NotNull().AbsolutePath,
+                        "/v1/systemone",
+                        StringComparison.Ordinal
+                    )
+                )
                 {
                     context.Response.StatusCode = 307;
                     context.Response.RedirectLocation = "/elsewhere";
@@ -1149,7 +1208,7 @@ public class SystemOneDeciderTests
                     Interlocked.Increment(ref _followed);
                     var bytes = Encoding.UTF8.GetBytes(answer);
                     context.Response.ContentType = "application/json";
-                    await context.Response.OutputStream.WriteAsync(bytes);
+                    await context.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
                 }
 
                 context.Response.Close();
@@ -1167,7 +1226,7 @@ public class SystemOneDeciderTests
         Func<Task>? waitFor = null
     ) : HttpMessageHandler
     {
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         private readonly List<(int Count, TaskCompletionSource Reached)> _watchers = [];
 
@@ -1200,7 +1259,14 @@ public class SystemOneDeciderTests
         {
             var sent = new SentRequest(
                 request.Headers.Authorization?.ToString(),
-                JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!
+                JsonNode
+                    .Parse(
+                        await request
+                            .Content.NotNull()
+                            .ReadAsStringAsync(cancellationToken)
+                            .ConfigureAwait(false)
+                    )
+                    .NotNull()
             );
 
             int attempt;
@@ -1221,7 +1287,7 @@ public class SystemOneDeciderTests
                         watcher.Reached.TrySetResult();
                 }
 
-                await waitFor();
+                await waitFor().ConfigureAwait(false);
 
                 lock (_lock)
                     _inFlight--;
@@ -1231,10 +1297,9 @@ public class SystemOneDeciderTests
             {
                 // Never answers; only cancellation (the train's, or the attempt timeout) ends it.
                 var never = new TaskCompletionSource();
-                await using var _ = cancellationToken.Register(() =>
-                    never.TrySetCanceled(cancellationToken)
-                );
-                await never.Task;
+                var _ = cancellationToken.Register(() => never.TrySetCanceled(cancellationToken));
+                await using var _Disposal = _.ConfigureAwait(false);
+                await never.Task.ConfigureAwait(false);
             }
 
             return answer(attempt);

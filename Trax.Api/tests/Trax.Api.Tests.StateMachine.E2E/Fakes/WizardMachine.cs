@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Trax.Core.Functional;
@@ -10,136 +11,6 @@ using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
-
-public enum WizardState
-{
-    /// <summary>The wizard's first step: what to make and how many pages.</summary>
-    Naming,
-
-    /// <summary>The order is described and waits for its payment.</summary>
-    Paying,
-
-    /// <summary>Paid; an approver lets the build start. Held too long, it expires.</summary>
-    Approving,
-
-    /// <summary>The build runs: <see cref="IBuildWizardTrain"/>.</summary>
-    Building,
-
-    /// <summary>The build finished; the context points at what it made.</summary>
-    Built,
-
-    /// <summary>The build failed.</summary>
-    BuildFailed,
-
-    /// <summary>The build's run was cancelled.</summary>
-    BuildCancelled,
-
-    /// <summary>Nobody approved in time.</summary>
-    Expired,
-
-    /// <summary>The build was stopped by its owner; an approver may start it again.</summary>
-    Held,
-}
-
-public enum WizardTrigger
-{
-    /// <summary>Describe what to make; carries <see cref="WizardDetailsInput"/>.</summary>
-    Describe,
-
-    /// <summary>Back from the payment to the description.</summary>
-    Back,
-
-    /// <summary>Pay: runs the irreversible <see cref="IOrderCharge"/> exactly once. Needs the Payer role.</summary>
-    Pay,
-
-    /// <summary>Approve the paid order, which starts the build. Needs the Approver role.</summary>
-    Approve,
-
-    /// <summary>Stop the running build.</summary>
-    CancelBuild,
-
-    /// <summary>Build again with the same choices: a new run. Needs the Approver role.</summary>
-    Rebuild,
-
-    /// <summary>Start over from the description.</summary>
-    Edit,
-}
-
-/// <summary>The wizard's context, one shape in every state.</summary>
-public sealed record WizardContext
-{
-    public string? Title { get; init; }
-
-    public int? Pages { get; init; }
-
-    public string? Note { get; init; }
-
-    /// <summary>The receipt the payment effect returned.</summary>
-    public string? Receipt { get; init; }
-
-    /// <summary>What the build made: a pointer, never the thing.</summary>
-    public string? Artifact { get; init; }
-}
-
-/// <summary>What a client starts a wizard with. Never the context type.</summary>
-public sealed record WizardStartInput
-{
-    [MinLength(1)]
-    public string Title { get; init; } = "";
-}
-
-/// <summary>The input of <see cref="WizardTrigger.Describe"/>.</summary>
-public sealed record WizardDetailsInput
-{
-    [MinLength(1)]
-    public string Title { get; init; } = "";
-
-    public int Pages { get; init; }
-
-    /// <summary>Named differently on the wire, so validation must read it under its JSON name.</summary>
-    [JsonPropertyName("note_text")]
-    [MaxLength(10)]
-    public string? Note { get; init; }
-
-    /// <summary>Never recorded anywhere a run's input is copied.</summary>
-    [TraxSensitive]
-    public string? Secret { get; init; }
-}
-
-/// <summary>What the payment effect hands the <see cref="WizardTrigger.Pay"/> edge: never a client argument.</summary>
-public sealed record WizardReceipt
-{
-    public string Receipt { get; init; } = "";
-}
-
-/// <summary>The input the server builds for <see cref="IBuildWizardTrain"/> from the context.</summary>
-public sealed record BuildWizardInput
-{
-    public string Title { get; init; } = "";
-
-    public int Pages { get; init; }
-}
-
-/// <summary>What <see cref="IBuildWizardTrain"/> returns.</summary>
-public sealed record WizardArtifact
-{
-    public string Artifact { get; init; } = "";
-}
-
-public interface IBuildWizardTrain : IServiceTrain<BuildWizardInput, WizardArtifact>;
-
-/// <summary>The train <see cref="WizardState.Building"/> invokes: effect junctions only, so a cancel stops it.</summary>
-public class BuildWizardTrain : ServiceTrain<BuildWizardInput, WizardArtifact>, IBuildWizardTrain
-{
-    protected override Task<Either<Exception, WizardArtifact>> Junctions() =>
-        Chain<BuildWizardStep>().Resolve();
-}
-
-public sealed class BuildWizardStep : EffectJunction<BuildWizardInput, WizardArtifact>
-{
-    public override Task<WizardArtifact> Run(BuildWizardInput input) =>
-        Task.FromResult(new WizardArtifact { Artifact = $"artifact:{input.Title}:{input.Pages}" });
-}
 
 /// <summary>
 /// A declarative wizard shaped like Recovery's topic map, carrying every kind of trigger the typed machine surface
@@ -192,6 +63,12 @@ public class WizardMachine : Machine<WizardState, WizardTrigger>
         m.Watch(r => r.OwnerOnly());
         m.Discard(r => r.OwnerOnly());
 
+        ConfigureUpToApproval(m);
+        ConfigureBuildAndAfter(m);
+    }
+
+    private static void ConfigureUpToApproval(IMachineBuilder<WizardState, WizardTrigger> m)
+    {
         m.In(WizardState.Naming)
             .Context<WizardContext>()
             .On(WizardTrigger.Describe)
@@ -227,7 +104,10 @@ public class WizardMachine : Machine<WizardState, WizardTrigger>
             .To(WizardState.Building)
             .After(ApprovalWindow)
             .GoTo(WizardState.Expired);
+    }
 
+    private static void ConfigureBuildAndAfter(IMachineBuilder<WizardState, WizardTrigger> m)
+    {
         m.In(WizardState.Building)
             .Context<WizardContext>()
             .Invokes<IBuildWizardTrain, BuildWizardInput, WizardArtifact>(BuildInput)

@@ -30,13 +30,15 @@ internal sealed class MachineRulesStartupValidator(
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
         _checked = true;
-        await using var scope = scopeFactory.CreateAsyncScope();
+        var scope = scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var caller = scope.ServiceProvider.GetService<ICallerAuthorization>();
         var problems = await Problems(
-            RegisteredMachines.Distinct(machines).ToList(),
-            options,
-            caller
-        );
+                RegisteredMachines.Distinct(machines).ToList(),
+                options,
+                caller
+            )
+            .ConfigureAwait(false);
         if (problems.Count > 0)
             throw new InvalidOperationException(
                 $"{problems.Count} problem(s) stop this host from serving its state machines to clients:"
@@ -91,8 +93,6 @@ internal sealed class MachineRulesStartupValidator(
             var reach = exposed
                 ? "marked [TraxMachine]"
                 : "reachable through the generic stateMachine mutations";
-            // How to stop serving it: the attribute is the only thing that serves it.
-            const string unserve = "remove [TraxMachine] from it";
 
             if (internals is null)
             {
@@ -103,58 +103,73 @@ internal sealed class MachineRulesStartupValidator(
                 continue;
             }
 
-            if (exposed)
-            {
-                if (machine.SchemaHash is null)
-                {
-                    // A machine mixing delegates with rules has no IR either; naming its delegate events says
-                    // which declarations stand in the way.
-                    var delegates =
-                        internals.DelegateTriggers.Count > 0
-                            ? " (its event(s) "
-                                + string.Join(
-                                    ", ",
-                                    internals.DelegateTriggers.Order(StringComparer.Ordinal)
-                                )
-                                + " use a delegate guard or reducer)"
-                            : "";
-                    problems.Add(
-                        $"The machine '{name}' is {reach}, but it is built from delegates and has no IR{delegates}, "
-                            + "which its typed operations and their version are built from. Declare it with Context, "
-                            + "When and Reduce, or "
-                            + unserve
-                            + "."
-                    );
-                    continue;
-                }
-                if (systemOwned)
-                {
-                    problems.Add(
-                        $"The machine '{name}' is {reach}, but it is system-owned: only host code creates and "
-                            + "drives its instances, so it has no client surface. "
-                            + char.ToUpperInvariant(unserve[0])
-                            + unserve[1..]
-                            + "."
-                    );
-                    continue;
-                }
-                if (internals.DelegateTriggers.Count > 0)
-                    problems.Add(
-                        $"The machine '{name}' is {reach}, but its event(s) "
-                            + string.Join(
-                                ", ",
-                                internals.DelegateTriggers.Order(StringComparer.Ordinal)
-                            )
-                            + " use a delegate guard or reducer, which its IR and version do not describe, so a "
-                            + "change to one would never make a client outdated. Declare them with When(Rule) and "
-                            + "Reduce(Reduction)."
-                    );
-            }
+            if (exposed && ExposedProblems(problems, machine, internals, name, reach, systemOwned))
+                continue;
 
-            problems.AddRange(await RuleProblems(machine, internals, reach, caller));
+            problems.AddRange(
+                await RuleProblems(machine, internals, reach, caller).ConfigureAwait(false)
+            );
         }
 
         return problems;
+    }
+
+    // What keeps a machine marked [TraxMachine] from being served to clients; true when nothing more about it is
+    // checked.
+    private static bool ExposedProblems(
+        List<string> problems,
+        IMachine machine,
+        IMachineInternals internals,
+        string name,
+        string reach,
+        bool systemOwned
+    )
+    {
+        // How to stop serving it: the attribute is the only thing that serves it.
+        const string unserve = "remove [TraxMachine] from it";
+
+        if (machine.SchemaHash is null)
+        {
+            // A machine mixing delegates with rules has no IR either; naming its delegate events says
+            // which declarations stand in the way.
+            var delegates =
+                internals.DelegateTriggers.Count > 0
+                    ? " (its event(s) "
+                        + string.Join(
+                            ", ",
+                            internals.DelegateTriggers.Order(StringComparer.Ordinal)
+                        )
+                        + " use a delegate guard or reducer)"
+                    : "";
+            problems.Add(
+                $"The machine '{name}' is {reach}, but it is built from delegates and has no IR{delegates}, "
+                    + "which its typed operations and their version are built from. Declare it with Context, "
+                    + "When and Reduce, or "
+                    + unserve
+                    + "."
+            );
+            return true;
+        }
+        if (systemOwned)
+        {
+            problems.Add(
+                $"The machine '{name}' is {reach}, but it is system-owned: only host code creates and "
+                    + "drives its instances, so it has no client surface. "
+                    + char.ToUpperInvariant(unserve[0])
+                    + unserve[1..]
+                    + "."
+            );
+            return true;
+        }
+        if (internals.DelegateTriggers.Count > 0)
+            problems.Add(
+                $"The machine '{name}' is {reach}, but its event(s) "
+                    + string.Join(", ", internals.DelegateTriggers.Order(StringComparer.Ordinal))
+                    + " use a delegate guard or reducer, which its IR and version do not describe, so a "
+                    + "change to one would never make a client outdated. Declare them with When(Rule) and "
+                    + "Reduce(Reduction)."
+            );
+        return false;
     }
 
     // Whether every caller narrow admits, wide admits too: each role set of wide is met by holding any role of some
@@ -186,40 +201,7 @@ internal sealed class MachineRulesStartupValidator(
         var name = machine.Name;
         var rules = internals.Rules;
 
-        var events = machine
-            .Triggers.Where(t => t.Kind is TriggerKind.Client or TriggerKind.EffectBound)
-            .Select(t => t.Name)
-            .ToList();
-        var undeclared = events.Where(e => !rules.Events.ContainsKey(e)).ToList();
-        if (rules.Start is null)
-            undeclared.Add("start");
-        if (rules.Get is null)
-            undeclared.Add("get");
-        if (rules.Watch is null)
-            undeclared.Add("changed");
-        if (rules.Discard is null)
-            undeclared.Add("discard");
-        if (undeclared.Count > 0)
-            problems.Add(
-                $"The machine '{name}' is {reach}, and declares no rule for {string.Join(", ", undeclared)}. "
-                    + "Every event a client can send declares Requires(...), RequiresPolicy(...), AnyAuthenticated() "
-                    + "or Anonymous(), and start, get, the push (changed) and discard declare theirs with Start(...), "
-                    + "Get(...), Watch(...) and Discard(...). There is no machine-level default."
-            );
-
-        var anonymous = rules
-            .Events.Where(e => e.Value.Kind == CallerRuleKind.Anonymous)
-            .Select(e => e.Key)
-            .Order(StringComparer.Ordinal)
-            .ToList();
-        if (rules.Start is { Kind: CallerRuleKind.Anonymous })
-            anonymous.Add("start");
-        if (anonymous.Count > 0)
-            problems.Add(
-                $"The machine '{name}' is user-owned and {reach}, but {string.Join(", ", anonymous)} "
-                    + "declare(s) Anonymous(). A user's instance belongs to an authenticated user, so an anonymous "
-                    + "caller has nothing to own it by. Use AnyAuthenticated() or a requirement."
-            );
+        AddUndeclaredAndAnonymous(problems, machine, rules, name, reach);
 
         foreach (
             var (read, rule) in new[]
@@ -255,7 +237,7 @@ internal sealed class MachineRulesStartupValidator(
                 .SelectMany(r => r.Rule.Policies.Select(p => (r.Where, Policy: p)))
                 .Distinct()
         )
-            if (caller is null || !await caller.IsPolicyRegistered(policy))
+            if (caller is null || !await caller.IsPolicyRegistered(policy).ConfigureAwait(false))
                 problems.Add(
                     $"The machine '{name}' is {reach}, and {where} requires the policy '{policy}', which this host "
                         + (
@@ -267,5 +249,51 @@ internal sealed class MachineRulesStartupValidator(
                 );
 
         return problems;
+    }
+
+    // Everything a client can do that declares no rule, and every rule that admits a caller with nothing to own an
+    // instance by.
+    private static void AddUndeclaredAndAnonymous(
+        List<string> problems,
+        IMachine machine,
+        MachineRules rules,
+        string name,
+        string reach
+    )
+    {
+        var events = machine
+            .Triggers.Where(t => t.Kind is TriggerKind.Client or TriggerKind.EffectBound)
+            .Select(t => t.Name)
+            .ToList();
+        var undeclared = events.Where(e => !rules.Events.ContainsKey(e)).ToList();
+        if (rules.Start is null)
+            undeclared.Add("start");
+        if (rules.Get is null)
+            undeclared.Add("get");
+        if (rules.Watch is null)
+            undeclared.Add("changed");
+        if (rules.Discard is null)
+            undeclared.Add("discard");
+        if (undeclared.Count > 0)
+            problems.Add(
+                $"The machine '{name}' is {reach}, and declares no rule for {string.Join(", ", undeclared)}. "
+                    + "Every event a client can send declares Requires(...), RequiresPolicy(...), AnyAuthenticated() "
+                    + "or Anonymous(), and start, get, the push (changed) and discard declare theirs with Start(...), "
+                    + "Get(...), Watch(...) and Discard(...). There is no machine-level default."
+            );
+
+        var anonymous = rules
+            .Events.Where(e => e.Value.Kind == CallerRuleKind.Anonymous)
+            .Select(e => e.Key)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        if (rules.Start is { Kind: CallerRuleKind.Anonymous })
+            anonymous.Add("start");
+        if (anonymous.Count > 0)
+            problems.Add(
+                $"The machine '{name}' is user-owned and {reach}, but {string.Join(", ", anonymous)} "
+                    + "declare(s) Anonymous(). A user's instance belongs to an authenticated user, so an anonymous "
+                    + "caller has nothing to own it by. Use AnyAuthenticated() or a requirement."
+            );
     }
 }

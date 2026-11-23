@@ -14,14 +14,18 @@ namespace Trax.Samples.ChatService.Trains.SendMessage.Junctions;
 public class PersistMessageJunction(
     ChatDbContext db,
     TraxPrincipal caller,
-    ILogger<PersistMessageJunction> logger
+    ILogger<PersistMessageJunction> logger,
+    TimeProvider clock
 ) : Junction<SendMessageInput, SendMessageOutput>
 {
     public override async Task<SendMessageOutput> Run(SendMessageInput input)
     {
-        var participant = await db.ChatParticipants.FirstAsync(p =>
-            p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-        );
+        var participant = await db
+            .ChatParticipants.FirstAsync(
+                p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                cancellationToken: CancellationToken
+            )
+            .ConfigureAwait(false);
 
         var message = new ChatMessage
         {
@@ -30,11 +34,11 @@ public class PersistMessageJunction(
             SenderUserId = caller.Id,
             SenderDisplayName = participant.DisplayName,
             Content = input.Content,
-            SentAt = DateTime.UtcNow,
+            SentAt = clock.GetUtcNow().UtcDateTime,
         };
 
         db.ChatMessages.Add(message);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Message {MessageId} sent by {UserId} in room {ChatRoomId}",

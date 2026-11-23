@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -36,9 +38,9 @@ public class DispatchConcurrencyTests : TestSetup
         await Task.WhenAll(task1, task2);
 
         // Assert - Exactly one Metadata record should exist for this manifest
-        using var assertScope = Scope
+        await using var assertScope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
+            .CreateAsyncScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadataCount = await assertContext.Metadatas.CountAsync(m =>
@@ -58,7 +60,9 @@ public class DispatchConcurrencyTests : TestSetup
         var entries = new List<(Manifest manifest, WorkQueue entry)>();
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Concurrent_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Concurrent_{i}")
+            );
             var entry = await CreateAndSaveWorkQueueEntry(manifest);
             entries.Add((manifest, entry));
         }
@@ -70,9 +74,9 @@ public class DispatchConcurrencyTests : TestSetup
         await Task.WhenAll(task1, task2, task3);
 
         // Assert - Each entry should have exactly one Metadata record
-        using var assertScope = Scope
+        await using var assertScope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
+            .CreateAsyncScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
         foreach (var (manifest, entry) in entries)
@@ -84,7 +88,10 @@ public class DispatchConcurrencyTests : TestSetup
                 .Should()
                 .Be(
                     1,
-                    $"manifest {manifest.Id} should have exactly one Metadata (concurrent safe dispatch)"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"manifest {manifest.Id} should have exactly one Metadata (concurrent safe dispatch)"
+                    )
                 );
 
             var updatedEntry = await assertContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
@@ -101,15 +108,15 @@ public class DispatchConcurrencyTests : TestSetup
 
         // Act - Run multiple dispatchers; the losers should skip without error
         var tasks = Enumerable.Range(0, 4).Select(_ => RunDispatcherInScope()).ToArray();
-        var act = async () => await Task.WhenAll(tasks);
+        var act = async () => await Task.WhenAll(tasks).ConfigureAwait(false);
 
         // Assert - No exceptions thrown
         await act.Should().NotThrowAsync("losing dispatchers should skip gracefully");
 
         // And exactly one dispatch occurred
-        using var assertScope = Scope
+        await using var assertScope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
+            .CreateAsyncScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadataCount = await assertContext.Metadatas.CountAsync(m =>
@@ -131,14 +138,15 @@ public class DispatchConcurrencyTests : TestSetup
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    TrainName = typeof(SchedulerTestTrain).FullName!,
+                    TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
-            await DataContext.Track(entry);
-            await DataContext.SaveChanges(CancellationToken.None);
+            await DataContext.Track(entry).ConfigureAwait(false);
+            await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         };
 
         // Assert - Unique partial index should prevent the duplicate
@@ -163,13 +171,14 @@ public class DispatchConcurrencyTests : TestSetup
                 var entry = WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(SchedulerTestTrain).FullName!,
+                        TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-                    }
+                    },
+                    TimeProvider.System
                 );
-                await DataContext.Track(entry);
-                await DataContext.SaveChanges(CancellationToken.None);
+                await DataContext.Track(entry).ConfigureAwait(false);
+                await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 DataContext.Reset();
             }
         };
@@ -190,12 +199,12 @@ public class DispatchConcurrencyTests : TestSetup
         // Transition to Dispatched
         firstEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == firstEntry.Id);
         firstEntry.Status = WorkQueueStatus.Dispatched;
-        firstEntry.DispatchedAt = DateTime.UtcNow;
+        firstEntry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
         // Act - Create a new Queued entry for the same manifest
-        var act = async () => await CreateAndSaveWorkQueueEntry(manifest);
+        var act = async () => await CreateAndSaveWorkQueueEntry(manifest).ConfigureAwait(false);
 
         // Assert - Should succeed since the first entry is no longer Queued
         await act.Should()
@@ -208,28 +217,27 @@ public class DispatchConcurrencyTests : TestSetup
 
     private async Task RunDispatcherInScope()
     {
-        using var scope = Scope
-            .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
-        var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+        var scope = Scope.ServiceProvider.GetRequiredService<IServiceProvider>().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
-        try
-        {
-            await train.Run(Unit.Default);
-        }
-        finally
-        {
-            if (train is IDisposable disposable)
-                disposable.Dispose();
+            try
+            {
+                await train.Run(Unit.Default).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (train is IDisposable disposable)
+                    disposable.Dispose();
+            }
         }
     }
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -243,8 +251,8 @@ public class DispatchConcurrencyTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -255,16 +263,17 @@ public class DispatchConcurrencyTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;

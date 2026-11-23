@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -14,7 +15,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public partial class RunAndQueueExecutionTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -35,7 +36,8 @@ public partial class RunAndQueueExecutionTests
     [TearDown]
     public async Task TearDown()
     {
-        await _serviceProvider.DisposeAsync();
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
         TrainBus.ClearMethodCache();
     }
 }

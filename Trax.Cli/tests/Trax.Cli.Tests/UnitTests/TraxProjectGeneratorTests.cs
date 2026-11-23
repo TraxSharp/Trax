@@ -6,7 +6,7 @@ namespace Trax.Cli.Tests.UnitTests;
 
 public class TraxProjectGeneratorTests
 {
-    private string _tempDir = null!;
+    private string _tempDir = "";
 
     [SetUp]
     public void SetUp()
@@ -69,12 +69,14 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_CreatesExpectedFiles
 
     [Test]
-    public void GenerateTrainsLibrary_SimpleSchema_CreatesExpectedFiles()
+    public async Task GenerateTrainsLibrary_SimpleSchema_CreatesExpectedFiles()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema();
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
         File.Exists(Path.Combine(_tempDir, "TestProject.Trains.csproj")).Should().BeTrue();
         File.Exists(Path.Combine(_tempDir, "ManifestNames.cs")).Should().BeTrue();
@@ -91,15 +93,17 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_ManifestNames
 
     [Test]
-    public void GenerateTrainsLibrary_ManifestNamesContainsOperationConstants()
+    public async Task GenerateTrainsLibrary_ManifestNamesContainsOperationConstants()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema();
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
         var manifestPath = Path.Combine(_tempDir, "ManifestNames.cs");
-        var content = File.ReadAllText(manifestPath);
+        var content = await File.ReadAllTextAsync(manifestPath).ConfigureAwait(false);
 
         content.Should().Contain("namespace TestProject.Trains;");
         content.Should().Contain("public static class ManifestNames");
@@ -112,66 +116,14 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_FolderGrouping
 
     [Test]
-    public void GenerateTrainsLibrary_OperationsGroupedByGroup_CreatesFolderPerGroup()
+    public async Task GenerateTrainsLibrary_OperationsGroupedByGroup_CreatesFolderPerGroup()
     {
         var generator = new TraxProjectGenerator();
-        var schema = MakeSchema(
-            operations:
-            [
-                new ApiOperation
-                {
-                    Name = "GetPlayer",
-                    Kind = OperationKind.Query,
-                    Group = "Players",
-                    InputType = new ApiType
-                    {
-                        Name = "GetPlayerInput",
-                        Fields =
-                        [
-                            new ApiField
-                            {
-                                Name = "Id",
-                                TypeName = "Guid",
-                                IsRequired = true,
-                            },
-                        ],
-                    },
-                    OutputType = new ApiType
-                    {
-                        Name = "Player",
-                        Fields = [],
-                        IsBuiltIn = true,
-                    },
-                },
-                new ApiOperation
-                {
-                    Name = "ListItems",
-                    Kind = OperationKind.Query,
-                    Group = "Items",
-                    InputType = new ApiType
-                    {
-                        Name = "Unit",
-                        Fields = [],
-                        IsBuiltIn = true,
-                    },
-                    OutputType = new ApiType
-                    {
-                        Name = "ListItemsOutput",
-                        Fields =
-                        [
-                            new ApiField
-                            {
-                                Name = "Items",
-                                TypeName = "List<Item>",
-                                IsRequired = true,
-                            },
-                        ],
-                    },
-                },
-            ]
-        );
+        var schema = MakeSchema(operations: [GroupedGetPlayer(), GroupedListItems()]);
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
         Directory
             .Exists(Path.Combine(_tempDir, "Trains", "Players", "GetPlayer"))
@@ -180,9 +132,65 @@ public class TraxProjectGeneratorTests
         Directory.Exists(Path.Combine(_tempDir, "Trains", "Items", "ListItems")).Should().BeTrue();
     }
 
+    // A query of the Players group that takes an id and answers a built-in Player.
+    private static ApiOperation GroupedGetPlayer() =>
+        new()
+        {
+            Name = "GetPlayer",
+            Kind = OperationKind.Query,
+            Group = "Players",
+            InputType = new ApiType
+            {
+                Name = "GetPlayerInput",
+                Fields =
+                [
+                    new ApiField
+                    {
+                        Name = "Id",
+                        TypeName = "Guid",
+                        IsRequired = true,
+                    },
+                ],
+            },
+            OutputType = new ApiType
+            {
+                Name = "Player",
+                Fields = [],
+                IsBuiltIn = true,
+            },
+        };
+
+    // A query of the Items group that takes nothing and answers a list of items.
+    private static ApiOperation GroupedListItems() =>
+        new()
+        {
+            Name = "ListItems",
+            Kind = OperationKind.Query,
+            Group = "Items",
+            InputType = new ApiType
+            {
+                Name = "Unit",
+                Fields = [],
+                IsBuiltIn = true,
+            },
+            OutputType = new ApiType
+            {
+                Name = "ListItemsOutput",
+                Fields =
+                [
+                    new ApiField
+                    {
+                        Name = "Items",
+                        TypeName = "List<Item>",
+                        IsRequired = true,
+                    },
+                ],
+            },
+        };
+
     // The same schema writes the same file on every machine, whatever culture it runs under.
     [Test]
-    public void GenerateTrainsLibrary_NamespacesAreInOrdinalOrderUnderAnyCulture()
+    public async Task GenerateTrainsLibrary_NamespacesAreInOrdinalOrderUnderAnyCulture()
     {
         var generator = new TraxProjectGenerator();
         static ApiOperation Operation(string name, string group) =>
@@ -213,14 +221,17 @@ public class TraxProjectGeneratorTests
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(
                 "en-US"
             );
-            generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+            await generator
+                .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+                .ConfigureAwait(false);
         }
         finally
         {
             System.Globalization.CultureInfo.CurrentCulture = culture;
         }
 
-        var content = File.ReadAllText(Path.Combine(_tempDir, "GraphQLNamespaces.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_tempDir, "GraphQLNamespaces.cs"))
+            .ConfigureAwait(false);
         content
             .IndexOf("string Beta", StringComparison.Ordinal)
             .Should()
@@ -232,18 +243,20 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_Enums
 
     [Test]
-    public void GenerateTrainsLibrary_WithEnum_CreatesEnumFileInModels()
+    public async Task GenerateTrainsLibrary_WithEnum_CreatesEnumFileInModels()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema(
             enums: [new ApiEnum { Name = "PlayerStatus", Values = ["Active", "Inactive"] }]
         );
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
         var enumPath = Path.Combine(_tempDir, "Models", "PlayerStatus.cs");
         File.Exists(enumPath).Should().BeTrue();
-        var content = File.ReadAllText(enumPath);
+        var content = await File.ReadAllTextAsync(enumPath).ConfigureAwait(false);
         content.Should().Contain("public enum PlayerStatus");
     }
 
@@ -252,7 +265,7 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_SharedTypes
 
     [Test]
-    public void GenerateTrainsLibrary_WithSharedType_CreatesTypeFileInModels()
+    public async Task GenerateTrainsLibrary_WithSharedType_CreatesTypeFileInModels()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema(
@@ -280,11 +293,13 @@ public class TraxProjectGeneratorTests
             ]
         );
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
         var typePath = Path.Combine(_tempDir, "Models", "Address.cs");
         File.Exists(typePath).Should().BeTrue();
-        var content = File.ReadAllText(typePath);
+        var content = await File.ReadAllTextAsync(typePath).ConfigureAwait(false);
         content.Should().Contain("Address");
     }
 
@@ -293,15 +308,17 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_Csproj
 
     [Test]
-    public void GenerateTrainsLibrary_CsprojIsClassLibrary()
+    public async Task GenerateTrainsLibrary_CsprojIsClassLibrary()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema();
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
         var csprojPath = Path.Combine(_tempDir, "TestProject.Trains.csproj");
-        var content = File.ReadAllText(csprojPath);
+        var content = await File.ReadAllTextAsync(csprojPath).ConfigureAwait(false);
 
         content.Should().Contain("Microsoft.NET.Sdk");
         content.Should().NotContain("Microsoft.NET.Sdk.Web");
@@ -316,11 +333,11 @@ public class TraxProjectGeneratorTests
     #region AddProjectReference
 
     [Test]
-    public void AddProjectReference_InsertsProjectReferenceIntoCsproj()
+    public async Task AddProjectReference_InsertsProjectReferenceIntoCsproj()
     {
         Directory.CreateDirectory(_tempDir);
         var csprojPath = Path.Combine(_tempDir, "TestProject.Api.csproj");
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             csprojPath,
             """
             <Project Sdk="Microsoft.NET.Sdk.Web">
@@ -331,9 +348,11 @@ public class TraxProjectGeneratorTests
             """
         );
 
-        TraxProjectGenerator.AddProjectReference(_tempDir, "TestProject.Api", "TestProject.Trains");
+        await TraxProjectGenerator
+            .AddProjectReferenceAsync(_tempDir, "TestProject.Api", "TestProject.Trains")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(csprojPath);
+        var content = await File.ReadAllTextAsync(csprojPath).ConfigureAwait(false);
         content.Should().Contain("ProjectReference");
         content.Should().Contain("TestProject.Trains.csproj");
     }
@@ -343,11 +362,11 @@ public class TraxProjectGeneratorTests
     #region PatchProgramCs
 
     [Test]
-    public void PatchProgramCs_AddTrainsAssemblyAlongsideProgram()
+    public async Task PatchProgramCs_AddTrainsAssemblyAlongsideProgram()
     {
         Directory.CreateDirectory(_tempDir);
         var programPath = Path.Combine(_tempDir, "Program.cs");
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             programPath,
             """
             using Trax.Mediator.Extensions;
@@ -359,9 +378,11 @@ public class TraxProjectGeneratorTests
             """
         );
 
-        TraxProjectGenerator.PatchProgramCs(_tempDir, "TestProject");
+        await TraxProjectGenerator
+            .PatchProgramCsAsync(_tempDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(programPath);
+        var content = await File.ReadAllTextAsync(programPath).ConfigureAwait(false);
         content
             .Should()
             .Contain("typeof(Program).Assembly, typeof(TestProject.Trains.ManifestNames).Assembly");
@@ -373,7 +394,7 @@ public class TraxProjectGeneratorTests
     #region GenerateTrainsLibrary_Namespaces
 
     [Test]
-    public void GenerateTrainsLibrary_ModelNamespaceIncludesTrains()
+    public async Task GenerateTrainsLibrary_ModelNamespaceIncludesTrains()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema(
@@ -395,23 +416,29 @@ public class TraxProjectGeneratorTests
             ]
         );
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_tempDir, "Models", "Player.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_tempDir, "Models", "Player.cs"))
+            .ConfigureAwait(false);
         content.Should().Contain("namespace TestProject.Trains.Models;");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_EnumNamespaceIncludesTrains()
+    public async Task GenerateTrainsLibrary_EnumNamespaceIncludesTrains()
     {
         var generator = new TraxProjectGenerator();
         var schema = MakeSchema(
             enums: [new ApiEnum { Name = "Status", Values = ["Active", "Inactive"] }]
         );
 
-        generator.GenerateTrainsLibrary(schema, _tempDir, "TestProject");
+        await generator
+            .GenerateTrainsLibraryAsync(schema, _tempDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_tempDir, "Models", "Status.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_tempDir, "Models", "Status.cs"))
+            .ConfigureAwait(false);
         content.Should().Contain("namespace TestProject.Trains.Models;");
     }
 

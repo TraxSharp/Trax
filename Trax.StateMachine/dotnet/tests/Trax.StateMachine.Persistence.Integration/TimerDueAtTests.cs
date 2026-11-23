@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -33,13 +34,13 @@ public class TimerDueAtTests(StoreProvider provider)
 
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(15);
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider, launcher: new RecordingLauncher());
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static Snapshot Reminder(string state) =>
         new()
@@ -62,10 +63,10 @@ public class TimerDueAtTests(StoreProvider provider)
     private static async Task<Guid> InReview(InstanceHost host)
     {
         var id = Guid.NewGuid();
-        await host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        await host.SeedDraft(User, id, ReminderMachine.Json("Idle")).ConfigureAwait(false);
         using var scope = host.Scope();
         var service = host.Service(scope, ReminderMachine.Id);
-        (await service.Advance(new Actor.Client(User, "Editor"), id, "Open"))
+        (await service.Advance(new Actor.Client(User, "Editor"), id, "Open").ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
@@ -76,10 +77,13 @@ public class TimerDueAtTests(StoreProvider provider)
     private async Task<Guid> InFetching(TimeSpan patience)
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, WaitMachine.Json("Idle", patience));
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, WaitMachine.Id);
-        (await service.Advance(User, id, "Fetch"))
+        await _host
+            .NotNull()
+            .SeedDraft(User, id, WaitMachine.Json("Idle", patience))
+            .ConfigureAwait(false);
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, WaitMachine.Id);
+        (await service.Advance(User, id, "Fetch").ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
@@ -88,7 +92,7 @@ public class TimerDueAtTests(StoreProvider provider)
     }
 
     private static async Task<TimerRow> Row(InstanceHost host, Guid id) =>
-        (await RawSql.Timer(host, id))
+        (await RawSql.Timer(host, id).ConfigureAwait(false))
         ?? throw new InvalidOperationException($"No row holds the id {id}.");
 
     private static async Task<TimerRow> ShouldBeDue(
@@ -98,8 +102,8 @@ public class TimerDueAtTests(StoreProvider provider)
         TimeSpan after
     )
     {
-        var now = await RawSql.Now(host);
-        var row = await Row(host, id);
+        var now = await RawSql.Now(host).ConfigureAwait(false);
+        var row = await Row(host, id).ConfigureAwait(false);
         row.State.Should().Be(state);
         row.DueAt.Should()
             .NotBeNull($"the row is in the timed state {state}. See {Adr}")
@@ -113,49 +117,50 @@ public class TimerDueAtTests(StoreProvider provider)
 
     private static async Task<TimerRow> ShouldHaveNoTimer(InstanceHost host, Guid id, string state)
     {
-        var row = await Row(host, id);
+        var row = await Row(host, id).ConfigureAwait(false);
         row.State.Should().Be(state);
         row.DueAt.Should().BeNull($"{state} has no timer. See {Adr}");
         return row;
     }
 
     private async Task<string> InvokeToken(Guid id) =>
-        (await _host.Rows(id)).Single().InvokeToken
+        (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single().InvokeToken
         ?? throw new InvalidOperationException("The draft holds no run.");
 
     private async Task EndRun(string token, bool failed)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var entries = scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.Where(w => w.ExternalId == token);
         // A run whose records are gone ends as a failure; a cancelled entry ends as a cancel.
         if (failed)
-            await entries.ExecuteDeleteAsync();
+            await entries.ExecuteDeleteAsync().ConfigureAwait(false);
         else
-            await entries.ExecuteUpdateAsync(s =>
-                s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled)
-            );
+            await entries
+                .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled))
+                .ConfigureAwait(false);
     }
 
     private InvokeOutcomeReconciler Reconciler =>
-        _host.Services.GetRequiredService<InvokeOutcomeReconciler>();
+        _host.NotNull().Services.GetRequiredService<InvokeOutcomeReconciler>();
 
     [Test]
     public async Task Start_into_a_timed_initial_state_sets_due_at()
     {
         Guid id;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             id = (
                 await _host
+                    .NotNull()
                     .Service(scope, ExpiringMachine.Id)
-                    .Start(new Actor.Client(User), null, "start-1")
+                    .Start(new Actor.Client(User), input: null, "start-1")
             )
                 .Should()
                 .BeOfType<StartOutcome.Started>()
                 .Which.Id;
 
-        var row = await ShouldBeDue(_host, id, "Open", ExpiringMachine.OpenFor);
+        var row = await ShouldBeDue(_host.NotNull(), id, "Open", ExpiringMachine.OpenFor);
         row.Revision.Should().Be(1);
     }
 
@@ -163,73 +168,80 @@ public class TimerDueAtTests(StoreProvider provider)
     public async Task Advance_into_a_timed_state_sets_due_at()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
-        var before = await ShouldHaveNoTimer(_host, id, "Idle");
+        await _host.NotNull().SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        var before = await ShouldHaveNoTimer(_host.NotNull(), id, "Idle");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(new Actor.Client(User, "Editor"), id, "Open")
             )
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
 
-        var after = await ShouldBeDue(_host, id, "Review", ReminderMachine.ReviewFor);
+        var after = await ShouldBeDue(_host.NotNull(), id, "Review", ReminderMachine.ReviewFor);
         after.Revision.Should().Be(before.Revision + 1);
     }
 
     [Test]
     public async Task Advance_out_of_a_timed_state_clears_due_at()
     {
-        var id = await InReview(_host);
-        var before = await ShouldBeDue(_host, id, "Review", ReminderMachine.ReviewFor);
+        var id = await InReview(_host.NotNull());
+        var before = await ShouldBeDue(_host.NotNull(), id, "Review", ReminderMachine.ReviewFor);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(User, id, "Approve", new JsonObject { ["verdict"] = "approved" })
             )
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
 
-        var after = await ShouldHaveNoTimer(_host, id, "Done");
+        var after = await ShouldHaveNoTimer(_host.NotNull(), id, "Done");
         after.Revision.Should().Be(before.Revision + 1);
     }
 
     [Test]
     public async Task Self_entry_through_Extend_restarts_the_timer()
     {
-        var id = await InReview(_host);
-        await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1));
-        var before = await Row(_host, id);
+        var id = await InReview(_host.NotNull());
+        await RawSql.SetDueAt(
+            _host.NotNull(),
+            id,
+            (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
+        );
+        var before = await Row(_host.NotNull(), id);
 
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, ReminderMachine.Id).Advance(User, id, "Extend"))
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, ReminderMachine.Id).Advance(User, id, "Extend"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
 
-        var after = await ShouldBeDue(_host, id, "Review", ReminderMachine.ReviewFor);
+        var after = await ShouldBeDue(_host.NotNull(), id, "Review", ReminderMachine.ReviewFor);
         after.Revision.Should().Be(before.Revision + 1);
     }
 
     [Test]
     public async Task A_rejected_event_writes_nothing()
     {
-        var id = await InReview(_host);
-        var before = await Row(_host, id);
+        var id = await InReview(_host.NotNull());
+        var before = await Row(_host.NotNull(), id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(User, id, "Approve", new JsonObject { ["verdict"] = "rejected" })
             )
                 .Should()
                 .BeOfType<AdvanceOutcome.Rejected>();
 
-        (await Row(_host, id))
+        (await Row(_host.NotNull(), id))
             .Should()
             .Be(before, $"a refused event writes neither due_at nor the revision. See {Adr}");
     }
@@ -239,21 +251,36 @@ public class TimerDueAtTests(StoreProvider provider)
     {
         var byHook = await InFetching(TimeSpan.FromMinutes(5));
         var bySweep = await InFetching(TimeSpan.FromMinutes(5));
-        var hookBefore = await ShouldBeDue(_host, byHook, "Fetching", TimeSpan.FromMinutes(5));
-        var sweepBefore = await ShouldBeDue(_host, bySweep, "Fetching", TimeSpan.FromMinutes(5));
+        var hookBefore = await ShouldBeDue(
+            _host.NotNull(),
+            byHook,
+            "Fetching",
+            TimeSpan.FromMinutes(5)
+        );
+        var sweepBefore = await ShouldBeDue(
+            _host.NotNull(),
+            bySweep,
+            "Fetching",
+            TimeSpan.FromMinutes(5)
+        );
         var hookToken = await InvokeToken(byHook);
         await EndRun(hookToken, failed: true);
         await EndRun(await InvokeToken(bySweep), failed: true);
 
-        (await _host.Services.GetRequiredService<IInvokedRunOutcomes>().Deliver(hookToken))
+        (
+            await _host
+                .NotNull()
+                .Services.GetRequiredService<IInvokedRunOutcomes>()
+                .Deliver(hookToken)
+        )
             .Should()
             .Be("Cooldown");
         await Reconciler.SweepOnce(CancellationToken.None);
 
-        (await ShouldBeDue(_host, byHook, "Cooldown", WaitMachine.CooldownFor))
+        (await ShouldBeDue(_host.NotNull(), byHook, "Cooldown", WaitMachine.CooldownFor))
             .Revision.Should()
             .Be(hookBefore.Revision + 1);
-        (await ShouldBeDue(_host, bySweep, "Cooldown", WaitMachine.CooldownFor))
+        (await ShouldBeDue(_host.NotNull(), bySweep, "Cooldown", WaitMachine.CooldownFor))
             .Revision.Should()
             .Be(sweepBefore.Revision + 1);
     }
@@ -262,29 +289,32 @@ public class TimerDueAtTests(StoreProvider provider)
     public async Task An_outcome_leaving_a_timed_invoking_state_clears_due_at()
     {
         var id = await InFetching(TimeSpan.FromMinutes(5));
-        var before = await ShouldBeDue(_host, id, "Fetching", TimeSpan.FromMinutes(5));
+        var before = await ShouldBeDue(_host.NotNull(), id, "Fetching", TimeSpan.FromMinutes(5));
         var token = await InvokeToken(id);
         await EndRun(token, failed: false);
 
-        (await _host.Services.GetRequiredService<IInvokedRunOutcomes>().Deliver(token))
+        (await _host.NotNull().Services.GetRequiredService<IInvokedRunOutcomes>().Deliver(token))
             .Should()
             .Be("Stopped");
 
-        (await ShouldHaveNoTimer(_host, id, "Stopped")).Revision.Should().Be(before.Revision + 1);
+        (await ShouldHaveNoTimer(_host.NotNull(), id, "Stopped"))
+            .Revision.Should()
+            .Be(before.Revision + 1);
     }
 
     [Test]
     public async Task Send_after_effect_into_a_timed_state_sets_due_at()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, RenewalMachine.DraftJson);
-        var before = await ShouldHaveNoTimer(_host, id, "Draft");
+        await _host.NotNull().SeedDraft(User, id, RenewalMachine.DraftJson);
+        var before = await ShouldHaveNoTimer(_host.NotNull(), id, "Draft");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .EffectRunner(RenewalMachine.Id)!
+                    .EffectRunner(RenewalMachine.Id)
+                    .NotNull()
                     .Run(User, id, "charge-1")
             )
                 .Should()
@@ -292,7 +322,7 @@ public class TimerDueAtTests(StoreProvider provider)
                 .Which.Snapshot.State.Should()
                 .Be("Active");
 
-        (await ShouldBeDue(_host, id, "Active", RenewalMachine.ActiveFor))
+        (await ShouldBeDue(_host.NotNull(), id, "Active", RenewalMachine.ActiveFor))
             .Revision.Should()
             .Be(before.Revision + 2, "the send marks the row, then records the effect");
     }
@@ -301,10 +331,10 @@ public class TimerDueAtTests(StoreProvider provider)
     public async Task System_start_and_advance_set_due_at()
     {
         var key = MachineKey.Of("timers", Guid.NewGuid().ToString());
-        var instance = await _host.Start<SystemReminderMachine>(key);
-        var before = await ShouldHaveNoTimer(_host, instance.Id, "Idle");
+        var instance = await _host.NotNull().Start<SystemReminderMachine>(key);
+        var before = await ShouldHaveNoTimer(_host.NotNull(), instance.Id, "Idle");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -313,7 +343,7 @@ public class TimerDueAtTests(StoreProvider provider)
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
 
-        (await ShouldBeDue(_host, instance.Id, "Review", ReminderMachine.ReviewFor))
+        (await ShouldBeDue(_host.NotNull(), instance.Id, "Review", ReminderMachine.ReviewFor))
             .Revision.Should()
             .Be(before.Revision + 1);
     }
@@ -321,9 +351,13 @@ public class TimerDueAtTests(StoreProvider provider)
     [Test]
     public async Task A_timer_firing_into_another_timed_state_sets_its_due_at()
     {
-        var id = await InReview(_host);
-        await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1));
-        var before = await Row(_host, id);
+        var id = await InReview(_host.NotNull());
+        await RawSql.SetDueAt(
+            _host.NotNull(),
+            id,
+            (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
+        );
+        var before = await Row(_host.NotNull(), id);
 
         (await Reconciler.FireDueTimersOnce(CancellationToken.None))
             .Should()
@@ -331,7 +365,7 @@ public class TimerDueAtTests(StoreProvider provider)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Fired);
 
-        (await ShouldBeDue(_host, id, "Expired", ReminderMachine.ExpiredFor))
+        (await ShouldBeDue(_host.NotNull(), id, "Expired", ReminderMachine.ExpiredFor))
             .Revision.Should()
             .Be(before.Revision + 1);
     }
@@ -340,15 +374,16 @@ public class TimerDueAtTests(StoreProvider provider)
     public async Task A_strand_keeps_due_at_and_the_timer_still_leaves()
     {
         var id = await InFetching(TimeSpan.FromMinutes(5));
-        var before = await ShouldBeDue(_host, id, "Fetching", TimeSpan.FromMinutes(5));
-        var row = (await _host.Rows(id)).Single();
+        var before = await ShouldBeDue(_host.NotNull(), id, "Fetching", TimeSpan.FromMinutes(5));
+        var row = (await _host.NotNull().Rows(id)).Single();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Instances(scope)
                     .StrandByInvokeToken(
-                        row.InvokeToken!,
+                        row.InvokeToken.NotNull(),
                         Waiting("Fetching", TimeSpan.FromMinutes(5)),
                         row.ConcurrencyToken
                     )
@@ -356,18 +391,22 @@ public class TimerDueAtTests(StoreProvider provider)
                 .Should()
                 .BeTrue();
 
-        var stranded = await Row(_host, id);
+        var stranded = await Row(_host.NotNull(), id);
         stranded
             .DueAt.Should()
             .Be(before.DueAt, $"a strand leaves the state, and so its timer, in place. See {Adr}");
 
-        await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1));
+        await RawSql.SetDueAt(
+            _host.NotNull(),
+            id,
+            (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
+        );
         (await Reconciler.FireDueTimersOnce(CancellationToken.None))
             .Should()
             .ContainSingle(r => r.InstanceId == id)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Fired);
-        await ShouldHaveNoTimer(_host, id, "TimedOut");
+        await ShouldHaveNoTimer(_host.NotNull(), id, "TimedOut");
     }
 
     [Test]
@@ -379,16 +418,20 @@ public class TimerDueAtTests(StoreProvider provider)
         var id = await InFetching(TimeSpan.FromMinutes(5));
         var token = await InvokeToken(id);
 
-        await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1));
+        await RawSql.SetDueAt(
+            _host.NotNull(),
+            id,
+            (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
+        );
         (await Reconciler.FireDueTimersOnce(CancellationToken.None))
             .Should()
             .ContainSingle(r => r.InstanceId == id)
             .Which.Outcome.Should()
             .Be(TimerFireResult.Fired);
 
-        await ShouldHaveNoTimer(_host, id, "TimedOut");
-        (await _host.Rows(id)).Single().InvokeToken.Should().BeNull();
-        using var scope = _host.Scope();
+        await ShouldHaveNoTimer(_host.NotNull(), id, "TimedOut");
+        (await _host.NotNull().Rows(id)).Single().InvokeToken.Should().BeNull();
+        using var scope = _host.NotNull().Scope();
         (
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
@@ -405,7 +448,7 @@ public class TimerDueAtTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -414,19 +457,20 @@ public class TimerDueAtTests(StoreProvider provider)
                 .Should()
                 .BeTrue();
 
-        await ShouldBeDue(_host, id, "Review", ReminderMachine.ReviewFor);
+        await ShouldBeDue(_host.NotNull(), id, "Review", ReminderMachine.ReviewFor);
     }
 
     [Test]
     public async Task Duration_is_read_at_entry_not_at_fire()
     {
         var id = await InFetching(TimeSpan.FromMinutes(5));
-        var before = await ShouldBeDue(_host, id, "Fetching", TimeSpan.FromMinutes(5));
-        var row = (await _host.Rows(id)).Single();
+        var before = await ShouldBeDue(_host.NotNull(), id, "Fetching", TimeSpan.FromMinutes(5));
+        var row = (await _host.NotNull().Rows(id)).Single();
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Instances(scope)
                     .Update(
                         DraftOwner.User(User),
@@ -439,7 +483,7 @@ public class TimerDueAtTests(StoreProvider provider)
                 .Should()
                 .BeTrue();
 
-        (await Row(_host, id))
+        (await Row(_host.NotNull(), id))
             .DueAt.Should()
             .Be(
                 before.DueAt,
@@ -476,12 +520,13 @@ public class TimerDueAtTests(StoreProvider provider)
         var id = Guid.NewGuid();
         DateTimeOffset began;
         DateTimeOffset later;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
             var services = scope.ServiceProvider;
-            await using var context = await services
+            var context = await services
                 .GetRequiredService<IDataContextProviderFactory>()
                 .CreateDbContextAsync(CancellationToken.None);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var database = ((DbContext)context).Database;
             var store = services
                 .GetRequiredService<InvokeOutbox>()
@@ -490,15 +535,18 @@ public class TimerDueAtTests(StoreProvider provider)
             using var transaction = await context.BeginTransaction(CancellationToken.None);
             // On Postgres now() is the transaction's start for as long as it lasts; the statement clock moves on.
             began = await Clock(database, transactionStart: true);
-            var deadline = DateTimeOffset.UtcNow + Bound;
+            var deadline = TimeProvider.System.GetUtcNow() + Bound;
             while ((later = await Clock(database, transactionStart: false)) <= began)
-                DateTimeOffset.UtcNow.Should().BeBefore(deadline, "the statement clock moves on");
+                TimeProvider
+                    .System.GetUtcNow()
+                    .Should()
+                    .BeBefore(deadline, "the statement clock moves on");
 
             (await store.Upsert(User, id, Reminder("Review"))).Should().BeTrue();
             await transaction.Commit();
         }
 
-        (await Row(_host, id))
+        (await Row(_host.NotNull(), id))
             .DueAt.Should()
             .NotBeNull()
             .And.BeOnOrAfter(
@@ -516,7 +564,7 @@ public class TimerDueAtTests(StoreProvider provider)
                 ? $"SELECT to_char({(transactionStart ? "now()" : "clock_timestamp()")} AT TIME ZONE 'UTC', "
                     + "'YYYY-MM-DD\"T\"HH24:MI:SS.US') AS \"Value\""
                 : "SELECT strftime('%Y-%m-%dT%H:%M:%f', 'now') AS \"Value\"";
-        var text = await database.SqlQueryRaw<string>(sql).SingleAsync();
+        var text = await database.SqlQueryRaw<string>(sql).SingleAsync().ConfigureAwait(false);
         return DateTimeOffset.Parse(
             text,
             CultureInfo.InvariantCulture,
@@ -542,14 +590,15 @@ public class TimerDueAtTests(StoreProvider provider)
             using var scope = paused.Scope();
             return await paused
                 .Service(scope, ReminderMachine.Id)
-                .Advance(new Actor.Client(User, "Editor"), id, "Open");
+                .Advance(new Actor.Client(User, "Editor"), id, "Open")
+                .ConfigureAwait(false);
         });
         try
         {
-            await gate.Reached.WaitAsync(Bound);
+            await gate.Reached.WaitAsync(Bound, TimeProvider.System);
 
             var between = await Row(paused, id);
-            if (between.State == "Review")
+            if (string.Equals(between.State, "Review", StringComparison.Ordinal))
                 between
                     .DueAt.Should()
                     .NotBeNull(
@@ -561,27 +610,29 @@ public class TimerDueAtTests(StoreProvider provider)
             gate.Release();
         }
 
-        (await advance.WaitAsync(Bound)).Should().BeOfType<AdvanceOutcome.Advanced>();
+        (await advance.WaitAsync(Bound, TimeProvider.System))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
         await ShouldBeDue(paused, id, "Review", ReminderMachine.ReviewFor);
     }
 
     [Test]
     public async Task due_at_is_utc_and_orders_correctly_on_sqlite()
     {
-        var later = await InReview(_host);
+        var later = await InReview(_host.NotNull());
         var sooner = Guid.NewGuid();
-        await _host.SeedDraft(User, sooner, PlainTimerMachine.Json("Idle"));
-        using (var scope = _host.Scope())
+        await _host.NotNull().SeedDraft(User, sooner, PlainTimerMachine.Json("Idle"));
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, PlainTimerMachine.Id);
+            var service = _host.NotNull().Service(scope, PlainTimerMachine.Id);
             (await service.Advance(User, sooner, "Wait"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
         }
 
-        var table = RawSql.Table(_host);
+        var table = RawSql.Table(_host.NotNull());
         var ordered = await RawSql.Query(
-            _host,
+            _host.NotNull(),
             $"SELECT id, due_at FROM {table} WHERE due_at IS NOT NULL AND (id = @a OR id = @b) ORDER BY due_at",
             (
                 "@a",
@@ -594,7 +645,7 @@ public class TimerDueAtTests(StoreProvider provider)
         );
 
         ordered
-            .Select(r => Guid.Parse(r[0]!.ToString()!))
+            .Select(r => Guid.Parse(r[0].NotNull().ToString().NotNull()))
             .Should()
             .Equal(
                 [sooner, later],

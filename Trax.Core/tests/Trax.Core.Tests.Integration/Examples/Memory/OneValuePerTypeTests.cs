@@ -5,31 +5,31 @@ using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Integration.Examples.Memory;
 
-// Shown on https://traxsharp.net/docs/core/memory
-//
-// Memory keeps one value per type. Both junctions return a string, so the second one replaces
-// the first, and the train returns the last name only.
-
-public sealed record Person(string FirstName, string LastName);
-
-public class GetFirstName : Junction<Person, string>
-{
-    public override Task<string> Run(Person person) => Task.FromResult(person.FirstName);
-}
-
-public class GetLastName : Junction<Person, string>
-{
-    public override Task<string> Run(Person person) => Task.FromResult(person.LastName);
-}
-
-public class NameTrain : Train<Person, string>
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<GetFirstName>().Chain<GetLastName>().Resolve();
-}
-
 public class OneValuePerTypeTests
 {
+    // Shown on https://traxsharp.net/docs/core/memory
+    //
+    // Memory keeps one value per type. Both junctions return a string, so the second one replaces
+    // the first, and the train returns the last name only.
+
+    public sealed record Person(string FirstName, string LastName);
+
+    public class GetFirstName : Junction<Person, string>
+    {
+        public override Task<string> Run(Person person) => Task.FromResult(person.FirstName);
+    }
+
+    public class GetLastName : Junction<Person, string>
+    {
+        public override Task<string> Run(Person person) => Task.FromResult(person.LastName);
+    }
+
+    public class NameTrain : Train<Person, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<GetFirstName>().Chain<GetLastName>().Resolve();
+    }
+
     [Test]
     public async Task Run_TwoJunctionsReturnAString_ReturnsTheSecond()
     {

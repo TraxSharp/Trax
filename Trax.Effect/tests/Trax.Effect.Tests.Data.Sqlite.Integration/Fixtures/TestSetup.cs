@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Sqlite.Extensions;
@@ -15,16 +16,20 @@ namespace Trax.Effect.Tests.Data.Sqlite.Integration.Fixtures;
 /// </summary>
 public abstract class TestSetup
 {
-    private ServiceProvider ServiceProvider { get; set; } = null!;
-    private string _dbPath = null!;
+    private ServiceProvider ServiceProvider
+    {
+        get => field.NotNull(nameof(ServiceProvider));
+        set;
+    }
+    private string? _dbPath;
 
-    public IServiceScope Scope { get; private set; } = null!;
+    public AsyncServiceScope Scope { get; private set; }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"trax_test_{Guid.NewGuid():N}.db");
-        var connectionString = $"Data Source={_dbPath}";
+        var connectionString = $"Data Source={_dbPath.NotNull()}";
 
         var services = new ServiceCollection();
 
@@ -45,14 +50,14 @@ public abstract class TestSetup
         await ServiceProvider.DisposeAsync();
 
         // Clean up the temp database file
-        if (File.Exists(_dbPath))
-            File.Delete(_dbPath);
+        if (File.Exists(_dbPath.NotNull()))
+            File.Delete(_dbPath.NotNull());
 
-        var walPath = _dbPath + "-wal";
+        var walPath = _dbPath.NotNull() + "-wal";
         if (File.Exists(walPath))
             File.Delete(walPath);
 
-        var shmPath = _dbPath + "-shm";
+        var shmPath = _dbPath.NotNull() + "-shm";
         if (File.Exists(shmPath))
             File.Delete(shmPath);
     }
@@ -60,13 +65,13 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
     }
 
     [TearDown]
     public async Task TestTearDown()
     {
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     public abstract ServiceProvider ConfigureServices(IServiceCollection services);

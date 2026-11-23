@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -27,7 +28,7 @@ public class MigrateOnDeployTests
 {
     private const string Schema = "migrate_on_deploy_tests";
 
-    private string _connectionString = null!;
+    private string? _connectionString;
 
     [SetUp]
     public async Task DropTheSchema()
@@ -37,7 +38,7 @@ public class MigrateOnDeployTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         _connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
         await Exec($"DROP SCHEMA IF EXISTS {Schema} CASCADE;");
     }
@@ -49,7 +50,8 @@ public class MigrateOnDeployTests
     [Test]
     public async Task A_migrate_process_creates_the_named_contexts_tables_and_does_not_start_the_host()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var host = new UnstartedHost(services);
 
         await host.RunTraxAsync(["--trax-migrate"]);
@@ -61,7 +63,8 @@ public class MigrateOnDeployTests
     [Test]
     public async Task A_second_migrate_run_changes_nothing()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var host = new UnstartedHost(services);
         await host.RunTraxAsync(["--trax-migrate"]);
         await Exec($"INSERT INTO {Schema}.gadgets (name) VALUES ('kept');");
@@ -102,7 +105,7 @@ public class MigrateOnDeployTests
         );
         var host = new UnstartedHost(services);
 
-        var act = async () => await host.RunTraxAsync(["--trax-migrate"]);
+        var act = async () => await host.RunTraxAsync(["--trax-migrate"]).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -113,7 +116,7 @@ public class MigrateOnDeployTests
     private ServiceProvider Services() =>
         Services(s =>
         {
-            s.AddDbContextFactory<GadgetContext>(o => o.UseNpgsql(_connectionString));
+            s.AddDbContextFactory<GadgetContext>(o => o.UseNpgsql(_connectionString.NotNull()));
             return effects => effects.MigrateOnDeploy<GadgetContext>();
         });
 
@@ -127,56 +130,68 @@ public class MigrateOnDeployTests
         var services = new ServiceCollection();
         var named = register(services);
         services.AddTrax(trax =>
-            trax.AddEffects(effects => named(effects.UsePostgres(_connectionString)))
+            trax.AddEffects(effects => named(effects.UsePostgres(_connectionString.NotNull())))
         );
         return services.BuildServiceProvider();
     }
 
     private async Task<List<string>> AppliedMigrations()
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            $"SELECT \"MigrationId\" FROM {Schema}.\"__EFMigrationsHistory\" ORDER BY 1",
-            connection
-        );
-        var ids = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetString(0));
-        return ids;
+        var connection = new NpgsqlConnection(_connectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                $"SELECT \"MigrationId\" FROM {Schema}.\"__EFMigrationsHistory\" ORDER BY 1",
+                connection
+            );
+            await using (command.ConfigureAwait(false))
+            {
+                var ids = new List<string>();
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                        ids.Add(reader.GetString(0));
+                }
+                return ids;
+            }
+        }
     }
 
     private async Task Exec(string sql)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(sql, connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private async Task<bool> TableExists(string table)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(
             "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @s AND table_name = @t)",
             connection
         );
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("s", Schema);
         command.Parameters.AddWithValue("t", table);
-        return (bool)(await command.ExecuteScalarAsync())!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     private async Task<long> Count(string table)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            $"SELECT count(*) FROM {Schema}.{table}",
-            connection
-        );
-        return (long)(await command.ExecuteScalarAsync())!;
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand($"SELECT count(*) FROM {Schema}.{table}", connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     /// <summary>A host that records whether anything started it.</summary>
@@ -200,7 +215,7 @@ public class MigrateOnDeployTests
     public sealed class Widget
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public string Name { get; set; } = "";
     }
 
     /// <summary>A context that has EF migrations, so a migrate process runs them rather than creating its tables.</summary>
@@ -254,7 +269,7 @@ public class MigrateOnDeployTests
     public sealed class Gadget
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public required string Name { get; set; }
     }
 
     public sealed class GadgetContext(DbContextOptions<GadgetContext> options)

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Factories;
 
 // In the assembly root namespace so this [SetUpFixture] covers every test namespace.
@@ -17,13 +18,21 @@ public partial class ConsoleSetup
 {
     private static IPlaywright? _playwright;
 
-    public static ConsoleHost Host { get; private set; } = null!;
+    public static ConsoleHost Host
+    {
+        get => field.NotNull(nameof(Host));
+        private set;
+    }
 
-    public static IBrowser Browser { get; private set; } = null!;
+    public static IBrowser Browser
+    {
+        get => field.NotNull(nameof(Browser));
+        private set;
+    }
 
     /// <summary>The persisted id of each console document, by operation name, as the page is told them.</summary>
     public static IReadOnlyDictionary<string, string> DocumentIds { get; private set; } =
-        new Dictionary<string, string>();
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -56,14 +65,24 @@ public partial class ConsoleSetup
     )
     {
         using var http = new HttpClient();
-        var html = await http.GetStringAsync(host.Console());
-        var content = ConfigMeta().Match(html).Groups["content"].Value;
+        var html = await http.GetStringAsync(host.Console()).ConfigureAwait(false);
+        var content = ConfigMeta.Match(html).Groups["content"].Value;
         using var config = JsonDocument.Parse(WebUtility.HtmlDecode(content));
         return config.RootElement.TryGetProperty("documents", out var documents)
-            ? documents.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!)
-            : new Dictionary<string, string>();
+            ? documents
+                .EnumerateObject()
+                .ToDictionary(
+                    p => p.Name,
+                    p => p.Value.GetString().NotNull(),
+                    StringComparer.Ordinal
+                )
+            : new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
-    [GeneratedRegex("<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"")]
-    private static partial Regex ConfigMeta();
+    [GeneratedRegex(
+        "<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConfigMeta { get; }
 }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -53,7 +54,10 @@ public class TraxDeployExportTests
     [Test]
     public async Task The_gate_refuses_an_exporting_process_that_starts_to_serve()
     {
-        var act = async () => await new DeployExportServeGate().StartAsync(CancellationToken.None);
+        var act = async () =>
+            await new DeployExportServeGate()
+                .StartAsync(CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -107,7 +111,8 @@ public class TraxDeployExportTests
                 effects.SkipMigrations().UsePostgres(UnreachableConnectionString)
             )
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var manifest = await DeployManifestExport.BuildAsync(
             provider,
@@ -115,7 +120,7 @@ public class TraxDeployExportTests
             CancellationToken.None
         );
 
-        manifest.Database!.Provider.Should().Be("postgres");
+        manifest.Database.NotNull().Provider.Should().Be("postgres");
         manifest.Database.MigratesOnStart.Should().BeFalse();
         manifest.Roles.Should().BeEmpty();
     }
@@ -125,7 +130,8 @@ public class TraxDeployExportTests
     {
         var services = new ServiceCollection();
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var manifest = await DeployManifestExport.BuildAsync(
             provider,
@@ -133,7 +139,7 @@ public class TraxDeployExportTests
             CancellationToken.None
         );
 
-        manifest.Database!.Provider.Should().Be("in-memory");
+        manifest.Database.NotNull().Provider.Should().Be("in-memory");
     }
 
     [Test]

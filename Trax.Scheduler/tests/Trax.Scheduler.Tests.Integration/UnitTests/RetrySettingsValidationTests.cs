@@ -18,6 +18,17 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class RetrySettingsValidationTests
 {
+    // Disposed after each test, asynchronously, so the helper that builds them stays synchronous.
+    private readonly List<ServiceProvider> _providers = [];
+
+    [TearDown]
+    public async Task DisposeProviders()
+    {
+        foreach (var provider in _providers)
+            await provider.DisposeAsync().ConfigureAwait(false);
+        _providers.Clear();
+    }
+
     [Test]
     public void ScheduleOptions_MaxRetries_refuses_a_negative_count()
     {
@@ -74,7 +85,7 @@ public class RetrySettingsValidationTests
         problem.Should().Contain(nameof(UpdateSchedulerConfigInput.FailureCountWindow));
     }
 
-    private static SchedulerConfiguration ResolveConfiguration(
+    private SchedulerConfiguration ResolveConfiguration(
         Action<SchedulerConfigurationBuilder> configure
     )
     {
@@ -90,7 +101,8 @@ public class RetrySettingsValidationTests
                     return scheduler;
                 })
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
         return provider.GetRequiredService<SchedulerConfiguration>();
     }
 }

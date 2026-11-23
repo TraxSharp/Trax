@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Persistence;
 
@@ -37,7 +38,7 @@ public class MachineExposureStartupTests
                 "a raw-delegate machine has no declared inputs to build its typed operations from, per "
                     + Adr
             );
-        refusal!.ToString().Should().Contain($"'{RawDelegateMachine.MachineId}'");
+        refusal.NotNull().ToString().Should().Contain($"'{RawDelegateMachine.MachineId}'");
     }
 
     [Test]
@@ -46,7 +47,7 @@ public class MachineExposureStartupTests
         var refusal = await MachineSchemaHost.RefusalAsync([typeof(SystemOwnedStepMachine)]);
 
         refusal.Should().NotBeNull("a system-owned machine's instances have no client, per " + Adr);
-        refusal!.ToString().Should().Contain($"'{SystemOwnedStepMachine.MachineId}'");
+        refusal.NotNull().ToString().Should().Contain($"'{SystemOwnedStepMachine.MachineId}'");
     }
 
     [Test]
@@ -61,7 +62,8 @@ public class MachineExposureStartupTests
                     + "client outdated, per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain($"'{MixedGuardMachine.MachineId}'")
@@ -80,7 +82,8 @@ public class MachineExposureStartupTests
                     + "machine refuses startup, per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain($"'{AnonymousEventMachine.MachineId}'")
@@ -104,7 +107,7 @@ public class MachineExposureStartupTests
                     + "startup, per "
                     + Adr
             );
-        refusal!.ToString().Should().Contain($"'{id}'").And.Contain(read);
+        refusal.NotNull().ToString().Should().Contain($"'{id}'").And.Contain(read);
     }
 
     [Test]
@@ -122,7 +125,8 @@ public class MachineExposureStartupTests
                     + "surface refuses to start without them, per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain($"'{PartsMachine.MachineId}'")
@@ -148,7 +152,8 @@ public class MachineExposureStartupTests
                 "the push of a machine 'on-train-state' is onTrainStateChanged, Trax's own subscription, per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain($"The machine '{OnTrainStateMachine.MachineId}'")
@@ -169,12 +174,13 @@ public class MachineExposureStartupTests
             .NotBeNull(
                 "the push of a machine 'order' is orderChanged, which the host has, per " + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain($"The machine '{OrderStepMachine.MachineId}'")
             .And.Contain("'orderChanged'")
-            .And.Contain(typeof(HostOrderChanged).FullName!);
+            .And.Contain(typeof(HostOrderChanged).FullName.NotNull());
     }
 
     /// <summary>A host subscription named like the push of a machine <c>order</c>.</summary>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -58,7 +59,11 @@ public class TrainPageBrowserTests : ConsoleTest
             .Expect(cell)
             .ToHaveAttributeAsync(
                 "href",
-                new System.Text.RegularExpressions.Regex($"/runs/{failed.Id}$")
+                new System.Text.RegularExpressions.Regex(
+                    string.Create(CultureInfo.InvariantCulture, $"/runs/{failed.Id}$"),
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                )
             );
         await Assertions
             .Expect(page.Cell(failed.Id, nameof(LoadClaim), "Completed"))
@@ -66,7 +71,11 @@ public class TrainPageBrowserTests : ConsoleTest
         await Assertions.Expect(page.FailureCount).ToHaveCountAsync(1, new() { Timeout = Render });
 
         await cell.ClickAsync();
-        await Assertions.Expect(Page).ToHaveURLAsync(Console.Url($"runs/{failed.Id}"));
+        await Assertions
+            .Expect(Page)
+            .ToHaveURLAsync(
+                Console.Url(string.Create(CultureInfo.InvariantCulture, $"runs/{failed.Id}"))
+            );
     }
 
     [Test]

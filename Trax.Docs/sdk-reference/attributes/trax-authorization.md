@@ -7,6 +7,7 @@ package: Trax.Effect
 namespace: Trax.Effect.Attributes
 source:
   - Trax.Effect/src/Trax.Effect/Attributes/TraxAuthorization.cs
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxAuthorizationDeclaration.cs
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 6

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Globalization;
 
 namespace Trax.Scheduler.Services.Http;
 
@@ -45,27 +46,41 @@ internal static class BoundedBody
         var chunk = ArrayPool<byte>.Shared.Rent(ChunkSize);
         try
         {
-            await using var stream = await content.ReadAsStreamAsync(deadline.Token);
-            using var buffer = new MemoryStream();
-            int read;
-            while (
-                (read = await stream.ReadAsync(chunk.AsMemory(0, ChunkSize), deadline.Token)) > 0
-            )
+            var stream = await content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
+            await using (stream.ConfigureAwait(false))
             {
-                var room = limit - buffer.Length;
-                if (read > room)
+                using var buffer = new MemoryStream();
+                int read;
+                while (
+                    (
+                        read = await stream
+                            .ReadAsync(chunk.AsMemory(0, ChunkSize), deadline.Token)
+                            .ConfigureAwait(false)
+                    ) > 0
+                )
                 {
-                    buffer.Write(chunk, 0, (int)room);
-                    return (buffer.ToArray(), true);
+                    var room = limit - buffer.Length;
+                    if (read > room)
+                    {
+                        await buffer
+                            .WriteAsync(chunk.AsMemory(0, (int)room), deadline.Token)
+                            .ConfigureAwait(false);
+                        return (buffer.ToArray(), true);
+                    }
+                    await buffer
+                        .WriteAsync(chunk.AsMemory(0, read), deadline.Token)
+                        .ConfigureAwait(false);
                 }
-                buffer.Write(chunk, 0, read);
+                return (buffer.ToArray(), false);
             }
-            return (buffer.ToArray(), false);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             throw new TaskCanceledException(
-                $"The response body did not arrive within {timeout.TotalSeconds:0.###} seconds.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The response body did not arrive within {timeout.TotalSeconds:0.###} seconds."
+                ),
                 new TimeoutException(ex.Message, ex)
             );
         }

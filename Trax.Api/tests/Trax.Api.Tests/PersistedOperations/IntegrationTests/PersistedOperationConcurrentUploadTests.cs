@@ -1,9 +1,11 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -17,9 +19,9 @@ public class PersistedOperationConcurrentUploadTests
 {
     private const int Rounds = 20;
 
-    private ServiceProvider _sp = null!;
-    private IPersistedOperationsService _service = null!;
-    private IPersistedOperationStore _store = null!;
+    private ServiceProvider? _sp;
+    private IPersistedOperationsService? _service;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -28,15 +30,16 @@ public class PersistedOperationConcurrentUploadTests
             Assert.Ignore("Postgres not reachable.");
 
         _sp = await GraphQLFixture.BuildAsync();
-        _service = _sp.GetRequiredService<IPersistedOperationsService>();
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
+        _service = _sp.NotNull().GetRequiredService<IPersistedOperationsService>();
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -47,19 +50,28 @@ public class PersistedOperationConcurrentUploadTests
     {
         for (var round = 0; round < Rounds; round++)
         {
-            var id = $"race_first_{round}_{Guid.NewGuid():N}";
+            var id = string.Create(
+                CultureInfo.InvariantCulture,
+                $"race_first_{round}_{Guid.NewGuid():N}"
+            );
 
             var results = await Task.WhenAll(
                 UploadAsync(id, "query Greet { hello }"),
                 UploadAsync(id, "query Greet { version }")
             );
 
-            results.Count(r => r.Success).Should().Be(1, $"round {round}");
+            results
+                .Count(r => r.Success)
+                .Should()
+                .Be(1, string.Create(CultureInfo.InvariantCulture, $"round {round}"));
             results
                 .Single(r => !r.Success)
                 .Errors.Single()
                 .Code.Should()
-                .Be(ShapeDiffViolationException.CodeValue, $"round {round}");
+                .Be(
+                    ShapeDiffViolationException.CodeValue,
+                    string.Create(CultureInfo.InvariantCulture, $"round {round}")
+                );
         }
     }
 
@@ -68,8 +80,13 @@ public class PersistedOperationConcurrentUploadTests
     {
         for (var round = 0; round < Rounds; round++)
         {
-            var id = $"race_bypass_{round}_{Guid.NewGuid():N}";
-            await _store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+            var id = string.Create(
+                CultureInfo.InvariantCulture,
+                $"race_bypass_{round}_{Guid.NewGuid():N}"
+            );
+            await _store
+                .NotNull()
+                .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
 
             await Task.WhenAll(
                 UploadAsync(id, "query Greet { version }", bypassShapeDiff: true),
@@ -78,9 +95,13 @@ public class PersistedOperationConcurrentUploadTests
 
             // Either the edit landed first and the bypass replaced it, or the bypass landed first
             // and the edit, a shape change against it, was refused. Never the edit last.
-            (await _store.GetAsync(id, null, CancellationToken.None))!
+            (await _store.NotNull().GetAsync(id, tenantKey: null, CancellationToken.None))
+                .NotNull()
                 .Document.Should()
-                .Be("query Greet { version }", $"round {round}");
+                .Be(
+                    "query Greet { version }",
+                    string.Create(CultureInfo.InvariantCulture, $"round {round}")
+                );
         }
     }
 
@@ -103,9 +124,15 @@ public class PersistedOperationConcurrentUploadTests
         bool bypassShapeDiff = false
     ) =>
         Task.Run(() =>
-            _service.UploadAsync(
-                new UploadPersistedOperationInput(id, document, BypassShapeDiff: bypassShapeDiff),
-                CancellationToken.None
-            )
+            _service
+                .NotNull()
+                .UploadAsync(
+                    new UploadPersistedOperationInput(
+                        id,
+                        document,
+                        BypassShapeDiff: bypassShapeDiff
+                    ),
+                    CancellationToken.None
+                )
         );
 }

@@ -8,7 +8,7 @@ namespace Trax.Scheduler.Trains.DeadLetterCleanup;
 /// Deletes resolved dead letter entries older than the configured retention period.
 /// Infrastructure the scheduler registers and runs itself; not intended to be called directly.
 /// </summary>
-internal class DeadLetterCleanupTrain
+internal sealed class DeadLetterCleanupTrain
     : ServiceTrain<DeadLetterCleanupRequest, Unit>,
         IDeadLetterCleanupTrain
 {

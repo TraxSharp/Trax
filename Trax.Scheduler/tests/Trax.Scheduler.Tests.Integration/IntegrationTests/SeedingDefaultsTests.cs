@@ -79,7 +79,7 @@ public class SeedingDefaultsTests
             Every.Minutes(5),
             configureEach: (id, item) =>
             {
-                if (id == "own")
+                if (string.Equals(id, "own", StringComparison.Ordinal))
                     item.MaxRetries = 1;
             }
         );
@@ -87,7 +87,7 @@ public class SeedingDefaultsTests
         var retries = await fx
             .DataContext.Manifests.AsNoTracking()
             .Where(m => m.ExternalId.StartsWith("defaults-"))
-            .ToDictionaryAsync(m => m.ExternalId, m => m.MaxRetries);
+            .ToDictionaryAsync(m => m.ExternalId, m => m.MaxRetries, StringComparer.Ordinal);
 
         retries["defaults-plain"].Should().Be(6);
         retries["defaults-own"].Should().Be(1);

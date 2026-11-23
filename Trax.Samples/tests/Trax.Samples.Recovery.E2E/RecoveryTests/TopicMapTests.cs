@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -132,45 +133,76 @@ public class TopicMapTests : RecoveryTestFixture
         // The run graph, read as the page reads it, draws the three branches as tracks of one
         // Parallel node: attempt 1 failed on the gate's Yes track inside cocitation, attempt 2 ran it.
         foreach (var (attempt, state) in new[] { (first, "FAILED"), (second, "COMPLETED") })
-        {
-            // The step rows trail the run's end by moments: wait for the graph to show the gate's
-            // step as it ended rather than read it once.
-            JsonElement graph = default;
-            (
-                await Polling.WaitUntilAsync(
-                    async () => GateStepState(graph = await RunGraph(attempt)) == state,
+            await ExpectGateStepOnTheGraphAsync(attempt, state);
+        Stream.Errors.Should().BeEmpty();
+    }
+
+    // The attempt's run graph, once it shows the gate's Yes step in the given state.
+    private async Task<JsonElement> GraphShowingTheGateStepAsync(long attempt, string state)
+    {
+        // The step rows trail the run's end by moments: wait for the graph to show the gate's
+        // step as it ended rather than read it once.
+        JsonElement graph = default;
+        (
+            await Polling
+                .WaitUntilAsync(
+                    async () =>
+                        string.Equals(
+                            GateStepState(graph = await RunGraph(attempt).ConfigureAwait(false)),
+                            state,
+                            StringComparison.Ordinal
+                        ),
                     TimeSpan.FromSeconds(10),
                     TimeSpan.FromMilliseconds(100)
                 )
-            )
-                .Should()
-                .BeTrue(
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
                     $"execution {attempt}'s graph should show the gate's Yes step {state}, but "
-                        + $"shows it {GateStepState(graph) ?? "missing"}"
-                );
+                ) + $"shows it {GateStepState(graph) ?? "missing"}"
+            );
 
-            var parallel = graph
-                .GetProperty("nodes")
-                .EnumerateArray()
-                .Single(n => n.GetProperty("kind").GetString() == "PARALLEL");
-            var branches = parallel.GetProperty("tracks").EnumerateArray().ToList();
-            branches.Select(t => t.GetProperty("name").GetString()).Should().Equal(Branches);
+        return graph;
+    }
 
-            var gate = branches[1]
-                .GetProperty("nodes")
-                .EnumerateArray()
-                .Single(n => n.GetProperty("kind").GetString() == "GATE");
-            gate.GetProperty("trackTaken").GetString().Should().Be("Yes");
-            gate.GetProperty("tracks")
-                .EnumerateArray()
-                .Single(t => t.GetProperty("name").GetString() == "Yes")
-                .GetProperty("nodes")[0]
-                .GetProperty("state")
-                .GetString()
-                .Should()
-                .Be(state);
-        }
-        Stream.Errors.Should().BeEmpty();
+    // The attempt's run graph shows the gate's Yes step in cocitation, in the given state.
+    private async Task ExpectGateStepOnTheGraphAsync(long attempt, string state)
+    {
+        var graph = await GraphShowingTheGateStepAsync(attempt, state).ConfigureAwait(false);
+
+        var parallel = graph
+            .GetProperty("nodes")
+            .EnumerateArray()
+            .Single(n =>
+                string.Equals(
+                    n.GetProperty("kind").GetString(),
+                    "PARALLEL",
+                    StringComparison.Ordinal
+                )
+            );
+        var branches = parallel.GetProperty("tracks").EnumerateArray().ToList();
+        branches.Select(t => t.GetProperty("name").GetString()).Should().Equal(Branches);
+
+        var gate = branches[1]
+            .GetProperty("nodes")
+            .EnumerateArray()
+            .Single(n =>
+                string.Equals(n.GetProperty("kind").GetString(), "GATE", StringComparison.Ordinal)
+            );
+        gate.GetProperty("trackTaken").GetString().Should().Be("Yes");
+        gate.GetProperty("tracks")
+            .EnumerateArray()
+            .Single(t =>
+                string.Equals(t.GetProperty("name").GetString(), "Yes", StringComparison.Ordinal)
+            )
+            .GetProperty("nodes")[0]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be(state);
     }
 
     private static TopicMapInput Input(int fromYear = 2016) =>
@@ -187,9 +219,12 @@ public class TopicMapTests : RecoveryTestFixture
 
     private static async Task<TopicMap> RunTrain(TopicMapInput input)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        var train = scope.ServiceProvider.GetRequiredService<IBuildTopicMapTrain>();
-        return await train.Run(input);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var train = scope.ServiceProvider.GetRequiredService<IBuildTopicMapTrain>();
+            return await train.Run(input).ConfigureAwait(false);
+        }
     }
 
     private static Task<TopicMapDbContext> TopicMapDb() =>
@@ -199,18 +234,26 @@ public class TopicMapTests : RecoveryTestFixture
 
     private static async Task<int> PairsWritten(string runId)
     {
-        await using var db = await TopicMapDb();
-        return await db.TopicPairs.CountAsync(p => p.RunId == runId);
+        var db = await TopicMapDb().ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db.TopicPairs.CountAsync(p => p.RunId == runId).ConfigureAwait(false);
+        }
     }
 
     private async Task<JsonElement> Execution(long metadataId)
     {
-        var response = await GraphQL.SendAsync(
-            $$"""
-            { operations { executionDetail(id: {{metadataId}}) { failureJunction failureException } } }
-            """,
-            OperatorKey
-        );
+        var response = await GraphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { executionDetail(id: {{metadataId}}) { failureJunction failureException } } }
+                    """
+                ),
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("operations", "executionDetail");
     }
@@ -223,16 +266,32 @@ public class TopicMapTests : RecoveryTestFixture
         var gate = graph
             .GetProperty("nodes")
             .EnumerateArray()
-            .Where(n => n.GetProperty("kind").GetString() == "PARALLEL")
+            .Where(n =>
+                string.Equals(
+                    n.GetProperty("kind").GetString(),
+                    "PARALLEL",
+                    StringComparison.Ordinal
+                )
+            )
             .SelectMany(p => p.GetProperty("tracks").EnumerateArray())
-            .Where(t => t.GetProperty("name").GetString() == "cocitation")
+            .Where(t =>
+                string.Equals(
+                    t.GetProperty("name").GetString(),
+                    "cocitation",
+                    StringComparison.Ordinal
+                )
+            )
             .SelectMany(t => t.GetProperty("nodes").EnumerateArray())
-            .FirstOrDefault(n => n.GetProperty("kind").GetString() == "GATE");
+            .FirstOrDefault(n =>
+                string.Equals(n.GetProperty("kind").GetString(), "GATE", StringComparison.Ordinal)
+            );
         if (gate.ValueKind != JsonValueKind.Object)
             return null;
         var yes = gate.GetProperty("tracks")
             .EnumerateArray()
-            .FirstOrDefault(t => t.GetProperty("name").GetString() == "Yes");
+            .FirstOrDefault(t =>
+                string.Equals(t.GetProperty("name").GetString(), "Yes", StringComparison.Ordinal)
+            );
         return
             yes.ValueKind == JsonValueKind.Object
             && yes.TryGetProperty("nodes", out var nodes)
@@ -243,18 +302,23 @@ public class TopicMapTests : RecoveryTestFixture
 
     private async Task<JsonElement> RunGraph(long metadataId)
     {
-        var response = await GraphQL.SendAsync(
-            $$"""
-            { operations { runGraph(metadataId: {{metadataId}}) { nodes {
-                id kind state trackTaken tracks { name taken nodes {
-                    id kind state trackTaken tracks { name taken nodes {
-                        id kind state trackTaken tracks { name taken }
-                    } }
-                } }
-            } } } }
-            """,
-            OperatorKey
-        );
+        var response = await GraphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { runGraph(metadataId: {{metadataId}}) { nodes {
+                        id kind state trackTaken tracks { name taken nodes {
+                            id kind state trackTaken tracks { name taken nodes {
+                                id kind state trackTaken tracks { name taken }
+                            } }
+                        } }
+                    } } } }
+                    """
+                ),
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("operations", "runGraph");
     }

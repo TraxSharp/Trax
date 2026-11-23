@@ -7,7 +7,7 @@ public class PickUp(DemoPace pace) : EffectJunction<Cooked, PickedUp>
 {
     public override async Task<PickedUp> Run(Cooked order)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
         return new PickedUp(order.OrderId, "Sam");
     }
 }

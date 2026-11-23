@@ -1,0 +1,604 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.ValidateArgumentsCorrectlyAnalyzer,
+    Trax.Analyzers.Rules.ValidateArgumentsCorrectlyFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class ValidateArgumentsCorrectlyAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task ReturnVoid()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                void A()
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReturnString()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                string A()
+                {
+                    throw null;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task OutParameter()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(out int a)
+                {
+                    throw null;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoValidation()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    yield return 0;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SameBlock()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    if (a == null)
+                    {
+                        throw new System.ArgumentNullException(nameof(a));
+                        yield return 0;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task StatementInMiddleOfArgumentValidation()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections;
+            class TypeName
+            {
+                IEnumerable A(string a)
+                {
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    yield break;
+
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    yield return 0;
+                    if (a == null)
+                    {
+                        yield return 1;
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    return A(a);
+                    IEnumerable<int> A(string a)
+                    {
+                        yield return 0;
+                        if (a == null)
+                        {
+                            yield return 1;
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ValidValidation()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    return A();
+
+                    IEnumerable<int> A()
+                    {
+                        yield return 0;
+                        if (a == null)
+                        {
+                            yield return 1;
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ValidValidation_ThrowIfNull()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    System.ArgumentNullException.ThrowIfNull(a);
+
+                    return A();
+
+                    IEnumerable<int> A()
+                    {
+                        yield return 0;
+                        if (a == null)
+                        {
+                            yield return 1;
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ValidValidation_ArgumentExceptionThrowIfNullOrEmpty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    System.ArgumentException.ThrowIfNullOrEmpty(a);
+
+                    return A();
+
+                    IEnumerable<int> A()
+                    {
+                        yield return 0;
+                        if (a == null)
+                        {
+                            yield return 1;
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_ArgumentExceptionThrowIfNullOrEmpty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    System.ArgumentException.ThrowIfNullOrEmpty(a);
+                    yield return 0;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_CustomArgumentExceptionThrowIf()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class CustomArgumentException : System.ArgumentException
+            {
+                public static void ThrowIf(bool condition, string paramName)
+                {
+                    if (condition)
+                        throw new CustomArgumentException(paramName);
+                }
+
+                public CustomArgumentException(string paramName) : base(paramName)
+                {
+                }
+            }
+
+            class TypeName
+            {
+                IEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    CustomArgumentException.ThrowIf(a is null, nameof(a));
+                    yield return 0;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_CustomArgumentExceptionThrow()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class CustomArgumentException : System.ArgumentException
+            {
+                public static void Throw(bool condition, string paramName)
+                {
+                    if (condition)
+                        throw new CustomArgumentException(paramName);
+                }
+
+                public CustomArgumentException(string paramName) : base(paramName)
+                {
+                }
+            }
+
+            class TypeName
+            {
+                IEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    CustomArgumentException.Throw(a is null, nameof(a));
+                    yield return 0;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_IAsyncEnumerable()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                async IAsyncEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    await System.Threading.Tasks.Task.Delay(1);
+                    yield return 0;
+
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IAsyncEnumerable<int> A(string a)
+                {
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    return A(a);
+
+                    async IAsyncEnumerable<int> A(string a)
+                    {
+                        await System.Threading.Tasks.Task.Delay(1);
+                        yield return 0;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_IAsyncEnumerable_ThrowIfNull()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                async IAsyncEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    System.ArgumentNullException.ThrowIfNull(a);
+
+                    await System.Threading.Tasks.Task.Delay(1);
+                    yield return 0;
+
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IAsyncEnumerable<int> A(string a)
+                {
+                    System.ArgumentNullException.ThrowIfNull(a);
+
+                    return A(a);
+
+                    async IAsyncEnumerable<int> A(string a)
+                    {
+                        await System.Threading.Tasks.Task.Delay(1);
+                        yield return 0;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_FixerPreserveEnumerableCancellationAttribute()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class TypeName
+            {
+                async IAsyncEnumerable<int> {|TRX0050:A|}(string a, [EnumeratorCancellation] CancellationToken ct = default)
+                {
+                    System.ArgumentNullException.ThrowIfNull(a);
+
+                    await System.Threading.Tasks.Task.Delay(1);
+                    yield return 0;
+
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Runtime.CompilerServices;
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class TypeName
+            {
+                IAsyncEnumerable<int> A(string a, CancellationToken ct = default)
+                {
+                    System.ArgumentNullException.ThrowIfNull(a);
+
+                    return A(a, ct);
+
+                    async IAsyncEnumerable<int> A(string a, [EnumeratorCancellation] CancellationToken ct)
+                    {
+                        await System.Threading.Tasks.Task.Delay(1);
+                        yield return 0;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_ExtensionMethod()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Collections.Generic;
+            static class TypeName
+            {
+                public static IEnumerable<int> {|TRX0050:A|}(this string a)
+                {
+                    if (a is null)
+                        throw new ArgumentNullException(nameof(a));
+
+                    yield return 1;
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Collections.Generic;
+            static class TypeName
+            {
+                public static IEnumerable<int> A(this string a)
+                {
+                    if (a is null)
+                        throw new ArgumentNullException(nameof(a));
+
+                    return A(a);
+                    IEnumerable<int> A(string a)
+                    {
+                        yield return 1;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("await System.Threading.Tasks.Task.Delay(1);")]
+    [InlineData("await foreach (var item in B()) { }")]
+    [InlineData("await using (var disposable = default(System.IAsyncDisposable)) { }")]
+    [InlineData("await using var disposable = default(System.IAsyncDisposable);")]
+    public Task IAsyncEnumerable_AwaitBeforeValidation(string statement)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Collections.Generic;
+            class TypeName
+            {
+                async IAsyncEnumerable<int> A(string a)
+                {
+                    {{statement}}
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    yield return 0;
+                }
+
+                IAsyncEnumerable<int> B() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_IAsyncEnumerable_AwaitInLambdaBeforeValidation()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                async IAsyncEnumerable<int> {|TRX0050:A|}(string a)
+                {
+                    System.Func<System.Threading.Tasks.Task> func = async () => await System.Threading.Tasks.Task.Delay(1);
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    await func();
+                    yield return 0;
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IAsyncEnumerable<int> A(string a)
+                {
+                    System.Func<System.Threading.Tasks.Task> func = async () => await System.Threading.Tasks.Task.Delay(1);
+                    if (a == null)
+                        throw new System.ArgumentNullException(nameof(a));
+
+                    return A(a);
+
+                    async IAsyncEnumerable<int> A(string a)
+                    {
+                        await func();
+                        yield return 0;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ThrowInLambdaBeforeYield()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            class TypeName
+            {
+                IEnumerable<int> A(string a)
+                {
+                    System.Func<int> func = () => throw new System.ArgumentNullException(nameof(a));
+                    yield return func();
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Typed;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -16,9 +17,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class TypedQueryGeneratorConditionalIgnoreTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
-    private ServiceProvider _services = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private GraphQLTestServerFixture? _fixture;
+    private ServiceProvider? _services;
+    private IGraphQLClientExecutor? _executor;
 
     [SetUp]
     public void SetUp()
@@ -26,17 +27,17 @@ public class TypedQueryGeneratorConditionalIgnoreTests
         _fixture = new GraphQLTestServerFixture();
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient());
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient());
         _services = services.BuildServiceProvider();
-        _executor = _services.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _services.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _fixture.Dispose();
+        _services?.Dispose();
+        _fixture?.Dispose();
     }
 
     [Test]
@@ -50,23 +51,11 @@ public class TypedQueryGeneratorConditionalIgnoreTests
     [Test]
     public async Task WhenWritingNull_property_is_populated_from_the_response()
     {
-        var result = await _executor.Run(new ConditionallyIgnoredPlayerRequest { Id = "player-1" });
+        var result = await _executor
+            .NotNull()
+            .Run(new ConditionallyIgnoredPlayerRequest { Id = "player-1" });
 
         result.Name.Should().Be("Aragorn");
         result.Level.Should().Be(42, "the server has a level for player-1 and STJ reads it");
     }
-}
-
-[GraphQLType("Player")]
-public sealed record ConditionallyIgnoredPlayer(
-    string Id,
-    string Name,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Level
-);
-
-[GraphQLOperation(OperationType.Query, Name = "ConditionallyIgnoredPlayer", RootField = "player")]
-public sealed class ConditionallyIgnoredPlayerRequest : TypedRequest<ConditionallyIgnoredPlayer>
-{
-    [GraphQLArgument("String!", VariableName = "id")]
-    public required string Id { get; init; }
 }

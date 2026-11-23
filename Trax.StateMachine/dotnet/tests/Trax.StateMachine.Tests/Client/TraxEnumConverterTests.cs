@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -26,10 +28,9 @@ public class TraxEnumConverterTests
     [Test]
     public void A_member_is_read_and_written_by_its_wire_name()
     {
-        var run = JsonSerializer.Deserialize<Run>(
-            """{"state":"LAST24_HOURS","previous":"RUNNING"}""",
-            TraxJson.Options
-        )!;
+        var run = JsonSerializer
+            .Deserialize<Run>("""{"state":"LAST24_HOURS","previous":"RUNNING"}""", TraxJson.Options)
+            .NotNull();
 
         run.Should().Be(new Run(RunState.Last24Hours, RunState.Running));
         JsonSerializer
@@ -41,13 +42,12 @@ public class TraxEnumConverterTests
     [Test]
     public void A_name_the_enum_lacks_is_read_as_unknown_and_written_back_as_sent()
     {
-        var run = JsonSerializer.Deserialize<Run>(
-            """{"state":"PAUSED","previous":"WAITING"}""",
-            TraxJson.Options
-        )!;
+        var run = JsonSerializer
+            .Deserialize<Run>("""{"state":"PAUSED","previous":"WAITING"}""", TraxJson.Options)
+            .NotNull();
 
         TraxEnum.IsUnknown(run.State).Should().BeTrue();
-        TraxEnum.IsUnknown(run.Previous!.Value).Should().BeTrue();
+        TraxEnum.IsUnknown(run.Previous.NotNull().Value).Should().BeTrue();
         run.State.Should().NotBe(run.Previous.Value);
         TraxEnum.IsUnknown(RunState.Running).Should().BeFalse();
         JsonSerializer
@@ -71,7 +71,10 @@ public class TraxEnumConverterTests
         var act = () =>
         {
             for (var i = 0; i <= TraxEnumConverter<Flood>.MaxUnknownNames; i++)
-                JsonSerializer.Deserialize<Flood>($"\"NEW_{i}\"", TraxJson.Options);
+                JsonSerializer.Deserialize<Flood>(
+                    string.Create(CultureInfo.InvariantCulture, $"\"NEW_{i}\""),
+                    TraxJson.Options
+                );
         };
 
         act.Should().Throw<JsonException>().WithMessage("*more than 256*");

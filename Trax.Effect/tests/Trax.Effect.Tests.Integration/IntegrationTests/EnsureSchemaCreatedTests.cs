@@ -1,8 +1,10 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -20,7 +22,7 @@ public class EnsureSchemaCreatedTests
     private const string Schema = "ensure_schema_tests";
     private const string CatalogSchema = "ensure_schema_tests_catalog";
 
-    private string _connectionString = null!;
+    private string? _connectionString;
 
     [SetUp]
     public async Task DropTheSchema()
@@ -30,7 +32,7 @@ public class EnsureSchemaCreatedTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         _connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         await DropBoth();
@@ -41,18 +43,21 @@ public class EnsureSchemaCreatedTests
 
     private async Task DropBoth() =>
         await Exec(
-            $"DROP SCHEMA IF EXISTS {Schema} CASCADE; DROP SCHEMA IF EXISTS {CatalogSchema} CASCADE;"
-        );
+                $"DROP SCHEMA IF EXISTS {Schema} CASCADE; DROP SCHEMA IF EXISTS {CatalogSchema} CASCADE;"
+            )
+            .ConfigureAwait(false);
 
     [Test]
     public async Task A_second_run_over_a_created_schema_changes_nothing()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
 
         await services.EnsureSchemaCreatedAsync<OneTableContext>();
         await Exec($"INSERT INTO {Schema}.gadgets (name) VALUES ('kept');");
 
-        var again = async () => await services.EnsureSchemaCreatedAsync<OneTableContext>();
+        var again = async () =>
+            await services.EnsureSchemaCreatedAsync<OneTableContext>().ConfigureAwait(false);
 
         await again.Should().NotThrowAsync();
         (await Names("gadgets")).Should().Equal("kept");
@@ -61,7 +66,8 @@ public class EnsureSchemaCreatedTests
     [Test]
     public async Task A_table_added_to_the_model_later_is_created_and_the_old_one_kept()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         await services.EnsureSchemaCreatedAsync<OneTableContext>();
         await Exec($"INSERT INTO {Schema}.gadgets (name) VALUES ('kept');");
 
@@ -75,13 +81,15 @@ public class EnsureSchemaCreatedTests
     [Test]
     public async Task A_create_statement_the_database_refuses_fails_the_call_and_creates_nothing()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
 
         // A composite type takes the name the second table's own row type needs, so its CREATE
         // TABLE is refused. The table before it in the same run must not be left behind.
         await Exec($"CREATE SCHEMA {Schema}; CREATE TYPE {Schema}.gizmos AS (a int);");
 
-        var create = async () => await services.EnsureSchemaCreatedAsync<TwoTableContext>();
+        var create = async () =>
+            await services.EnsureSchemaCreatedAsync<TwoTableContext>().ConfigureAwait(false);
 
         await create.Should().ThrowAsync<PostgresException>();
         (await TableExists("gadgets")).Should().BeFalse("the statements run in one transaction");
@@ -90,7 +98,8 @@ public class EnsureSchemaCreatedTests
     [Test]
     public async Task A_table_mapped_from_another_schema_does_not_make_the_first_creation_skip_the_sequences()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
 
         // The catalog's table exists before the lending context is created for the first time.
         await services.EnsureSchemaCreatedAsync<CatalogContext>();
@@ -103,7 +112,8 @@ public class EnsureSchemaCreatedTests
     [Test]
     public async Task A_sequence_added_to_the_model_later_is_created()
     {
-        await using var services = Services();
+        var services = Services();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         await services.EnsureSchemaCreatedAsync<OneTableContext>();
         await Exec($"INSERT INTO {Schema}.gadgets (name) VALUES ('kept');");
 
@@ -128,9 +138,11 @@ public class EnsureSchemaCreatedTests
                     Task.Run(() => host.EnsureSchemaCreatedAsync<TwoTableContext>())
                 );
 
-                var start = async () => await Task.WhenAll(starts);
+                var start = async () => await Task.WhenAll(starts).ConfigureAwait(false);
 
-                await start.Should().NotThrowAsync($"round {round}");
+                await start
+                    .Should()
+                    .NotThrowAsync(string.Create(CultureInfo.InvariantCulture, $"round {round}"));
             }
             finally
             {
@@ -147,78 +159,87 @@ public class EnsureSchemaCreatedTests
     {
         var services = new ServiceCollection();
         services.AddDomainDataContext<OneTableContext, OneTableContext>(o =>
-            o.UseNpgsql(_connectionString)
+            o.UseNpgsql(_connectionString.NotNull())
         );
         services.AddDomainDataContext<TwoTableContext, TwoTableContext>(o =>
-            o.UseNpgsql(_connectionString)
+            o.UseNpgsql(_connectionString.NotNull())
         );
         services.AddDomainDataContext<CatalogContext, CatalogContext>(o =>
-            o.UseNpgsql(_connectionString)
+            o.UseNpgsql(_connectionString.NotNull())
         );
         services.AddDomainDataContext<LendingContext, LendingContext>(o =>
-            o.UseNpgsql(_connectionString)
+            o.UseNpgsql(_connectionString.NotNull())
         );
         services.AddDomainDataContext<SequenceContext, SequenceContext>(o =>
-            o.UseNpgsql(_connectionString)
+            o.UseNpgsql(_connectionString.NotNull())
         );
         return services.BuildServiceProvider();
     }
 
     private async Task Exec(string sql)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(sql, connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private async Task<List<string>> Names(string table)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(
             $"SELECT name FROM {Schema}.{table} ORDER BY id;",
             connection
         );
+        await using var commandDisposal = command.ConfigureAwait(false);
         var names = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
             names.Add(reader.GetString(0));
         return names;
     }
 
     private async Task<object?> Scalar(string sql)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        return await command.ExecuteScalarAsync();
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(sql, connection);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return await command.ExecuteScalarAsync().ConfigureAwait(false);
     }
 
     private async Task<bool> TableExists(string table)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
+        var connection = new NpgsqlConnection(_connectionString.NotNull());
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = new NpgsqlCommand(
             "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
                 + "WHERE table_schema = @schema AND table_name = @table);",
             connection
         );
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Parameters.AddWithValue("schema", Schema);
         command.Parameters.AddWithValue("table", table);
-        return (bool)(await command.ExecuteScalarAsync())!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 
     public sealed class Row
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public required string Name { get; set; }
     }
 
     public sealed class OtherRow
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public required string Name { get; set; }
     }
 
     public sealed class OneTableContext(DbContextOptions<OneTableContext> options)
@@ -261,7 +282,7 @@ public class EnsureSchemaCreatedTests
     public sealed class Book
     {
         public int Id { get; set; }
-        public string Title { get; set; } = null!;
+        public required string Title { get; set; }
 
         /// <summary>The documented cross-schema read: the catalog owns the table.</summary>
         public static void OnCrossSchemaModelCreating(ModelBuilder modelBuilder, string schema) =>
@@ -276,7 +297,7 @@ public class EnsureSchemaCreatedTests
     public sealed class Loan
     {
         public int Id { get; set; }
-        public string Title { get; set; } = null!;
+        public required string Title { get; set; }
     }
 
     public sealed class CatalogContext(DbContextOptions<CatalogContext> options)

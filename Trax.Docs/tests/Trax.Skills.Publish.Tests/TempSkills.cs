@@ -5,13 +5,20 @@ internal sealed class TempSkills : IDisposable
 {
     public const string Internal = "metadata:\n  internal: true\n";
 
-    public TempSkills()
+    private TempSkills()
     {
         Root = Path.Combine(Path.GetTempPath(), "trax-skills-" + Guid.NewGuid().ToString("N"));
         Skills = Path.Combine(Root, "skills");
-        Directory.CreateDirectory(Skills);
         License = Path.Combine(Root, "LICENSE");
-        File.WriteAllText(License, "MIT License\n");
+    }
+
+    /// <summary>An empty <c>skills/</c> folder with a LICENSE beside it.</summary>
+    public static async Task<TempSkills> CreateAsync()
+    {
+        var skills = new TempSkills();
+        Directory.CreateDirectory(skills.Skills);
+        await File.WriteAllTextAsync(skills.License, "MIT License\n").ConfigureAwait(false);
+        return skills;
     }
 
     public string Root { get; }
@@ -23,7 +30,7 @@ internal sealed class TempSkills : IDisposable
     public string Out => Path.Combine(Root, "out");
 
     /// <summary>A skill that passes every rule, unless the caller overrides part of it.</summary>
-    public TempSkills Skill(
+    public async Task<TempSkills> SkillAsync(
         string folder,
         string? name = null,
         string description = "Use when writing a train in an app built on Trax.",
@@ -33,30 +40,31 @@ internal sealed class TempSkills : IDisposable
     {
         var dir = Path.Combine(Skills, folder);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(
-            Path.Combine(dir, "SKILL.md"),
-            $"---\nname: {name ?? folder}\ndescription: {description}\n{metadata}---\n{body}"
-        );
+        await File.WriteAllTextAsync(
+                Path.Combine(dir, "SKILL.md"),
+                $"---\nname: {name ?? folder}\ndescription: {description}\n{metadata}---\n{body}"
+            )
+            .ConfigureAwait(false);
         return this;
     }
 
-    public TempSkills File_(string relative, string text = "x")
+    public async Task<TempSkills> FileAsync(string relative, string text = "x")
     {
         var path = Path.Combine(Skills, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
+        Directory.CreateDirectory(ParentOf(path));
+        await File.WriteAllTextAsync(path, text).ConfigureAwait(false);
         return this;
     }
 
     /// <summary>
     /// A file and a folder outside <see cref="Skills"/>, holding what a link into a skill must not publish.
     /// </summary>
-    public (string File, string Folder) Outside()
+    public async Task<(string File, string Folder)> OutsideAsync()
     {
         var folder = Path.Combine(Root, "outside");
         Directory.CreateDirectory(folder);
         var file = Path.Combine(folder, "secret.md");
-        File.WriteAllText(file, "secret");
+        await File.WriteAllTextAsync(file, "secret").ConfigureAwait(false);
         return (file, folder);
     }
 
@@ -64,13 +72,17 @@ internal sealed class TempSkills : IDisposable
     public TempSkills Link(string relative, string target, bool folder = false)
     {
         var path = Path.Combine(Skills, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Directory.CreateDirectory(ParentOf(path));
         if (folder)
             Directory.CreateSymbolicLink(path, target);
         else
             File.CreateSymbolicLink(path, target);
         return this;
     }
+
+    private static string ParentOf(string path) =>
+        Path.GetDirectoryName(path)
+        ?? throw new ArgumentException($"'{path}' names no file.", nameof(path));
 
     public void Dispose()
     {

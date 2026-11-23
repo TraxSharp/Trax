@@ -1,8 +1,10 @@
+using System.Globalization;
 using AwesomeAssertions;
 using DbUp;
 using DbUp.Postgresql;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -46,7 +48,7 @@ public class PostgresMigrationTests
             .Build();
 
         return TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
     }
 
@@ -58,14 +60,17 @@ public class PostgresMigrationTests
         // DbUp is journalled, so this is a no-op when the database is already at 036.
         await DatabaseMigrator.Migrate(connectionString);
 
-        await using var connection = new NpgsqlConnection(connectionString);
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
 
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = "SELECT indexname FROM pg_indexes WHERE schemaname = 'trax';";
 
         var indexes = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
+        var reader = await command.ExecuteReaderAsync();
+        await using var readerDisposal = reader.ConfigureAwait(false);
         while (await reader.ReadAsync())
             indexes.Add(reader.GetString(0));
 
@@ -85,7 +90,7 @@ public class PostgresMigrationTests
     {
         await WithDatabaseMigratedTo040(async connectionString =>
         {
-            var script = await ReadMigration041();
+            var script = await ReadMigration041().ConfigureAwait(false);
 
             // Split exactly as production does: DatabaseMigrator hands the connection string to
             // PostgresqlDatabase, which runs each script through this manager's splitter.
@@ -94,28 +99,34 @@ public class PostgresMigrationTests
                 .ToList();
             statements.Should().HaveCountGreaterThan(1);
 
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
+            var connection = new NpgsqlConnection(connectionString);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
 
             var inserted = 0;
             async Task InsertAsOlderWriter() =>
                 await Exec(
-                    connection,
-                    "INSERT INTO trax.work_queue (external_id, train_name, input, input_type_name) "
-                        + $"VALUES ('older-writer-{inserted++}', 'Some.Train', NULL, NULL);"
-                );
+                        connection,
+                        "INSERT INTO trax.work_queue (external_id, train_name, input, input_type_name) "
+                            + string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"VALUES ('older-writer-{inserted++}', 'Some.Train', NULL, NULL);"
+                            )
+                    )
+                    .ConfigureAwait(false);
 
-            await InsertAsOlderWriter();
+            await InsertAsOlderWriter().ConfigureAwait(false);
             foreach (var statement in statements)
             {
-                await Exec(connection, statement);
-                await InsertAsOlderWriter();
+                await Exec(connection, statement).ConfigureAwait(false);
+                await InsertAsOlderWriter().ConfigureAwait(false);
             }
 
             var unconfirmed = await ExternalIds(
-                connection,
-                "SELECT external_id FROM trax.work_queue WHERE confirmed_at IS NULL ORDER BY id;"
-            );
+                    connection,
+                    "SELECT external_id FROM trax.work_queue WHERE confirmed_at IS NULL ORDER BY id;"
+                )
+                .ConfigureAwait(false);
 
             unconfirmed
                 .Should()
@@ -131,24 +142,11 @@ public class PostgresMigrationTests
     {
         await WithDatabaseMigratedTo040(async connectionString =>
         {
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
+            var connection = new NpgsqlConnection(connectionString);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
 
-            async Task Seed(string externalId, string status, string age) =>
-                await Exec(
-                    connection,
-                    "INSERT INTO trax.work_queue "
-                        + "(external_id, train_name, input, input_type_name, status, created_at) "
-                        + $"VALUES ('{externalId}', 'Some.Train', NULL, NULL, '{status}', "
-                        + $"(now() AT TIME ZONE 'utc') - interval '{age}');"
-                );
-
-            await Seed("queued-old", "queued", "10 days");
-            await Seed("cancelled-old", "cancelled", "10 days");
-            // A dispatch that fails is put back to queued without touching confirmed_at, so one
-            // in flight across the migration has to come out of it confirmed.
-            await Seed("dispatched-recent", "dispatched", "1 hour");
-            await Seed("dispatched-old", "dispatched", "10 days");
+            await SeedWorkQueueAges(connection).ConfigureAwait(false);
 
             var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
             var to041 = DeployChanges
@@ -161,15 +159,17 @@ public class PostgresMigrationTests
             to041.Successful.Should().BeTrue(to041.Error?.ToString());
 
             var backfilled = await ExternalIds(
-                connection,
-                "SELECT external_id FROM trax.work_queue "
-                    + "WHERE confirmed_at = created_at ORDER BY external_id;"
-            );
+                    connection,
+                    "SELECT external_id FROM trax.work_queue "
+                        + "WHERE confirmed_at = created_at ORDER BY external_id;"
+                )
+                .ConfigureAwait(false);
             var leftNull = await ExternalIds(
-                connection,
-                "SELECT external_id FROM trax.work_queue WHERE confirmed_at IS NULL "
-                    + "ORDER BY external_id;"
-            );
+                    connection,
+                    "SELECT external_id FROM trax.work_queue WHERE confirmed_at IS NULL "
+                        + "ORDER BY external_id;"
+                )
+                .ConfigureAwait(false);
 
             backfilled
                 .Should()
@@ -185,20 +185,7 @@ public class PostgresMigrationTests
                         + "and nothing reads confirmed_at on one"
                 );
 
-            var unconfirmedIndex = await ExternalIds(
-                connection,
-                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' "
-                    + "AND indexname = 'ix_work_queue_unconfirmed';"
-            );
-            unconfirmedIndex
-                .Should()
-                .ContainSingle()
-                .Which.Should()
-                .Contain(
-                    "'queued'",
-                    "the sweep only looks for queued rows, and the dispatched history left null "
-                        + "must not sit in the index"
-                );
+            await AssertUnconfirmedIndexHoldsOnlyQueued(connection).ConfigureAwait(false);
         });
     }
 
@@ -219,16 +206,19 @@ public class PostgresMigrationTests
             var act = () => Task.WhenAll(hosts);
 
             await act.Should()
-                .NotThrowAsync("the advisory lock makes the second host wait for the first");
+                .NotThrowAsync("the advisory lock makes the second host wait for the first")
+                .ConfigureAwait(false);
 
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
+            var connection = new NpgsqlConnection(connectionString);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
             var journaled = await ExternalIds(
-                connection,
-                "SELECT scriptname FROM trax.migrations ORDER BY scriptname;"
-            );
+                    connection,
+                    "SELECT scriptname FROM trax.migrations ORDER BY scriptname;"
+                )
+                .ConfigureAwait(false);
             journaled.Should().OnlyHaveUniqueItems("each script is applied once");
-            journaled.Should().HaveCount(EmbeddedScripts().Count);
+            journaled.Should().HaveCount((await EmbeddedScripts().ConfigureAwait(false)).Count);
         });
     }
 
@@ -251,7 +241,9 @@ public class PostgresMigrationTests
 
             var act = () => DatabaseMigrator.Migrate(pooledToOne);
 
-            await act.Should().NotThrowAsync("the migration does not borrow from the host's pool");
+            await act.Should()
+                .NotThrowAsync("the migration does not borrow from the host's pool")
+                .ConfigureAwait(false);
         });
     }
 
@@ -265,12 +257,17 @@ public class PostgresMigrationTests
     {
         await WithEmptyDatabase(async connectionString =>
         {
-            await DatabaseMigrator.Migrate(connectionString);
+            await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
+            var connection = new NpgsqlConnection(connectionString);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
 
-            foreach (var (name, script) in EmbeddedScripts().Where(s => Number(s.Name) >= 46))
+            foreach (
+                var (name, script) in (await EmbeddedScripts().ConfigureAwait(false)).Where(s =>
+                    Number(s.Name) >= 46
+                )
+            )
             {
                 var statements = new PostgresqlConnectionManager(connectionString)
                     .SplitScriptIntoCommands(script)
@@ -282,7 +279,8 @@ public class PostgresMigrationTests
                     await act.Should()
                         .NotThrowAsync(
                             $"{name} must be safe to run again, and this failed:\n{statement}"
-                        );
+                        )
+                        .ConfigureAwait(false);
                 }
             }
         });
@@ -302,10 +300,11 @@ public class PostgresMigrationTests
     private static Task WithDatabaseMigratedTo(int last, Func<string, Task> test) =>
         WithEmptyDatabase(async connectionString =>
         {
-            await using (var setup = new NpgsqlConnection(connectionString))
+            var setup = new NpgsqlConnection(connectionString);
+            await using (setup.ConfigureAwait(false))
             {
-                await setup.OpenAsync();
-                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;");
+                await setup.OpenAsync().ConfigureAwait(false);
+                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;").ConfigureAwait(false);
             }
 
             var upTo = DeployChanges
@@ -320,7 +319,7 @@ public class PostgresMigrationTests
                 .PerformUpgrade();
             upTo.Successful.Should().BeTrue(upTo.Error?.ToString());
 
-            await test(connectionString);
+            await test(connectionString).ConfigureAwait(false);
         });
 
     /// <summary>
@@ -335,38 +334,25 @@ public class PostgresMigrationTests
             64,
             async connectionString =>
             {
-                await using (var before = new NpgsqlConnection(connectionString))
-                {
-                    await before.OpenAsync();
-                    await Exec(
-                        before,
-                        "INSERT INTO trax.log (event_id, level, message, category) "
-                            + "VALUES (0, 'information', 'written before 065', 'Migration')"
-                    );
-                    // Rows the writer already stored, outside a run and inside one, keep their
-                    // value: the upgrade only fills the NULLs.
-                    await Exec(
-                        before,
-                        "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
-                            + "VALUES (0, 0, 'information', 'no run before 065', 'Migration'), "
-                            + "(42, 0, 'information', 'a run before 065', 'Migration')"
-                    );
-                }
+                await SeedLogsBefore065(connectionString).ConfigureAwait(false);
 
-                await DatabaseMigrator.Migrate(connectionString);
+                await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-                await using var connection = new NpgsqlConnection(connectionString);
-                await connection.OpenAsync();
+                var connection = new NpgsqlConnection(connectionString);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
                 await Exec(
-                    connection,
-                    "INSERT INTO trax.log (event_id, level, message, category) "
-                        + "VALUES (0, 'information', 'written after 065', 'Migration')"
-                );
+                        connection,
+                        "INSERT INTO trax.log (event_id, level, message, category) "
+                            + "VALUES (0, 'information', 'written after 065', 'Migration')"
+                    )
+                    .ConfigureAwait(false);
                 (
                     await ExternalIds(
-                        connection,
-                        "SELECT message || ':' || metadata_id FROM trax.log ORDER BY id"
-                    )
+                            connection,
+                            "SELECT message || ':' || metadata_id FROM trax.log ORDER BY id"
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .Equal(
@@ -378,16 +364,18 @@ public class PostgresMigrationTests
 
                 var explicitNull = async () =>
                     await Exec(
-                        connection,
-                        "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
-                            + "VALUES (NULL, 0, 'information', 'null', 'Migration')"
-                    );
-                await explicitNull.Should().ThrowAsync<PostgresException>();
+                            connection,
+                            "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                                + "VALUES (NULL, 0, 'information', 'null', 'Migration')"
+                        )
+                        .ConfigureAwait(false);
+                await explicitNull.Should().ThrowAsync<PostgresException>().ConfigureAwait(false);
                 (
                     await ExternalIds(
-                        connection,
-                        "SELECT conname FROM pg_constraint WHERE conname = 'ck_log_metadata_id_not_null'"
-                    )
+                            connection,
+                            "SELECT conname FROM pg_constraint WHERE conname = 'ck_log_metadata_id_not_null'"
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .BeEmpty("the check only stands in for the scan SET NOT NULL would make");
@@ -404,9 +392,11 @@ public class PostgresMigrationTests
         var connectionString = GetConnectionString();
         await DatabaseMigrator.Migrate(connectionString);
 
-        await using var connection = new NpgsqlConnection(connectionString);
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        var transaction = await connection.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         await Exec(connection, "SET LOCAL enable_seqscan = off;");
 
         var plan = await ExternalIds(
@@ -432,17 +422,21 @@ public class PostgresMigrationTests
         var connectionString = GetConnectionString();
         await DatabaseMigrator.Migrate(connectionString);
 
-        await using var connection = new NpgsqlConnection(connectionString);
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        var transaction = await connection.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         await Exec(connection, "SET LOCAL enable_seqscan = off;");
 
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             $"EXPLAIN SELECT count(*) FROM trax.log AS l WHERE lower(l.{column}) LIKE @pattern ESCAPE '\\'";
         command.Parameters.AddWithValue("pattern", "%needle\\_marker%");
         var plan = new List<string>();
-        await using (var rows = await command.ExecuteReaderAsync())
+        var rows = await command.ExecuteReaderAsync();
+        await using (rows.ConfigureAwait(false))
             while (await rows.ReadAsync())
                 plan.Add(rows.GetString(0));
 
@@ -468,18 +462,24 @@ public class PostgresMigrationTests
                 SearchPath = "public",
             }.ConnectionString;
 
-            await using (var setup = new NpgsqlConnection(offPath))
+            var setup = new NpgsqlConnection(offPath);
+            await using (setup.ConfigureAwait(false))
             {
-                await setup.OpenAsync();
-                await Exec(setup, "CREATE SCHEMA ext_home;");
-                await Exec(setup, "CREATE EXTENSION pg_trgm WITH SCHEMA ext_home;");
+                await setup.OpenAsync().ConfigureAwait(false);
+                await Exec(setup, "CREATE SCHEMA ext_home;").ConfigureAwait(false);
+                await Exec(setup, "CREATE EXTENSION pg_trgm WITH SCHEMA ext_home;")
+                    .ConfigureAwait(false);
             }
 
-            await DatabaseMigrator.Migrate(offPath);
+            await DatabaseMigrator.Migrate(offPath).ConfigureAwait(false);
 
-            await using var connection = new NpgsqlConnection(offPath);
-            await connection.OpenAsync();
-            (await ExternalIds(connection, "SELECT current_setting('search_path');"))
+            var connection = new NpgsqlConnection(offPath);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
+            (
+                await ExternalIds(connection, "SELECT current_setting('search_path');")
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .Equal(
                     ["public"],
@@ -493,7 +493,9 @@ public class PostgresMigrationTests
                     "ix_metadata_failure_reason_trgm",
                 }
             )
-                (await IndexState(connection, index)).Should().Be("valid, not unique", index);
+                (await IndexState(connection, index).ConfigureAwait(false))
+                    .Should()
+                    .Be("valid, not unique", index);
         });
     }
 
@@ -511,17 +513,19 @@ public class PostgresMigrationTests
                 SearchPath = "public",
             }.ConnectionString;
 
-            await DatabaseMigrator.Migrate(offPath);
+            await DatabaseMigrator.Migrate(offPath).ConfigureAwait(false);
 
-            await using var connection = new NpgsqlConnection(offPath);
-            await connection.OpenAsync();
+            var connection = new NpgsqlConnection(offPath);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
             (
                 await ExternalIds(
-                    connection,
-                    "SELECT n.nspname FROM pg_extension e "
-                        + "JOIN pg_namespace n ON n.oid = e.extnamespace "
-                        + "WHERE e.extname = 'pg_trgm';"
-                )
+                        connection,
+                        "SELECT n.nspname FROM pg_extension e "
+                            + "JOIN pg_namespace n ON n.oid = e.extnamespace "
+                            + "WHERE e.extname = 'pg_trgm';"
+                    )
+                    .ConfigureAwait(false)
             )
                 .Should()
                 .Equal(["public"], "063 installs the extension in the first search-path schema");
@@ -533,7 +537,9 @@ public class PostgresMigrationTests
                     "ix_metadata_failure_reason_trgm",
                 }
             )
-                (await IndexState(connection, index)).Should().Be("valid, not unique", index);
+                (await IndexState(connection, index).ConfigureAwait(false))
+                    .Should()
+                    .Be("valid, not unique", index);
         });
     }
 
@@ -581,19 +587,23 @@ public class PostgresMigrationTests
     private static async Task<string> PlanWithoutSeqScan(string explain, string value)
     {
         var connectionString = GetConnectionString();
-        await DatabaseMigrator.Migrate(connectionString);
+        await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-        await Exec(connection, "SET LOCAL enable_seqscan = off;");
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var transaction = await connection.BeginTransactionAsync().ConfigureAwait(false);
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
+        await Exec(connection, "SET LOCAL enable_seqscan = off;").ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = explain;
         command.Parameters.AddWithValue("value", value);
         var plan = new List<string>();
-        await using (var rows = await command.ExecuteReaderAsync())
-            while (await rows.ReadAsync())
+        var rows = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using (rows.ConfigureAwait(false))
+            while (await rows.ReadAsync().ConfigureAwait(false))
                 plan.Add(rows.GetString(0));
         return string.Join('\n', plan);
     }
@@ -618,96 +628,30 @@ public class PostgresMigrationTests
             async connectionString =>
             {
                 const int drafts = 25_000;
-                string storage;
-                await using (var before = new NpgsqlConnection(connectionString))
-                {
-                    await before.OpenAsync();
-                    await Exec(
-                        before,
-                        "INSERT INTO trax.snapshot_draft "
-                            + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
-                            + "SELECT gen_random_uuid(), 'user-' || (n % 7), 'machine-' || (n % 3), 1, 'Draft', "
-                            + $"'{{}}'::jsonb, gen_random_uuid(), now() FROM generate_series(1, {drafts}) AS n"
-                    );
-                    storage = await Filenode(before, "snapshot_draft");
-                }
+                var storage = await SeedDrafts(connectionString, drafts).ConfigureAwait(false);
 
-                await DatabaseMigrator.Migrate(connectionString);
+                await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-                await using var connection = new NpgsqlConnection(connectionString);
-                await connection.OpenAsync();
+                var connection = new NpgsqlConnection(connectionString);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
 
-                (await Filenode(connection, "snapshot_draft"))
+                (await Filenode(connection, "snapshot_draft").ConfigureAwait(false))
                     .Should()
                     .Be(storage, "no statement of the upgrade rewrote the table");
                 (
                     await ExternalIds(
-                        connection,
-                        "SELECT count(*) || ' ' || count(row_id) || ' ' || count(DISTINCT row_id) "
-                            + "FROM trax.snapshot_draft"
-                    )
+                            connection,
+                            "SELECT count(*) || ' ' || count(row_id) || ' ' || count(DISTINCT row_id) "
+                                + "FROM trax.snapshot_draft"
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .Equal([$"{drafts} {drafts} {drafts}"], "every draft has a key of its own");
-                (
-                    await ExternalIds(
-                        connection,
-                        "SELECT c.conname || ' ' || a.attname FROM pg_constraint c "
-                            + "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) "
-                            + "WHERE c.conrelid = 'trax.snapshot_draft'::regclass AND c.contype = 'p'"
-                    )
-                )
-                    .Should()
-                    .Equal("pk_snapshot_draft row_id");
-                (
-                    await ExternalIds(
-                        connection,
-                        "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'trax' "
-                            + "AND table_name = 'snapshot_draft' AND column_name = 'row_id'"
-                    )
-                )
-                    .Should()
-                    .Equal("NO");
-                (
-                    await ExternalIds(
-                        connection,
-                        "SELECT conname || ' ' || convalidated FROM pg_constraint "
-                            + "WHERE conrelid = 'trax.snapshot_draft'::regclass AND contype = 'c'"
-                    )
-                )
-                    .Should()
-                    .Equal(
-                        ["ck_snapshot_draft_owner true"],
-                        "the owner check is proved, and the check that stood in for NOT NULL's scan is gone"
-                    );
-                foreach (
-                    var index in new[]
-                    {
-                        "ux_snapshot_draft_user_machine_id",
-                        "ux_snapshot_draft_system_machine_id",
-                        "ux_snapshot_draft_invoke_token",
-                    }
-                )
-                    (await IndexState(connection, index)).Should().Be("valid, unique", index);
+                await AssertDraftKeyChecksAndIndexes(connection).ConfigureAwait(false);
 
-                // A host still on the previous version inserts naming neither column, and the row is
-                // keyed after every existing one.
-                await Exec(
-                    connection,
-                    "INSERT INTO trax.snapshot_draft "
-                        + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
-                        + "VALUES (gen_random_uuid(), 'late', 'machine-0', 1, 'Draft', '{}'::jsonb, "
-                        + "gen_random_uuid(), now())"
-                );
-                (
-                    await ExternalIds(
-                        connection,
-                        "SELECT (row_id > (SELECT max(row_id) FROM trax.snapshot_draft WHERE user_key <> 'late'))::text "
-                            + "|| ' ' || owner_kind FROM trax.snapshot_draft WHERE user_key = 'late'"
-                    )
-                )
-                    .Should()
-                    .Equal("true user");
+                await AssertLateInsertIsKeyedLast(connection).ConfigureAwait(false);
             }
         );
 
@@ -718,31 +662,33 @@ public class PostgresMigrationTests
             45,
             async connectionString =>
             {
-                await using var connection = new NpgsqlConnection(connectionString);
-                await connection.OpenAsync();
+                var connection = new NpgsqlConnection(connectionString);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
 
                 // Two queued entries under one subject make a unique build of 046's index fail
                 // partway, which is the one way to leave an invalid index behind without killing
                 // a backend.
                 await Exec(
-                    connection,
-                    "INSERT INTO trax.work_queue (external_id, train_name, subject_key) VALUES "
-                        + "('invalid-a', 'A.Train', 'subject'), ('invalid-b', 'A.Train', 'subject');"
-                );
+                        connection,
+                        "INSERT INTO trax.work_queue (external_id, train_name, subject_key) VALUES "
+                            + "('invalid-a', 'A.Train', 'subject'), ('invalid-b', 'A.Train', 'subject');"
+                    )
+                    .ConfigureAwait(false);
                 var interrupted = () =>
                     Exec(
                         connection,
                         "CREATE UNIQUE INDEX CONCURRENTLY ix_work_queue_subject_queued "
                             + "ON trax.work_queue (subject_key);"
                     );
-                await interrupted.Should().ThrowAsync<PostgresException>();
-                (await IndexState(connection, "ix_work_queue_subject_queued"))
+                await interrupted.Should().ThrowAsync<PostgresException>().ConfigureAwait(false);
+                (await IndexState(connection, "ix_work_queue_subject_queued").ConfigureAwait(false))
                     .Should()
                     .Be("invalid", "the failed build leaves its index behind");
 
-                await DatabaseMigrator.Migrate(connectionString);
+                await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-                (await IndexState(connection, "ix_work_queue_subject_queued"))
+                (await IndexState(connection, "ix_work_queue_subject_queued").ConfigureAwait(false))
                     .Should()
                     .Be(
                         "valid, not unique",
@@ -772,18 +718,20 @@ public class PostgresMigrationTests
                     Timezone = "America/New_York",
                 }.ConnectionString;
 
-                await using var connection = new NpgsqlConnection(newYork);
-                await connection.OpenAsync();
+                var connection = new NpgsqlConnection(newYork);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
                 await Exec(
-                    connection,
-                    "INSERT INTO trax.work_queue (external_id, train_name, created_at) "
-                        + "VALUES ('before-049', 'A.Train', '2026-01-15 12:00:00');"
-                );
+                        connection,
+                        "INSERT INTO trax.work_queue (external_id, train_name, created_at) "
+                            + "VALUES ('before-049', 'A.Train', '2026-01-15 12:00:00');"
+                    )
+                    .ConfigureAwait(false);
 
                 string[] tables = ["work_queue", "manifest_group", "manifest"];
-                var before = new Dictionary<string, string>();
+                var before = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var table in tables)
-                    before[table] = await Filenode(connection, table);
+                    before[table] = await Filenode(connection, table).ConfigureAwait(false);
 
                 var result = DeployChanges
                     .To.PostgresqlDatabase(newYork)
@@ -798,7 +746,7 @@ public class PostgresMigrationTests
                 result.Successful.Should().BeTrue(result.Error?.ToString());
 
                 foreach (var table in tables)
-                    (await Filenode(connection, table))
+                    (await Filenode(connection, table).ConfigureAwait(false))
                         .Should()
                         .Be(
                             before[table],
@@ -807,10 +755,11 @@ public class PostgresMigrationTests
                         );
 
                 var stored = await ExternalIds(
-                    connection,
-                    "SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') "
-                        + "FROM trax.work_queue WHERE external_id = 'before-049';"
-                );
+                        connection,
+                        "SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') "
+                            + "FROM trax.work_queue WHERE external_id = 'before-049';"
+                    )
+                    .ConfigureAwait(false);
                 stored
                     .Should()
                     .Equal(
@@ -834,10 +783,12 @@ public class PostgresMigrationTests
             48,
             async connectionString =>
             {
-                await using var holder = new NpgsqlConnection(connectionString);
-                await holder.OpenAsync();
-                await using var held = await holder.BeginTransactionAsync();
-                await Exec(holder, "SELECT 1 FROM trax.work_queue LIMIT 1;");
+                var holder = new NpgsqlConnection(connectionString);
+                await using var holderDisposal = holder.ConfigureAwait(false);
+                await holder.OpenAsync().ConfigureAwait(false);
+                var held = await holder.BeginTransactionAsync().ConfigureAwait(false);
+                await using var heldDisposal = held.ConfigureAwait(false);
+                await Exec(holder, "SELECT 1 FROM trax.work_queue LIMIT 1;").ConfigureAwait(false);
 
                 var policy = new MigrationLockPolicy(
                     TimeSpan.FromMilliseconds(200),
@@ -845,13 +796,15 @@ public class PostgresMigrationTests
                     Backoff: TimeSpan.Zero
                 );
                 var migrate = () =>
-                    DatabaseMigrator.Migrate(connectionString, policy).WaitAsync(Bounded);
+                    DatabaseMigrator
+                        .Migrate(connectionString, policy, logger: null, TimeProvider.System)
+                        .WaitAsync(Bounded, TimeProvider.System);
 
-                (await migrate.Should().ThrowAsync<PostgresException>())
+                (await migrate.Should().ThrowAsync<PostgresException>().ConfigureAwait(false))
                     .Which.SqlState.Should()
                     .Be(PostgresErrorCodes.LockNotAvailable);
 
-                await held.RollbackAsync();
+                await held.RollbackAsync().ConfigureAwait(false);
             }
         );
     }
@@ -869,59 +822,47 @@ public class PostgresMigrationTests
                     ApplicationName = application,
                 }.ConnectionString;
 
-                await using var holder = new NpgsqlConnection(connectionString);
-                await holder.OpenAsync();
-                var held = await holder.BeginTransactionAsync();
-                await Exec(holder, "SELECT 1 FROM trax.work_queue LIMIT 1;");
+                var holder = new NpgsqlConnection(connectionString);
+                await using var holderDisposal = holder.ConfigureAwait(false);
+                await holder.OpenAsync().ConfigureAwait(false);
+                var held = await holder.BeginTransactionAsync().ConfigureAwait(false);
+                await Exec(holder, "SELECT 1 FROM trax.work_queue LIMIT 1;").ConfigureAwait(false);
 
                 var policy = new MigrationLockPolicy(
                     TimeSpan.FromMilliseconds(300),
                     Attempts: 50,
                     Backoff: TimeSpan.Zero
                 );
-                var migration = DatabaseMigrator.Migrate(named, policy);
+                var migration = DatabaseMigrator.Migrate(
+                    named,
+                    policy,
+                    logger: null,
+                    TimeProvider.System
+                );
 
-                // Two distinct waits by the script session prove the first one timed out and the
-                // script was run again. Only then is the lock released.
-                await using (var observer = new NpgsqlConnection(connectionString))
-                {
-                    await observer.OpenAsync();
-                    var waits = new HashSet<string>();
-                    var deadline = DateTime.UtcNow + Bounded;
-                    while (waits.Count < 2)
-                    {
-                        DateTime
-                            .UtcNow.Should()
-                            .BeBefore(deadline, "the script should have waited on the lock twice");
-                        migration.IsCompleted.Should().BeFalse("the lock is still held");
-                        foreach (
-                            var start in await ExternalIds(
-                                observer,
-                                "SELECT query_start::text FROM pg_stat_activity "
-                                    + $"WHERE application_name = '{application}' "
-                                    + "AND wait_event_type = 'Lock';"
-                            )
-                        )
-                            waits.Add(start);
-                        await Task.Yield();
-                    }
-                }
+                await WaitForTwoLockWaits(connectionString, application, migration)
+                    .ConfigureAwait(false);
 
-                await held.RollbackAsync();
-                await held.DisposeAsync();
+                await held.RollbackAsync().ConfigureAwait(false);
+                await held.DisposeAsync().ConfigureAwait(false);
 
-                await migration.WaitAsync(Bounded);
+                await migration.WaitAsync(Bounded, TimeProvider.System).ConfigureAwait(false);
 
-                await using var connection = new NpgsqlConnection(connectionString);
-                await connection.OpenAsync();
+                var connection = new NpgsqlConnection(connectionString);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
                 (
                     await ExternalIds(
-                        connection,
-                        "SELECT scriptname FROM trax.migrations ORDER BY scriptname;"
-                    )
+                            connection,
+                            "SELECT scriptname FROM trax.migrations ORDER BY scriptname;"
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Should()
-                    .HaveCount(EmbeddedScripts().Count, "every script ran once the lock was free");
+                    .HaveCount(
+                        (await EmbeddedScripts().ConfigureAwait(false)).Count,
+                        "every script ran once the lock was free"
+                    );
             }
         );
     }
@@ -936,101 +877,334 @@ public class PostgresMigrationTests
     {
         await WithEmptyDatabase(async connectionString =>
         {
-            await DatabaseMigrator.Migrate(connectionString);
+            await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
+            var connection = new NpgsqlConnection(connectionString);
+            await using var connectionDisposal = connection.ConfigureAwait(false);
+            await connection.OpenAsync().ConfigureAwait(false);
             await Exec(
-                connection,
-                "INSERT INTO trax.work_queue (external_id, train_name) VALUES "
-                    + "('consumer-a', 'A.Train'), ('consumer-b', 'A.Train');"
-            );
+                    connection,
+                    "INSERT INTO trax.work_queue (external_id, train_name) VALUES "
+                        + "('consumer-a', 'A.Train'), ('consumer-b', 'A.Train');"
+                )
+                .ConfigureAwait(false);
             var failed = () =>
                 Exec(
                     connection,
                     "CREATE UNIQUE INDEX CONCURRENTLY ix_consumer_work_queue_train "
                         + "ON trax.work_queue (train_name);"
                 );
-            await failed.Should().ThrowAsync<PostgresException>();
+            await failed.Should().ThrowAsync<PostgresException>().ConfigureAwait(false);
 
-            await DatabaseMigrator.Migrate(connectionString);
+            await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
-            (await IndexState(connection, "ix_consumer_work_queue_train"))
+            (await IndexState(connection, "ix_consumer_work_queue_train").ConfigureAwait(false))
                 .Should()
                 .Be("invalid", "the migrator drops only what a script builds again");
         });
     }
 
     [Test]
-    public void The_scripts_index_names_include_every_concurrently_built_index()
+    public async Task The_scripts_index_names_include_every_concurrently_built_index()
     {
-        DatabaseMigrator
-            .ScriptIndexNames.Should()
+        (await DatabaseMigrator.ScriptIndexNamesAsync().ConfigureAwait(false))
+            .Should()
             .Contain(["ix_work_queue_subject_queued", "ix_metadata_external_id"])
             .And.NotContain(name => name.EndsWith("_ccnew"));
     }
 
     [Test]
-    public void A_duplicate_met_while_building_a_scripts_unique_index_runs_the_scripts_again()
+    public async Task A_duplicate_met_while_building_a_scripts_unique_index_runs_the_scripts_again()
     {
-        static PostgresException Error(string sqlState, string? constraint) =>
-            new(
-                "could not create unique index",
-                "ERROR",
-                "ERROR",
-                sqlState,
-                constraintName: constraint
-            );
-
-        DatabaseMigrator
-            .IsRetryable(
-                Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
-            )
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
+                    IndexBuildError(
+                        PostgresErrorCodes.UniqueViolation,
+                        "ix_work_queue_unique_queued_replay"
+                    )
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue("migration 062 clears a duplicate queued replay before it builds the index");
-        DatabaseMigrator
-            .IsRetryable(
-                new InvalidOperationException(
-                    "wrapped",
-                    Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
+                    new InvalidOperationException(
+                        "wrapped",
+                        IndexBuildError(
+                            PostgresErrorCodes.UniqueViolation,
+                            "ix_work_queue_unique_queued_replay"
+                        )
+                    )
                 )
-            )
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.LockNotAvailable, null))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
+                    IndexBuildError(PostgresErrorCodes.LockNotAvailable, constraint: null)
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.UniqueViolation, "some_consumer_index"))
+        await AssertOtherIndexBuildErrorsAreNotRetriedAsync().ConfigureAwait(false);
+    }
+
+    private static async Task AssertOtherIndexBuildErrorsAreNotRetriedAsync()
+    {
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
+                    IndexBuildError(PostgresErrorCodes.UniqueViolation, "some_consumer_index")
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse("only an index a script builds again is retried");
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.UniqueViolation, null))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(
+                    IndexBuildError(PostgresErrorCodes.UniqueViolation, constraint: null)
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse();
-        DatabaseMigrator
-            .IsRetryable(Error(PostgresErrorCodes.SyntaxError, null))
+        (
+            await DatabaseMigrator
+                .IsRetryableAsync(IndexBuildError(PostgresErrorCodes.SyntaxError, constraint: null))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse();
     }
+
+    private static async Task SeedWorkQueueAges(NpgsqlConnection connection)
+    {
+        async Task Seed(string externalId, string status, string age) =>
+            await Exec(
+                    connection,
+                    "INSERT INTO trax.work_queue "
+                        + "(external_id, train_name, input, input_type_name, status, created_at) "
+                        + $"VALUES ('{externalId}', 'Some.Train', NULL, NULL, '{status}', "
+                        + $"(now() AT TIME ZONE 'utc') - interval '{age}');"
+                )
+                .ConfigureAwait(false);
+
+        await Seed("queued-old", "queued", "10 days").ConfigureAwait(false);
+        await Seed("cancelled-old", "cancelled", "10 days").ConfigureAwait(false);
+        // A dispatch that fails is put back to queued without touching confirmed_at, so one
+        // in flight across the migration has to come out of it confirmed.
+        await Seed("dispatched-recent", "dispatched", "1 hour").ConfigureAwait(false);
+        await Seed("dispatched-old", "dispatched", "10 days").ConfigureAwait(false);
+    }
+
+    private static async Task AssertUnconfirmedIndexHoldsOnlyQueued(NpgsqlConnection connection)
+    {
+        var unconfirmedIndex = await ExternalIds(
+                connection,
+                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' "
+                    + "AND indexname = 'ix_work_queue_unconfirmed';"
+            )
+            .ConfigureAwait(false);
+        unconfirmedIndex
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(
+                "'queued'",
+                "the sweep only looks for queued rows, and the dispatched history left null "
+                    + "must not sit in the index"
+            );
+    }
+
+    private static async Task SeedLogsBefore065(string connectionString)
+    {
+        var before = new NpgsqlConnection(connectionString);
+        await using (before.ConfigureAwait(false))
+        {
+            await before.OpenAsync().ConfigureAwait(false);
+            await Exec(
+                    before,
+                    "INSERT INTO trax.log (event_id, level, message, category) "
+                        + "VALUES (0, 'information', 'written before 065', 'Migration')"
+                )
+                .ConfigureAwait(false);
+            // Rows the writer already stored, outside a run and inside one, keep their
+            // value: the upgrade only fills the NULLs.
+            await Exec(
+                    before,
+                    "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                        + "VALUES (0, 0, 'information', 'no run before 065', 'Migration'), "
+                        + "(42, 0, 'information', 'a run before 065', 'Migration')"
+                )
+                .ConfigureAwait(false);
+        }
+    }
+
+    // Inserts the drafts and returns the table's storage file before the upgrade.
+    private static async Task<string> SeedDrafts(string connectionString, int drafts)
+    {
+        string storage;
+        var before = new NpgsqlConnection(connectionString);
+        await using (before.ConfigureAwait(false))
+        {
+            await before.OpenAsync().ConfigureAwait(false);
+            await Exec(
+                    before,
+                    "INSERT INTO trax.snapshot_draft "
+                        + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
+                        + "SELECT gen_random_uuid(), 'user-' || (n % 7), 'machine-' || (n % 3), 1, 'Draft', "
+                        + $"'{{}}'::jsonb, gen_random_uuid(), now() FROM generate_series(1, {drafts.ToString(CultureInfo.InvariantCulture)}) AS n"
+                )
+                .ConfigureAwait(false);
+            storage = await Filenode(before, "snapshot_draft").ConfigureAwait(false);
+        }
+
+        return storage;
+    }
+
+    private static async Task AssertDraftKeyChecksAndIndexes(NpgsqlConnection connection)
+    {
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT c.conname || ' ' || a.attname FROM pg_constraint c "
+                        + "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) "
+                        + "WHERE c.conrelid = 'trax.snapshot_draft'::regclass AND c.contype = 'p'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal("pk_snapshot_draft row_id");
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'trax' "
+                        + "AND table_name = 'snapshot_draft' AND column_name = 'row_id'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal("NO");
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT conname || ' ' || convalidated FROM pg_constraint "
+                        + "WHERE conrelid = 'trax.snapshot_draft'::regclass AND contype = 'c'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal(
+                ["ck_snapshot_draft_owner true"],
+                "the owner check is proved, and the check that stood in for NOT NULL's scan is gone"
+            );
+        foreach (
+            var index in new[]
+            {
+                "ux_snapshot_draft_user_machine_id",
+                "ux_snapshot_draft_system_machine_id",
+                "ux_snapshot_draft_invoke_token",
+            }
+        )
+            (await IndexState(connection, index).ConfigureAwait(false))
+                .Should()
+                .Be("valid, unique", index);
+    }
+
+    private static async Task AssertLateInsertIsKeyedLast(NpgsqlConnection connection)
+    {
+        // A host still on the previous version inserts naming neither column, and the row is
+        // keyed after every existing one.
+        await Exec(
+                connection,
+                "INSERT INTO trax.snapshot_draft "
+                    + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
+                    + "VALUES (gen_random_uuid(), 'late', 'machine-0', 1, 'Draft', '{}'::jsonb, "
+                    + "gen_random_uuid(), now())"
+            )
+            .ConfigureAwait(false);
+        (
+            await ExternalIds(
+                    connection,
+                    "SELECT (row_id > (SELECT max(row_id) FROM trax.snapshot_draft WHERE user_key <> 'late'))::text "
+                        + "|| ' ' || owner_kind FROM trax.snapshot_draft WHERE user_key = 'late'"
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Equal("true user");
+    }
+
+    private static async Task WaitForTwoLockWaits(
+        string connectionString,
+        string application,
+        Task migration
+    )
+    {
+        // Two distinct waits by the script session prove the first one timed out and the
+        // script was run again. Only then is the lock released.
+        var observer = new NpgsqlConnection(connectionString);
+        await using (observer.ConfigureAwait(false))
+        {
+            await observer.OpenAsync().ConfigureAwait(false);
+            var waits = new HashSet<string>(StringComparer.Ordinal);
+            var deadline = TimeProvider.System.GetUtcNow() + Bounded;
+            while (waits.Count < 2)
+            {
+                TimeProvider
+                    .System.GetUtcNow()
+                    .Should()
+                    .BeBefore(deadline, "the script should have waited on the lock twice");
+                migration.IsCompleted.Should().BeFalse("the lock is still held");
+                foreach (
+                    var start in await ExternalIds(
+                            observer,
+                            "SELECT query_start::text FROM pg_stat_activity "
+                                + $"WHERE application_name = '{application}' "
+                                + "AND wait_event_type = 'Lock';"
+                        )
+                        .ConfigureAwait(false)
+                )
+                    waits.Add(start);
+                await Task.Yield();
+            }
+        }
+    }
+
+    private static PostgresException IndexBuildError(string sqlState, string? constraint) =>
+        new(
+            "could not create unique index",
+            "ERROR",
+            "ERROR",
+            sqlState,
+            constraintName: constraint
+        );
 
     private static readonly TimeSpan Bounded = TimeSpan.FromSeconds(60);
 
     private static async Task<string> Filenode(NpgsqlConnection connection, string table) =>
         (
             await ExternalIds(connection, $"SELECT pg_relation_filenode('trax.{table}')::text;")
+                .ConfigureAwait(false)
         ).Single();
 
     private static async Task<string> IndexState(NpgsqlConnection connection, string index)
     {
         var state = await ExternalIds(
-            connection,
-            "SELECT CASE WHEN NOT i.indisvalid THEN 'invalid' "
-                + "WHEN i.indisunique THEN 'valid, unique' ELSE 'valid, not unique' END "
-                + "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
-                + $"WHERE c.relname = '{index}';"
-        );
+                connection,
+                "SELECT CASE WHEN NOT i.indisvalid THEN 'invalid' "
+                    + "WHEN i.indisunique THEN 'valid, unique' ELSE 'valid, not unique' END "
+                    + "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                    + $"WHERE c.relname = '{index}';"
+            )
+            .ConfigureAwait(false);
         return state.SingleOrDefault() ?? "missing";
     }
 
@@ -1044,27 +1218,30 @@ public class PostgresMigrationTests
             Database = $"trax_migration_{Guid.NewGuid():N}",
             Pooling = false,
         };
-        var database = builder.Database!;
+        var database = builder.Database.NotNull();
         var maintenance = new NpgsqlConnectionStringBuilder(builder.ConnectionString)
         {
             Database = "postgres",
         }.ConnectionString;
 
-        await using (var admin = new NpgsqlConnection(maintenance))
+        var admin = new NpgsqlConnection(maintenance);
+        await using (admin.ConfigureAwait(false))
         {
-            await admin.OpenAsync();
-            await Exec(admin, $"CREATE DATABASE {database}");
+            await admin.OpenAsync().ConfigureAwait(false);
+            await Exec(admin, $"CREATE DATABASE {database}").ConfigureAwait(false);
         }
 
         try
         {
-            await test(builder.ConnectionString);
+            await test(builder.ConnectionString).ConfigureAwait(false);
         }
         finally
         {
-            await using var admin = new NpgsqlConnection(maintenance);
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+            var dropper = new NpgsqlConnection(maintenance);
+            await using var dropperDisposal = dropper.ConfigureAwait(false);
+            await dropper.OpenAsync().ConfigureAwait(false);
+            await Exec(dropper, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
         }
     }
 
@@ -1073,55 +1250,83 @@ public class PostgresMigrationTests
         var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
         var resource = assembly
             .GetManifestResourceNames()
-            .Single(name => name.EndsWith("041_work_queue_confirmed_at.sql"));
-        await using var stream = assembly.GetManifestResourceStream(resource)!;
+            .Single(name =>
+                name.EndsWith("041_work_queue_confirmed_at.sql", StringComparison.Ordinal)
+            );
+        var stream = assembly.GetManifestResourceStream(resource).NotNull();
+        await using var streamDisposal = stream.ConfigureAwait(false);
         using var reader = new StreamReader(stream);
-        return await reader.ReadToEndAsync();
+        return await reader.ReadToEndAsync().ConfigureAwait(false);
     }
 
     /// <summary>The embedded Postgres scripts, by file name, in the order DbUp runs them.</summary>
-    private static List<(string Name, string Script)> EmbeddedScripts()
+    private static async Task<List<(string Name, string Script)>> EmbeddedScripts()
     {
         var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
-        return assembly
-            .GetManifestResourceNames()
-            .Where(name => name.EndsWith(".sql"))
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .Select(name =>
-            {
-                using var stream = assembly.GetManifestResourceStream(name)!;
-                using var reader = new StreamReader(stream);
-                return (
-                    name[(name.IndexOf(".Migrations.") + ".Migrations.".Length)..],
-                    reader.ReadToEnd()
-                );
-            })
-            .ToList();
+        var scripts = new List<(string Name, string Script)>();
+        foreach (
+            var name in assembly
+                .GetManifestResourceNames()
+                .Where(name => name.EndsWith(".sql", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
+        )
+        {
+            var stream = assembly.GetManifestResourceStream(name).NotNull();
+            await using var streamDisposal = stream.ConfigureAwait(false);
+            using var reader = new StreamReader(stream);
+            scripts.Add(
+                (
+                    name[
+                        (
+                            name.IndexOf(".Migrations.", StringComparison.Ordinal)
+                            + ".Migrations.".Length
+                        )..
+                    ],
+                    await reader.ReadToEndAsync().ConfigureAwait(false)
+                )
+            );
+        }
+        return scripts;
     }
 
-    private static int Number(string fileName) => int.Parse(fileName[..fileName.IndexOf('_')]);
+    private static int Number(string fileName) =>
+        int.Parse(
+            fileName[..fileName.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
 
     private static async Task<List<string>> ExternalIds(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
         var values = new List<string>();
-        await using var rows = await command.ExecuteReaderAsync();
-        while (await rows.ReadAsync())
+        var rows = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var rowsDisposal = rows.ConfigureAwait(false);
+        while (await rows.ReadAsync().ConfigureAwait(false))
             values.Add(rows.GetString(0));
         return values;
     }
 
     private static int MigrationNumber(string resourceName)
     {
-        var file = resourceName[(resourceName.IndexOf(".Migrations.") + ".Migrations.".Length)..];
-        return int.Parse(file[..file.IndexOf('_')]);
+        var file = resourceName[
+            (
+                resourceName.IndexOf(".Migrations.", StringComparison.Ordinal)
+                + ".Migrations.".Length
+            )..
+        ];
+        return int.Parse(
+            file[..file.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

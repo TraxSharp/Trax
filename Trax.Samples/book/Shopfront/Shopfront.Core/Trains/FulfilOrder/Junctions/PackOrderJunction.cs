@@ -4,7 +4,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.FulfilOrder.Junctions;
 
-internal class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction> logger)
+internal sealed class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction> logger)
     : EffectJunction<(FulfilOrderInput Order, ShippingLabel Label), FulfilOrderOutput>
 {
     public override async Task<FulfilOrderOutput> Run(
@@ -12,12 +12,14 @@ internal class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction
     )
     {
         logger.LogInformation("Packing order {OrderId}", input.Order.OrderId);
-        await warehouse.Pack(
-            input.Order.OrderId,
-            input.Order.Items,
-            input.Label.TrackingNumber,
-            CancellationToken
-        );
+        await warehouse
+            .Pack(
+                input.Order.OrderId,
+                input.Order.Items,
+                input.Label.TrackingNumber,
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         logger.LogInformation(
             "Packed order {OrderId} as {TrackingNumber}",
             input.Order.OrderId,

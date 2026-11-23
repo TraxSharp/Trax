@@ -10,4 +10,4 @@ namespace Trax.Effect.Models.Manifest;
 /// process that runs the manifest, because <see cref="Manifest.PropertyTypeName"/> is looked up
 /// by name across the loaded assemblies.
 /// </remarks>
-public interface IManifestProperties { }
+public interface IManifestProperties;

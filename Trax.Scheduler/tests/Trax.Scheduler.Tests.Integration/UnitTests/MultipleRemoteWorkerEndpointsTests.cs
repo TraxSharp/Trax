@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -28,7 +29,7 @@ public class MultipleRemoteWorkerEndpointsTests
     public async Task Each_routed_train_is_sent_to_its_own_endpoint_with_its_own_credentials()
     {
         var runner = new RecordingRunner();
-        using var provider = BuildProvider(
+        var provider = BuildProvider(
             runner,
             scheduler =>
                 scheduler
@@ -59,6 +60,7 @@ public class MultipleRemoteWorkerEndpointsTests
                         routing => routing.ForTrain<ICpuTrain>()
                     )
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var gpu = await Submit(provider, typeof(IGpuTrain), metadataId: 1);
         var cpu = await Submit(provider, typeof(ICpuTrain), metadataId: 2);
@@ -107,11 +109,15 @@ public class MultipleRemoteWorkerEndpointsTests
         long metadataId
     )
     {
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var routing = scope.ServiceProvider.GetRequiredService<JobSubmitterRoutingConfiguration>();
-        var submitter = routing.ResolveSubmitter(scope.ServiceProvider, train.FullName!);
+        var submitter = routing.ResolveSubmitter(scope.ServiceProvider, train.FullName.NotNull());
         submitter.Should().NotBeNull($"{train.Name} is routed");
-        await submitter!.EnqueueAsync(metadataId, CancellationToken.None);
+        await submitter
+            .NotNull()
+            .EnqueueAsync(metadataId, CancellationToken.None)
+            .ConfigureAwait(false);
         return submitter;
     }
 
@@ -166,15 +172,24 @@ public class MultipleRemoteWorkerEndpointsTests
             CancellationToken cancellationToken
         )
         {
-            var body = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
-            var job = JsonSerializer.Deserialize<RemoteJobRequest>(
-                body,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            )!;
+            var body = await request
+                .Content.NotNull()
+                .ReadAsByteArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var job = JsonSerializer
+                .Deserialize<RemoteJobRequest>(
+                    body,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        RespectNullableAnnotations = false,
+                        RespectRequiredConstructorParameters = false,
+                    }
+                )
+                .NotNull();
             lock (Requests)
                 Requests.Add(
                     new RecordedRequest(
-                        request.RequestUri!,
+                        request.RequestUri.NotNull(),
                         job.MetadataId,
                         request.Headers.TryGetValues("Authorization", out var values)
                             ? values.ToArray()

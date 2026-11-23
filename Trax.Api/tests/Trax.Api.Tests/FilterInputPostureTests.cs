@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -36,7 +37,7 @@ public class FilterInputPostureTests
     private const string NavigationWhere =
         "{ discover { inputPosts { nodes { title comments(where: { author: { email: { eq: \"ada@example.test\" } } }) { body } } } } }";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task StartAsync()
@@ -98,14 +99,14 @@ public class FilterInputPostureTests
     }
 
     [OneTimeTearDown]
-    public void StopAsync() => _host.Dispose();
+    public void StopAsync() => _host?.Dispose();
 
     // ── A type extension's filtered field ────────────────────────────────
 
     [Test]
     public async Task AnExtensionFieldsWhereThroughAGatedNavigation_RefusesAnAnonymousCaller()
     {
-        (await _host.PostAsync(ExtensionWhere))
+        (await _host.NotNull().PostAsync(ExtensionWhere))
             .Should()
             .Contain("TRAX_AUTHORIZATION", Adr)
             .And.NotContain("first");
@@ -114,7 +115,7 @@ public class FilterInputPostureTests
     [Test]
     public async Task AnExtensionFieldsWhereThroughAGatedNavigation_RefusesACallerWithoutTheRole()
     {
-        (await _host.PostAsync(ExtensionWhere, PostureHost.SupportKey))
+        (await _host.NotNull().PostAsync(ExtensionWhere, PostureHost.SupportKey))
             .Should()
             .Contain("TRAX_AUTHORIZATION", Adr)
             .And.NotContain("first");
@@ -123,7 +124,7 @@ public class FilterInputPostureTests
     [Test]
     public async Task AnExtensionFieldsWhereThroughAGatedNavigation_ServesACallerInTheRole()
     {
-        (await _host.PostAsync(ExtensionWhere, PostureHost.AdminKey))
+        (await _host.NotNull().PostAsync(ExtensionWhere, PostureHost.AdminKey))
             .Should()
             .Contain("\"first\"")
             .And.NotContain("\"second\"")
@@ -133,7 +134,7 @@ public class FilterInputPostureTests
     [Test]
     public async Task AnExtensionFieldsOrderThroughAGatedNavigation_RefusesAnAnonymousCaller()
     {
-        (await _host.PostAsync(ExtensionOrder))
+        (await _host.NotNull().PostAsync(ExtensionOrder))
             .Should()
             .Contain("TRAX_AUTHORIZATION", Adr)
             .And.NotContain("first");
@@ -142,7 +143,7 @@ public class FilterInputPostureTests
     [Test]
     public async Task AnExtensionFieldsOrderThroughAGatedNavigation_ServesACallerInTheRole()
     {
-        (await _host.PostAsync(ExtensionOrder, PostureHost.AdminKey))
+        (await _host.NotNull().PostAsync(ExtensionOrder, PostureHost.AdminKey))
             .Should()
             .Contain("\"first\"")
             .And.NotContain("\"errors\"");
@@ -152,9 +153,11 @@ public class FilterInputPostureTests
     public async Task AnExtensionFieldsWhereOverOpenColumns_ServesAnAnonymousCaller()
     {
         (
-            await _host.PostAsync(
-                "{ discover { searchInputPosts(where: { title: { eq: \"second\" } }) { title } } }"
-            )
+            await _host
+                .NotNull()
+                .PostAsync(
+                    "{ discover { searchInputPosts(where: { title: { eq: \"second\" } }) { title } } }"
+                )
         )
             .Should()
             .Contain("\"second\"")
@@ -166,7 +169,7 @@ public class FilterInputPostureTests
     [Test]
     public async Task ANavigationsWhereThroughAGatedNavigation_RefusesAnAnonymousCaller()
     {
-        (await _host.PostAsync(NavigationWhere))
+        (await _host.NotNull().PostAsync(NavigationWhere))
             .Should()
             .Contain("TRAX_AUTHORIZATION", Adr)
             .And.NotContain("by ada");
@@ -180,7 +183,7 @@ public class FilterInputPostureTests
     [Test]
     public async Task ANavigationsWhereThroughAGatedNavigation_AdmitsACallerInTheRole()
     {
-        (await _host.PostAsync(NavigationWhere, PostureHost.AdminKey))
+        (await _host.NotNull().PostAsync(NavigationWhere, PostureHost.AdminKey))
             .Should()
             .Contain("\"first\"")
             .And.NotContain("\"errors\"");
@@ -190,9 +193,11 @@ public class FilterInputPostureTests
     public async Task ANavigationsWhereOverOpenColumns_ServesAnAnonymousCaller()
     {
         (
-            await _host.PostAsync(
-                "{ discover { inputPosts { nodes { comments(where: { body: { eq: \"by bob\" } }) { body } } } } }"
-            )
+            await _host
+                .NotNull()
+                .PostAsync(
+                    "{ discover { inputPosts { nodes { comments(where: { body: { eq: \"by bob\" } }) { body } } } } }"
+                )
         )
             .Should()
             .Contain("\"by bob\"")
@@ -228,7 +233,7 @@ public class FilterInputPostureTests
         public InputOwner? Owner { get; set; }
 
         [UseFiltering]
-        public List<InputComment> Comments { get; set; } = [];
+        public IList<InputComment> Comments { get; set; } = [];
     }
 
     [TraxAuthorize(Roles = "Admin")]
@@ -263,7 +268,11 @@ public class FilterInputPostureTests
         {
             descriptor.Name("DiscoverQueries");
             descriptor
-                .Field<InputSearch>(s => s.SearchInputPosts(default!))
+                .Field<InputSearch>(s =>
+                    s.SearchInputPosts(
+                        Null.Of<Trax.Api.Tests.FilterInputPostureTests.InputPostureContext>()
+                    )
+                )
                 .UseFiltering()
                 .UseSorting();
         }

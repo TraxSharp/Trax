@@ -27,12 +27,14 @@ namespace Shopfront.Inventory;
 public class Catalogue(IShopfrontDbContext db)
 {
     // The price of each of these SKUs that the shop sells.
-    public Task<Dictionary<string, decimal>> PricesOf(
+    public async Task<IReadOnlyDictionary<string, decimal>> PricesOf(
         IReadOnlyCollection<string> skus,
         CancellationToken cancellationToken
     ) =>
-        db.Products.Where(p => skus.Contains(p.Sku))
-            .ToDictionaryAsync(p => p.Sku, p => p.Price, cancellationToken);
+        await db
+            .Products.Where(p => skus.Contains(p.Sku))
+            .ToDictionaryAsync(p => p.Sku, p => p.Price, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
 
     // Reserves every line or none of them. Returns the first SKU that is short, or null.
     public async Task<string?> TryReserve(
@@ -43,7 +45,8 @@ public class Catalogue(IShopfrontDbContext db)
         var skus = lines.Select(l => l.Sku).ToList();
         var products = await db
             .Products.Where(p => skus.Contains(p.Sku))
-            .ToDictionaryAsync(p => p.Sku, cancellationToken);
+            .ToDictionaryAsync(p => p.Sku, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
 
         var shortSku = lines
             .Where(l => products[l.Sku].Stock < l.Quantity)
@@ -57,7 +60,7 @@ public class Catalogue(IShopfrontDbContext db)
 
         // One transaction for every line. If another order changed one of these products since
         // it was read, nothing is saved and DbUpdateConcurrencyException says so.
-        await db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return null;
     }
 
@@ -74,7 +77,8 @@ public class Catalogue(IShopfrontDbContext db)
                 .ExecuteUpdateAsync(
                     set => set.SetProperty(p => p.Stock, p => p.Stock + quantity),
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
     }
 }
 ```
@@ -97,7 +101,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction> logger)
+internal sealed class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction> logger)
     : EffectJunction<PlaceOrderInput, PricedCart>
 {
     public override async Task<PricedCart> Run(PlaceOrderInput input)
@@ -105,10 +109,9 @@ internal class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction>
         if (input.Lines.Count == 0)
             throw new TrainException("The cart is empty.");
 
-        var prices = await catalogue.PricesOf(
-            [.. input.Lines.Select(l => l.Sku)],
-            CancellationToken
-        );
+        var prices = await catalogue
+            .PricesOf([.. input.Lines.Select(l => l.Sku)], CancellationToken)
+            .ConfigureAwait(false);
 
         var lines = input
             .Lines.Select(line =>
@@ -138,15 +141,16 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class ReserveStockJunction(Catalogue catalogue, ILogger<ReserveStockJunction> logger)
-    : EffectJunction<PricedCart, StockReservation>
+internal sealed class ReserveStockJunction(
+    Catalogue catalogue,
+    ILogger<ReserveStockJunction> logger
+) : EffectJunction<PricedCart, StockReservation>
 {
     public override async Task<StockReservation> Run(PricedCart cart)
     {
-        var shortSku = await catalogue.TryReserve(
-            [.. cart.Lines.Select(l => (l.Sku, l.Quantity))],
-            CancellationToken
-        );
+        var shortSku = await catalogue
+            .TryReserve([.. cart.Lines.Select(l => (l.Sku, l.Quantity))], CancellationToken)
+            .ConfigureAwait(false);
         if (shortSku is not null)
             throw new TrainException($"{shortSku} is out of stock.");
 

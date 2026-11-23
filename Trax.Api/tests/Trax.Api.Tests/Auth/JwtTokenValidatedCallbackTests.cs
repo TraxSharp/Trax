@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -26,20 +27,22 @@ public class JwtTokenValidatedCallbackTests
     [Test]
     public async Task OnTokenValidated_NullPrincipal_FailsContext()
     {
-        using var sp = BuildProvider(new StubResolver());
+        var sp = BuildProvider(new StubResolver());
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var ctx = NewContext(sp, opts, principal: null, token: new JwtSecurityToken());
 
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure!.Message.Should().Contain("without a principal");
+        ctx.Result.NotNull().Failure.NotNull().Message.Should().Contain("without a principal");
     }
 
     [Test]
     public async Task OnTokenValidated_NullSecurityToken_FailsContext()
     {
-        using var sp = BuildProvider(new StubResolver());
+        var sp = BuildProvider(new StubResolver());
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewContext(sp, opts, principal, token: null);
@@ -47,7 +50,7 @@ public class JwtTokenValidatedCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure!.Message.Should().Contain("without a principal");
+        ctx.Result.NotNull().Failure.NotNull().Message.Should().Contain("without a principal");
     }
 
     [Test]
@@ -62,7 +65,8 @@ public class JwtTokenValidatedCallbackTests
         );
         services.Remove(resolver);
 
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewContext(sp, opts, principal, token: new JwtSecurityToken());
@@ -70,13 +74,17 @@ public class JwtTokenValidatedCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure!.Message.Should().Contain("ITraxPrincipalResolver<JwtTokenInput>");
+        ctx.Result.NotNull()
+            .Failure.NotNull()
+            .Message.Should()
+            .Contain("ITraxPrincipalResolver<JwtTokenInput>");
     }
 
     [Test]
     public async Task OnTokenValidated_ResolverReturnsNull_FailsContext()
     {
-        using var sp = BuildProvider(new StubResolver(returns: null));
+        var sp = BuildProvider(new StubResolver(returns: null));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewContext(sp, opts, principal, token: new JwtSecurityToken());
@@ -84,14 +92,15 @@ public class JwtTokenValidatedCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure!.Message.Should().Contain("known Trax principal");
+        ctx.Result.NotNull().Failure.NotNull().Message.Should().Contain("known Trax principal");
     }
 
     [Test]
     public async Task OnTokenValidated_ResolverThrows_FailsWithException()
     {
         var boom = new InvalidOperationException("resolver explosion");
-        using var sp = BuildProvider(new StubResolver(throws: boom));
+        var sp = BuildProvider(new StubResolver(throws: boom));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewContext(sp, opts, principal, token: new JwtSecurityToken());
@@ -99,7 +108,7 @@ public class JwtTokenValidatedCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure.Should().BeSameAs(boom);
+        ctx.Result.NotNull().Failure.Should().BeSameAs(boom);
     }
 
     [Test]
@@ -112,7 +121,8 @@ public class JwtTokenValidatedCallbackTests
             Claims: null,
             PrincipalType: JwtDefaults.PrincipalType
         );
-        using var sp = BuildProvider(new StubResolver(returns: trax));
+        var sp = BuildProvider(new StubResolver(returns: trax));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var input = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u-1")], "test"));
         var ctx = NewContext(sp, opts, input, token: new JwtSecurityToken());
@@ -121,7 +131,10 @@ public class JwtTokenValidatedCallbackTests
 
         ctx.Result.Should().BeNull();
         ctx.Principal.Should().NotBeSameAs(input);
-        ctx.Principal!.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("TraxJwt:u-1");
+        ctx.Principal.NotNull()
+            .FindFirst(TraxAuthClaimTypes.PrincipalId)
+            ?.Value.Should()
+            .Be("TraxJwt:u-1");
     }
 
     [Test]
@@ -150,7 +163,8 @@ public class JwtTokenValidatedCallbackTests
             new StubResolver(throws: new Exception("must not run"))
         );
 
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewContext(sp, opts, principal, token: new JwtSecurityToken());
@@ -158,7 +172,7 @@ public class JwtTokenValidatedCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Succeeded.Should().BeTrue();
+        ctx.Result.NotNull().Succeeded.Should().BeTrue();
     }
 
     private static ServiceProvider BuildProvider(StubResolver resolver)
@@ -185,13 +199,13 @@ public class JwtTokenValidatedCallbackTests
         var http = new DefaultHttpContext { RequestServices = sp };
         var scheme = new AuthenticationScheme(
             JwtDefaults.SchemeName,
-            null,
+            displayName: null,
             typeof(JwtBearerHandler)
         );
         var ctx = new TokenValidatedContext(http, scheme, opts)
         {
             Principal = principal,
-            SecurityToken = token!,
+            SecurityToken = token ?? Null.Of<Microsoft.IdentityModel.Tokens.SecurityToken>(),
         };
         return ctx;
     }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -24,7 +25,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
 
     private static string NewUser() => $"u-{Guid.NewGuid():N}";
 
-    private static DateTimeOffset LongAgo => DateTimeOffset.UtcNow.AddHours(-1);
+    private static DateTimeOffset LongAgo => TimeProvider.System.GetUtcNow().AddHours(-1);
 
     private InstanceHost Host(TimeSpan? ttl, Action<IServiceCollection>? services = null) =>
         InstanceHost.Create(provider, draftTtl: ttl, services: services);
@@ -35,7 +36,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     private static async Task<Guid> Saved(InstanceHost host, string user, string json)
     {
         var id = Guid.NewGuid();
-        await host.SeedDraft(user, id, json);
+        await host.SeedDraft(user, id, json).ConfigureAwait(false);
         return id;
     }
 
@@ -47,7 +48,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     )
     {
         using var scope = host.Scope();
-        return await host.Service(scope, machine).Load(user, id);
+        return await host.Service(scope, machine).Load(user, id).ConfigureAwait(false);
     }
 
     [Test]
@@ -61,7 +62,8 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
         // would be kept past it as the record of what the server did.)
         await host.SeedDraft(user, old, PlainTimerMachine.Json("Waiting"));
         await host.SeedDraft(user, young, PlainTimerMachine.Json("Waiting"));
-        (await RawSql.Timer(host, old))!
+        (await RawSql.Timer(host, old))
+            .NotNull()
             .DueAt.Should()
             .NotBeNull("Waiting's timer keeps it past its TTL");
         await Born(host, old, StateMachineOptions.DefaultMaxDraftLifetime + TimeSpan.FromDays(1));
@@ -80,11 +82,12 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     private static async Task Born(InstanceHost host, Guid id, TimeSpan ago)
     {
         using var scope = host.Scope();
-        DateTimeOffset? at = DateTimeOffset.UtcNow - ago;
+        DateTimeOffset? at = TimeProvider.System.GetUtcNow() - ago;
         await scope
-            .ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>()
+            .ServiceProvider.GetRequiredService<Effect.Data.Services.DataContext.IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
-            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at));
+            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at))
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -141,7 +144,11 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
         using var host = Host(ttl: null);
         var user = NewUser();
         var id = await Saved(host, user, TestTurnstile.UnlockedJson);
-        await host.Backdate(id, SnapshotOwnerKind.User, DateTimeOffset.UtcNow.AddYears(-1));
+        await host.Backdate(
+            id,
+            SnapshotOwnerKind.User,
+            TimeProvider.System.GetUtcNow().AddYears(-1)
+        );
 
         await Sweeper(host).SweepOnce();
 
@@ -170,17 +177,24 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
                 $"an idle instance in a state only the server puts it in is the host's to keep. See {Adr}"
             )
             .Which;
-        loaded.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        loaded.Snapshot.Context["receipt"].NotNull().GetValue<string>().Should().Be("receipt-1");
         effect.Calls.Should().Be(1);
     }
 
     private static async Task<Snapshot> PlaceOrder(InstanceHost host, string user, Guid id)
     {
         // An order has an effect, so the generic save does not serve it: the review draft is seeded through the store.
-        await host.Seed(user, id, TestDb.Parse(OrderMachine.ReviewSnapshot(1)));
+        await host.Seed(user, id, TestDb.Parse(OrderMachine.ReviewSnapshot(1)))
+            .ConfigureAwait(false);
         using var scope = host.Scope();
         var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
-        return (await registry.EffectRunner("order")!.Run(user, id, $"send-{Guid.NewGuid()}"))
+        return (
+            await registry
+                .EffectRunner("order")
+                .NotNull()
+                .Run(user, id, $"send-{Guid.NewGuid()}")
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot;

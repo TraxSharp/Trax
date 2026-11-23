@@ -1,0 +1,9 @@
+# The code tools/sync-upstream.sh copies from Meziantou.Analyzer keeps upstream's layout, so the
+# next sync is a readable diff. Trax's own files in this folder are formatted as everywhere else.
+src/Trax.Analyzers/**/*.cs
+src/Trax.Analyzers.CodeFixers/**/*.cs
+src/Trax.Analyzers.Annotations/**/*.cs
+src/Trax.Analyzers.Roslyn/
+src/Trax.Analyzers.Polyfills/
+tests/Trax.Analyzers.Tests/**/*.cs
+!tests/Trax.Analyzers.Tests/NuGetPackages.cs

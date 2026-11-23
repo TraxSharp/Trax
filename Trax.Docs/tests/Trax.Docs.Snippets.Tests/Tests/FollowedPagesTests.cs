@@ -67,10 +67,9 @@ public class FollowedPagesTests
     }
 
     [Test]
-    public void FileWord_IsNotOnAnUncompiledCSharpFence()
+    public async Task FileWord_IsNotOnAnUncompiledCSharpFence()
     {
-        var offenders = Fences
-            .OnPublishedPages()
+        var offenders = (await Fences.OnPublishedPagesAsync().ConfigureAwait(false))
             .Where(f => f.File is not null && f.IsCSharp && !f.IsCompiled)
             .Select(f => f.Location)
             .ToList();
@@ -88,7 +87,7 @@ public class FollowedPagesTests
     }
 
     [Test]
-    public void PageInAChain_NamesTheFileOfEveryCompiledFence_OncePerGroup()
+    public async Task PageInAChain_NamesTheFileOfEveryCompiledFence_OncePerGroup()
     {
         var pages = Pages();
         var inChain = pages
@@ -97,7 +96,7 @@ public class FollowedPagesTests
             .ToHashSet(StringComparer.Ordinal);
 
         var units = SnippetUnit
-            .Own(Fences.OnPublishedPages())
+            .Own(await Fences.OnPublishedPagesAsync().ConfigureAwait(false))
             .Where(u => inChain.Contains(u.Page))
             .ToList();
 
@@ -105,11 +104,11 @@ public class FollowedPagesTests
             .SelectMany(u => u.Fences)
             .Where(f => f.File is null)
             .Select(f => $"{f.Location}  names no file")
-            .Distinct();
+            .Distinct(StringComparer.Ordinal);
         var twice = units.SelectMany(u =>
             u.Fences.Where(f => f.File is not null)
-                .GroupBy(f => f.File)
-                .Where(g => g.Count() > 1)
+                .GroupBy(f => f.File, StringComparer.Ordinal)
+                .Where(g => g.Skip(1).Any())
                 .Select(g => $"{u.Page} [{u.Group}]  names {g.Key} {g.Count()} times")
         );
         var offenders = unnamed.Concat(twice).ToList();

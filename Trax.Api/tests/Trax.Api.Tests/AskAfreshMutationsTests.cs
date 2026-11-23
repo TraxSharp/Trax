@@ -14,8 +14,10 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -56,8 +58,8 @@ public class AskAfreshMutationsTests
 {
     private const string Database = "trax_api_ask_afresh";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -69,20 +71,21 @@ public class AskAfreshMutationsTests
             t.AddEffects(e => e.UsePostgres(AuthE2EHost.ConnectionString(Database)))
         );
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         await ((DbContext)db).Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.dead_letter, trax.work_queue, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
         );
@@ -128,7 +131,7 @@ public class AskAfreshMutationsTests
                 var jobs = JobsOver(Scheduler);
                 var job = await mutations.RequeueAllDeadLetters(jobs, default, askAfresh);
                 await FinishedAsync(jobs, job.Id);
-                jobs.Get(job.Id)!.Count.Should().Be(1);
+                jobs.Get(job.Id).NotNull().Count.Should().Be(1);
                 break;
         }
 
@@ -161,14 +164,14 @@ public class AskAfreshMutationsTests
                 manifest.ExternalId,
                 TimeSpan.FromMinutes(1),
                 Scheduler,
-                _factory,
+                _factory.NotNull(),
                 default,
                 askAfresh
             )
             : await mutations.TriggerManifest(
                 manifest.ExternalId,
                 Scheduler,
-                _factory,
+                _factory.NotNull(),
                 default,
                 askAfresh
             );
@@ -191,9 +194,9 @@ public class AskAfreshMutationsTests
             ReplayDecisionsOf: 77
         );
         await SeedManifestAsync("m");
-        scheduler.TriggerAsync("m", true, Arg.Any<CancellationToken>()).Returns(claimed);
+        scheduler.TriggerAsync("m", askAfresh: true, Arg.Any<CancellationToken>()).Returns(claimed);
         scheduler
-            .TriggerAsync("m", Arg.Any<TimeSpan>(), true, Arg.Any<CancellationToken>())
+            .TriggerAsync("m", Arg.Any<TimeSpan>(), askAfresh: true, Arg.Any<CancellationToken>())
             .Returns(claimed);
         var mutations = new OperationsMutations();
 
@@ -202,11 +205,17 @@ public class AskAfreshMutationsTests
                 "m",
                 TimeSpan.FromMinutes(1),
                 scheduler,
-                _factory,
+                _factory.NotNull(),
                 default,
                 askAfresh: true
             )
-            : await mutations.TriggerManifest("m", scheduler, _factory, default, askAfresh: true);
+            : await mutations.TriggerManifest(
+                "m",
+                scheduler,
+                _factory.NotNull(),
+                default,
+                askAfresh: true
+            );
 
         response.Success.Should().BeTrue();
         response
@@ -221,13 +230,21 @@ public class AskAfreshMutationsTests
         await SeedManifestAsync("m");
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
-            .TriggerAsync("m", true, Arg.Any<CancellationToken>())
-            .Returns(new ManifestTriggerResult(9, false, null, false, null));
+            .TriggerAsync("m", askAfresh: true, Arg.Any<CancellationToken>())
+            .Returns(
+                new ManifestTriggerResult(
+                    9,
+                    Created: false,
+                    ScheduledAt: null,
+                    AlreadyDispatched: false,
+                    ReplayDecisionsOf: null
+                )
+            );
 
         var response = await new OperationsMutations().TriggerManifest(
             "m",
             scheduler,
-            _factory,
+            _factory.NotNull(),
             default,
             askAfresh: true
         );
@@ -245,7 +262,7 @@ public class AskAfreshMutationsTests
 
         var off = await mutations.SetManifestsReplayDecisionsOnRetry(
             [manifest.Id],
-            false,
+            replay: false,
             Operations,
             default
         );
@@ -255,11 +272,12 @@ public class AskAfreshMutationsTests
         (
             await queries.GetManifestDetail(
                 manifest.Id,
-                _factory,
+                _factory.NotNull(),
                 Substitute.For<ITrainDiscoveryService>(),
                 default
             )
-        )!
+        )
+            .NotNull()
             .ReplayDecisionsOnRetry.Should()
             .BeFalse();
         (await QueuedEntryAsync(manifest.Id))
@@ -268,7 +286,7 @@ public class AskAfreshMutationsTests
 
         var again = await mutations.SetManifestsReplayDecisionsOnRetry(
             [manifest.Id],
-            false,
+            replay: false,
             Operations,
             default
         );
@@ -276,7 +294,7 @@ public class AskAfreshMutationsTests
 
         var on = await mutations.SetManifestsReplayDecisionsOnRetry(
             [manifest.Id],
-            true,
+            replay: true,
             Operations,
             default
         );
@@ -284,11 +302,12 @@ public class AskAfreshMutationsTests
         (
             await queries.GetManifestDetail(
                 manifest.Id,
-                _factory,
+                _factory.NotNull(),
                 Substitute.For<ITrainDiscoveryService>(),
                 default
             )
-        )!
+        )
+            .NotNull()
             .ReplayDecisionsOnRetry.Should()
             .BeTrue();
     }
@@ -298,7 +317,7 @@ public class AskAfreshMutationsTests
     {
         var response = await new OperationsMutations().SetManifestsReplayDecisionsOnRetry(
             [],
-            false,
+            replay: false,
             Operations,
             default
         );
@@ -316,7 +335,7 @@ public class AskAfreshMutationsTests
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
             .RequeueDeadLetterAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new DeadLetterOperationResult(true, 1, "ok"));
+            .Returns(new DeadLetterOperationResult(Success: true, 1, "ok"));
         scheduler
             .RequeueDeadLettersAsync(Arg.Any<long[]>(), Arg.Any<CancellationToken>())
             .Returns(new BatchDeadLetterResult(1, "ok"));
@@ -325,12 +344,17 @@ public class AskAfreshMutationsTests
             .Returns(new BatchDeadLetterResult(1, "ok"));
 
         await SeedManifestAsync("m");
-        await new OperationsMutations().TriggerManifest("m", scheduler, _factory, default);
+        await new OperationsMutations().TriggerManifest(
+            "m",
+            scheduler,
+            _factory.NotNull(),
+            default
+        );
         await new OperationsMutations().TriggerManifestDelayed(
             "m",
             TimeSpan.FromMinutes(1),
             scheduler,
-            _factory,
+            _factory.NotNull(),
             default
         );
         await new DeadLetterMutations().RequeueDeadLetter(1, scheduler, default);
@@ -393,7 +417,7 @@ public class AskAfreshMutationsTests
         await scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
-                false,
+                askAfresh: false,
                 Arg.Any<IProgress<int>?>(),
                 Arg.Any<CancellationToken>()
             );
@@ -462,22 +486,29 @@ public class AskAfreshMutationsTests
 
         await operations
             .Received(1)
-            .TriggerManifestAsync("m", null, true, Arg.Any<CancellationToken>());
+            .TriggerManifestAsync("m", delay: null, askAfresh: true, Arg.Any<CancellationToken>());
         await operations
             .Received(1)
-            .TriggerManifestAsync("m", TimeSpan.FromMinutes(5), true, Arg.Any<CancellationToken>());
-        await scheduler.Received(1).RequeueDeadLetterAsync(1, true, Arg.Any<CancellationToken>());
+            .TriggerManifestAsync(
+                "m",
+                TimeSpan.FromMinutes(5),
+                askAfresh: true,
+                Arg.Any<CancellationToken>()
+            );
+        await scheduler
+            .Received(1)
+            .RequeueDeadLetterAsync(1, askAfresh: true, Arg.Any<CancellationToken>());
         await scheduler
             .Received(1)
             .RequeueDeadLettersAsync(
                 Arg.Is<long[]>(ids => ids != null && ids.SequenceEqual(new[] { 1L })),
-                true,
+                askAfresh: true,
                 Arg.Any<CancellationToken>()
             );
         await scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
-                true,
+                askAfresh: true,
                 Arg.Any<IProgress<int>?>(),
                 Arg.Any<CancellationToken>()
             );
@@ -487,10 +518,12 @@ public class AskAfreshMutationsTests
                 Arg.Is<IReadOnlyCollection<long>>(ids =>
                     ids != null && ids.SequenceEqual(new[] { 1L })
                 ),
-                false,
+                replay: false,
                 Arg.Any<CancellationToken>()
             );
-        await operations.Received(1).RequeueExecutionAsync(1, true, Arg.Any<CancellationToken>());
+        await operations
+            .Received(1)
+            .RequeueExecutionAsync(1, askAfresh: true, Arg.Any<CancellationToken>());
         await host.StopAsync();
     }
 
@@ -501,12 +534,23 @@ public class AskAfreshMutationsTests
     )> StartHostAsync()
     {
         // The triggers refuse an unknown manifest, so the one the documents name exists.
-        await SeedManifestAsync("m");
+        await SeedManifestAsync("m").ConfigureAwait(false);
 
+        var scheduler = CreateScheduler();
+        var operations = CreateOperations();
+
+        var host = BuildHost(scheduler, operations);
+
+        await host.StartAsync().ConfigureAwait(false);
+        return (host, scheduler, operations);
+    }
+
+    private static ITraxScheduler CreateScheduler()
+    {
         var scheduler = Substitute.For<ITraxScheduler>();
         scheduler
             .RequeueDeadLetterAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new DeadLetterOperationResult(true, 1, "ok"));
+            .Returns(new DeadLetterOperationResult(Success: true, 1, "ok"));
         scheduler
             .RequeueDeadLettersAsync(
                 Arg.Any<long[]>(),
@@ -523,7 +567,15 @@ public class AskAfreshMutationsTests
             .Returns(new BatchDeadLetterResult(1, "ok"));
         scheduler
             .TriggerAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new ManifestTriggerResult(1, true, null, false, null));
+            .Returns(
+                new ManifestTriggerResult(
+                    1,
+                    Created: true,
+                    ScheduledAt: null,
+                    AlreadyDispatched: false,
+                    ReplayDecisionsOf: null
+                )
+            );
         scheduler
             .TriggerAsync(
                 Arg.Any<string>(),
@@ -531,11 +583,24 @@ public class AskAfreshMutationsTests
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new ManifestTriggerResult(1, true, null, false, null));
+            .Returns(
+                new ManifestTriggerResult(
+                    1,
+                    Created: true,
+                    ScheduledAt: null,
+                    AlreadyDispatched: false,
+                    ReplayDecisionsOf: null
+                )
+            );
+        return scheduler;
+    }
+
+    private static IOperationsService CreateOperations()
+    {
         var operations = Substitute.For<IOperationsService>();
         operations
             .RequeueExecutionAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
         operations
             .TriggerManifestAsync(
                 Arg.Any<string>(),
@@ -545,9 +610,15 @@ public class AskAfreshMutationsTests
             )
             .Returns(
                 new TriggerManifestResult(
-                    true,
+                    Success: true,
                     "triggered",
-                    new ManifestTriggerResult(1, true, null, false, null)
+                    new ManifestTriggerResult(
+                        1,
+                        Created: true,
+                        ScheduledAt: null,
+                        AlreadyDispatched: false,
+                        ReplayDecisionsOf: null
+                    )
                 )
             );
         operations
@@ -556,9 +627,13 @@ public class AskAfreshMutationsTests
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
+        return operations;
+    }
 
-        var host = new HostBuilder()
+    private IHost BuildHost(ITraxScheduler scheduler, IOperationsService operations)
+    {
+        return new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
@@ -574,7 +649,7 @@ public class AskAfreshMutationsTests
                         discovery.DiscoverTrains().Returns([]);
                         services.AddSingleton(discovery);
                         services.AddSingleton(Substitute.For<IEffectRegistry>());
-                        services.AddSingleton(_factory);
+                        services.AddSingleton(_factory.NotNull());
                         services.AddTraxGraphQL(graphql =>
                             graphql
                                 .ExposeOperationQueries()
@@ -598,9 +673,6 @@ public class AskAfreshMutationsTests
                     })
             )
             .Build();
-
-        await host.StartAsync();
-        return (host, scheduler, operations);
     }
 
     private static async Task<JsonDocument> PostAsync(IHost host, string query, string? apiKey)
@@ -613,8 +685,8 @@ public class AskAfreshMutationsTests
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     #endregion
@@ -623,7 +695,7 @@ public class AskAfreshMutationsTests
 
     private ITraxScheduler Scheduler =>
         new TraxScheduler(
-            _factory,
+            _factory.NotNull(),
             Substitute.For<Trax.Mediator.Services.TrainRegistry.ITrainRegistry>(),
             Substitute.For<ICancellationRegistry>(),
             NullLogger<TraxScheduler>.Instance
@@ -632,7 +704,7 @@ public class AskAfreshMutationsTests
     private IOperationsService Operations =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             new ServiceCollection()
@@ -649,7 +721,7 @@ public class AskAfreshMutationsTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(scheduler);
-        services.AddSingleton(_factory);
+        services.AddSingleton(_factory.NotNull());
         return new DeadLetterRequeueJobs(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             NullLogger<DeadLetterRequeueJobs>.Instance,
@@ -663,7 +735,7 @@ public class AskAfreshMutationsTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         while (jobs.Get(id)?.Status == DeadLetterRequeueJobStatus.Running)
             // determinism: the poll interval of a wait bounded by the timeout above.
-            await Task.Delay(10, timeout.Token);
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
     }
 
     /// <summary>Waits for a background requeue-all to call the scheduler.</summary>
@@ -674,69 +746,88 @@ public class AskAfreshMutationsTests
             !scheduler
                 .ReceivedCalls()
                 .Any(c =>
-                    c.GetMethodInfo().Name == nameof(ITraxScheduler.RequeueAllDeadLettersAsync)
+                    string.Equals(
+                        c.GetMethodInfo().Name,
+                        nameof(ITraxScheduler.RequeueAllDeadLettersAsync),
+                        StringComparison.Ordinal
+                    )
                 )
         )
             // determinism: the poll interval of a wait bounded by the timeout above.
-            await Task.Delay(10, timeout.Token);
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
     }
 
     /// <summary>A manifest with this external id, so a trigger for it is not refused as unknown.</summary>
     private async Task SeedManifestAsync(string externalId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var group = new ManifestGroup
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
+            var group = new ManifestGroup
+            {
+                Name = $"group-{Guid.NewGuid():N}",
+                IsEnabled = true,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
-        manifest.ManifestGroupId = group.Id;
-        manifest.ExternalId = externalId;
-        await db.Track(manifest);
-        await db.SaveChanges(default);
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
+            manifest.ManifestGroupId = group.Id;
+            manifest.ExternalId = externalId;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<(Manifest Manifest, long FailedRun)> SeedFailedManifestAsync()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-
-        var group = new ManifestGroup
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
+            var group = new ManifestGroup
+            {
+                Name = $"group-{Guid.NewGuid():N}",
+                IsEnabled = true,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
-        manifest.ManifestGroupId = group.Id;
-        manifest.PropertyTypeName = "Trax.X.AskAfreshInput";
-        manifest.Properties = "{\"v\":1}";
-        await db.Track(manifest);
-        await db.SaveChanges(default);
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IAskAfreshTrain) });
+            manifest.ManifestGroupId = group.Id;
+            manifest.PropertyTypeName = "Trax.X.AskAfreshInput";
+            manifest.Properties = "{\"v\":1}";
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
+            var runId = await SeedFailedRunWithDecisionAsync(db, manifest).ConfigureAwait(false);
+            return (manifest, runId);
+        }
+    }
+
+    private static async Task<long> SeedFailedRunWithDecisionAsync(
+        IDataContext db,
+        Manifest manifest
+    )
+    {
         var run = Metadata.Create(
             new CreateMetadata
             {
                 Name = manifest.Name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         run.ManifestId = manifest.Id;
         run.TrainState = TrainState.Failed;
         run.DecisionsRecorded = true;
-        run.StartTime = DateTime.UtcNow.AddMinutes(-5);
-        await db.Track(run);
-        await db.SaveChanges(default);
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
+        await db.Track(run).ConfigureAwait(false);
+        await db.SaveChanges(default).ConfigureAwait(false);
 
         var ranFrom = WorkQueue.Create(
             new CreateWorkQueue
@@ -745,11 +836,12 @@ public class AskAfreshMutationsTests
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         ranFrom.Status = WorkQueueStatus.Dispatched;
         ranFrom.MetadataId = run.Id;
-        await db.Track(ranFrom);
+        await db.Track(ranFrom).ConfigureAwait(false);
 
         db.RecordedDecisions.Add(
             new RecordedDecision
@@ -761,53 +853,65 @@ public class AskAfreshMutationsTests
                 Question = """{"text":"Which lane?"}""",
                 Answer = """{"choice":"Fast"}""",
                 Fingerprint = "fingerprint",
-                DecidedAt = DateTime.UtcNow.AddMinutes(-5),
+                DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5),
             }
         );
-        await db.SaveChanges(default);
-        return (manifest, run.Id);
+        await db.SaveChanges(default).ConfigureAwait(false);
+        return run.Id;
     }
 
     private async Task<long> SeedDeadLetterAsync(Manifest manifest)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var deadLetter = DeadLetter.Create(
-            new CreateDeadLetter
-            {
-                Manifest = manifest,
-                Reason = "failed",
-                RetryCount = 0,
-            }
-        );
-        await db.Track(deadLetter);
-        await db.SaveChanges(default);
-        return deadLetter.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var deadLetter = DeadLetter.Create(
+                new CreateDeadLetter
+                {
+                    Manifest = manifest,
+                    Reason = "failed",
+                    RetryCount = 0,
+                },
+                TimeProvider.System
+            );
+            await db.Track(deadLetter).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return deadLetter.Id;
+        }
     }
 
     private async Task SeedQueuedRetryAsync(Manifest manifest, long failedRun)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var retry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = manifest.Name,
-                Input = manifest.Properties,
-                InputTypeName = manifest.PropertyTypeName,
-                ManifestId = manifest.Id,
-                ScheduledAt = DateTime.UtcNow.AddHours(1),
-            }
-        );
-        retry.ReplayDecisionsOf = failedRun;
-        await db.Track(retry);
-        await db.SaveChanges(default);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var retry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = manifest.Name,
+                    Input = manifest.Properties,
+                    InputTypeName = manifest.PropertyTypeName,
+                    ManifestId = manifest.Id,
+                    ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                },
+                TimeProvider.System
+            );
+            retry.ReplayDecisionsOf = failedRun;
+            await db.Track(retry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<WorkQueue> QueuedEntryAsync(long manifestId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        return await db
-            .WorkQueues.AsNoTracking()
-            .SingleAsync(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .WorkQueues.AsNoTracking()
+                .SingleAsync(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued)
+                .ConfigureAwait(false);
+        }
     }
 
     public interface IAskAfreshTrain;

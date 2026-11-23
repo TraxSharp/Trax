@@ -51,4 +51,4 @@ namespace Trax.Effect.Attributes;
     AllowMultiple = false,
     Inherited = true
 )]
-public sealed class TraxSensitiveAttribute : Attribute { }
+public sealed class TraxSensitiveAttribute : Attribute;

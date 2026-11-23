@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 
 namespace Trax.Effect.Tests.Broadcaster.UnitTests;
@@ -32,25 +33,27 @@ public class RabbitMqReceiverRestartTests
     private static IConnection? ConnectionOf(RabbitMqTrainEventReceiver receiver) =>
         (IConnection?)
             typeof(RabbitMqTrainEventReceiver)
-                .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
                 .GetValue(receiver);
 
     [Test]
     public async Task StartAsync_CalledAgain_ClosesTheConnectionTheFirstStartOpened()
     {
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             Options(),
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
         await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
-        var first = ConnectionOf(receiver)!;
+        var first = ConnectionOf(receiver).NotNull();
 
         await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
 
         first
             .IsOpen.Should()
             .BeFalse("a restart replaces the receiver's connection rather than adding one");
-        ConnectionOf(receiver)!.IsOpen.Should().BeTrue();
+        ConnectionOf(receiver).NotNull().IsOpen.Should().BeTrue();
     }
 
     [Test]
@@ -60,24 +63,32 @@ public class RabbitMqReceiverRestartTests
         // An exchange of another type under the same name makes the receiver's declare fail
         // after its connection is open.
         var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
-        await using (var setup = await factory.CreateConnectionAsync())
-        await using (var channel = await setup.CreateChannelAsync())
+        var setup = await factory.CreateConnectionAsync();
+        await using (setup.ConfigureAwait(false))
         {
-            await channel.ExchangeDeclareAsync(
-                options.ExchangeName,
-                ExchangeType.Direct,
-                durable: false,
-                autoDelete: true
-            );
+            var channel = await setup.CreateChannelAsync(cancellationToken: CancellationToken.None);
+            await using (channel.ConfigureAwait(false))
+            {
+                await channel.ExchangeDeclareAsync(
+                    options.ExchangeName,
+                    ExchangeType.Direct,
+                    durable: false,
+                    autoDelete: true,
+                    cancellationToken: CancellationToken.None
+                );
+            }
         }
 
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             options,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var start = async () =>
-            await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
+            await receiver
+                .StartAsync((_, _) => Task.CompletedTask, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await start.Should().ThrowAsync<Exception>();
         var connection = ConnectionOf(receiver);

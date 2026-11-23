@@ -16,6 +16,7 @@ using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Projection;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.TypeModules;
@@ -52,10 +53,8 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                 var objectType = (ITypeSystemMember)
                     CreateObjectTypeMethod
                         .MakeGenericMethod(reg.EntityType)
-                        .Invoke(
-                            null,
-                            [reg.Attribute, reg.AuthorizeAttributes, reg.AllowAnonymous]
-                        )!;
+                        .Invoke(null, [reg.Attribute, reg.AuthorizeAttributes, reg.AllowAnonymous])
+                        .NotNull();
                 types.Add(objectType);
             }
         }
@@ -63,8 +62,9 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         // Group model registrations by namespace. A namespace that holds any query model is
         // owned by this module: it declares the namespace type and its field on DiscoverQueries,
         // and TrainTypeModule only extends the type with its train fields.
-        var byNamespace = registrations.GroupBy(r =>
-            r.Attribute.Namespace is { } ns ? TrainTypeModule.CamelCase(ns) : null
+        var byNamespace = registrations.GroupBy(
+            r => r.Attribute.Namespace is { } ns ? TrainTypeModule.CamelCase(ns) : null,
+            StringComparer.Ordinal
         );
 
         foreach (var group in byNamespace)
@@ -100,17 +100,13 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         return new(types);
     }
 
-    private static readonly MethodInfo CreateObjectTypeMethod =
-        typeof(QueryModelTypeModule).GetMethod(
-            nameof(CreateObjectType),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+    private static readonly MethodInfo CreateObjectTypeMethod = typeof(QueryModelTypeModule)
+        .GetMethod(nameof(CreateObjectType), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
-    private static readonly MethodInfo ConfigureFieldMethod =
-        typeof(QueryModelTypeModule).GetMethod(
-            nameof(ConfigureField),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+    private static readonly MethodInfo ConfigureFieldMethod = typeof(QueryModelTypeModule)
+        .GetMethod(nameof(ConfigureField), BindingFlags.NonPublic | BindingFlags.Static)
+        .NotNull();
 
     private static void AddModelQueryField(
         IObjectTypeDescriptor descriptor,
@@ -176,6 +172,23 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         if (attr.Projection)
             field.Use(QueryModelProjection.CreateMiddleware<TEntity>());
 
+        UseFilteringAndSorting<TEntity>(field, reg);
+
+        field.Resolve(ctx =>
+        {
+            var dbContext = (DbContext)ctx.Services.GetRequiredService(reg.DbContextType);
+            return dbContext.Set<TEntity>();
+        });
+    }
+
+    private static void UseFilteringAndSorting<TEntity>(
+        IObjectFieldDescriptor field,
+        QueryModelRegistration reg
+    )
+        where TEntity : class
+    {
+        var attr = reg.Attribute;
+
         // Filtering and sorting follow the exposed field set: the input types are bound to the
         // entity in the conventions (see GraphQLServiceExtensions), so a model's own entry field
         // and every navigation reaching it from another model offer the same fields its object
@@ -195,12 +208,6 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
             else
                 field.UseSorting<QueryModelSortInputType<TEntity>>();
         }
-
-        field.Resolve(ctx =>
-        {
-            var dbContext = (DbContext)ctx.Services.GetRequiredService(reg.DbContextType);
-            return dbContext.Set<TEntity>();
-        });
     }
 
     private static ObjectType<TEntity> CreateObjectType<TEntity>(
@@ -223,30 +230,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         // re-emit the directive on an anonymous entity.
         if (attr.ExposeAs is { } exposeAs)
         {
-            var allowedNames = GetExposedPropertyNames(exposeAs);
-
-            return new ObjectType<TEntity>(descriptor =>
-            {
-                descriptor.BindFieldsExplicitly();
-
-                foreach (
-                    var prop in typeof(TEntity).GetProperties(
-                        BindingFlags.Public | BindingFlags.Instance
-                    )
-                )
-                {
-                    // Property names on the entity that also appear on the
-                    // exposed interface get bound; everything else is hidden.
-                    // Explicit interface implementations don't have matching
-                    // public properties on the entity and are silently skipped
-                    // (the build-time validator surfaces this as an error).
-                    if (allowedNames.Contains(prop.Name))
-                        descriptor.Field(prop);
-                }
-
-                if (!allowAnonymous)
-                    AuthorizeDirectives.Apply(descriptor, authorizeAttributes);
-            });
+            return ExposedAsObjectType<TEntity>(exposeAs, authorizeAttributes, allowAnonymous);
         }
 
         if (attr.BindFields != FieldBindingBehavior.Explicit)
@@ -269,7 +253,41 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                 )
             )
             {
-                if (prop.GetCustomAttribute<ColumnAttribute>() is not null)
+                if (Attribute.IsDefined(prop, typeof(ColumnAttribute)))
+                    descriptor.Field(prop);
+            }
+
+            if (!allowAnonymous)
+                AuthorizeDirectives.Apply(descriptor, authorizeAttributes);
+        });
+    }
+
+    // The type built from the ExposeAs interface's property set.
+    private static ObjectType<TEntity> ExposedAsObjectType<TEntity>(
+        Type exposeAs,
+        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes,
+        bool allowAnonymous
+    )
+        where TEntity : class
+    {
+        var allowedNames = GetExposedPropertyNames(exposeAs);
+
+        return new ObjectType<TEntity>(descriptor =>
+        {
+            descriptor.BindFieldsExplicitly();
+
+            foreach (
+                var prop in typeof(TEntity).GetProperties(
+                    BindingFlags.Public | BindingFlags.Instance
+                )
+            )
+            {
+                // Property names on the entity that also appear on the
+                // exposed interface get bound; everything else is hidden.
+                // Explicit interface implementations don't have matching
+                // public properties on the entity and are silently skipped
+                // (the build-time validator surfaces this as an error).
+                if (allowedNames.Contains(prop.Name))
                     descriptor.Field(prop);
             }
 
@@ -321,19 +339,19 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
     internal static string Pluralize(string name)
     {
         if (
-            name.EndsWith("s", StringComparison.Ordinal)
-            || name.EndsWith("x", StringComparison.Ordinal)
-            || name.EndsWith("z", StringComparison.Ordinal)
+            name.EndsWith('s')
+            || name.EndsWith('x')
+            || name.EndsWith('z')
             || name.EndsWith("ch", StringComparison.Ordinal)
             || name.EndsWith("sh", StringComparison.Ordinal)
         )
             return name + "es";
 
-        if (name.EndsWith("y", StringComparison.Ordinal) && name.Length > 1 && !IsVowel(name[^2]))
+        if (name.EndsWith('y') && name.Length > 1 && !IsVowel(name[^2]))
             return name[..^1] + "ies";
 
         return name + "s";
     }
 
-    private static bool IsVowel(char c) => "aeiouAEIOU".Contains(c);
+    private static bool IsVowel(char c) => "aeiouAEIOU".Contains(c, StringComparison.Ordinal);
 }

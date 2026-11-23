@@ -1,6 +1,8 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Globalization;
 using Trax.Cli.Deploy;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Commands;
@@ -48,41 +50,50 @@ internal static class DeployCommand
         foreach (var subcommand in DeployAwsCommands.Create())
             command.Subcommands.Add(subcommand);
         command.SetAction(
-            (parseResult, ct) =>
-            {
-                var path =
-                    parseResult.GetValue(file)?.FullName
-                    ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
-                var environment = parseResult.GetValue(env);
-                var chosen =
-                    parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
-                if (chosen != "aws")
-                    return Task.FromResult(
-                        Run(
-                            chosen,
-                            path,
-                            parseResult.GetValue(output)?.FullName,
-                            parseResult.GetValue(build),
-                            new DotnetHostExporter(ct),
-                            BuildImage
-                        )
-                    );
-                if (environment is null)
-                {
-                    Console.Error.WriteLine(
-                        "--target aws deploys one environment: name it with --env."
-                    );
-                    return Task.FromResult(1);
-                }
-                return DeployAwsCommands.DeployAsync(
-                    path,
-                    environment,
-                    new DotnetHostExporter(ct),
-                    ct
-                );
-            }
+            (parseResult, ct) => RunActionAsync(parseResult, target, env, file, output, build, ct)
         );
         return command;
+    }
+
+    private static async Task<int> RunActionAsync(
+        ParseResult parseResult,
+        Option<string?> target,
+        Option<string> env,
+        Option<FileInfo?> file,
+        Option<DirectoryInfo?> output,
+        Option<bool> build,
+        CancellationToken ct
+    )
+    {
+        var stdout = parseResult.InvocationConfiguration.Output;
+        var stderr = parseResult.InvocationConfiguration.Error;
+        var path =
+            parseResult.GetValue(file)?.FullName
+            ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
+        var environment = parseResult.GetValue(env);
+        var chosen = parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
+        if (!string.Equals(chosen, "aws", StringComparison.Ordinal))
+            return await RunAsync(
+                    chosen,
+                    path,
+                    parseResult.GetValue(output)?.FullName,
+                    parseResult.GetValue(build),
+                    new DotnetHostExporter(ct),
+                    BuildImageAsync,
+                    stdout,
+                    stderr
+                )
+                .ConfigureAwait(false);
+        if (environment is null)
+        {
+            await stderr
+                .WriteLineAsync("--target aws deploys one environment: name it with --env.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+        return await DeployAwsCommands
+            .DeployAsync(path, environment, new DotnetHostExporter(ct), stdout, stderr, ct)
+            .ConfigureAwait(false);
     }
 
     private static Command CreateInit()
@@ -119,26 +130,31 @@ internal static class DeployCommand
             region,
             domain,
         };
-        init.SetAction(parseResult =>
-            Init(
-                Directory.GetCurrentDirectory(),
-                parseResult.GetValue(app),
-                parseResult.GetValue(force),
-                parseResult.GetValue(target) ?? "compose",
-                parseResult.GetValue(region),
-                parseResult.GetValue(domain)
-            )
+        init.SetAction(
+            (parseResult, _) =>
+                InitAsync(
+                    Directory.GetCurrentDirectory(),
+                    parseResult.GetValue(app),
+                    parseResult.GetValue(force),
+                    parseResult.GetValue(target) ?? "compose",
+                    parseResult.GetValue(region),
+                    parseResult.GetValue(domain),
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error
+                )
         );
         return init;
     }
 
-    internal static int Init(
+    internal static async Task<int> InitAsync(
         string directory,
         string? app,
         bool force,
-        string target = "compose",
-        string? region = null,
-        string? domain = null
+        string target,
+        string? region,
+        string? domain,
+        TextWriter stdout,
+        TextWriter stderr
     )
     {
         try
@@ -153,7 +169,7 @@ internal static class DeployCommand
                     $"{path} exists. Edit it, or pass --force to write a new one over it."
                 );
             var file = DeployInit.Create(directory, app);
-            if (target == "aws")
+            if (string.Equals(target, "aws", StringComparison.Ordinal))
                 file.Environments["production"] = new DeployEnvironment
                 {
                     Profile = DeployEnvironment.Production,
@@ -161,51 +177,58 @@ internal static class DeployCommand
                     Domain = domain ?? $"{file.App}.example.com",
                     Auth = new DeployAuth(),
                 };
-            File.WriteAllText(path, file.Write());
-            Console.WriteLine($"Wrote {path}:");
+            await File.WriteAllTextAsync(path, file.Write()).ConfigureAwait(false);
+            await stdout.WriteLineAsync($"Wrote {path}:").ConfigureAwait(false);
             foreach (var (name, service) in file.Services)
-                Console.WriteLine($"  {name, -12}{service.Project}");
-            Console.WriteLine(
-                target == "aws"
-                    ? "Check the production environment's region, domain and hostedZoneId, name the settings and "
-                        + "secrets the hosts read, then run 'trax deploy plan --env production'."
-                    : "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'."
-            );
+                await stdout
+                    .WriteLineAsync($"  {name, -12}{service.Project}")
+                    .ConfigureAwait(false);
+            await stdout
+                .WriteLineAsync(
+                    string.Equals(target, "aws", StringComparison.Ordinal)
+                        ? "Check the production environment's region, domain and hostedZoneId, name the settings and "
+                            + "secrets the hosts read, then run 'trax deploy plan --env production'."
+                        : "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'."
+                )
+                .ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex) when (Reported(ex))
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
 
-    internal static int Run(
+    internal static async Task<int> RunAsync(
         string target,
         string filePath,
         string? outDir,
         bool build,
         IHostExporter exporter,
-        Action<string, string> buildImage
+        Func<string, string, Task> buildImage,
+        TextWriter stdout,
+        TextWriter stderr
     )
     {
         try
         {
-            if (target != "compose")
+            if (!string.Equals(target, "compose", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"--target '{target}' is not one trax deploys to. Use compose, or aws with --env."
                 );
-            var file = DeployFile.Read(filePath);
-            var exports = Export(file, filePath, exporter);
+            var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+            var exports = await ExportAsync(file, filePath, exporter, stdout).ConfigureAwait(false);
 
-            var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath))!;
+            var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
             var files = ComposeTarget.Render(file, exports);
             var compose = Path.Combine(dir, ComposeTarget.ComposeFile);
             if (
                 File.Exists(compose)
-                && !File.ReadLines(compose)
-                    .FirstOrDefault()
-                    ?.StartsWith(ComposeTarget.Header, StringComparison.Ordinal)
+                && !(await FirstLineAsync(compose).ConfigureAwait(false))?.StartsWith(
+                    ComposeTarget.Header,
+                    StringComparison.Ordinal
+                )
                     is true
             )
                 throw new InvalidOperationException(
@@ -214,29 +237,37 @@ internal static class DeployCommand
             Directory.CreateDirectory(dir);
             foreach (var (name, content) in files)
             {
-                File.WriteAllText(Path.Combine(dir, name), content);
-                Console.WriteLine($"Wrote {Path.Combine(dir, name)}");
+                await File.WriteAllTextAsync(Path.Combine(dir, name), content)
+                    .ConfigureAwait(false);
+                await stdout
+                    .WriteLineAsync($"Wrote {Path.Combine(dir, name)}")
+                    .ConfigureAwait(false);
             }
 
             if (build)
                 foreach (var (name, service) in file.Services)
                 {
-                    Console.WriteLine($"Building {ComposeTarget.ImageName(file, name)}...");
-                    buildImage(
-                        DeployFile.ProjectPath(filePath, service),
-                        ComposeTarget.ImageName(file, name)
-                    );
+                    await stdout
+                        .WriteLineAsync($"Building {ComposeTarget.ImageName(file, name)}...")
+                        .ConfigureAwait(false);
+                    await buildImage(
+                            DeployFile.ProjectPath(filePath, service),
+                            ComposeTarget.ImageName(file, name)
+                        )
+                        .ConfigureAwait(false);
                 }
 
-            Console.WriteLine(
-                $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run 'docker compose up -d' "
-                    + $"(or 'podman compose up -d') in {dir}."
-            );
+            await stdout
+                .WriteLineAsync(
+                    $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run 'docker compose up -d' "
+                        + $"(or 'podman compose up -d') in {dir}."
+                )
+                .ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex) when (Reported(ex))
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }
@@ -254,30 +285,40 @@ internal static class DeployCommand
                 or System.ComponentModel.Win32Exception;
 
     /// <summary>Asks each service's host what it needs, by running it once with --trax-export-deploy.</summary>
-    internal static Dictionary<string, DeployManifest> Export(
+    internal static async Task<Dictionary<string, DeployManifest>> ExportAsync(
         DeployFile file,
         string filePath,
-        IHostExporter exporter
+        IHostExporter exporter,
+        TextWriter stdout
     )
     {
         var placeholders = DotnetHostExporter.Placeholders(file);
         var exports = new Dictionary<string, DeployManifest>(StringComparer.Ordinal);
         foreach (var (name, service) in file.Services)
         {
-            Console.WriteLine($"Asking {name} what it needs ({service.Project})...");
-            exports[name] = exporter.Export(
-                DeployFile.ProjectPath(filePath, service),
-                placeholders
-            );
+            await stdout
+                .WriteLineAsync($"Asking {name} what it needs ({service.Project})...")
+                .ConfigureAwait(false);
+            exports[name] = await exporter
+                .ExportAsync(DeployFile.ProjectPath(filePath, service), placeholders)
+                .ConfigureAwait(false);
         }
         return exports;
     }
 
-    private static void BuildImage(string projectPath, string repository)
+    // The first line of a file, or null when it is empty.
+    private static async Task<string?> FirstLineAsync(string path)
+    {
+        using var reader = new StreamReader(path);
+        return await reader.ReadLineAsync().ConfigureAwait(false);
+    }
+
+    private static async Task BuildImageAsync(string projectPath, string repository)
     {
         var psi = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            WorkingDirectory = Path.GetDirectoryName(projectPath).NotNull(),
+            UseShellExecute = false,
         };
         foreach (
             var arg in new[]
@@ -292,10 +333,13 @@ internal static class DeployCommand
             }
         )
             psi.ArgumentList.Add(arg);
-        var (exit, stdout, stderr) = ChildProcess.Run(psi);
+        var (exit, stdout, stderr) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
         if (exit != 0)
             throw new InvalidOperationException(
-                $"Building the {repository} image failed (exit {exit}):\n{stdout}{stderr}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Building the {repository} image failed (exit {exit}):\n{stdout}{stderr}"
+                )
             );
     }
 }

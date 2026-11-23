@@ -502,7 +502,7 @@ public interface ITraxScheduler
     /// <param name="askAfresh">True queues every run to ask its deciders afresh.</param>
     /// <param name="progress">
     /// Told the running total of dead letters resolved after each page commits, on the fold's own
-    /// thread; <c>null</c> reports nothing. An implementation that predates this overload runs
+    /// thread; <see langword="null"/> reports nothing. An implementation that predates this overload runs
     /// the fold without reporting.
     /// </param>
     /// <param name="ct">Cancellation token.</param>

@@ -52,7 +52,7 @@ internal sealed class HotChocolateOperationCacheInvalidator
 
     /// <summary>
     /// Schema name captured at <c>ConfigureSchema</c> time so we know which executor's
-    /// caches to reach. <c>null</c> resolves to HotChocolate's default schema.
+    /// caches to reach. <see langword="null"/> resolves to HotChocolate's default schema.
     /// </summary>
     public void SetSchemaName(string? schemaName) => _schemaName = schemaName;
 

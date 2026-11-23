@@ -12,11 +12,11 @@ namespace Trax.Cli.Commands;
 /// </remarks>
 internal static class TraxCommandLine
 {
-    public static RootCommand Create() =>
+    public static async Task<RootCommand> CreateAsync() =>
         new("Trax CLI — generate Trax API projects from schemas, and deploy them")
         {
             GenerateCommand.Create(),
-            MachineCommand.Create(),
+            await MachineCommand.CreateAsync().ConfigureAwait(false),
             ClientCommand.Create(),
             LexiconCommand.Create(),
             DeployCommand.Create(),
@@ -27,5 +27,6 @@ internal static class TraxCommandLine
         ResponseFileTokenReplacer = null,
     };
 
-    public static ParseResult Parse(string[] args) => Create().Parse(args, Configuration);
+    public static async Task<ParseResult> ParseAsync(string[] args) =>
+        (await CreateAsync().ConfigureAwait(false)).Parse(args, Configuration);
 }

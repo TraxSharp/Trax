@@ -10,8 +10,15 @@ grand_parent: SDK Reference
 nav_order: 12
 source:
   - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineTypeModule.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineContextField.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineContextFields.cs
   - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineSurface.cs
-  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineChanged.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineChange.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineChangedSubscription.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/IMachineIrOrder.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineWatchLimits.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineChangedStream.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachinePushExtension.cs
 ---
 
 # Machines root

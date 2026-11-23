@@ -1,7 +1,9 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -34,7 +36,7 @@ public class DatabaseClockSkewTests
     /// <summary>How far a written time may be from the expected one: the test's own run time.</summary>
     private static readonly TimeSpan Tolerance = TimeSpan.FromMinutes(1);
 
-    private SchedulerE2EFixture _fx = null!;
+    private SchedulerE2EFixture? _fx;
 
     [OneTimeSetUp]
     public async Task CreateSkewedClock()
@@ -42,12 +44,15 @@ public class DatabaseClockSkewTests
         await using var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
+        command.CommandText = string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
             CREATE SCHEMA IF NOT EXISTS clock_skew;
             CREATE OR REPLACE FUNCTION clock_skew.now() RETURNS timestamptz
                 LANGUAGE sql STABLE AS $$ SELECT pg_catalog.now() + interval '{(int)
                 Skew.TotalHours} hours' $$;
-            """;
+            """
+        );
         await command.ExecuteNonQueryAsync();
     }
 
@@ -55,7 +60,8 @@ public class DatabaseClockSkewTests
     public async Task TearDown()
     {
         if (_fx is not null)
-            await _fx.DisposeAsync();
+            if (_fx is not null)
+                await _fx.DisposeAsync();
     }
 
     private static string SkewedConnectionString =>
@@ -66,62 +72,74 @@ public class DatabaseClockSkewTests
 
     private async Task CreateFixture(bool failingSubmitter = false)
     {
-        _fx = await SchedulerE2EFixture.CreateAsync(
-            scheduler =>
-            {
-                if (failingSubmitter)
-                    scheduler.OverrideSubmitter(s =>
-                        s.AddScoped<IJobSubmitter, FailingJobSubmitter>()
-                    );
-            },
-            connectionString: SkewedConnectionString
-        );
+        _fx = await SchedulerE2EFixture
+            .CreateAsync(
+                scheduler =>
+                {
+                    if (failingSubmitter)
+                        scheduler.OverrideSubmitter(s =>
+                            s.AddScoped<IJobSubmitter, FailingJobSubmitter>()
+                        );
+                },
+                connectionString: SkewedConnectionString
+            )
+            .ConfigureAwait(false);
 
         // The skew is in place: the database's clock, as the scheduler reads it, is ahead.
-        (await DatabaseNow())
+        (await DatabaseNow().ConfigureAwait(false))
             .Should()
-            .BeCloseTo(DateTime.UtcNow + Skew, Tolerance, "the test's clock skew must apply");
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew,
+                Tolerance,
+                "the test's clock skew must apply"
+            );
     }
 
     [Test]
     public async Task A_manifests_retry_backoff_is_due_by_the_database_clock()
     {
         await CreateFixture();
-        _fx.Configuration.DefaultRetryDelay = TimeSpan.FromMinutes(5);
+        _fx.NotNull().Configuration.DefaultRetryDelay = TimeSpan.FromMinutes(5);
         var manifest = await CreateManifestWhoseLastRunFailed();
 
-        await _fx.RunManifestManagerAsync();
-        _fx.DataContext.Reset();
+        await _fx.NotNull().RunManifestManagerAsync();
+        _fx.NotNull().DataContext.Reset();
 
-        var entry = await _fx
+        var entry = await _fx.NotNull()
             .DataContext.WorkQueues.AsNoTracking()
             .SingleAsync(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued);
         entry
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + Skew + TimeSpan.FromMinutes(5), Tolerance);
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew + TimeSpan.FromMinutes(5),
+                Tolerance
+            );
     }
 
     [Test]
     public async Task A_failed_dispatchs_backoff_is_due_by_the_database_clock()
     {
         await CreateFixture(failingSubmitter: true);
-        _fx.Configuration.MaxDispatchAttempts = 5;
+        _fx.NotNull().Configuration.MaxDispatchAttempts = 5;
         var entry = await QueueEntry(
             """{"Value":"clock"}""",
             typeof(SchedulerTestInput).AssemblyQualifiedName
         );
 
-        await _fx.RunJobDispatcherAsync();
-        _fx.DataContext.Reset();
+        await _fx.NotNull().RunJobDispatcherAsync();
+        _fx.NotNull().DataContext.Reset();
 
-        var requeued = await _fx
+        var requeued = await _fx.NotNull()
             .DataContext.WorkQueues.AsNoTracking()
             .SingleAsync(q => q.Id == entry.Id);
         requeued.Status.Should().Be(WorkQueueStatus.Queued);
         requeued.DispatchAttempts.Should().Be(1);
         requeued
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + Skew + TimeSpan.FromSeconds(5), Tolerance);
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew + TimeSpan.FromSeconds(5),
+                Tolerance
+            );
     }
 
     [Test]
@@ -133,17 +151,20 @@ public class DatabaseClockSkewTests
             "Not.A.Registered.Input, Not.An.Assembly"
         );
 
-        await _fx.RunJobDispatcherAsync();
-        _fx.DataContext.Reset();
+        await _fx.NotNull().RunJobDispatcherAsync();
+        _fx.NotNull().DataContext.Reset();
 
-        var deferred = await _fx
+        var deferred = await _fx.NotNull()
             .DataContext.WorkQueues.AsNoTracking()
             .SingleAsync(q => q.Id == entry.Id);
         deferred.Status.Should().Be(WorkQueueStatus.Queued);
         deferred.DispatchAttempts.Should().Be(1);
         deferred
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow + Skew + TimeSpan.FromSeconds(5), Tolerance);
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime + Skew + TimeSpan.FromSeconds(5),
+                Tolerance
+            );
     }
 
     /// <summary>
@@ -151,12 +172,19 @@ public class DatabaseClockSkewTests
     /// </summary>
     private static async Task<DateTime> DatabaseNow()
     {
-        await using var connection = new NpgsqlConnection(SkewedConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT now()";
-        var value = (DateTime)(await command.ExecuteScalarAsync())!;
-        return value.ToUniversalTime();
+        var connection = new NpgsqlConnection(SkewedConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = "SELECT now()";
+                var value = (DateTime)
+                    (await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
+                return value.ToUniversalTime();
+            }
+        }
     }
 
     private async Task<WorkQueue> QueueEntry(string input, string? inputTypeName)
@@ -164,24 +192,27 @@ public class DatabaseClockSkewTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = input,
                 InputTypeName = inputTypeName,
-            }
+            },
+            TimeProvider.System
         );
-        await _fx.DataContext.Track(entry);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
+        await _fx.NotNull().DataContext.Track(entry).ConfigureAwait(false);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _fx.NotNull().DataContext.Reset();
         return entry;
     }
 
     /// <summary>An interval manifest due now whose latest run failed an hour ago.</summary>
     private async Task<Manifest> CreateManifestWhoseLastRunFailed()
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _fx.DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(
+                _fx.NotNull().DataContext,
+                name: $"group-{Guid.NewGuid():N}"
+            )
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -194,26 +225,27 @@ public class DatabaseClockSkewTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
-        await _fx.DataContext.Track(manifest);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
+        await _fx.NotNull().DataContext.Track(manifest).ConfigureAwait(false);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _fx.NotNull().DataContext.Reset();
 
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "clock" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Failed;
-        run.StartTime = DateTime.UtcNow.AddHours(-1);
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         run.EndTime = run.StartTime.AddMinutes(1);
-        await _fx.DataContext.Track(run);
-        await _fx.DataContext.SaveChanges(CancellationToken.None);
-        _fx.DataContext.Reset();
+        await _fx.NotNull().DataContext.Track(run).ConfigureAwait(false);
+        await _fx.NotNull().DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _fx.NotNull().DataContext.Reset();
         return manifest;
     }
 

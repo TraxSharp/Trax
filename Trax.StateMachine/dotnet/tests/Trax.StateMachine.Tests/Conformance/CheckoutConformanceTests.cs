@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -17,11 +18,7 @@ public class CheckoutConformanceTests
     public static IEnumerable<TestCaseData> AdvanceFixtures()
     {
         var dir = FixturePaths.AdvanceDir("checkout");
-        foreach (
-            var path in Directory
-                .EnumerateFiles(dir, "*.json")
-                .OrderBy(p => p, StringComparer.Ordinal)
-        )
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json").Order(StringComparer.Ordinal))
             yield return new TestCaseData(path).SetName(
                 $"checkout-advance/{Path.GetFileNameWithoutExtension(path)}"
             );
@@ -30,33 +27,36 @@ public class CheckoutConformanceTests
     public static IEnumerable<TestCaseData> RehydrateFixtures()
     {
         var dir = FixturePaths.RehydrateDir("checkout");
-        foreach (
-            var path in Directory
-                .EnumerateFiles(dir, "*.json")
-                .OrderBy(p => p, StringComparer.Ordinal)
-        )
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json").Order(StringComparer.Ordinal))
             yield return new TestCaseData(path).SetName(
                 $"checkout-rehydrate/{Path.GetFileNameWithoutExtension(path)}"
             );
     }
 
     [TestCaseSource(nameof(AdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path) => Replay(path);
+    public Task Advance_matches_the_shared_fixture(string path) => Replay(path);
 
-    private static void Replay(string path)
+    private static async Task Replay(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
-        var given = ToSnapshot((JsonObject)fixture["given"]!);
-        var when = (JsonObject)fixture["when"]!;
-        var trigger = when["trigger"]!.GetValue<string>();
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
+        var given = ToSnapshot((JsonObject)fixture["given"].NotNull());
+        var when = (JsonObject)fixture["when"].NotNull();
+        var trigger = when["trigger"].NotNull().GetValue<string>();
         var input = when["input"]?.DeepClone();
-        var expect = (JsonObject)fixture["expect"]!;
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = DeclarativeCheckout.Machine.Advance(given, trigger, input);
 
-        if (expect["outcome"]!.GetValue<string>() == "transitioned")
+        if (
+            string.Equals(
+                expect["outcome"].NotNull().GetValue<string>(),
+                "transitioned",
+                StringComparison.Ordinal
+            )
+        )
         {
-            var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
+            var expected = ToSnapshot((JsonObject)expect["snapshot"].NotNull());
             result
                 .Should()
                 .BeOfType<AdvanceResult.Transitioned>()
@@ -70,25 +70,32 @@ public class CheckoutConformanceTests
                 .BeOfType<AdvanceResult.Rejected>()
                 .Which.Reason.ToWire()
                 .Should()
-                .Be(expect["reason"]!.GetValue<string>());
+                .Be(expect["reason"].NotNull().GetValue<string>());
         }
     }
 
     [TestCaseSource(nameof(RehydrateFixtures))]
-    public void Rehydrate_matches_the_shared_fixture(string path)
+    public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()
-                : fixture["json"]!.ToJsonString();
-        var expect = (JsonObject)fixture["expect"]!;
+                : fixture["json"].NotNull().ToJsonString();
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = TestCheckout.Machine.Rehydrate(json);
 
-        if (expect["result"]!.GetValue<string>() == "ok")
+        if (
+            string.Equals(
+                expect["result"].NotNull().GetValue<string>(),
+                "ok",
+                StringComparison.Ordinal
+            )
+        )
         {
-            var expected = ToSnapshot((JsonObject)expect["snapshot"]!);
+            var expected = ToSnapshot((JsonObject)expect["snapshot"].NotNull());
             result.Should().BeOfType<RehydrationResult.Ok>().Which.Snapshot.Should().Be(expected);
         }
         else
@@ -98,34 +105,40 @@ public class CheckoutConformanceTests
                 .BeOfType<RehydrationResult.Error>()
                 .Which.Code.ToWire()
                 .Should()
-                .Be(expect["code"]!.GetValue<string>());
+                .Be(expect["code"].NotNull().GetValue<string>());
         }
     }
 
     [Test]
-    public void Serialize_canonicalizes_the_multi_key_wire_handoff_samples()
+    public async Task Serialize_canonicalizes_the_multi_key_wire_handoff_samples()
     {
         var handoff = (JsonObject)
-            JsonNode.Parse(
-                File.ReadAllText(
-                    Path.Combine(FixturePaths.MachinesRoot, "checkout", "wire-handoff.json")
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(FixturePaths.MachinesRoot, "checkout", "wire-handoff.json")
+                        )
+                        .ConfigureAwait(false)
                 )
-            )!;
+                .NotNull();
 
-        foreach (var sample in (JsonArray)handoff["samples"]!)
+        foreach (var sample in (JsonArray)handoff["samples"].NotNull())
         {
-            var s = (JsonObject)sample!;
-            var built = ToSnapshot((JsonObject)s["build"]!);
-            TestCheckout.Machine.Serialize(built).Should().Be(s["snapshot"]!.GetValue<string>());
+            var s = (JsonObject)sample.NotNull();
+            var built = ToSnapshot((JsonObject)s["build"].NotNull());
+            TestCheckout
+                .Machine.Serialize(built)
+                .Should()
+                .Be(s["snapshot"].NotNull().GetValue<string>());
         }
     }
 
     private static Snapshot ToSnapshot(JsonObject o) =>
         new()
         {
-            Machine = o["machine"]!.GetValue<string>(),
-            Version = o["version"]!.GetValue<int>(),
-            State = o["state"]!.GetValue<string>(),
-            Context = (JsonObject)o["context"]!.DeepClone(),
+            Machine = o["machine"].NotNull().GetValue<string>(),
+            Version = o["version"].NotNull().GetValue<int>(),
+            State = o["state"].NotNull().GetValue<string>(),
+            Context = (JsonObject)o["context"].NotNull().DeepClone(),
         };
 }

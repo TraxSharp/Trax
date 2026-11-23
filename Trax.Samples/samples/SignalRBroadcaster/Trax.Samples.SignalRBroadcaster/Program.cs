@@ -119,9 +119,11 @@ app.MapPost(
         {
             try
             {
-                await trains.RunAsync<PingOutput>(
-                    new PingInput { Source = "page", Outcome = request.Outcome }
-                );
+                await trains
+                    .RunAsync<PingOutput>(
+                        new PingInput { Source = "page", Outcome = request.Outcome }
+                    )
+                    .ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -139,7 +141,7 @@ app.MapPost(
     "/sign-out",
     async (HttpContext context) =>
     {
-        await context.SignOutAsync();
+        await context.SignOutAsync().ConfigureAwait(false);
         return Results.Redirect("/");
     }
 );
@@ -160,17 +162,21 @@ if (app.Environment.IsDevelopment())
                 ],
                 CookieAuthenticationDefaults.AuthenticationScheme
             );
-            await context.SignInAsync(new ClaimsPrincipal(identity));
+            await context.SignInAsync(new ClaimsPrincipal(identity)).ConfigureAwait(false);
             return Results.Redirect("/");
         }
     );
 
-app.Run();
-
-/// <summary>The body of <c>POST /pings</c>.</summary>
-public record PingRequest(PingOutcome Outcome = PingOutcome.Succeed);
+await app.RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.SignalRBroadcaster
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

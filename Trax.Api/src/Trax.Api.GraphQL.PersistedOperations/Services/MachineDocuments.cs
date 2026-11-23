@@ -88,7 +88,7 @@ internal static class MachineDocuments
         // The machine segment ends at the first `_` after the prefix, and an operation may hold `_` itself, so a
         // machine id with one would read back as a shorter machine's. A machine built with the fluent Id(...) is
         // kebab-case and never has one.
-        if (string.IsNullOrEmpty(machine) || machine.Contains('_'))
+        if (string.IsNullOrEmpty(machine) || machine.Contains('_', StringComparison.Ordinal))
             throw new ArgumentException(
                 $"The machine id '{machine}' cannot name persisted documents: a machine document's id separates "
                     + "the machine from the operation with '_', so the machine id must be non-empty and hold no '_'. "
@@ -168,7 +168,7 @@ internal static class MachineDocuments
             var operations = MachineType(root, field);
             if (operations is null)
             {
-                if (keyword == "query")
+                if (string.Equals(keyword, "query", StringComparison.Ordinal))
                     throw NotServed(machine);
                 continue;
             }
@@ -195,14 +195,28 @@ internal static class MachineDocuments
         if (documents.Count == 0)
             throw NotServed(machine);
 
-        // The instance's push: the machine's own field, so a client sends only the id.
+        AddPushDocument(schema, machine, documents, irHash, pascal);
+        return documents;
+    }
+
+    // The instance's push: the machine's own field, so a client sends only the id.
+    private static void AddPushDocument(
+        ISchemaDefinition schema,
+        IMachine machine,
+        List<MachineDocument> documents,
+        string irHash,
+        string pascal
+    )
+    {
         var pushField = MachineChangedSubscription.FieldOf(machine.Name);
         if (
             schema.SubscriptionType is { } subscriptions
             && subscriptions.Fields.TryGetField(pushField, out var changed)
         )
         {
-            var id = changed.Arguments.First(a => a.Name == "id");
+            var id = changed.Arguments.First(a =>
+                string.Equals(a.Name, "id", StringComparison.Ordinal)
+            );
             var text =
                 $"subscription {pascal}MachineChanged($id: {Print(id.Type)}) {{ "
                 + $"{pushField}(id: $id)"
@@ -218,7 +232,6 @@ internal static class MachineDocuments
                 )
             );
         }
-        return documents;
     }
 
     private static InvalidOperationException NotServed(IMachine machine) =>
@@ -306,7 +319,7 @@ internal static class MachineDocuments
                 ancestors.RemoveAt(ancestors.Count - 1);
                 return fields.Count == 0
                     ? " { __typename }"
-                    : " { " + string.Join(" ", fields) + " }";
+                    : " { " + string.Join(' ', fields) + " }";
             case IInterfaceTypeDefinition or IUnionTypeDefinition:
                 return " { __typename }";
             default:
@@ -322,37 +335,4 @@ internal static class MachineDocuments
             TypeKind.List => "[" + Print(type.InnerType()) + "]",
             _ => type.NamedType().Name,
         };
-}
-
-/// <summary>One generated machine document, as <see cref="MachineDocuments.Generate"/> returns it.</summary>
-/// <param name="Id">The persisted id: the reserved prefix, the machine, the operation and the hash.</param>
-/// <param name="Machine">The machine's id.</param>
-/// <param name="Operation">The operation's name (<c>start</c>, <c>discard</c>, <c>get</c> or an event).</param>
-/// <param name="Text">The GraphQL document text.</param>
-/// <param name="IrHash">The hash of the machine's IR the document was generated for.</param>
-internal sealed record MachineDocument(
-    string Id,
-    string Machine,
-    string Operation,
-    string Text,
-    string IrHash
-) : GeneratedDocument(Id, Text)
-{
-    /// <inheritdoc />
-    public override string Slot => Machine;
-
-    /// <inheritdoc />
-    public override string Owner => $"machine '{Machine}'";
-
-    /// <inheritdoc />
-    public override string Description =>
-        $"Generated for the machine '{Machine}' ({Operation}), IR {IrHash}.";
-
-    /// <inheritdoc />
-    public override bool Matches(string stored) =>
-        string.Equals(
-            MachineDocuments.IdOf(Machine, Operation, IrHash, stored),
-            Id,
-            StringComparison.Ordinal
-        );
 }

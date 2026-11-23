@@ -8,6 +8,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -106,7 +107,7 @@ public class HostConfigurationErrorTests
             InputType = typeof(OrphanInput),
             OutputType = typeof(Trax.Core.Functional.Unit),
             Lifetime = ServiceLifetime.Scoped,
-            ServiceTypeName = typeof(IOrphanTrain).FullName!,
+            ServiceTypeName = typeof(IOrphanTrain).FullName.NotNull(),
             ImplementationTypeName = nameof(OrphanTrain),
             InputTypeName = nameof(OrphanInput),
             OutputTypeName = nameof(Trax.Core.Functional.Unit),
@@ -123,7 +124,7 @@ public class HostConfigurationErrorTests
 
     private interface IOrphanTrain;
 
-    private sealed class OrphanTrain;
+    private static class OrphanTrain;
 
     public sealed record OrphanInput
     {

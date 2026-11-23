@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.StateMachine.Persistence;
@@ -29,7 +30,8 @@ public class ApiDashboardBrowserTests : ConsoleTest
     [OneTimeSetUp]
     public async Task StartTheGate()
     {
-        using var scope = Host.Services.CreateScope();
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         _gate = (
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
@@ -46,9 +48,12 @@ public class ApiDashboardBrowserTests : ConsoleTest
         // The footer's read of the Trax version the host runs, through the gated endpoint, by its id.
         var graphQL = Page.WaitForResponseAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.Request.Method == "POST"
-                && r.Request.PostData?.Contains("\"operationName\":\"ServerVersion\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && string.Equals(r.Request.Method, "POST", StringComparison.Ordinal)
+                && r.Request.PostData?.Contains(
+                    "\"operationName\":\"ServerVersion\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = Render.Ms() }
         );
         // Deep link, no credential yet: the app asks for one.
@@ -62,7 +67,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
             .Expect(Console.Footer)
             .ToContainTextAsync("Trax Dashboard — v", new() { Timeout = Render.Ms() });
 
-        var socketUrl = await connected.Acknowledged.WaitAsync(Render);
+        var socketUrl = await connected.Acknowledged.WaitAsync(Render, TimeProvider.System);
         socketUrl.Should().Be($"ws://{Host.Address.Authority}/trax/graphql");
 
         // The router took the deep link under the base path the host wrote into the page.
@@ -105,9 +110,12 @@ public class ApiDashboardBrowserTests : ConsoleTest
         string drawn
     )
     {
-        var url = Console.Url(route.Replace("{gate}", $"{_gate}"));
+        var url = Console.Url(route.Replace("{gate}", $"{_gate}", StringComparison.Ordinal));
         var document = await Page.GotoAsync(url);
-        document!.Status.Should().Be(200, $"{url} is a route of the app, not a missing file");
+        document
+            .NotNull()
+            .Status.Should()
+            .Be(200, $"{url} is a route of the app, not a missing file");
 
         // Nothing is stored, so every load asks for the key again.
         var connected = await Console.ConnectAsync(Caller.Operator);
@@ -122,7 +130,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
 
         var request = await connected.FirstRequest;
         (await request.HeaderValueAsync("x-api-key")).Should().Be(Caller.Operator.Key);
-        (await connected.Acknowledged.WaitAsync(Render))
+        (await connected.Acknowledged.WaitAsync(Render, TimeProvider.System))
             .Should()
             .Be($"ws://{Host.Address.Authority}/trax/graphql");
     }
@@ -135,7 +143,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
         (await (await connected.FirstRequest).HeaderValueAsync("x-api-key"))
             .Should()
             .Be(Caller.Operator.Key);
-        await connected.Acknowledged.WaitAsync(Render);
+        await connected.Acknowledged.WaitAsync(Render, TimeProvider.System);
 
         (await StoredAsync())
             .Should()

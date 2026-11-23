@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -20,29 +21,31 @@ public class StrictInputParityTests
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
     [Test]
-    public void Each_value_gets_one_verdict_in_both_engines()
+    public async Task Each_value_gets_one_verdict_in_both_engines()
     {
         var cases = StrictInputMachine.Cases;
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(StrictInputMachine.Built)).NotNull();
         var start = StrictInputMachine.Open();
         var inputs = cases
             .Select(c => (JsonNode?)StrictInputMachine.InputWith(c.Field, c.Value?.DeepClone()))
             .Prepend(StrictInputMachine.ValidInput())
             .ToList();
 
-        var twin = TwinEngine.Replay(
-            new Dictionary<string, JsonObject> { ["strict"] = ir },
-            inputs
-                .Select(input => new TwinEngine.Sequence(
-                    "strict",
-                    start,
-                    [new TwinEngine.Step("advance", nameof(StrictTrigger.Submit), input)]
-                ))
-                .ToList()
-        );
+        var twin = await TwinEngine
+            .ReplayAsync(
+                new Dictionary<string, JsonObject>(StringComparer.Ordinal) { ["strict"] = ir },
+                inputs
+                    .Select(input => new TwinEngine.Sequence(
+                        "strict",
+                        start,
+                        [new TwinEngine.Step("advance", nameof(StrictTrigger.Submit), input)]
+                    ))
+                    .ToList()
+            )
+            .ConfigureAwait(false);
 
         var names = cases.Select(c => c.Name).Prepend("valid input").ToList();
-        var expected = cases.Select(c => c.Valid).Prepend(true).ToList();
+        var expected = cases.Select(c => c.Valid).Prepend(element: true).ToList();
         var diffs = new List<string>();
         if (!StrictInputMachine.ClrReads(StrictInputMachine.ValidInput(), out var invalid))
             diffs.Add($"valid input: the CLR does not read it: {invalid}");
@@ -62,23 +65,39 @@ public class StrictInputParityTests
                 AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
                 _ => ("unknown", null),
             };
-            var answer = twin[i][0];
-            if (answer.Outcome != outcome || answer.Reason != reason)
-                diffs.Add(
-                    $"{names[i]}: C# {outcome} {reason}, twin {answer.Outcome} {answer.Reason}"
-                );
-            var want = expected[i] ? "transitioned" : "rejected";
-            if (outcome != want)
-                diffs.Add($"{names[i]}: C# {outcome} {reason}, the CLR type says {want}");
-            if (!expected[i] && reason != RefusalCode.InvalidInput.ToWire())
-                diffs.Add($"{names[i]}: refused as {reason}, not invalid-input");
+            CompareVerdict(diffs, names[i], expected[i], outcome, reason, twin[i][0]);
         }
 
         diffs
             .Should()
             .BeEmpty(
                 $"both engines give each value the verdict of its CLR type ({Adr}):\n"
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
+    }
+
+    // Records where the C# engine's verdict on one input differs from the twin's, or from its CLR type's.
+    private static void CompareVerdict(
+        List<string> diffs,
+        string name,
+        bool valid,
+        string outcome,
+        string? reason,
+        TwinEngine.Answer answer
+    )
+    {
+        if (
+            !string.Equals(answer.Outcome, outcome, StringComparison.Ordinal)
+            || !string.Equals(answer.Reason, reason, StringComparison.Ordinal)
+        )
+            diffs.Add($"{name}: C# {outcome} {reason}, twin {answer.Outcome} {answer.Reason}");
+        var want = valid ? "transitioned" : "rejected";
+        if (!string.Equals(outcome, want, StringComparison.Ordinal))
+            diffs.Add($"{name}: C# {outcome} {reason}, the CLR type says {want}");
+        if (
+            !valid
+            && !string.Equals(reason, RefusalCode.InvalidInput.ToWire(), StringComparison.Ordinal)
+        )
+            diffs.Add($"{name}: refused as {reason}, not invalid-input");
     }
 }

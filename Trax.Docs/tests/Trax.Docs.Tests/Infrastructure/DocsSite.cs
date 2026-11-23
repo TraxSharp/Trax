@@ -6,10 +6,15 @@ namespace Trax.Docs.Tests.Infrastructure;
 /// </summary>
 internal sealed class DocsSite
 {
-    private readonly Dictionary<string, HashSet<string>> _headingIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _headingIds;
 
-    private DocsSite(HashSet<string> pages, IReadOnlyList<(string Page, string Path)> redirects)
+    private DocsSite(
+        HashSet<string> pages,
+        IReadOnlyList<(string Page, string Path)> redirects,
+        Dictionary<string, HashSet<string>> headingIds
+    )
     {
+        _headingIds = headingIds;
         Pages = pages;
         RedirectClaims = redirects;
         Redirects = redirects
@@ -30,7 +35,12 @@ internal sealed class DocsSite
     public static DocsSite Of(
         IEnumerable<string> pages,
         IEnumerable<(string Page, string Path)> redirects
-    ) => new(pages.ToHashSet(StringComparer.Ordinal), redirects.ToList());
+    ) =>
+        new(
+            pages.ToHashSet(StringComparer.Ordinal),
+            redirects.ToList(),
+            new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
+        );
 
     /// <summary>
     /// Whether a page is an SDK reference leaf page, one that documents a member or type:
@@ -40,14 +50,23 @@ internal sealed class DocsSite
     public static bool IsSdkReferenceLeaf(string page) =>
         page.StartsWith("sdk-reference/", StringComparison.Ordinal) && page.Split('/').Length >= 3;
 
-    public static DocsSite Load()
+    /// <summary>
+    /// The site this checkout publishes. Reads every published page once, for its redirect
+    /// claims and its heading ids.
+    /// </summary>
+    public static async Task<DocsSite> LoadAsync()
     {
         var pages = RepoRoot.PublishedPages().ToHashSet(StringComparer.Ordinal);
-        var redirects = pages
-            .Order(StringComparer.Ordinal)
-            .SelectMany(p => FrontMatter.OfPage(p).List("redirect_from").Select(r => (p, r)))
-            .ToList();
-        return new DocsSite(pages, redirects);
+        var redirects = new List<(string Page, string Path)>();
+        var headingIds = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var page in pages.Order(StringComparer.Ordinal))
+        {
+            var text = await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')))
+                .ConfigureAwait(false);
+            redirects.AddRange(FrontMatter.Of(text).List("redirect_from").Select(r => (page, r)));
+            headingIds[page] = Headings.Ids(text);
+        }
+        return new DocsSite(pages, redirects, headingIds);
     }
 
     /// <summary>
@@ -65,7 +84,9 @@ internal sealed class DocsSite
 
     /// <summary>The <c>/docs</c> path a published page is served at.</summary>
     public static string PathOf(string page) =>
-        page == "index.md" ? "/docs" : "/docs/" + page[..^".md".Length];
+        string.Equals(page, "index.md", StringComparison.Ordinal)
+            ? "/docs"
+            : "/docs/" + page[..^".md".Length];
 
     /// <summary>
     /// The page a reader lands on at <paramref name="path"/>: the page itself, or the page whose
@@ -78,14 +99,11 @@ internal sealed class DocsSite
         return Redirects.TryGetValue(Normalize(path), out var target) ? target : null;
     }
 
-    public HashSet<string> HeadingIds(string page)
-    {
-        if (!_headingIds.TryGetValue(page, out var ids))
-            _headingIds[page] = ids = Headings.Ids(
-                File.ReadAllText(RepoRoot.Combine(page.Split('/')))
-            );
-        return ids;
-    }
+    /// <summary>The heading ids on a published page; empty for a page the site does not publish.</summary>
+    public IReadOnlySet<string> HeadingIds(string page) =>
+        _headingIds.TryGetValue(page, out var ids)
+            ? ids
+            : new HashSet<string>(StringComparer.Ordinal);
 
     private static string Normalize(string path) => path.Length > 1 ? path.TrimEnd('/') : path;
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Machines;
 using Trax.Samples.Shared.Testing;
 
@@ -54,11 +55,12 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     public async Task<Result> CreateAsync()
     {
         var result = await MutateAsync(
-            "start",
-            $"requestId: {Literal($"start-{Guid.NewGuid():N}")}"
-        );
+                "start",
+                $"requestId: {Literal($"start-{Guid.NewGuid():N}")}"
+            )
+            .ConfigureAwait(false);
         result.Problem.Should().BeNull("the start should be accepted");
-        Id = result.Id!.Value;
+        Id = result.Id.NotNull().Value;
         return result;
     }
 
@@ -68,11 +70,13 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     /// </summary>
     public async Task<bool> DiscardAsync()
     {
-        var response = await graphQL.SendAsync(
-            $"mutation {{ machines {{ {Field} {{ discard(id: {Literal(Id.ToString())}, requestId: "
-                + $"{Literal($"discard-{Guid.NewGuid():N}")}) {{ discarded problem {{ code }} }} }} }} }}",
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                $"mutation {{ machines {{ {Field} {{ discard(id: {Literal(Id.ToString())}, requestId: "
+                    + $"{Literal($"discard-{Guid.NewGuid():N}")}) {{ discarded problem {{ code }} }} }} }} }}",
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("machines", Field, "discard", "discarded").GetBoolean();
     }
@@ -83,32 +87,34 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     /// </summary>
     public async Task<Result> SaveAsync(string snapshot)
     {
-        var response = await graphQL.SendAsync(
-            """
-            mutation($i: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $i) { output { snapshot problem { code } } } } }
-            }
-            """,
-            apiKey,
-            new
-            {
-                i = new
+        var response = await graphQL
+            .SendAsync(
+                """
+                mutation($i: SaveSnapshotInput!) {
+                  dispatch { stateMachine { saveSnapshot(input: $i) { output { snapshot problem { code } } } } }
+                }
+                """,
+                apiKey,
+                new
                 {
-                    machine = TopicMapMachine.MachineId,
-                    id = Id.ToString(),
-                    snapshot,
-                },
-            }
-        );
+                    i = new
+                    {
+                        machine = TopicMapMachine.MachineId,
+                        id = Id.ToString(),
+                        snapshot,
+                    },
+                }
+            )
+            .ConfigureAwait(false);
         return response.HasErrors
-            ? new Result(null, NotServed, null)
+            ? new Result(Snapshot: null, NotServed, Id: null)
             : new Result(
-                null,
+                Snapshot: null,
                 response
                     .GetData("dispatch", "stateMachine", "saveSnapshot", "output", "problem")
                     .GetProperty("code")
                     .GetString(),
-                null
+                Id: null
             );
     }
 
@@ -119,14 +125,14 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     public async Task<Result> AdvanceAsync(string trigger, object? input = null)
     {
         var field = JsonNamingPolicy.CamelCase.ConvertName(trigger);
-        if (!GraphQLName().IsMatch(field))
-            return new Result(null, NotServed, null);
+        if (!GraphQLName.IsMatch(field))
+            return new Result(Snapshot: null, NotServed, Id: null);
 
         var args = $"id: {Literal(Id.ToString())}";
         if (input is not null)
             args += $", input: {Literal(JsonSerializer.SerializeToNode(input, Camel))}";
         args += $", requestId: {Literal($"req-{Guid.NewGuid():N}")}";
-        return await MutateAsync(field, args);
+        return await MutateAsync(field, args).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -135,56 +141,70 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     /// </summary>
     public async Task<Result> LoadAsync()
     {
-        var response = await graphQL.SendAsync(
-            $"{{ machines {{ {Field} {{ get(id: {Literal(Id.ToString())}) {{ {Answer} }} }} }} }}",
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                $"{{ machines {{ {Field} {{ get(id: {Literal(Id.ToString())}) {{ {Answer} }} }} }} }}",
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var read = response.GetData("machines", Field, "get");
         return read.ValueKind == JsonValueKind.Null
-            ? new Result(null, "NOT_FOUND", null)
+            ? new Result(Snapshot: null, "NOT_FOUND", Id: null)
             : Parse(read);
     }
 
     /// <summary>Chooses every field of the corpus and the years, which enters <c>Building</c>.</summary>
     public async Task<Result> BuildAsync(IReadOnlyList<string> fields, int fromYear, int toYear)
     {
-        (await AdvanceAsync(nameof(TopicMapTrigger.ChooseFields), new { fields }))
+        (
+            await AdvanceAsync(nameof(TopicMapTrigger.ChooseFields), new { fields })
+                .ConfigureAwait(false)
+        )
             .State.Should()
             .Be(nameof(TopicMapState.ChoosingRange));
-        return await AdvanceAsync(nameof(TopicMapTrigger.Build), new { fromYear, toYear });
+        return await AdvanceAsync(nameof(TopicMapTrigger.Build), new { fromYear, toYear })
+            .ConfigureAwait(false);
     }
 
     /// <summary>Loads the draft until it is in <paramref name="state"/>.</summary>
     public async Task<Result> WaitForStateAsync(string state)
     {
         Result? last = null;
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                last = await LoadAsync();
-                return last.State == state;
-            },
-            Patience,
-            TimeSpan.FromMilliseconds(100)
-        );
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    last = await LoadAsync().ConfigureAwait(false);
+                    return string.Equals(last.State, state, StringComparison.Ordinal);
+                },
+                Patience,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         reached.Should().BeTrue($"the draft should reach {state}; it is in {last?.State}");
-        return last!;
+        return last.NotNull();
     }
 
-    private static readonly JsonSerializerOptions Camel = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Camel = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
-    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$")]
-    private static partial Regex GraphQLName();
+    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex GraphQLName { get; }
 
     private async Task<Result> MutateAsync(string field, string args)
     {
-        var response = await graphQL.SendAsync(
-            $"mutation {{ machines {{ {Field} {{ {field}({args}) {{ {Answer} }} }} }} }}",
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                $"mutation {{ machines {{ {Field} {{ {field}({args}) {{ {Answer} }} }} }} }}",
+                apiKey
+            )
+            .ConfigureAwait(false);
         if (response.HasErrors)
-            return new Result(null, NotServed, null);
+            return new Result(Snapshot: null, NotServed, Id: null);
         return Parse(response.GetData("machines", Field, field));
     }
 
@@ -193,18 +213,21 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     private static Result Parse(JsonElement answer)
     {
         var id = answer.GetProperty("id") is { ValueKind: JsonValueKind.String } minted
-            ? Guid.Parse(minted.GetString()!)
+            ? Guid.Parse(minted.GetString().NotNull())
             : (Guid?)null;
         if (answer.GetProperty("problem") is { ValueKind: JsonValueKind.Object } problem)
-            return new Result(null, problem.GetProperty("code").GetString(), id);
+            return new Result(Snapshot: null, problem.GetProperty("code").GetString(), id);
 
         var context = new JsonObject();
         foreach (var field in answer.GetProperty("context").EnumerateObject())
             if (field.Value.ValueKind != JsonValueKind.Null)
                 context[field.Name] = JsonNode.Parse(field.Value.GetRawText());
         return new Result(
-            JsonNode.Parse(Snapshot(answer.GetProperty("state").GetString()!, context))!.AsObject(),
-            null,
+            JsonNode
+                .Parse(Snapshot(answer.GetProperty("state").GetString().NotNull(), context))
+                .NotNull()
+                .AsObject(),
+            Problem: null,
             id
         );
     }
@@ -227,6 +250,6 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
     {
         public string? State => Snapshot?["state"]?.GetValue<string>();
 
-        public JsonObject Context => Snapshot!["context"]!.AsObject();
+        public JsonObject Context => Snapshot.NotNull()["context"].NotNull().AsObject();
     }
 }

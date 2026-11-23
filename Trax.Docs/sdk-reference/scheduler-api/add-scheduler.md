@@ -14,6 +14,7 @@ source:
   - Trax.Scheduler/src/Trax.Scheduler/Extensions/SchedulerExtensions.cs
   - Trax.Scheduler/src/Trax.Scheduler/Extensions/SchedulerBuilderOrderExtensions.cs
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/RoutedSubmitterRegistration.cs
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.Settings.cs
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfiguration.cs
 ---

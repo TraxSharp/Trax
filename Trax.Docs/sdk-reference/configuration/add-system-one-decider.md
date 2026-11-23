@@ -14,6 +14,7 @@ source:
   - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/Extensions/ServiceExtensions.cs
   - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/SystemOneOptions.cs
   - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/SystemOneDecider.cs
+  - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/DecisionServiceException.cs
 ---
 
 # AddSystemOneDecider

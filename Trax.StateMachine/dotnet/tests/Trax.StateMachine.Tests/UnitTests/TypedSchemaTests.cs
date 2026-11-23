@@ -67,18 +67,36 @@ public class TypedSchemaTests
         // Sorted by key (ordinal), matching the canonical wire.
         schema.Fields.Select(f => f.Name).Should().Equal("gift", "items", "receipt", "total");
 
-        schema.Fields.Single(f => f.Name == "items").Type.Should().Be(JsonFieldType.Array);
-        schema.Fields.Single(f => f.Name == "receipt").Type.Should().Be(JsonFieldType.String);
         schema
-            .Fields.Single(f => f.Name == "total")
+            .Fields.Single(f => string.Equals(f.Name, "items", StringComparison.Ordinal))
+            .Type.Should()
+            .Be(JsonFieldType.Array);
+        schema
+            .Fields.Single(f => string.Equals(f.Name, "receipt", StringComparison.Ordinal))
+            .Type.Should()
+            .Be(JsonFieldType.String);
+        schema
+            .Fields.Single(f => string.Equals(f.Name, "total", StringComparison.Ordinal))
             .Type.Should()
             .Be(JsonFieldType.Integer, "an int is an integer, so a fraction is refused");
-        schema.Fields.Single(f => f.Name == "gift").Type.Should().Be(JsonFieldType.Boolean);
+        schema
+            .Fields.Single(f => string.Equals(f.Name, "gift", StringComparison.Ordinal))
+            .Type.Should()
+            .Be(JsonFieldType.Boolean);
 
         // string? is nullable; string[]/int/bool are not.
-        schema.Fields.Single(f => f.Name == "receipt").Nullable.Should().BeTrue();
-        schema.Fields.Single(f => f.Name == "items").Nullable.Should().BeFalse();
-        schema.Fields.Single(f => f.Name == "total").Nullable.Should().BeFalse();
+        schema
+            .Fields.Single(f => string.Equals(f.Name, "receipt", StringComparison.Ordinal))
+            .Nullable.Should()
+            .BeTrue();
+        schema
+            .Fields.Single(f => string.Equals(f.Name, "items", StringComparison.Ordinal))
+            .Nullable.Should()
+            .BeFalse();
+        schema
+            .Fields.Single(f => string.Equals(f.Name, "total", StringComparison.Ordinal))
+            .Nullable.Should()
+            .BeFalse();
     }
 
     [Test]
@@ -105,11 +123,15 @@ public class TypedSchemaTests
     {
         var schema = SchemaReflection.For<WithObjectAndNullableValue>();
 
-        var meta = schema.Fields.Single(f => f.Name == "meta");
+        var meta = schema.Fields.Single(f =>
+            string.Equals(f.Name, "meta", StringComparison.Ordinal)
+        );
         meta.Type.Should().Be(JsonFieldType.Object, "a non-enumerable complex type maps to object");
         meta.Nullable.Should().BeFalse();
 
-        var limit = schema.Fields.Single(f => f.Name == "limit");
+        var limit = schema.Fields.Single(f =>
+            string.Equals(f.Name, "limit", StringComparison.Ordinal)
+        );
         limit.Type.Should().Be(JsonFieldType.Integer);
         limit.Nullable.Should().BeTrue("int? is a nullable value type");
     }
@@ -132,7 +154,7 @@ public class TypedSchemaTests
         var schema = SchemaReflection.For<TypedCollections>();
         Rule.ArrayOf? ArrayConstraint(string name) =>
             schema
-                .Fields.Single(f => f.Name == name)
+                .Fields.Single(f => string.Equals(f.Name, name, StringComparison.Ordinal))
                 .Constraints.OfType<Rule.ArrayOf>()
                 .SingleOrDefault();
 
@@ -156,7 +178,7 @@ public class TypedSchemaTests
             .BeNull("a non-generic collection has no element constraint");
 
         var legislature = schema
-            .Fields.Single(f => f.Name == "legislature")
+            .Fields.Single(f => string.Equals(f.Name, "legislature", StringComparison.Ordinal))
             .Constraints.OfType<Rule.OneOf>()
             .Single();
         legislature.Values.Should().Equal("federal", "state", "unsure");

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -41,7 +42,7 @@ public class RunProgressRecheckE2ETests
 
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
 
-    private IHost _host = null!;
+    private IHost? _host;
     private volatile bool _active = true;
 
     [OneTimeSetUp]
@@ -96,15 +97,15 @@ public class RunProgressRecheckE2ETests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task StopHost()
     {
         ProgressMarkerTrain.Gate.TrySetResult();
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [SetUp]
@@ -123,7 +124,8 @@ public class RunProgressRecheckE2ETests
         var running = RunAsync();
         var runId = await RunningIdAsync();
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host.NotNull(), AliceKey);
+        await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -157,7 +159,8 @@ public class RunProgressRecheckE2ETests
         var running = RunAsync();
         var runId = await RunningIdAsync();
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host.NotNull(), AliceKey);
+        await using var aliceDisposal = alice.ConfigureAwait(false);
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -165,7 +168,7 @@ public class RunProgressRecheckE2ETests
 
         // allowed-delay: lets three re-checks pass on the real clock the socket runs on; the
         // run's end after them is what the test waits for.
-        await Task.Delay(Interval * 3);
+        await Task.Delay(Interval * 3, TimeProvider.System);
         ProgressMarkerTrain.Gate.TrySetResult();
         await running;
 
@@ -176,15 +179,18 @@ public class RunProgressRecheckE2ETests
                 e => e.GetProperty("problem").ValueKind != JsonValueKind.Null,
                 "a caller the endpoint policy still admits keeps receiving"
             );
-        events.Last().GetProperty("state").GetString().Should().Be("COMPLETED");
+        events[^1].GetProperty("state").GetString().Should().Be("COMPLETED");
     }
 
     private async Task RunAsync()
     {
-        using var response = await _host.PostGraphQLAsync(
-            """mutation { dispatch { progressMarker(input: { note: "recheck", fail: false }, mode: RUN) { externalId } } }""",
-            r => r.Headers.Add("X-Api-Key", AliceKey)
-        );
+        using var response = await _host
+            .NotNull()
+            .PostGraphQLAsync(
+                """mutation { dispatch { progressMarker(input: { note: "recheck", fail: false }, mode: RUN) { externalId } } }""",
+                r => r.Headers.Add("X-Api-Key", AliceKey)
+            )
+            .ConfigureAwait(false);
         response
             .RootElement.GetProperty("data")
             .ValueKind.Should()
@@ -194,10 +200,15 @@ public class RunProgressRecheckE2ETests
     // The external id of the run waiting at the gate, read from its row.
     private async Task<string> RunningIdAsync()
     {
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        using var db = await _host
+        await ProgressMarkerTrain
+            .Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m =>
@@ -206,7 +217,8 @@ public class RunProgressRecheckE2ETests
             )
             .OrderByDescending(m => m.Id)
             .Select(m => m.ExternalId)
-            .FirstAsync();
+            .FirstAsync()
+            .ConfigureAwait(false);
     }
 
     private sealed class OnlyTrains(ITrainDiscoveryService all) : ITrainDiscoveryService

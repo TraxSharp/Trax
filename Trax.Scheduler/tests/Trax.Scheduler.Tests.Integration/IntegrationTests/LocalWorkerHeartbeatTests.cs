@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.BackgroundJob;
@@ -51,21 +53,27 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
         try
         {
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            var claimedAt = DateTime.UtcNow;
+            await started.Task.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            );
+            var claimedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
             var second = NewWorker(registry);
             await second.StartAsync(stop.Token);
 
             // negative-wait: the job must still be held by the first worker well after its
             // visibility timeout has passed, which only elapsed time can show.
-            while (DateTime.UtcNow - claimedAt < VisibilityTimeout * 2.5)
-                await Task.Delay(TimeSpan.FromMilliseconds(100));
+            await HoldPastTheVisibilityTimeout(claimedAt);
 
             DataContext.Reset();
             var jobRunnerRuns = await DataContext
                 .Metadatas.AsNoTracking()
-                .CountAsync(m => m.Name.Contains(nameof(JobRunnerTrain)));
+                .CountAsync(
+                    m => m.Name.Contains(nameof(JobRunnerTrain)),
+                    cancellationToken: CancellationToken.None
+                );
             jobRunnerRuns.Should().Be(1, "only the first worker claimed the job");
             DeliveryProbeTrain.Runs[key].Should().Be(1);
 
@@ -79,8 +87,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
         finally
         {
             gate.TrySetResult();
-            stop.Cancel();
-            await first.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await first.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
@@ -113,22 +121,21 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
         try
         {
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            var claimedAt = DateTime.UtcNow;
+            await started.Task.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            );
+            var claimedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
             other = NewWorker(registry, batchSize: 1);
             await other.StartAsync(stop.Token);
 
             // negative-wait: the waiting jobs must still be held well after their visibility
             // timeout has passed, which only elapsed time can show.
-            while (DateTime.UtcNow - claimedAt < VisibilityTimeout * 2.5)
-                await Task.Delay(TimeSpan.FromMilliseconds(100));
+            await HoldPastTheVisibilityTimeout(claimedAt);
 
-            foreach (var key in waiting)
-                DeliveryProbeTrain
-                    .Runs.ContainsKey(key)
-                    .Should()
-                    .BeFalse("the batch's worker still holds the jobs it has not reached");
+            AssertNoneHasRun(waiting);
 
             gate.TrySetResult();
             foreach (var run in waitingRuns)
@@ -139,10 +146,10 @@ public class LocalWorkerHeartbeatTests : TestSetup
         finally
         {
             gate.TrySetResult();
-            stop.Cancel();
+            await stop.CancelAsync().ConfigureAwait(false);
             if (other is not null)
-                await other.StopAsync(CancellationToken.None);
-            await batching.StopAsync(CancellationToken.None);
+                await other.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await batching.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(first);
             foreach (var key in waiting)
                 DeliveryProbeTrain.Forget(key);
@@ -165,14 +172,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
         // The database refuses every refresh of this job's claim; the claim itself, which sets
         // fetched_at from null, is allowed.
-        var function = $"refuse_refresh_{jobId}";
-        await ExecuteSqlAsync(
-            $"CREATE FUNCTION trax.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ "
-                + $"BEGIN IF OLD.id = {jobId} AND OLD.fetched_at IS NOT NULL THEN "
-                + "RAISE EXCEPTION 'refresh refused'; END IF; RETURN NEW; END $$; "
-                + $"CREATE TRIGGER {function} BEFORE UPDATE ON trax.background_job "
-                + $"FOR EACH ROW EXECUTE FUNCTION trax.{function}();"
-        );
+        var function = string.Create(CultureInfo.InvariantCulture, $"refuse_refresh_{jobId}");
+        await CreateRefreshRefusingTrigger(function, jobId);
 
         var logger = new CapturingLogger();
         using var stop = new CancellationTokenSource();
@@ -204,12 +205,13 @@ public class LocalWorkerHeartbeatTests : TestSetup
         finally
         {
             gate.TrySetResult();
-            stop.Cancel();
-            await worker.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
             await ExecuteSqlAsync(
-                $"DROP TRIGGER IF EXISTS {function} ON trax.background_job; "
-                    + $"DROP FUNCTION IF EXISTS trax.{function}();"
-            );
+                    $"DROP TRIGGER IF EXISTS {function} ON trax.background_job; "
+                        + $"DROP FUNCTION IF EXISTS trax.{function}();"
+                )
+                .ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
@@ -249,8 +251,8 @@ public class LocalWorkerHeartbeatTests : TestSetup
         }
         finally
         {
-            stop.Cancel();
-            await worker.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
@@ -299,29 +301,68 @@ public class LocalWorkerHeartbeatTests : TestSetup
         }
         finally
         {
-            stop.Cancel();
-            await worker.StopAsync(CancellationToken.None);
+            await stop.CancelAsync().ConfigureAwait(false);
+            await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
             DeliveryProbeTrain.Forget(key);
         }
     }
 
+    private static async Task HoldPastTheVisibilityTimeout(DateTime claimedAt)
+    {
+        while (TimeProvider.System.GetUtcNow().UtcDateTime - claimedAt < VisibilityTimeout * 2.5)
+            // negative-wait: only elapsed time shows the job is still held.
+            await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+    }
+
+    private static void AssertNoneHasRun(string[] waiting)
+    {
+        foreach (var key in waiting)
+            DeliveryProbeTrain
+                .Runs.ContainsKey(key)
+                .Should()
+                .BeFalse("the batch's worker still holds the jobs it has not reached");
+    }
+
+    private static Task CreateRefreshRefusingTrigger(string function, long jobId) =>
+        ExecuteSqlAsync(
+            $"CREATE FUNCTION trax.{function}() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BEGIN IF OLD.id = {jobId} AND OLD.fetched_at IS NOT NULL THEN "
+                )
+                + "RAISE EXCEPTION 'refresh refused'; END IF; RETURN NEW; END $$; "
+                + $"CREATE TRIGGER {function} BEFORE UPDATE ON trax.background_job "
+                + $"FOR EACH ROW EXECUTE FUNCTION trax.{function}();"
+        );
+
     private static async Task ExecuteSqlAsync(string sql)
     {
-        await using var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(sql, connection);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (condition())
                 return true;
             // determinism: polls the condition, bounded by the timeout above.
-            await Task.Delay(25);
+            await Task.Delay(25).ConfigureAwait(false);
         }
         return condition();
     }
@@ -355,7 +396,9 @@ public class LocalWorkerHeartbeatTests : TestSetup
         public IReadOnlyList<(LogLevel Level, string Message)> Entries => _entries.ToList();
 
         public bool Has(LogLevel level, string fragment) =>
-            _entries.Any(e => e.Level == level && e.Message.Contains(fragment));
+            _entries.Any(e =>
+                e.Level == level && e.Message.Contains(fragment, StringComparison.Ordinal)
+            );
 
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => null;
@@ -389,19 +432,25 @@ public class LocalWorkerHeartbeatTests : TestSetup
 
     private async Task WaitForRunState(long metadataId, TrainState state)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(30);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             DataContext.Reset();
             var row = await DataContext
                 .Metadatas.AsNoTracking()
-                .SingleAsync(m => m.Id == metadataId);
+                .SingleAsync(m => m.Id == metadataId)
+                .ConfigureAwait(false);
             if (row.TrainState == state)
                 return;
             await Task.Yield();
         }
 
-        throw new TimeoutException($"Metadata {metadataId} did not reach {state}.");
+        throw new TimeoutException(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Metadata {metadataId} did not reach {state}."
+            )
+        );
     }
 
     private async Task<Metadata> QueueLocalJob(DeliveryProbeInput input)
@@ -409,13 +458,14 @@ public class LocalWorkerHeartbeatTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(DeliveryProbeTrain).FullName!,
+                Name = typeof(DeliveryProbeTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var job = BackgroundJob.Create(
             new CreateBackgroundJob
@@ -426,10 +476,11 @@ public class LocalWorkerHeartbeatTests : TestSetup
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputType = typeof(DeliveryProbeInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
-        await DataContext.Track(job);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(job).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

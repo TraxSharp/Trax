@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.Operations;
 
@@ -36,7 +38,7 @@ public class ParityMutationStressTests : StressTestSetup
         services.AddSingleton<IConfiguration>(
             new ConfigurationBuilder()
                 .AddInMemoryCollection(
-                    new Dictionary<string, string?>
+                    new Dictionary<string, string?>(StringComparer.Ordinal)
                     {
                         ["Logging:LogLevel:Default"] = "Warning",
                         ["Logging:LogLevel:Trax"] = "Information",
@@ -68,7 +70,7 @@ public class ParityMutationStressTests : StressTestSetup
         return OperationsFieldAsync("mutation { operations " + body + " }", ct, path);
     }
 
-    private static string Ids(IEnumerable<long> ids) => "[" + string.Join(",", ids) + "]";
+    private static string Ids(IEnumerable<long> ids) => "[" + string.Join(',', ids) + "]";
 
     private static string Message(JsonElement payload) =>
         payload.GetProperty("message").GetString() ?? "";
@@ -109,9 +111,10 @@ public class ParityMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"triggerManifests(ids: {Ids(ids)}) {{ success queued matched message }}",
-                    ct
-                );
+                        $"triggerManifests(ids: {Ids(ids)}) {{ success queued matched message }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.GetProperty("queued").GetInt32().Should().Be(ids.Length, Message(payload));
             }
         );
@@ -131,22 +134,24 @@ public class ParityMutationStressTests : StressTestSetup
             FullManifestBatchBudget,
             async () =>
             {
-                await DeleteQueuedManifestEntries();
+                await DeleteQueuedManifestEntries().ConfigureAwait(false);
                 await ExecSqlAsync(
-                    "INSERT INTO trax.work_queue (external_id, train_name, status, created_at, "
-                        + "scheduled_at, priority, dispatch_attempts, manifest_id, confirmed_at) "
-                        + "SELECT 'wq-parity-' || id, name, 'queued', now(), now() + interval '1 hour', "
-                        + "0, 0, id, now() FROM trax.manifest "
-                        + $"WHERE id IN ({string.Join(',', ids)})"
-                );
+                        "INSERT INTO trax.work_queue (external_id, train_name, status, created_at, "
+                            + "scheduled_at, priority, dispatch_attempts, manifest_id, confirmed_at) "
+                            + "SELECT 'wq-parity-' || id, name, 'queued', now(), now() + interval '1 hour', "
+                            + "0, 0, id, now() FROM trax.manifest "
+                            + $"WHERE id IN ({string.Join(',', ids)})"
+                    )
+                    .ConfigureAwait(false);
             },
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"triggerManifests(ids: {Ids(ids)}, askAfresh: true) "
-                        + "{ success queued alreadyQueued message }",
-                    ct
-                );
+                        $"triggerManifests(ids: {Ids(ids)}, askAfresh: true) "
+                            + "{ success queued alreadyQueued message }",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload
                     .GetProperty("alreadyQueued")
                     .GetInt32()
@@ -169,9 +174,10 @@ public class ParityMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"triggerGroups(ids: {Ids(ids)}) {{ success matched queued message }}",
-                    ct
-                );
+                        $"triggerGroups(ids: {Ids(ids)}) {{ success matched queued message }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.GetProperty("matched").GetInt32().Should().Be(GroupPage);
                 payload
                     .GetProperty("queued")
@@ -200,9 +206,10 @@ public class ParityMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"triggerGroups(ids: {Ids(ids)}) {{ success matched queued skipped message }}",
-                    ct
-                );
+                        $"triggerGroups(ids: {Ids(ids)}) {{ success matched queued skipped message }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.GetProperty("matched").GetInt32().Should().Be(40);
                 payload
                     .GetProperty("skipped")
@@ -248,15 +255,19 @@ public class ParityMutationStressTests : StressTestSetup
         flagged.Should().BeGreaterThan(0, "the seed puts active runs in the first groups");
 
         await MeasureWriteAsync(
-            $"operations.cancelGroups (a page of 25 groups, {flagged} runs)",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"operations.cancelGroups (a page of 25 groups, {flagged} runs)"
+            ),
             ListBudget + CancelBudgetPerRun * flagged,
             ClearCancellations,
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"cancelGroups(ids: {Ids(ids)}) {{ success count message }}",
-                    ct
-                );
+                        $"cancelGroups(ids: {Ids(ids)}) {{ success count message }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.GetProperty("count").GetInt32().Should().Be((int)flagged, Message(payload));
             }
         );
@@ -279,9 +290,10 @@ public class ParityMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var payload = await Mutate(
-                    $"cancelGroups(ids: {Ids(ids)}) {{ success count message }}",
-                    ct
-                );
+                        $"cancelGroups(ids: {Ids(ids)}) {{ success count message }}",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.GetProperty("count").GetInt32().Should().BeGreaterThan(0, Message(payload));
             }
         );
@@ -295,10 +307,12 @@ public class ParityMutationStressTests : StressTestSetup
     public async Task ConfigureEffect_WithinBudget()
     {
         var effect = Services
-            .CreateScope()
+            .CreateAsyncScope()
             .ServiceProvider.GetRequiredService<IEffectSettingsService>()
             .GetEffects()
-            .First(e => e.Fields.Any(f => f.Name == "SaveOutputs"));
+            .First(e =>
+                e.Fields.Any(f => string.Equals(f.Name, "SaveOutputs", StringComparison.Ordinal))
+            );
 
         await MeasureAsync(
             "operations.configureEffect",
@@ -308,11 +322,12 @@ public class ParityMutationStressTests : StressTestSetup
                 foreach (var value in new[] { "false", "true" })
                 {
                     var payload = await Mutate(
-                        $"configureEffect(fullName: \"{effect.FullName}\", values: "
-                            + $"[{{ name: \"SaveOutputs\", value: \"{value}\" }}]) "
-                            + "{ success count message errors { field message } }",
-                        ct
-                    );
+                            $"configureEffect(fullName: \"{effect.FullName}\", values: "
+                                + $"[{{ name: \"SaveOutputs\", value: \"{value}\" }}]) "
+                                + "{ success count message errors { field message } }",
+                            ct
+                        )
+                        .ConfigureAwait(false);
                     payload.GetProperty("success").GetBoolean().Should().BeTrue(Message(payload));
                 }
             }
@@ -329,22 +344,24 @@ public class ParityMutationStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var levels = await OperationsFieldAsync(
-                    "{ operations { config { logLevels { category level } } } }",
-                    ct,
-                    "config"
-                );
+                        "{ operations { config { logLevels { category level } } } }",
+                        ct,
+                        "config"
+                    )
+                    .ConfigureAwait(false);
                 levels.GetArrayLength().Should().BeGreaterThan(0);
 
                 var category = levels[0].GetProperty("category").GetString();
-                var level = levels[0].GetProperty("level").GetString()!.ToUpperInvariant();
+                var level = levels[0].GetProperty("level").GetString().NotNull().ToUpperInvariant();
                 foreach (var target in new[] { "DEBUG", level })
                 {
                     var payload = await Mutate(
-                        $"setLogLevels(levels: [{{ category: \"{category}\", level: {target} }}]) "
-                            + "{ success count message }",
-                        ct,
-                        "config"
-                    );
+                            $"setLogLevels(levels: [{{ category: \"{category}\", level: {target} }}]) "
+                                + "{ success count message }",
+                            ct,
+                            "config"
+                        )
+                        .ConfigureAwait(false);
                     payload.GetProperty("success").GetBoolean().Should().BeTrue(Message(payload));
                 }
             }

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Reqnroll;
 using Shopfront.Auth;
 using Shopfront.Data;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
@@ -25,10 +26,11 @@ public sealed class FeatureHooks
     [BeforeTestRun]
     public static async Task StartTheHub()
     {
-        await using (var db = Context())
+        var db = Context();
+        await using (db.ConfigureAwait(false))
         {
-            await db.Database.EnsureDeletedAsync();
-            await db.Database.MigrateAsync();
+            await db.Database.EnsureDeletedAsync().ConfigureAwait(false);
+            await db.Database.MigrateAsync().ConfigureAwait(false);
         }
 
         hub = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
@@ -38,26 +40,36 @@ public sealed class FeatureHooks
         var features = Path.Combine(AppContext.BaseDirectory, "features");
         // The hub runs only the documents it registered, so the bindings send each step by the
         // persisted id the storefront's client manifest holds for it.
-        var manifest = Path.Combine(AppContext.BaseDirectory, "manifest.json");
+        var manifest = ClientManifest.Read(
+            await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "manifest.json"))
+                .ConfigureAwait(false)
+        );
 
         // The lexicon is read with the trains' records, as the hub reads them.
-        var lexicon = Lexicon.ReadDirectory(
-            features,
-            [typeof(Shopfront.Trains.ReturnOrder.IReturnOrderTrain).Assembly]
-        )!;
+        var lexicon = Lexicon
+            .ReadDirectory(
+                features,
+                [typeof(Shopfront.Trains.ReturnOrder.IReturnOrderTrain).Assembly]
+            )
+            .NotNull();
 
         TraxFeatures.Configure(trax =>
         {
             trax.Host = hub.Services;
             trax.Client = client;
             trax.Glossary = lexicon.GlossaryOrThrow();
-            trax.Manifest = ClientManifest.Read(File.ReadAllText(manifest));
+            trax.Manifest = manifest;
             trax.Credential = (actor, person, scenario) =>
                 new FeatureCredential(
-                    new Dictionary<string, string>
+                    new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["Authorization"] =
-                            "Bearer " + DevJwt.Mint($"{person}-{scenario}", actor.Roles[0]),
+                            "Bearer "
+                            + DevJwt.Mint(
+                                $"{person}-{scenario}",
+                                actor.Roles[0],
+                                TimeProvider.System
+                            ),
                     }
                 );
         });
@@ -66,14 +78,14 @@ public sealed class FeatureHooks
     // The hub hands every job to the worker, and these tests start none: a scenario that waits for
     // the check's answer runs in memory only (ReturnFeaturesTests).
     [BeforeScenario("in-memory")]
-    public static void InMemoryOnly() =>
+    public void InMemoryOnly() =>
         Assert.Ignore("Runs in memory only: no worker answers the check here.");
 
     [AfterTestRun]
     public static async Task StopTheHub()
     {
         if (hub is not null)
-            await hub.DisposeAsync();
+            await hub.DisposeAsync().ConfigureAwait(false);
     }
 
     private static ShopfrontDbContext Context() =>

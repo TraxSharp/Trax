@@ -15,7 +15,7 @@ internal static class TrainNameExpander
         ITrainDiscoveryService? discoveryService
     )
     {
-        var expanded = new HashSet<string>(names);
+        var expanded = new HashSet<string>(names, StringComparer.Ordinal);
 
         foreach (var twins in ExpandEach(names, discoveryService).Values)
             expanded.UnionWith(twins);
@@ -49,9 +49,15 @@ internal static class TrainNameExpander
                 var serviceFullName = reg.ServiceType.FullName;
                 var implFullName = reg.ImplementationType.FullName;
 
-                if (name == serviceFullName && implFullName is not null)
+                if (
+                    string.Equals(name, serviceFullName, StringComparison.Ordinal)
+                    && implFullName is not null
+                )
                     result[name].Add(implFullName);
-                else if (name == implFullName && serviceFullName is not null)
+                else if (
+                    string.Equals(name, implFullName, StringComparison.Ordinal)
+                    && serviceFullName is not null
+                )
                     result[name].Add(serviceFullName);
             }
         }

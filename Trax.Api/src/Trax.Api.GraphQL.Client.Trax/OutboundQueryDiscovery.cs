@@ -13,7 +13,7 @@ public static class OutboundQueryDiscovery
     /// <summary>One request type marked with <see cref="TraxOutboundQueryAttribute"/>.</summary>
     /// <param name="RequestType">The request type.</param>
     /// <param name="Endpoint">The logical endpoint name from the attribute.</param>
-    /// <param name="QueryName">The operation name parsed from the request's query, or <c>null</c> when it is anonymous, not a query or mutation, or cannot be read.</param>
+    /// <param name="QueryName">The operation name parsed from the request's query, or <see langword="null"/> when it is anonymous, not a query or mutation, or cannot be read.</param>
     public sealed record Entry(Type RequestType, string Endpoint, string? QueryName);
 
     /// <summary>
@@ -22,7 +22,7 @@ public static class OutboundQueryDiscovery
     /// constructor to read their query.
     /// </summary>
     /// <param name="assemblies">The assemblies to scan.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="assemblies"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="assemblies"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<Entry> Discover(params Assembly[] assemblies)
     {
         ArgumentNullException.ThrowIfNull(assemblies);

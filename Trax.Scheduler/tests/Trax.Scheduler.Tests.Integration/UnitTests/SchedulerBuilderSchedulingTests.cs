@@ -22,6 +22,17 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulerBuilderSchedulingTests
 {
+    // Disposed after each test, asynchronously, so the helper that builds them stays synchronous.
+    private readonly List<ServiceProvider> _providers = [];
+
+    [TearDown]
+    public async Task DisposeProviders()
+    {
+        foreach (var provider in _providers)
+            await provider.DisposeAsync().ConfigureAwait(false);
+        _providers.Clear();
+    }
+
     private SchedulerConfiguration ResolveConfiguration(
         Action<SchedulerConfigurationBuilder> configure
     )
@@ -38,7 +49,8 @@ public class SchedulerBuilderSchedulingTests
                     return scheduler;
                 })
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
         return provider.GetRequiredService<SchedulerConfiguration>();
     }
 

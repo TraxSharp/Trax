@@ -22,7 +22,7 @@ public class HeadlessHostTextTests
         string version
     )
     {
-        await using var session = Hosts.Session(
+        await using var session = await Hosts.SessionAsync(
             new FakeHost().Answer("ServerVersion", Hosts.Version(version))
         );
 
@@ -67,12 +67,12 @@ public class HeadlessHostTextTests
     [Test]
     public async Task A_graph_writes_the_hosts_names_cleaned()
     {
-        await using var session = Hosts.Session(
+        await using var session = await Hosts.SessionAsync(
             new FakeHost().Answer(
                 "Machines",
                 """{"operations":{"machines":[{"name":"MACHINE","version":1,"systemOwned":false,"initialState":"STATE","states":[{"name":"STATE","isInitial":true,"isFinal":true,"isCommitted":false}],"transitions":[],"timers":[]}]}}"""
-                    .Replace("MACHINE", Escaped(Hostile))
-                    .Replace("STATE", Escaped(Hostile))
+                    .Replace("MACHINE", Escaped(Hostile), StringComparison.Ordinal)
+                    .Replace("STATE", Escaped(Hostile), StringComparison.Ordinal)
             )
         );
         var output = new StringWriter();

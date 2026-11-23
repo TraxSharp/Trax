@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -12,11 +13,11 @@ public class OpenApiSchemaParserTests
     #region Petstore
 
     [Test]
-    public void Parse_Petstore_Returns4Operations()
+    public async Task Parse_Petstore_Returns4Operations()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         schema.Operations.Should().HaveCount(4);
         schema
@@ -26,11 +27,11 @@ public class OpenApiSchemaParserTests
     }
 
     [Test]
-    public void Parse_Petstore_GetOperationsAreQuery()
+    public async Task Parse_Petstore_GetOperationsAreQuery()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         schema
             .Operations.Where(o => o.Name is "ListPets" or "GetPet")
@@ -39,11 +40,11 @@ public class OpenApiSchemaParserTests
     }
 
     [Test]
-    public void Parse_Petstore_PostAndDeleteAreMutation()
+    public async Task Parse_Petstore_PostAndDeleteAreMutation()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         schema
             .Operations.Where(o => o.Name is "CreatePet" or "DeletePet")
@@ -52,59 +53,71 @@ public class OpenApiSchemaParserTests
     }
 
     [Test]
-    public void Parse_Petstore_GetPetInputHasPetIdOfTypeGuid()
+    public async Task Parse_Petstore_GetPetInputHasPetIdOfTypeGuid()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
-        var getPet = schema.Operations.Single(o => o.Name == "GetPet");
-        var petIdField = getPet.InputType.Fields.Single(f => f.Name == "PetId");
+        var getPet = schema.Operations.Single(o =>
+            string.Equals(o.Name, "GetPet", StringComparison.Ordinal)
+        );
+        var petIdField = getPet.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "PetId", StringComparison.Ordinal)
+        );
         petIdField.TypeName.Should().Be("Guid");
     }
 
     [Test]
-    public void Parse_Petstore_DeletePetOutputIsUnit()
+    public async Task Parse_Petstore_DeletePetOutputIsUnit()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
-        var deletePet = schema.Operations.Single(o => o.Name == "DeletePet");
+        var deletePet = schema.Operations.Single(o =>
+            string.Equals(o.Name, "DeletePet", StringComparison.Ordinal)
+        );
         deletePet.OutputType.Name.Should().Be("Unit");
     }
 
     [Test]
-    public void Parse_Petstore_CreatePetInputHasFieldsFromRequest()
+    public async Task Parse_Petstore_CreatePetInputHasFieldsFromRequest()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
-        var createPet = schema.Operations.Single(o => o.Name == "CreatePet");
-        var nameField = createPet.InputType.Fields.Single(f => f.Name == "Name");
-        var tagField = createPet.InputType.Fields.Single(f => f.Name == "Tag");
+        var createPet = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreatePet", StringComparison.Ordinal)
+        );
+        var nameField = createPet.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Name", StringComparison.Ordinal)
+        );
+        var tagField = createPet.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Tag", StringComparison.Ordinal)
+        );
 
         nameField.IsRequired.Should().BeTrue();
         tagField.IsRequired.Should().BeFalse();
     }
 
     [Test]
-    public void Parse_Petstore_AllOperationsGroupedAsPets()
+    public async Task Parse_Petstore_AllOperationsGroupedAsPets()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         schema.Operations.Should().AllSatisfy(o => o.Group.Should().Be("Pets"));
     }
 
     [Test]
-    public void Parse_Petstore_OperationsHaveHttpMethodAndPath()
+    public async Task Parse_Petstore_OperationsHaveHttpMethodAndPath()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("petstore.json"));
+        var schema = await parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
 
         schema
             .Operations.Should()
@@ -120,52 +133,75 @@ public class OpenApiSchemaParserTests
     #region ComplexOpenApi
 
     [Test]
-    public void Parse_ComplexOpenApi_Returns4Operations()
+    public async Task Parse_ComplexOpenApi_Returns4Operations()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("complex-openapi.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
 
         schema.Operations.Should().HaveCount(4);
     }
 
     [Test]
-    public void Parse_ComplexOpenApi_ListUsersIsQuery_CreateUserIsMutation()
+    public async Task Parse_ComplexOpenApi_ListUsersIsQuery_CreateUserIsMutation()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("complex-openapi.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
 
-        schema.Operations.Single(o => o.Name == "ListUsers").Kind.Should().Be(OperationKind.Query);
         schema
-            .Operations.Single(o => o.Name == "CreateUser")
+            .Operations.Single(o => string.Equals(o.Name, "ListUsers", StringComparison.Ordinal))
+            .Kind.Should()
+            .Be(OperationKind.Query);
+        schema
+            .Operations.Single(o => string.Equals(o.Name, "CreateUser", StringComparison.Ordinal))
             .Kind.Should()
             .Be(OperationKind.Mutation);
     }
 
     [Test]
-    public void Parse_ComplexOpenApi_GetUserInputHasUserIdOfTypeLong()
+    public async Task Parse_ComplexOpenApi_GetUserInputHasUserIdOfTypeLong()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("complex-openapi.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
 
-        var getUser = schema.Operations.Single(o => o.Name == "GetUser");
-        var userIdField = getUser.InputType.Fields.Single(f => f.Name == "UserId");
+        var getUser = schema.Operations.Single(o =>
+            string.Equals(o.Name, "GetUser", StringComparison.Ordinal)
+        );
+        var userIdField = getUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "UserId", StringComparison.Ordinal)
+        );
         userIdField.TypeName.Should().Be("long");
     }
 
     [Test]
-    public void Parse_ComplexOpenApi_CreateUserInputHasRequiredAndDateTimeFields()
+    public async Task Parse_ComplexOpenApi_CreateUserInputHasRequiredAndDateTimeFields()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("complex-openapi.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
 
-        var createUser = schema.Operations.Single(o => o.Name == "CreateUser");
-        var emailField = createUser.InputType.Fields.Single(f => f.Name == "Email");
-        var nameField = createUser.InputType.Fields.Single(f => f.Name == "Name");
-        var birthDateField = createUser.InputType.Fields.Single(f => f.Name == "BirthDate");
+        var createUser = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreateUser", StringComparison.Ordinal)
+        );
+        var emailField = createUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Email", StringComparison.Ordinal)
+        );
+        var nameField = createUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "Name", StringComparison.Ordinal)
+        );
+        var birthDateField = createUser.InputType.Fields.Single(f =>
+            string.Equals(f.Name, "BirthDate", StringComparison.Ordinal)
+        );
 
         emailField.IsRequired.Should().BeTrue();
         nameField.IsRequired.Should().BeTrue();
@@ -173,28 +209,38 @@ public class OpenApiSchemaParserTests
     }
 
     [Test]
-    public void Parse_ComplexOpenApi_HealthCheckGetsASynthesizedName()
+    public async Task Parse_ComplexOpenApi_HealthCheckGetsASynthesizedName()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("complex-openapi.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
 
-        var healthOp = schema.Operations.SingleOrDefault(o => o.HttpPath == "/health");
+        var healthOp = schema.Operations.SingleOrDefault(o =>
+            string.Equals(o.HttpPath, "/health", StringComparison.Ordinal)
+        );
         healthOp.Should().NotBeNull();
-        healthOp!.Name.Should().NotBeNullOrWhiteSpace();
+        healthOp.NotNull().Name.Should().NotBeNullOrWhiteSpace();
         // No operationId in the schema, so the name is synthesized from path segments
         healthOp.Name.Should().Be("Health");
     }
 
     [Test]
-    public void Parse_ComplexOpenApi_UserSchemaHasRolesAsListOfString()
+    public async Task Parse_ComplexOpenApi_UserSchemaHasRolesAsListOfString()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("complex-openapi.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
 
-        var userType = schema.Types.Single(t => t.Name == "User");
-        var rolesField = userType.Fields.Single(f => f.Name == "Roles");
+        var userType = schema.Types.Single(t =>
+            string.Equals(t.Name, "User", StringComparison.Ordinal)
+        );
+        var rolesField = userType.Fields.Single(f =>
+            string.Equals(f.Name, "Roles", StringComparison.Ordinal)
+        );
         rolesField.TypeName.Should().Be("List<string>");
     }
 

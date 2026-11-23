@@ -1,10 +1,11 @@
-using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using RabbitMQ.Client;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -33,7 +34,7 @@ public class RabbitMqBroadcasterResilienceTests
             ExternalId: externalId,
             TrainName: "Resilience.ITrain",
             TrainState: "InProgress",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: "Started",
@@ -44,7 +45,7 @@ public class RabbitMqBroadcasterResilienceTests
     [Test]
     public async Task PublishAsync_ToAnUnreachableBroker_ReturnsWithoutWaitingOnTheNetwork()
     {
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             new RabbitMqBroadcasterOptions
             {
                 ConnectionString = BlackholedBroker,
@@ -53,18 +54,19 @@ public class RabbitMqBroadcasterResilienceTests
             },
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
 
         // measuring-interval: the stopwatch measures how long the publishing train is held up.
-        var clock = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await Task.WhenAll(
             broadcaster.PublishAsync(Message("a"), CancellationToken.None),
             broadcaster.PublishAsync(Message("b"), CancellationToken.None),
             broadcaster.PublishAsync(Message("c"), CancellationToken.None)
         );
-        clock.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(started);
 
-        clock
-            .Elapsed.Should()
+        elapsed
+            .Should()
             .BeLessThan(
                 TimeSpan.FromSeconds(1),
                 "a train must not wait on a broker it cannot reach"
@@ -86,12 +88,12 @@ public class RabbitMqBroadcasterResilienceTests
         await broadcaster.PublishAsync(Message(), CancellationToken.None);
 
         // measuring-interval: the stopwatch measures how long shutdown is held up.
-        var clock = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await broadcaster.DisposeAsync();
-        clock.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(started);
 
-        clock
-            .Elapsed.Should()
+        elapsed
+            .Should()
             .BeLessThan(
                 RabbitMqTrainEventBroadcaster.DisposeDrainTimeout + TimeSpan.FromSeconds(2)
             );
@@ -100,7 +102,7 @@ public class RabbitMqBroadcasterResilienceTests
     [Test]
     public async Task PublishAsync_WhenTheQueueIsFull_DropsAndCountsInsteadOfWaiting()
     {
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             new RabbitMqBroadcasterOptions
             {
                 ConnectionString = BlackholedBroker,
@@ -110,9 +112,13 @@ public class RabbitMqBroadcasterResilienceTests
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance,
             queueCapacity: 2
         );
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
 
         for (var i = 0; i < 5; i++)
-            await broadcaster.PublishAsync(Message($"m{i}"), CancellationToken.None);
+            await broadcaster.PublishAsync(
+                Message(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
+                CancellationToken.None
+            );
 
         // Two fit in the queue. The sender may already hold the first while it tries to connect,
         // which frees one more slot.
@@ -134,9 +140,9 @@ public class RabbitMqBroadcasterResilienceTests
 
         // A connection the broker has closed (a broker restart) and its channel.
         var closedConnection = Substitute.For<IConnection>();
-        closedConnection.IsOpen.Returns(false);
+        closedConnection.IsOpen.Returns(returnThis: false);
         var closedChannel = Substitute.For<IChannel>();
-        closedChannel.IsOpen.Returns(false);
+        closedChannel.IsOpen.Returns(returnThis: false);
         Set(broadcaster, "_connection", closedConnection);
         Set(broadcaster, "_channel", closedChannel);
 
@@ -157,10 +163,11 @@ public class RabbitMqBroadcasterResilienceTests
             SigningKey = TestBroadcastKey.Value,
             ExchangeName = $"trax.test.order.{Guid.NewGuid():N}",
         };
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             options,
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
         var received = new List<string>();
         var all = new TaskCompletionSource();
         await receiver.StartAsync(
@@ -177,22 +184,30 @@ public class RabbitMqBroadcasterResilienceTests
             CancellationToken.None
         );
 
-        await using (
-            var broadcaster = new RabbitMqTrainEventBroadcaster(
-                options,
-                NullLogger<RabbitMqTrainEventBroadcaster>.Instance
-            )
-        )
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
+            options,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using (broadcaster.ConfigureAwait(false))
         {
             for (var i = 0; i < 20; i++)
-                await broadcaster.PublishAsync(Message($"m{i}"), CancellationToken.None);
+                await broadcaster.PublishAsync(
+                    Message(string.Create(CultureInfo.InvariantCulture, $"m{i}")),
+                    CancellationToken.None
+                );
         }
 
         // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
-        (await Task.WhenAny(all.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+        (await Task.WhenAny(all.Task, Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)))
             .Should()
             .Be(all.Task);
-        received.Should().Equal(Enumerable.Range(0, 20).Select(i => $"m{i}"));
+        received
+            .Should()
+            .Equal(
+                Enumerable
+                    .Range(0, 20)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"m{i}"))
+            );
 
         await receiver.StopAsync(CancellationToken.None);
     }
@@ -202,14 +217,17 @@ public class RabbitMqBroadcasterResilienceTests
     {
         var exchange = $"trax.test.mismatch.{Guid.NewGuid():N}";
         var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
-        await using var setup = await factory.CreateConnectionAsync();
-        await using (var channel = await setup.CreateChannelAsync())
+        var setup = await factory.CreateConnectionAsync();
+        await using var setupDisposal = setup.ConfigureAwait(false);
+        var channel = await setup.CreateChannelAsync(cancellationToken: CancellationToken.None);
+        await using (channel.ConfigureAwait(false))
         {
             await channel.ExchangeDeclareAsync(
                 exchange,
                 ExchangeType.Direct,
                 durable: false,
-                autoDelete: false
+                autoDelete: false,
+                cancellationToken: CancellationToken.None
             );
         }
 
@@ -228,14 +246,19 @@ public class RabbitMqBroadcasterResilienceTests
             await broadcaster.PublishAsync(Message("mismatch"), CancellationToken.None);
 
             // determinism: the wait is on the logged refusal; the timeout is only the ceiling.
-            await logger.Logged.WaitAsync(TimeSpan.FromSeconds(15));
+            await logger.Logged.WaitAsync(
+                TimeSpan.FromSeconds(15),
+                TimeProvider.System,
+                CancellationToken.None
+            );
             broadcaster.RefusedEvents.Should().Be(1);
         }
         finally
         {
             await broadcaster.DisposeAsync();
-            await using var cleanup = await setup.CreateChannelAsync();
-            await cleanup.ExchangeDeleteAsync(exchange);
+            var cleanup = await setup.CreateChannelAsync(cancellationToken: CancellationToken.None);
+            await using var cleanupDisposal = cleanup.ConfigureAwait(false);
+            await cleanup.ExchangeDeleteAsync(exchange, cancellationToken: CancellationToken.None);
         }
     }
 
@@ -268,6 +291,7 @@ public class RabbitMqBroadcasterResilienceTests
 
     private static void Set(object target, string field, object value) =>
         typeof(RabbitMqTrainEventBroadcaster)
-            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)
+            .NotNull()
             .SetValue(target, value);
 }

@@ -26,25 +26,27 @@ public class SchemaTextRenderingTests
     private const string Adr =
         "see cli/0002 (docs/adr/0002-generated-code-refuses-a-schema-name-it-cannot-emit.md)";
 
-    private CodeRenderer _renderer = null!;
+    private CodeRenderer _renderer = new();
 
     [SetUp]
     public void SetUp() => _renderer = new CodeRenderer();
 
     [Test]
-    public void An_enum_description_renders_on_one_comment_line()
+    public async Task An_enum_description_renders_on_one_comment_line()
     {
-        var result = _renderer.RenderEnum(
-            new ApiEnum
-            {
-                Name = "Color",
-                Values = ["Red"],
-                Description = MultiLine,
-            },
-            "MyApi"
-        );
+        var result = await _renderer
+            .RenderEnumAsync(
+                new ApiEnum
+                {
+                    Name = "Color",
+                    Values = ["Red"],
+                    Description = MultiLine,
+                },
+                "MyApi"
+            )
+            .ConfigureAwait(false);
 
-        AssertOnOneDocLine(result, Collapsed);
+        await AssertOnOneDocLineAsync(result, Collapsed).ConfigureAwait(false);
     }
 
     // Every bidirectional control, which would let a description reorder how the code around it displays.
@@ -52,7 +54,7 @@ public class SchemaTextRenderingTests
         "\u061C\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069";
 
     [Test]
-    public void A_description_carries_no_bidirectional_control_into_the_generated_code()
+    public async Task A_description_carries_no_bidirectional_control_into_the_generated_code()
     {
         var description = "safe \u202E} class Emitted {\u2066 text\u200F end\u061C";
         var op = Operation(description: description, fieldDescription: description);
@@ -60,8 +62,8 @@ public class SchemaTextRenderingTests
         foreach (
             var source in new[]
             {
-                _renderer.RenderTrainImplementation(op, "MyApi"),
-                _renderer.RenderInput(op, "MyApi"),
+                (await _renderer.RenderTrainImplementationAsync(op, "MyApi").ConfigureAwait(false)),
+                (await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false)),
             }
         )
             source
@@ -85,31 +87,33 @@ public class SchemaTextRenderingTests
     }
 
     [Test]
-    public void An_enum_value_that_is_a_keyword_is_escaped()
+    public async Task An_enum_value_that_is_a_keyword_is_escaped()
     {
-        var result = _renderer.RenderEnum(
-            new ApiEnum { Name = "Kind", Values = ["Plain", "class"] },
-            "MyApi"
-        );
+        var result = await _renderer
+            .RenderEnumAsync(new ApiEnum { Name = "Kind", Values = ["Plain", "class"] }, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("@class,");
     }
 
     [Test]
-    public void A_field_description_renders_on_one_comment_line()
+    public async Task A_field_description_renders_on_one_comment_line()
     {
         var op = Operation(fieldDescription: MultiLine);
 
-        AssertOnOneDocLine(_renderer.RenderInput(op, "MyApi"), Collapsed);
+        await AssertOnOneDocLineAsync(
+                await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false),
+                Collapsed
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
-    public void A_doc_comment_escapes_xml_markup()
+    public async Task A_doc_comment_escapes_xml_markup()
     {
         var op = Operation(fieldDescription: "a </summary> <b> & c");
 
-        _renderer
-            .RenderInput(op, "MyApi")
+        (await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false))
             .Should()
             .Contain("/// a &lt;/summary&gt; &lt;b&gt; &amp; c");
     }
@@ -117,20 +121,28 @@ public class SchemaTextRenderingTests
     [TestCase("ends with a backslash \\")]
     [TestCase("pre\\\"); } } namespace Extra { class Emitted { } } //")]
     [TestCase("quote \" and backslash \\ and both \\\"")]
-    public void A_train_description_is_one_string_literal_holding_the_description(
+    public async Task A_train_description_is_one_string_literal_holding_the_description(
         string description
     )
     {
         var op = Operation(description: description);
 
-        var source = _renderer.RenderTrainImplementation(op, "MyApi");
-        var root = CSharpSyntaxTree.ParseText(source).GetRoot();
+        var source = await _renderer
+            .RenderTrainImplementationAsync(op, "MyApi")
+            .ConfigureAwait(false);
+        var root = await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false);
 
         root.ContainsDiagnostics.Should()
             .BeFalse("the rendered train must parse ({0}):\n{1}", Adr, source);
         var argument = root.DescendantNodes()
             .OfType<AttributeArgumentSyntax>()
-            .Single(a => a.NameEquals?.Name.Identifier.Text == "Description");
+            .Single(a =>
+                string.Equals(
+                    a.NameEquals?.Name.Identifier.Text,
+                    "Description",
+                    StringComparison.Ordinal
+                )
+            );
         argument
             .Expression.Should()
             .BeOfType<LiteralExpressionSyntax>()
@@ -140,46 +152,47 @@ public class SchemaTextRenderingTests
     }
 
     [Test]
-    public void A_train_description_on_several_lines_is_collapsed_into_the_literal()
+    public async Task A_train_description_on_several_lines_is_collapsed_into_the_literal()
     {
-        var source = _renderer.RenderTrainImplementation(
-            Operation(description: MultiLine),
-            "MyApi"
-        );
+        var source = await _renderer
+            .RenderTrainImplementationAsync(Operation(description: MultiLine), "MyApi")
+            .ConfigureAwait(false);
 
-        var argument = CSharpSyntaxTree
-            .ParseText(source)
-            .GetRoot()
+        var argument = (
+            await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false)
+        )
             .DescendantNodes()
             .OfType<AttributeArgumentSyntax>()
-            .Single(a => a.NameEquals?.Name.Identifier.Text == "Description");
+            .Single(a =>
+                string.Equals(
+                    a.NameEquals?.Name.Identifier.Text,
+                    "Description",
+                    StringComparison.Ordinal
+                )
+            );
         ((LiteralExpressionSyntax)argument.Expression).Token.ValueText.Should().Be(Collapsed);
     }
 
     [Test]
-    public void An_http_path_renders_on_one_comment_line()
+    public async Task An_http_path_renders_on_one_comment_line()
     {
         var op = Operation(httpPath: "/players\n} class Emitted { } //");
 
-        var source = _renderer.RenderJunction(op, "MyApi");
+        var source = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         source.Should().Contain("// Original endpoint: GET /players } class Emitted { } //");
-        CSharpSyntaxTree
-            .ParseText(source)
-            .GetRoot()
+        (await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false))
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
             .Should()
             .ContainSingle();
     }
 
-    private static void AssertOnOneDocLine(string source, string expectedText)
+    private static async Task AssertOnOneDocLineAsync(string source, string expectedText)
     {
         var lines = source.Split('\n');
         lines.Should().Contain(l => l.Trim() == "/// " + expectedText);
-        CSharpSyntaxTree
-            .ParseText(source)
-            .GetRoot()
+        (await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false))
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
             .Should()

@@ -69,7 +69,7 @@ public class LogQueries
             Order = order == SortOrder.Oldest ? LogOrder.OldestFirst : LogOrder.NewestFirst,
         };
 
-        var page = await operationsService.GetLogsAsync(query, ct);
+        var page = await operationsService.GetLogsAsync(query, ct).ConfigureAwait(false);
 
         var hasFilter =
             metadataId.HasValue
@@ -78,29 +78,15 @@ public class LogQueries
             || !string.IsNullOrEmpty(messageContains)
             || !string.IsNullOrEmpty(categoryContains);
 
-        // A text filter counts up to OperationsService.LogCountCap matches and no further, so a
-        // common term never counts the whole table; the service counts every other filter
-        // exactly. An unfiltered count of the log table is a full scan, so that one total is the
-        // database's estimate when there is a usable one.
-        int totalCount;
-        bool isEstimate = false;
-        bool isCapped = false;
-        if (hasFilter)
-        {
-            var count = await operationsService.CountLogsCappedAsync(query, ct);
-            (totalCount, isCapped) = (count.Count, count.Capped);
-        }
-        else
-        {
-            using var db = await dataContextFactory.CreateDbContextAsync(ct);
-            (totalCount, isEstimate) = await CountEstimator.EstimateOrCountAsync(
-                db,
+        var (totalCount, isEstimate, isCapped) = await CountLogsAsync(
+                operationsService,
+                dataContextFactory,
                 sqlDialect,
-                "log",
-                () => operationsService.CountLogsAsync(query, ct),
+                query,
+                hasFilter,
                 ct
-            );
-        }
+            )
+            .ConfigureAwait(false);
 
         return new PagedResult<LogEntry>(
             page.Items.Select(l => new LogEntry(
@@ -123,5 +109,46 @@ public class LogQueries
         {
             IsCountCapped = isCapped,
         };
+    }
+
+    /// <summary>The total a page of logs reports, with whether it is an estimate or capped.</summary>
+    private static async Task<(int TotalCount, bool IsEstimate, bool IsCapped)> CountLogsAsync(
+        IOperationsService operationsService,
+        IDataContextProviderFactory dataContextFactory,
+        ISqlDialect? sqlDialect,
+        LogQuery query,
+        bool hasFilter,
+        CancellationToken ct
+    )
+    {
+        // A text filter counts up to OperationsService.LogCountCap matches and no further, so a
+        // common term never counts the whole table; the service counts every other filter
+        // exactly. An unfiltered count of the log table is a full scan, so that one total is the
+        // database's estimate when there is a usable one.
+        int totalCount;
+        bool isEstimate = false;
+        bool isCapped = false;
+        if (hasFilter)
+        {
+            var count = await operationsService
+                .CountLogsCappedAsync(query, ct)
+                .ConfigureAwait(false);
+            (totalCount, isCapped) = (count.Count, count.Capped);
+        }
+        else
+        {
+            var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
+            (totalCount, isEstimate) = await CountEstimator
+                .EstimateOrCountAsync(
+                    db,
+                    sqlDialect,
+                    "log",
+                    () => operationsService.CountLogsAsync(query, ct),
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+        return (totalCount, isEstimate, isCapped);
     }
 }

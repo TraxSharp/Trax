@@ -10,39 +10,34 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// choice between alternatives.</para>
 /// </summary>
 [TestFixture]
-public class RabbitMqCredentialsMatchComposeTests
+public partial class RabbitMqCredentialsMatchComposeTests
 {
-    private static readonly Regex AmqpUri = new(
-        @"amqp://(?<user>[^:@/""]+):(?<pass>[^@/""]+)@",
-        RegexOptions.Compiled
-    );
-
     private static (string User, string Pass) FromEnv(string text, string userKey, string passKey)
     {
         string Value(string key) =>
-            Regex.Match(text, key + @"\s*:\s*(?<v>\S+)").Groups["v"].Value.Trim('"', '\'');
+            Regex
+                .Match(text, key + @"\s*:\s*(?<v>\S+)", RegexOptions.None, TimeSpan.FromSeconds(1))
+                .Groups["v"]
+                .Value.Trim('"', '\'');
         return (Value(userKey), Value(passKey));
     }
 
     [Test]
-    public void Every_rabbitmq_connection_string_uses_the_compose_and_ci_user()
+    public async Task Every_rabbitmq_connection_string_uses_the_compose_and_ci_user()
     {
-        var compose = File.ReadAllText(Path.Combine(RepoRoot.Path, "docker-compose.yml"));
+        var compose = await File.ReadAllTextAsync(
+            Path.Combine(RepoRoot.Path, "docker-compose.yml")
+        );
         var composeUser = FromEnv(compose, "RABBITMQ_DEFAULT_USER", "RABBITMQ_DEFAULT_PASS");
 
         var offenders = new List<string>();
         // Every workflow that starts a broker, at the root of the repository Trax.Samples lives in.
-        var workflows = Directory
-            .EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
-            .Where(w =>
-                File.ReadAllText(w).Contains("RABBITMQ_DEFAULT_USER", StringComparison.Ordinal)
-            )
-            .ToList();
+        var workflows = await BrokerWorkflowsAsync();
         workflows.Should().NotBeEmpty("CI starts a RabbitMQ broker for the samples' tests");
         foreach (var workflow in workflows)
         {
             var ciUser = FromEnv(
-                File.ReadAllText(workflow),
+                await File.ReadAllTextAsync(workflow).ConfigureAwait(false),
                 "RABBITMQ_DEFAULT_USER",
                 "RABBITMQ_DEFAULT_PASS"
             );
@@ -52,23 +47,15 @@ public class RabbitMqCredentialsMatchComposeTests
                 );
         }
 
-        var files = Directory
-            .EnumerateFiles(
-                Path.Combine(RepoRoot.Path, "samples"),
-                "appsettings*.json",
-                SearchOption.AllDirectories
-            )
-            .Concat(SourceFiles.CSharp("samples", "tests"))
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-            );
+        var files = ConfigAndSourceFiles();
 
         foreach (var file in files)
         {
-            foreach (Match match in AmqpUri.Matches(File.ReadAllText(file)))
+            foreach (
+                Match match in AmqpUri.Matches(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                )
+            )
             {
                 var used = (match.Groups["user"].Value, match.Groups["pass"].Value);
                 if (used != composeUser)
@@ -84,4 +71,50 @@ public class RabbitMqCredentialsMatchComposeTests
                     + string.Join("\n  ", offenders)
             );
     }
+
+    private static async Task<List<string>> BrokerWorkflowsAsync()
+    {
+        var workflows = new List<string>();
+        foreach (
+            var w in Directory.EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
+        )
+        {
+            if (
+                (await File.ReadAllTextAsync(w).ConfigureAwait(false)).Contains(
+                    "RABBITMQ_DEFAULT_USER",
+                    StringComparison.Ordinal
+                )
+            )
+                workflows.Add(w);
+        }
+
+        return workflows;
+    }
+
+    // The samples' appsettings files and the C# sources of the samples and their tests.
+    private static IEnumerable<string> ConfigAndSourceFiles() =>
+        Directory
+            .EnumerateFiles(
+                Path.Combine(RepoRoot.Path, "samples"),
+                "appsettings*.json",
+                SearchOption.AllDirectories
+            )
+            .Concat(SourceFiles.CSharp("samples", "tests"))
+            .Where(f =>
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+            );
+
+    [GeneratedRegex(
+        @"amqp://(?<user>[^:@/""]+):(?<pass>[^@/""]+)@",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AmqpUri { get; }
 }

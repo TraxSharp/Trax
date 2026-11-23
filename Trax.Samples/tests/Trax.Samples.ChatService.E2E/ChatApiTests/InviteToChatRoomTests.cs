@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Fixtures;
 using Trax.Samples.ChatService.E2E.Utilities;
 
@@ -30,15 +31,14 @@ public class InviteToChatRoomTests : ChatApiTestFixture
 
     private async Task<List<string>> RoomIdsOfAsync(string apiKey)
     {
-        var rooms = await GraphQL.SendAsync(
-            "query { discover { getChatRooms { rooms { id } } } }",
-            apiKey: apiKey
-        );
+        var rooms = await GraphQL
+            .SendAsync("query { discover { getChatRooms { rooms { id } } } }", apiKey: apiKey)
+            .ConfigureAwait(false);
         rooms.HasErrors.Should().BeFalse(rooms.FirstErrorMessage);
         return rooms
             .GetData("discover", "getChatRooms", "rooms")
             .EnumerateArray()
-            .Select(r => r.GetProperty("id").GetString()!)
+            .Select(r => r.GetProperty("id").GetString().NotNull())
             .ToList();
     }
 
@@ -107,12 +107,24 @@ public class InviteToChatRoomTests : ChatApiTestFixture
         list.Select(p => p.GetProperty("displayName").GetString())
             .Should()
             .BeEquivalentTo(["Bob", "Charlie"]);
-        list.Single(p => p.GetProperty("displayName").GetString() == "Bob")
+        list.Single(p =>
+                string.Equals(
+                    p.GetProperty("displayName").GetString(),
+                    "Bob",
+                    StringComparison.Ordinal
+                )
+            )
             .GetProperty("isMember")
             .GetBoolean()
             .Should()
             .BeTrue();
-        list.Single(p => p.GetProperty("displayName").GetString() == "Charlie")
+        list.Single(p =>
+                string.Equals(
+                    p.GetProperty("displayName").GetString(),
+                    "Charlie",
+                    StringComparison.Ordinal
+                )
+            )
             .GetProperty("isMember")
             .GetBoolean()
             .Should()

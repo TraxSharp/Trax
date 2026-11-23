@@ -16,6 +16,7 @@ using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -46,7 +47,7 @@ public class PersistedOperationTransportTests
     private const string InlineQuery = "{ hello }";
     private const string IntrospectionQuery = "{ __schema { queryType { name } } }";
 
-    private WebApplication _app = null!;
+    private WebApplication? _app;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -61,7 +62,8 @@ public class PersistedOperationTransportTests
     public async Task OneTimeTearDown()
     {
         if (_app is not null)
-            await _app.DisposeAsync();
+            if (_app is not null)
+                await _app.DisposeAsync();
     }
 
     [SetUp]
@@ -72,13 +74,13 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task JsonPost_InlineDocument_IsRefused()
     {
-        (await PostJsonAsync(_app, new { query = InlineQuery })).Should().Be(Required);
+        (await PostJsonAsync(_app.NotNull(), new { query = InlineQuery })).Should().Be(Required);
     }
 
     [Test]
     public async Task Get_InlineDocument_IsRefused()
     {
-        (await GetAsync(_app, "query=" + Uri.EscapeDataString(InlineQuery)))
+        (await GetAsync(_app.NotNull(), "query=" + Uri.EscapeDataString(InlineQuery)))
             .Should()
             .Be(Required, "a GET reaches the same execution pipeline as a POST, per " + Adr);
     }
@@ -86,7 +88,7 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task Multipart_InlineDocument_IsRefused()
     {
-        (await PostMultipartAsync(_app, new { query = InlineQuery, variables = new { } }))
+        (await PostMultipartAsync(_app.NotNull(), new { query = InlineQuery, variables = new { } }))
             .Should()
             .Be(Required, "a multipart POST reaches the same execution pipeline, per " + Adr);
     }
@@ -94,7 +96,7 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task Socket_InlineDocument_IsRefused()
     {
-        (await SubscribeAsync(_app, new { query = InlineQuery }))
+        (await SubscribeAsync(_app.NotNull(), new { query = InlineQuery }))
             .Should()
             .Be(Required, "a socket operation reaches the same execution pipeline, per " + Adr);
     }
@@ -102,9 +104,12 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task InProcess_InlineDocument_IsRefused()
     {
-        var executor = await ExecutorAsync(_app);
+        var executor = await ExecutorAsync(_app.NotNull());
 
-        var result = await executor.ExecuteAsync(InlineQuery);
+        var result = await executor.ExecuteAsync(
+            InlineQuery,
+            cancellationToken: CancellationToken.None
+        );
 
         Classify(result.ExpectOperationResult().ToJson()).Should().Be(Required);
     }
@@ -113,14 +118,15 @@ public class PersistedOperationTransportTests
     public async Task InProcess_HostAllowance_Executes()
     {
         // Host code building a request itself can say so with HotChocolate's own override.
-        var executor = await ExecutorAsync(_app);
+        var executor = await ExecutorAsync(_app.NotNull());
 
         var result = await executor.ExecuteAsync(
             OperationRequestBuilder
                 .New()
                 .SetDocument(InlineQuery)
                 .AllowNonPersistedOperation()
-                .Build()
+                .Build(),
+            cancellationToken: CancellationToken.None
         );
 
         Classify(result.ExpectOperationResult().ToJson()).Should().Be("data");
@@ -141,18 +147,34 @@ public class PersistedOperationTransportTests
             + Adr
             + " and Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-        (await PostJsonAsync(_app, new { query = MachineMutation })).Should().Be(Required, Because);
-        (await GetAsync(_app, "query=" + Uri.EscapeDataString(MachineMutation)))
+        (await PostJsonAsync(_app.NotNull(), new { query = MachineMutation }))
             .Should()
             .Be(Required, Because);
-        (await PostMultipartAsync(_app, new { query = MachineMutation, variables = new { } }))
+        (await GetAsync(_app.NotNull(), "query=" + Uri.EscapeDataString(MachineMutation)))
             .Should()
             .Be(Required, Because);
-        (await SubscribeAsync(_app, new { query = MachineSubscription }))
+        (
+            await PostMultipartAsync(
+                _app.NotNull(),
+                new { query = MachineMutation, variables = new { } }
+            )
+        )
             .Should()
             .Be(Required, Because);
-        var executor = await ExecutorAsync(_app);
-        Classify((await executor.ExecuteAsync(MachineMutation)).ExpectOperationResult().ToJson())
+        (await SubscribeAsync(_app.NotNull(), new { query = MachineSubscription }))
+            .Should()
+            .Be(Required, Because);
+        var executor = await ExecutorAsync(_app.NotNull());
+        Classify(
+                (
+                    await executor.ExecuteAsync(
+                        MachineMutation,
+                        cancellationToken: CancellationToken.None
+                    )
+                )
+                    .ExpectOperationResult()
+                    .ToJson()
+            )
             .Should()
             .Be(Required, Because);
     }
@@ -164,13 +186,15 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task JsonPost_Introspection_IsNotRefusedForPersistence()
     {
-        (await PostJsonAsync(_app, new { query = IntrospectionQuery })).Should().Be("data");
+        (await PostJsonAsync(_app.NotNull(), new { query = IntrospectionQuery }))
+            .Should()
+            .Be("data");
     }
 
     [Test]
     public async Task Get_Introspection_IsNotRefusedForPersistence()
     {
-        (await GetAsync(_app, "query=" + Uri.EscapeDataString(IntrospectionQuery)))
+        (await GetAsync(_app.NotNull(), "query=" + Uri.EscapeDataString(IntrospectionQuery)))
             .Should()
             .Be("data");
     }
@@ -178,7 +202,12 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task Multipart_Introspection_IsNotRefusedForPersistence()
     {
-        (await PostMultipartAsync(_app, new { query = IntrospectionQuery, variables = new { } }))
+        (
+            await PostMultipartAsync(
+                _app.NotNull(),
+                new { query = IntrospectionQuery, variables = new { } }
+            )
+        )
             .Should()
             .Be("data");
     }
@@ -186,7 +215,9 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task Socket_Introspection_IsNotRefusedForPersistence()
     {
-        (await SubscribeAsync(_app, new { query = IntrospectionQuery })).Should().Be("data");
+        (await SubscribeAsync(_app.NotNull(), new { query = IntrospectionQuery }))
+            .Should()
+            .Be("data");
     }
 
     [Test]
@@ -194,7 +225,7 @@ public class PersistedOperationTransportTests
     {
         (
             await GetAsync(
-                _app,
+                _app.NotNull(),
                 "operationName=IntrospectionQuery&query="
                     + Uri.EscapeDataString("query IntrospectionQuery { hello }")
             )
@@ -206,12 +237,12 @@ public class PersistedOperationTransportTests
     [Test]
     public async Task PersistedId_ExecutesOnEveryTransport()
     {
-        var store = _app.Services.GetRequiredService<IPersistedOperationStore>();
-        await store.UpsertAsync("greet_v1", GraphQLFixture.ValidDocument, null, default);
+        var store = _app.NotNull().Services.GetRequiredService<IPersistedOperationStore>();
+        await store.UpsertAsync("greet_v1", GraphQLFixture.ValidDocument, options: null, default);
 
-        (await PostJsonAsync(_app, new { id = "greet_v1" })).Should().Be("data");
-        (await GetAsync(_app, "id=greet_v1")).Should().Be("data");
-        (await SubscribeAsync(_app, new { id = "greet_v1" })).Should().Be("data");
+        (await PostJsonAsync(_app.NotNull(), new { id = "greet_v1" })).Should().Be("data");
+        (await GetAsync(_app.NotNull(), "id=greet_v1")).Should().Be("data");
+        (await SubscribeAsync(_app.NotNull(), new { id = "greet_v1" })).Should().Be("data");
     }
 
     [Test]
@@ -219,17 +250,24 @@ public class PersistedOperationTransportTests
     {
         const string query = "query Allowed { hello }";
 
-        (await GetAsync(_app, "operationName=Allowed&query=" + Uri.EscapeDataString(query)))
+        (
+            await GetAsync(
+                _app.NotNull(),
+                "operationName=Allowed&query=" + Uri.EscapeDataString(query)
+            )
+        )
             .Should()
             .Be("data");
-        (await SubscribeAsync(_app, new { query, operationName = "Allowed" })).Should().Be("data");
+        (await SubscribeAsync(_app.NotNull(), new { query, operationName = "Allowed" }))
+            .Should()
+            .Be("data");
     }
 
     [Test]
     public async Task EnforcementOff_InlineDocumentExecutesOverGet()
     {
         await using var app = await StartAsync(po =>
-            po.RequirePersisted(false).LogNonPersistedRequests(true)
+            po.RequirePersisted(require: false).LogNonPersistedRequests(log: true)
         );
 
         (await GetAsync(app, "query=" + Uri.EscapeDataString(InlineQuery))).Should().Be("data");
@@ -282,14 +320,14 @@ public class PersistedOperationTransportTests
         // above never pass through it.
         app.UsePersistedOperationsEnforcement();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
     private static Task<IRequestExecutor> ExecutorAsync(WebApplication app) =>
         app
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax")
+            .GetExecutorAsync("trax", cancellationToken: CancellationToken.None)
             .AsTask();
 
     private static async Task<string> PostJsonAsync(WebApplication app, object body)
@@ -302,16 +340,28 @@ public class PersistedOperationTransportTests
                 "application/json"
             ),
         };
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     private static async Task<string> GetAsync(WebApplication app, string queryString)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/trax/graphql?" + queryString);
         request.Headers.Add("GraphQL-Preflight", "1");
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     private static async Task<string> PostMultipartAsync(WebApplication app, object operations)
@@ -326,8 +376,14 @@ public class PersistedOperationTransportTests
             Content = form,
         };
         request.Headers.Add("GraphQL-Preflight", "1");
-        var response = await app.GetTestClient().SendAsync(request);
-        return Classify(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return Classify(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     /// <summary>
@@ -337,32 +393,33 @@ public class PersistedOperationTransportTests
     {
         var client = app.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        using var ws = await client.ConnectClosingAsync(
-            new Uri("ws://localhost/trax/graphql"),
-            default
-        );
+        using var ws = await client
+            .ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default)
+            .ConfigureAwait(false);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token);
-        (await ReceiveAsync(ws, cts.Token))
+        await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token)
+            .ConfigureAwait(false);
+        (await ReceiveAsync(ws, cts.Token).ConfigureAwait(false))
             .GetProperty("type")
             .GetString()
             .Should()
             .Be("connection_ack");
 
         await SendAsync(
-            ws,
-            JsonSerializer.Serialize(
-                new
-                {
-                    id = "1",
-                    type = "subscribe",
-                    payload,
-                }
-            ),
-            cts.Token
-        );
-        var reply = await ReceiveAsync(ws, cts.Token);
+                ws,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        id = "1",
+                        type = "subscribe",
+                        payload,
+                    }
+                ),
+                cts.Token
+            )
+            .ConfigureAwait(false);
+        var reply = await ReceiveAsync(ws, cts.Token).ConfigureAwait(false);
         return reply.GetProperty("type").GetString() switch
         {
             "next" => Classify(reply.GetProperty("payload").GetRawText()),
@@ -400,12 +457,17 @@ public class PersistedOperationTransportTests
     }
 
     private static Task SendAsync(WebSocket ws, string message, CancellationToken ct) =>
-        ws.SendAsync(Encoding.UTF8.GetBytes(message), WebSocketMessageType.Text, true, ct);
+        ws.SendAsync(
+            Encoding.UTF8.GetBytes(message),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            ct
+        );
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws, CancellationToken ct)
     {
         var buffer = new byte[64 * 1024];
-        var received = await ws.ReceiveAsync(buffer, ct);
+        var received = await ws.ReceiveAsync(buffer, ct).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(buffer, 0, received.Count));
         return doc.RootElement.Clone();
     }

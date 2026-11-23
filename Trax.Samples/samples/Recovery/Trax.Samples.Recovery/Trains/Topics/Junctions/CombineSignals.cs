@@ -24,13 +24,63 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
     )
     {
         var (slice, embedding, coCitation, authors) = signals;
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
-        var titles = slice.Papers.ToDictionary(p => p.Id, p => p.Title);
+        var links = ScoreLinks(slice, embedding, coCitation, authors);
+
+        var onTheMap = links.Where(l => l.Score >= Threshold).ToList();
+
+        var db = await contexts.CreateDbContextAsync(CancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var transaction = await db
+                .Database.BeginTransactionAsync(CancellationToken)
+                .ConfigureAwait(false);
+            await using (transaction.ConfigureAwait(false))
+            {
+                await db
+                    .TopicPairs.Where(p => p.RunId == slice.RunId)
+                    .ExecuteDeleteAsync(CancellationToken)
+                    .ConfigureAwait(false);
+                db.TopicPairs.AddRange(
+                    onTheMap.Select(l => new TopicPair
+                    {
+                        RunId = slice.RunId,
+                        WorkA = l.WorkA,
+                        WorkB = l.WorkB,
+                        Embedding = l.Embedding,
+                        SharedReferences = l.SharedReferences,
+                        SharedAuthors = l.SharedAuthors,
+                        Score = l.Score,
+                    })
+                );
+                await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(CancellationToken).ConfigureAwait(false);
+
+                return new CombinedSignals(
+                    slice.RunId,
+                    slice.Papers.Count,
+                    coCitation.Track,
+                    onTheMap.Count,
+                    links
+                );
+            }
+        }
+    }
+
+    // Every embedding pair, scored by its similarity, its shared references and its shared authors.
+    private static List<TopicLink> ScoreLinks(
+        CorpusSlice slice,
+        EmbeddingSignal embedding,
+        CoCitationSignal coCitation,
+        AuthorSignal authors
+    )
+    {
+        var titles = slice.Papers.ToDictionary(p => p.Id, p => p.Title, StringComparer.Ordinal);
         var references = coCitation.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
         var coauthors = authors.Pairs.ToDictionary(p => (p.WorkA, p.WorkB), p => (int)p.Value);
 
-        var links = embedding
+        return embedding
             .Pairs.Select(pair =>
             {
                 var shared = references.GetValueOrDefault((pair.WorkA, pair.WorkB));
@@ -47,40 +97,9 @@ public class CombineSignals(IDbContextFactory<TopicMapDbContext> contexts, DemoP
                     pair.Value,
                     shared,
                     sharedAuthors,
-                    Math.Round(score, 3)
+                    Math.Round(score, 3, MidpointRounding.ToEven)
                 );
             })
             .ToList();
-
-        var onTheMap = links.Where(l => l.Score >= Threshold).ToList();
-
-        await using var db = await contexts.CreateDbContextAsync(CancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken);
-
-        await db
-            .TopicPairs.Where(p => p.RunId == slice.RunId)
-            .ExecuteDeleteAsync(CancellationToken);
-        db.TopicPairs.AddRange(
-            onTheMap.Select(l => new TopicPair
-            {
-                RunId = slice.RunId,
-                WorkA = l.WorkA,
-                WorkB = l.WorkB,
-                Embedding = l.Embedding,
-                SharedReferences = l.SharedReferences,
-                SharedAuthors = l.SharedAuthors,
-                Score = l.Score,
-            })
-        );
-        await db.SaveChangesAsync(CancellationToken);
-        await transaction.CommitAsync(CancellationToken);
-
-        return new CombinedSignals(
-            slice.RunId,
-            slice.Papers.Count,
-            coCitation.Track,
-            onTheMap.Count,
-            links
-        );
     }
 }

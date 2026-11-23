@@ -36,7 +36,7 @@ public static class StateMachinesBuilderExtensions
     public static TraxBuilderWithEffects AddStateMachines(
         this TraxBuilderWithEffects builder,
         params Assembly[] assemblies
-    ) => builder.AddStateMachines(null, assemblies);
+    ) => builder.AddStateMachines(configure: null, assemblies);
 
     /// <summary>
     /// Add state-machine persistence with host-level options (see <see cref="StateMachineOptions"/>, e.g. the
@@ -78,9 +78,22 @@ public static class StateMachinesBuilderExtensions
                     + "AddStateMachines(o => ..., typeof(A).Assembly, typeof(B).Assembly)."
             );
 
+        var options = new StateMachineOptions();
+        configure?.Invoke(options);
+
+        // Registration is synchronous; the read below awaits only file reads, each ConfigureAwait(false), so the
+        // wait holds no context of its own. Machines served from features are read before discovery runs.
+        var served = options.FeaturesDirectory is { } features
+            ? IrDirectory
+                .LoadAsync(features, options.FeatureTrainAssemblies)
+                .GetAwaiter()
+                .GetResult()
+            : null;
+
         RegisterMachinesAndStores(
             builder.ServiceCollection,
-            configure,
+            options,
+            served,
             assemblies,
             inMemory: !builder.HasDatabaseProvider
         );
@@ -96,21 +109,15 @@ public static class StateMachinesBuilderExtensions
     // registry, and the six generic stateMachine mutation routes.
     private static void RegisterMachinesAndStores(
         IServiceCollection services,
-        Action<StateMachineOptions>? configure,
+        StateMachineOptions options,
+        IrDirectory.Loaded? served,
         Assembly[] assemblies,
         bool inMemory
     )
     {
-        var options = new StateMachineOptions();
-        configure?.Invoke(options);
-
         // Machines served from features are registered as the host's own, before discovery reads them.
-        if (options.FeaturesDirectory is { } features)
-            services.AddIrMachinesFrom(
-                features,
-                options.ConfigurePolicyRunner,
-                options.FeatureTrainAssemblies
-            );
+        if (served is not null)
+            services.AddIrMachinesFrom(served, options.ConfigurePolicyRunner);
         else if (options.ConfigurePolicyRunner is not null)
             throw new InvalidOperationException(
                 "StateMachineOptions.PolicyRunner configures the policies of machines served from features, and "
@@ -154,6 +161,24 @@ public static class StateMachinesBuilderExtensions
                     + $"{nameof(StateMachineOptions.DraftTtl)}, or set it to null for no bound."
             );
 
+        ExposeGenericMutations(services, options);
+
+        services.AddSingleton(options);
+
+        // Resolves only inside a run a machine invoked, which the job runner starts.
+        InvokedRunScope.Register(services);
+
+        RegisterMachineTypes(services, assemblies);
+        RegisterSnapshotStores(services);
+        RegisterInvokesAndSweeps(services);
+        RegisterChangeFeedAndRoutes(services, options);
+    }
+
+    private static void ExposeGenericMutations(
+        IServiceCollection services,
+        StateMachineOptions options
+    )
+    {
         // The generic mutations fail closed: serving them names the policy that gates them.
         if (options.GenericMutationsExposed)
         {
@@ -178,12 +203,10 @@ public static class StateMachinesBuilderExtensions
                     )
                 );
         }
+    }
 
-        services.AddSingleton(options);
-
-        // Resolves only inside a run a machine invoked, which the job runner starts.
-        InvokedRunScope.Register(services);
-
+    private static void RegisterMachineTypes(IServiceCollection services, Assembly[] assemblies)
+    {
         var machineTypes = assemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type =>
@@ -204,7 +227,7 @@ public static class StateMachinesBuilderExtensions
                 && !machineTypes.Contains(type)
             )
             .Select(type => type.FullName)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
         if (misplaced.Count > 0)
@@ -222,7 +245,10 @@ public static class StateMachinesBuilderExtensions
         // refused at startup, once the host's own registrations are in.
         foreach (var type in machineTypes)
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IMachine), type));
+    }
 
+    private static void RegisterSnapshotStores(IServiceCollection services)
+    {
         // The stores use the request's data context, and the provider's dialect to read a unique violation as a
         // lost race. InMemory registers no dialect, so there a race throws rather than being misread.
         // Each write records the IR hash of the definition that made it, so a machine whose hash cannot be
@@ -233,7 +259,8 @@ public static class StateMachinesBuilderExtensions
         services.AddHostedService<MachineSchemaStartupValidator>();
         services.AddScoped<ISnapshotStore>(sp => new EfSnapshotStore(
             sp.GetRequiredService<IDataContext>(),
-            sp.GetService<ISqlDialect>()
+            sp.GetService<ISqlDialect>(),
+            sp.GetRequiredService<TimeProvider>()
         )
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
@@ -245,11 +272,15 @@ public static class StateMachinesBuilderExtensions
         });
         services.AddScoped<IEffectClaimStore>(sp => new EfEffectClaimStore(
             sp.GetRequiredService<IDataContext>(),
-            sp.GetService<ISqlDialect>()
+            sp.GetService<ISqlDialect>(),
+            sp.GetRequiredService<TimeProvider>()
         ));
         services.AddScoped<IdempotentEffect>();
         services.AddScoped<ISnapshotMachineRegistry, SnapshotMachineRegistry>();
+    }
 
+    private static void RegisterInvokesAndSweeps(IServiceCollection services)
+    {
         // System-owned instances and invoke tokens: server-only, so reached through the provider's data context
         // whatever ISnapshotStore a host substitutes. The outbox writes a snapshot entering or leaving an invoking
         // state together with its run, through the launcher Trax.Mediator registers; the cancellation cancels a
@@ -257,7 +288,8 @@ public static class StateMachinesBuilderExtensions
         // invoke a train it cannot run, cancel or authorize as declared.
         services.AddScoped<IMachineInstanceStore>(sp => new EfSnapshotStore(
             sp.GetRequiredService<IDataContext>(),
-            sp.GetService<ISqlDialect>()
+            sp.GetService<ISqlDialect>(),
+            sp.GetRequiredService<TimeProvider>()
         )
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
@@ -295,7 +327,13 @@ public static class StateMachinesBuilderExtensions
         // Drafts idle past the TTL are deleted by a sweep on every host that registers machines, never by a read.
         services.AddSingleton<DraftSweeper>();
         services.AddHostedService(sp => sp.GetRequiredService<DraftSweeper>());
+    }
 
+    private static void RegisterChangeFeedAndRoutes(
+        IServiceCollection services,
+        StateMachineOptions options
+    )
+    {
         // The change feed: one listener per host (a Postgres session on the provider's notices, or a poll of the
         // table on SQLite and InMemory, and on Postgres when the host chose to poll) and the hub that re-reads a
         // changed row for whoever watches it. Neither opens anything until something watches. Stopped in reverse
@@ -303,6 +341,7 @@ public static class StateMachinesBuilderExtensions
         // database sends.
         services.AddSingleton(sp => new SnapshotChangeListener(
             sp.GetRequiredService<IDataContextProviderFactory>(),
+            sp.GetRequiredService<TimeProvider>(),
             sp.GetService<ILogger<SnapshotChangeListener>>(),
             options.ChangeFeed == StateMachineChangeFeed.Poll
                 ? null
@@ -369,42 +408,4 @@ public static class StateMachinesBuilderExtensions
             "Discard: delete one of the caller's instances, cancelling a run its state invoked first."
         ),
     ];
-}
-
-/// <summary>
-/// The IR hash (<see cref="IMachine.SchemaHash"/>) of each registered machine by name, which the store writes to a
-/// row's <c>ir_hash</c>. Null for a machine with no exportable IR, and for a name no registered machine has.
-/// </summary>
-internal sealed class MachineIrHashes(IEnumerable<IMachine> machines)
-{
-    private readonly Lazy<IReadOnlyDictionary<string, IMachine>> _byName = new(() =>
-        machines
-            .GroupBy(m => m.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal)
-    );
-
-    /// <summary>The IR hash of the machine named <paramref name="machine"/>, or null.</summary>
-    public string? Of(string machine) =>
-        _byName.Value.TryGetValue(machine, out var found) ? found.SchemaHash : null;
-}
-
-/// <summary>
-/// What a write that does not say does to a row's timer, by machine, state and context, from the registered machines'
-/// timers (see <see cref="EfSnapshotStore.Timers"/>). Null for a name no registered machine has, and for a duration the
-/// context cannot give.
-/// </summary>
-internal sealed class MachineTimerLookup(IEnumerable<IMachine> machines)
-{
-    private readonly Lazy<IReadOnlyDictionary<string, IMachineInternals>> _byName = new(() =>
-        machines
-            .OfType<IMachineInternals>()
-            .GroupBy(m => ((IMachine)m).Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal)
-    );
-
-    /// <summary>The timer a write in <paramref name="state"/> keeps from entry, none, or null when it cannot tell.</summary>
-    public SnapshotTimer? Of(string machine, string state, JsonObject context) =>
-        _byName.Value.TryGetValue(machine, out var found)
-            ? found.TimerFor(state, context, restart: false).Timer
-            : null;
 }

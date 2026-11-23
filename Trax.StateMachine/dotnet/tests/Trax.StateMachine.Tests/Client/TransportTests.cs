@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -7,6 +8,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -22,7 +24,7 @@ public class TransportTests
     {
         Id = "turnstile",
         IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
         Documents =
         [
             new ClientManifestDocument
@@ -263,7 +265,7 @@ public class TransportTests
 
         var answer = await server.GetAsync("i-1");
 
-        answer.Problem!.Code.Should().Be("NOT_FOUND");
+        answer.Problem.NotNull().Code.Should().Be("NOT_FOUND");
     }
 
     [Test]
@@ -306,7 +308,7 @@ public class TransportTests
         read.IsCompleted.Should().BeFalse();
         time.Advance(TimeSpan.FromMilliseconds(1));
 
-        var answered = () => read.WaitAsync(TimeSpan.FromSeconds(10));
+        var answered = () => read.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         (await answered.Should().ThrowAsync<HttpRequestException>()).WithMessage(
             "*within 30 seconds*"
         );
@@ -321,7 +323,7 @@ public class TransportTests
         )
         {
             // determinism: not a fixed delay, a wait only the request's cancellation ends.
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("unreachable");
         }
     }
@@ -525,11 +527,36 @@ public class TransportTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        var host = Task.Run(async () =>
+        var host = ServeOversizedMessage(listener);
+        var client = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = new Uri(
+                    string.Create(CultureInfo.InvariantCulture, $"ws://127.0.0.1:{port}/graphql")
+                ),
+                MaxMessageSize = 1024,
+            }
+        );
+        await using var clientDisposal = client.ConfigureAwait(false);
+        var sink = new Sink();
+
+        using var subscription = client.Subscribe(
+            new JsonObject { ["id"] = "changed-1", ["variables"] = new JsonObject() },
+            sink
+        );
+        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
+
+        error.Message.Should().Contain("larger than 1024");
+        await host.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
+    }
+
+    // Accepts the client, acknowledges it, then sends a message past its limit.
+    private static Task ServeOversizedMessage(TcpListener listener) =>
+        Task.Run(async () =>
         {
-            using var tcp = await listener.AcceptTcpClientAsync();
+            using var tcp = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
             var stream = tcp.GetStream();
-            await HandshakeAsync(stream);
+            await HandshakeAsync(stream).ConfigureAwait(false);
             using var socket = WebSocket.CreateFromStream(
                 stream,
                 new WebSocketCreationOptions
@@ -539,49 +566,35 @@ public class TransportTests
                 }
             );
             var buffer = new byte[4096];
-            await socket.ReceiveAsync(buffer, CancellationToken.None);
-            await socket.SendAsync(
-                Encoding.UTF8.GetBytes("{\"type\":\"connection_ack\"}"),
-                WebSocketMessageType.Text,
-                true,
-                CancellationToken.None
-            );
+            await socket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
+            await socket
+                .SendAsync(
+                    Encoding.UTF8.GetBytes("{\"type\":\"connection_ack\"}"),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
             var large = Encoding.UTF8.GetBytes(
                 "{\"type\":\"ping\",\"payload\":\"" + new string('x', 64 * 1024) + "\"}"
             );
             try
             {
-                await socket.SendAsync(
-                    large,
-                    WebSocketMessageType.Text,
-                    true,
-                    CancellationToken.None
-                );
-                await socket.ReceiveAsync(buffer, CancellationToken.None);
+                await socket
+                    .SendAsync(
+                        large,
+                        WebSocketMessageType.Text,
+                        endOfMessage: true,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+                await socket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception)
             {
                 // The client gave up on the connection.
             }
         });
-        await using var client = new GraphQLSubscriptionSocket(
-            new GraphQLSubscriptionSocketOptions
-            {
-                Endpoint = new Uri($"ws://127.0.0.1:{port}/graphql"),
-                MaxMessageSize = 1024,
-            }
-        );
-        var sink = new Sink();
-
-        using var subscription = client.Subscribe(
-            new JsonObject { ["id"] = "changed-1", ["variables"] = new JsonObject() },
-            sink
-        );
-        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
-        error.Message.Should().Contain("larger than 1024");
-        await host.WaitAsync(TimeSpan.FromSeconds(10));
-    }
 
     // The server half of the opening handshake (RFC 6455), so a test needs no web host.
     private static async Task HandshakeAsync(NetworkStream stream)
@@ -590,7 +603,7 @@ public class TransportTests
         var one = new byte[1];
         while (!request.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
         {
-            if (await stream.ReadAsync(one) == 0)
+            if (await stream.ReadAsync(one).ConfigureAwait(false) == 0)
                 throw new IOException("The client closed before its handshake ended.");
             request.Append((char)one[0]);
         }
@@ -606,6 +619,6 @@ public class TransportTests
         var response =
             "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             + $"Sec-WebSocket-Accept: {accept}\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\n\r\n";
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(response));
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(response)).ConfigureAwait(false);
     }
 }

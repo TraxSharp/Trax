@@ -46,7 +46,7 @@ internal sealed class QueryModelAuthorizationValidator(
                 if (!seen.Add(attr.Policy))
                     continue;
 
-                var policy = await policyProvider.GetPolicyAsync(attr.Policy);
+                var policy = await policyProvider.GetPolicyAsync(attr.Policy).ConfigureAwait(false);
                 if (policy is null)
                     throw new InvalidOperationException(
                         $"[TraxAuthorize(Policy = \"{attr.Policy}\")] on '{entityType.FullName}' "

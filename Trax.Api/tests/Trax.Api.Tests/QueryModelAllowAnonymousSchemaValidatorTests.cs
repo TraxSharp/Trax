@@ -31,15 +31,15 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
 {
     [TraxQueryModel]
     [TraxAllowAnonymous]
-    private class AnonThing
+    private sealed class AnonThing
     {
         public int Id { get; set; }
         public string Name { get; set; } = "";
     }
 
-    private class AnonDbContext(DbContextOptions<AnonDbContext> options) : DbContext(options)
+    private sealed class AnonDbContext(DbContextOptions<AnonDbContext> options) : DbContext(options)
     {
-        public DbSet<AnonThing> Things { get; set; } = null!;
+        public DbSet<AnonThing> Things => Set<AnonThing>();
     }
 
     [Test]
@@ -69,7 +69,8 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
         );
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*[TraxAllowAnonymous] invariant violated*")
@@ -89,7 +90,8 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
         );
         var validator = new QueryModelAuthorizationSchemaValidator(config, services);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*[TraxAllowAnonymous] invariant violated*")
@@ -223,7 +225,7 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
 
         var sp = services.BuildServiceProvider();
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
-        _ = await resolver.GetExecutorAsync("trax");
+        _ = await resolver.GetExecutorAsync("trax").ConfigureAwait(false);
 
         return (config, sp);
     }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Effect.Enums;
 
 namespace Trax.Effect.Services.Checkpoints;
@@ -30,8 +31,10 @@ internal static class ResumeSources
 
     /// <summary>The reason a second resume of a run some resume already completed is refused.</summary>
     public static string AlreadyResumedReason(long runId) =>
-        $"a resume of run {runId} already completed, so its work is done. Requeue it to run it "
-        + "again from the top.";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"a resume of run {runId} already completed, so its work is done. Requeue it to run it "
+        ) + "again from the top.";
 
     /// <summary>
     /// Why the run <paramref name="from"/> may not be resumed by a run of
@@ -53,20 +56,31 @@ internal static class ResumeSources
     ) =>
         source switch
         {
-            null => (UnknownRun, $"no run {from} exists."),
+            null => (
+                UnknownRun,
+                string.Create(CultureInfo.InvariantCulture, $"no run {from} exists.")
+            ),
             { Name: var name } when !string.Equals(name, train, StringComparison.Ordinal) => (
                 AnotherTrain,
-                $"run {from} is a run of train '{name}', not of this train."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"run {from} is a run of train '{name}', not of this train."
+                )
             ),
             { State: not (TrainState.Failed or TrainState.Cancelled) } => (
                 NotFailed,
-                $"run {from} is {source.State}; only a failed or cancelled run can be resumed."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"run {from} is {source.State}; only a failed or cancelled run can be resumed."
+                )
             ),
             { ResumedToCompletion: true } => (AlreadyResumed, AlreadyResumedReason(from)),
             _ when !RunInputs.Same(source.Input, storedInput, input, inputType) => (
                 DifferentInput,
-                $"run {from} ran on a different input, so its checkpoints hold state computed "
-                    + "for another request."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"run {from} ran on a different input, so its checkpoints hold state computed "
+                ) + "for another request."
             ),
             _ => null,
         };

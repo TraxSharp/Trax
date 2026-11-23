@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -19,13 +20,13 @@ namespace Trax.StateMachine.Persistence.Integration;
 [TestFixture(StoreProvider.Sqlite)]
 public class InvokeTokenStoreTests(StoreProvider provider)
 {
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static Snapshot Turnstile(string state, JsonObject? context = null) =>
         new()
@@ -40,11 +41,18 @@ public class InvokeTokenStoreTests(StoreProvider provider)
 
     private async Task<(Guid Id, Guid Token)> SystemRow(string state = "Locked")
     {
-        using var scope = _host.Scope();
-        var store = _host.Instances(scope);
+        using var scope = _host.NotNull().Scope();
+        var store = _host.NotNull().Instances(scope);
         var id = Guid.NewGuid();
-        (await store.Insert(DraftOwner.System, id, Turnstile(state))).Should().BeTrue();
-        return (id, (await store.Get(DraftOwner.System, "turnstile", id))!.Token);
+        (await store.Insert(DraftOwner.System, id, Turnstile(state)).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
+        return (
+            id,
+            (await store.Get(DraftOwner.System, "turnstile", id).ConfigureAwait(false))
+                .NotNull()
+                .Token
+        );
     }
 
     [Test]
@@ -52,11 +60,11 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     {
         var (id, _) = await SystemRow();
 
-        using var scope = _host.Scope();
-        (await _host.Instances(scope).Insert(DraftOwner.System, id, Turnstile("Locked")))
+        using var scope = _host.NotNull().Scope();
+        (await _host.NotNull().Instances(scope).Insert(DraftOwner.System, id, Turnstile("Locked")))
             .Should()
             .BeFalse();
-        (await _host.Rows(id)).Should().ContainSingle();
+        (await _host.NotNull().Rows(id)).Should().ContainSingle();
     }
 
     [Test]
@@ -69,8 +77,8 @@ public class InvokeTokenStoreTests(StoreProvider provider)
         var (first, firstToken) = await SystemRow();
         var (second, secondToken) = await SystemRow();
 
-        using var scope = _host.Scope();
-        var store = _host.Instances(scope);
+        using var scope = _host.NotNull().Scope();
+        var store = _host.NotNull().Instances(scope);
         (
             await store.SetInvokeToken(
                 DraftOwner.System,
@@ -94,7 +102,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
             .Should()
             .BeFalse("one token names one entry into one state");
 
-        (await _host.Rows(second)).Single().InvokeToken.Should().BeNull();
+        (await _host.NotNull().Rows(second)).Single().InvokeToken.Should().BeNull();
     }
 
     [Test]
@@ -105,8 +113,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     {
         var token = NewToken();
         var (first, firstToken) = await SystemRow();
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await _host
+                .NotNull()
                 .Instances(scope)
                 .SetInvokeToken(
                     DraftOwner.System,
@@ -116,7 +125,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                     new InvokeTokenWrite(token)
                 );
 
-        using var write = _host.Scope();
+        using var write = _host.NotNull().Scope();
         var db = write.ServiceProvider.GetRequiredService<IDataContext>();
         db.SnapshotDrafts.Add(
             new SnapshotDraft
@@ -127,7 +136,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                 Version = 1,
                 State = "Locked",
                 ConcurrencyToken = Guid.NewGuid(),
-                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = TimeProvider.System.GetUtcNow(),
                 InvokeToken = token,
             }
         );
@@ -146,7 +155,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
             }
         )
         {
-            using var scope = _host.Scope();
+            using var scope = _host.NotNull().Scope();
             var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
             db.SnapshotDrafts.Add(
                 new SnapshotDraft
@@ -158,7 +167,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                     Version = 1,
                     State = "Locked",
                     ConcurrencyToken = Guid.NewGuid(),
-                    UpdatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = TimeProvider.System.GetUtcNow(),
                 }
             );
             var save = () => ((DbContext)db).SaveChangesAsync();
@@ -171,9 +180,10 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     {
         var token = NewToken();
         var (id, concurrency) = await SystemRow();
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Instances(scope)
                     .SetInvokeToken(
                         DraftOwner.System,
@@ -187,9 +197,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
                 .BeTrue();
 
         var outcome = Turnstile("Unlocked", new JsonObject { ["paidWith"] = "quarter" });
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var store = _host.Instances(scope);
+            var store = _host.NotNull().Instances(scope);
             (await store.ApplyByInvokeToken(token, outcome, nextInvokeToken: null))
                 .Should()
                 .BeTrue();
@@ -199,7 +209,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
             (await store.GetByInvokeToken(token)).Should().BeNull();
         }
 
-        var row = (await _host.Rows(id)).Single();
+        var row = (await _host.NotNull().Rows(id)).Single();
         row.State.Should().Be("Unlocked");
         row.InvokeToken.Should().BeNull();
     }
@@ -214,8 +224,8 @@ public class InvokeTokenStoreTests(StoreProvider provider)
         var live = NewToken();
         var (id, concurrency) = await SystemRow();
 
-        using var scope = _host.Scope();
-        var store = _host.Instances(scope);
+        using var scope = _host.NotNull().Scope();
+        var store = _host.NotNull().Instances(scope);
         await store.SetInvokeToken(
             DraftOwner.System,
             "turnstile",
@@ -224,7 +234,7 @@ public class InvokeTokenStoreTests(StoreProvider provider)
             new InvokeTokenWrite(stale)
         );
         var read = await store.GetByInvokeToken(stale);
-        read!.Owner.Should().Be(DraftOwner.System);
+        read.NotNull().Owner.Should().Be(DraftOwner.System);
         read.Snapshot.InvokeToken.Should().Be(stale);
         (
             await store.SetInvokeToken(
@@ -238,10 +248,17 @@ public class InvokeTokenStoreTests(StoreProvider provider)
             .Should()
             .BeTrue();
 
-        (await store.ApplyByInvokeToken(stale, Turnstile("Locked"), null))
+        (await store.ApplyByInvokeToken(stale, Turnstile("Locked"), nextInvokeToken: null))
             .Should()
             .BeFalse("a completion whose token was replaced is a no-transition");
-        (await store.ApplyByInvokeToken(live, Turnstile("Locked"), null, Guid.NewGuid()))
+        (
+            await store.ApplyByInvokeToken(
+                live,
+                Turnstile("Locked"),
+                nextInvokeToken: null,
+                Guid.NewGuid()
+            )
+        )
             .Should()
             .BeFalse("the row no longer carries that concurrency token");
         (await store.GetByInvokeToken(live)).Should().NotBeNull();
@@ -255,34 +272,34 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         var token = NewToken();
-        using var scope = _host.Scope();
-        var store = _host.Instances(scope);
+        using var scope = _host.NotNull().Scope();
+        var store = _host.NotNull().Instances(scope);
         await store.Insert(DraftOwner.User("u1"), id, Turnstile("Locked"));
         var read = await store.Get(DraftOwner.User("u1"), "turnstile", id);
         await store.SetInvokeToken(
             DraftOwner.User("u1"),
             "turnstile",
             id,
-            read!.Token,
+            read.NotNull().Token,
             new InvokeTokenWrite(token)
         );
 
         var users = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
         var stored = await users.Get("u1", "turnstile", id);
-        stored!.InvokeToken.Should().Be(token);
+        stored.NotNull().InvokeToken.Should().Be(token);
         (
             await users.UpdateWithRequest(
                 "u1",
                 id,
                 Turnstile("Unlocked", new JsonObject { ["paidWith"] = "quarter" }),
                 stored.Token,
-                null
+                request: null
             )
         )
             .Should()
             .BeTrue();
         (await users.Upsert("u1", id, Turnstile("Locked"))).Should().BeTrue();
 
-        (await _host.Rows(id)).Single().InvokeToken.Should().Be(token);
+        (await _host.NotNull().Rows(id)).Single().InvokeToken.Should().Be(token);
     }
 }

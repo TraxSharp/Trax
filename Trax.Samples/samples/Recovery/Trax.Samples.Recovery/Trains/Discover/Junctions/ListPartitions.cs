@@ -11,14 +11,17 @@ public class ListPartitions(ITopicMapDbContext db, DemoPace pace)
 {
     public override async Task<DiscoveredPartitions> Run(DiscoverPartitionsInput input)
     {
-        if (input.Source is { } source && !IndexFixture.Sources.Contains(source))
+        if (
+            input.Source is { } source
+            && !IndexFixture.Sources.Contains(source, StringComparer.Ordinal)
+        )
             throw new ArgumentException(
                 $"There is no source {source}; the sources are "
                     + $"{string.Join(", ", IndexFixture.Sources)}.",
                 nameof(input)
             );
 
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var partitions = await db
             .SourceRecords.AsNoTracking()
@@ -30,7 +33,8 @@ public class ListPartitions(ITopicMapDbContext db, DemoPace pace)
                 g.Key.Month,
                 Records = g.Count(),
             })
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         return new DiscoveredPartitions(
             partitions

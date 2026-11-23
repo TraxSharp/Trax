@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -53,11 +54,13 @@ public class OutcomeSaveFailureTests : TestSetup
         Probe.FailSavingState = TrainState.Completed;
         var train = (CompletingTrain)Scope.ServiceProvider.GetRequiredService<ICompletingTrain>();
 
-        var run = async () => await train.Run(Unit.Default);
+        var run = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         await run.Should().ThrowExactlyAsync<OutcomeSaveException>();
         train
-            .Metadata!.TrainState.Should()
+            .Metadata.NotNull()
+            .TrainState.Should()
             .NotBe(
                 TrainState.Failed,
                 "0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md says the work "
@@ -66,7 +69,7 @@ public class OutcomeSaveFailureTests : TestSetup
         Probe.OnFailedCalls.Should().Be(0);
         Probe.OnCompletedCalls.Should().Be(0, "the outcome was never recorded");
 
-        var row = await PersistedRow(typeof(ICompletingTrain).FullName!);
+        var row = await PersistedRow(typeof(ICompletingTrain).FullName.NotNull());
         row.TrainState.Should()
             .Be(
                 TrainState.Completed,
@@ -81,7 +84,8 @@ public class OutcomeSaveFailureTests : TestSetup
         Probe.FailSavingState = TrainState.Failed;
         var train = (FailingTrain)Scope.ServiceProvider.GetRequiredService<IFailingTrain>();
 
-        var run = async () => await train.Run(Unit.Default);
+        var run = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         (await run.Should().ThrowAsync<Exception>())
             .Which.Should()
@@ -97,9 +101,13 @@ public class OutcomeSaveFailureTests : TestSetup
     private async Task<Metadata> PersistedRow(string trainName)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Name == trainName);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Name == trainName)
+            .ConfigureAwait(false);
     }
 
     private static class Probe
@@ -124,12 +132,12 @@ public class OutcomeSaveFailureTests : TestSetup
     private class OutcomeSaveException() : Exception("The outcome could not be saved.");
 
     /// <summary>Throws from SaveChanges once the tracked run has reached the probed state.</summary>
-    private class FailingOutcomeSaveProvider : IEffectProvider
+    private sealed class FailingOutcomeSaveProvider : IEffectProvider
     {
         private readonly List<Metadata> _tracked = [];
 
         public Task SaveChanges(CancellationToken cancellationToken) =>
-            _tracked.Any(m => m.TrainState == Probe.FailSavingState)
+            _tracked.Exists(m => m.TrainState == Probe.FailSavingState)
                 ? throw new OutcomeSaveException()
                 : Task.CompletedTask;
 
@@ -146,12 +154,12 @@ public class OutcomeSaveFailureTests : TestSetup
         public void Dispose() { }
     }
 
-    private class FailingOutcomeSaveFactory : IEffectProviderFactory
+    private sealed class FailingOutcomeSaveFactory : IEffectProviderFactory
     {
         public IEffectProvider Create() => new FailingOutcomeSaveProvider();
     }
 
-    private class CompletingTrain : ServiceTrain<Unit, Unit>, ICompletingTrain
+    private sealed class CompletingTrain : ServiceTrain<Unit, Unit>, ICompletingTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
@@ -173,7 +181,7 @@ public class OutcomeSaveFailureTests : TestSetup
         }
     }
 
-    private class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
+    private sealed class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
     {
         public static readonly InvalidOperationException Failure = new("The train's own failure.");
 
@@ -192,7 +200,7 @@ public class OutcomeSaveFailureTests : TestSetup
         }
     }
 
-    private interface ICompletingTrain : IServiceTrain<Unit, Unit> { }
+    private interface ICompletingTrain : IServiceTrain<Unit, Unit>;
 
-    private interface IFailingTrain : IServiceTrain<Unit, Unit> { }
+    private interface IFailingTrain : IServiceTrain<Unit, Unit>;
 }

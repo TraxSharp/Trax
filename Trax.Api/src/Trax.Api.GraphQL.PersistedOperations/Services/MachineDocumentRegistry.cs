@@ -1,34 +1,10 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
-
-/// <summary>What the store holds for one machine document id: the version it registered under, and whether it is active.</summary>
-internal readonly record struct StoredMachineDocument(int Version, bool IsActive);
-
-/// <summary>What a node does with a request naming a machine document by id.</summary>
-internal enum MachineDocumentVerdict
-{
-    /// <summary>One of this node's own documents: look it up and run it.</summary>
-    Own,
-
-    /// <summary>A document of an older version of the machine, or one no version generated: the client reloads.</summary>
-    ClientOutdated,
-
-    /// <summary>
-    /// A document of a newer version of the machine than this node runs, or one of a machine this node does not serve
-    /// that the store holds active: the client retries.
-    /// </summary>
-    ServerOutdated,
-
-    /// <summary>
-    /// A client document another node registered that the store holds active: it runs here if its stored text passes
-    /// this node's checks, and answers <see cref="ClientOutdated"/> if not.
-    /// </summary>
-    Stored,
-}
 
 /// <summary>
 /// This node's machine documents, and what it knows of the others stored beside them: the order in which each version
@@ -58,7 +34,7 @@ internal enum MachineDocumentVerdict
 /// </para>
 /// <para>See <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
 /// </remarks>
-internal sealed class MachineDocumentRegistry : IMachineIrOrder
+internal sealed class MachineDocumentRegistry(TimeProvider? clock = null) : IMachineIrOrder
 {
     /// <summary>The default shortest time between two reads of the stored versions that requests can cause.</summary>
     internal static readonly TimeSpan MinRefreshInterval = TimeSpan.FromSeconds(1);
@@ -67,6 +43,9 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     internal const int MissCapacity = 4096;
 
     private readonly ConcurrentDictionary<string, long> _misses = new(StringComparer.Ordinal);
+
+    /// <summary>The clock the read and miss times are timestamps of.</summary>
+    internal TimeProvider Clock { get; } = clock ?? TimeProvider.System;
 
     // What this node decided about each stored client document it was asked for: whether its stored text passes this
     // node's checks. Only ids the store holds active get here, so it holds no more than the store does.
@@ -100,20 +79,20 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     public IReadOnlyList<GeneratedDocument> Documents => _state?.Documents ?? [];
 
     /// <summary>This node's document under <paramref name="id"/>, if it is one of its own.</summary>
-    public bool TryGetOwn(string id, out GeneratedDocument document)
+    public bool TryGetOwn(string id, [NotNullWhen(true)] out GeneratedDocument? document)
     {
         if (_state is { } state && state.Own.TryGetValue(id, out var own))
         {
             document = own;
             return true;
         }
-        document = null!;
+        document = null;
         return false;
     }
 
     /// <summary>
     /// Records the documents this node registered, its version of each machine, and every stored id's version, as read
-    /// by a read of the store that began at <paramref name="readStartedAt"/> (a <see cref="Stopwatch"/> timestamp; now
+    /// by a read of the store that began at <paramref name="readStartedAt"/> (a timestamp of <see cref="Clock"/>; now
     /// when omitted).
     /// </summary>
     public void Publish(
@@ -123,14 +102,14 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         long? readStartedAt = null
     )
     {
-        var readAt = readStartedAt ?? Stopwatch.GetTimestamp();
+        var readAt = readStartedAt ?? Clock.GetTimestamp();
         _state = new State(
             documents,
             documents.ToDictionary(d => d.Id, StringComparer.Ordinal),
             ownVersions,
             stored,
             readAt,
-            Stopwatch.GetTimestamp()
+            Clock.GetTimestamp()
         );
     }
 
@@ -146,9 +125,9 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
             Task<IReadOnlyDictionary<string, StoredMachineDocument>>
         > readStored,
         CancellationToken cancellationToken
-    ) => ValueTask.FromResult(Classify(id, readStored));
+    ) => ValueTask.FromResult(Verdict(id, readStored));
 
-    private MachineDocumentVerdict Classify(
+    private MachineDocumentVerdict Verdict(
         string id,
         Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> readStored
     )
@@ -204,7 +183,7 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     // about within the interval still turns client-outdated after the next read.
     private void Remember(string id)
     {
-        var firstAsked = Stopwatch.GetTimestamp();
+        var firstAsked = Clock.GetTimestamp();
         if (!_misses.TryAdd(id, firstAsked))
             return;
         _missOrder.Enqueue((id, firstAsked));
@@ -252,7 +231,7 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         if (
             state.Documents.Any(d =>
                 d is MachineDocument m
-                && m.Machine == machine
+                && string.Equals(m.Machine, machine, StringComparison.Ordinal)
                 && string.Equals(m.IrHash, irHash, StringComparison.Ordinal)
             )
         )
@@ -289,11 +268,11 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
             {
                 if (_state is not { } before || _readStored is not { } read)
                     return;
-                var since = Stopwatch.GetElapsedTime(before.ReadFinishedAt);
+                var since = Clock.GetElapsedTime(before.ReadFinishedAt);
                 if (since < RefreshInterval)
-                    await Task.Delay(RefreshInterval - since).ConfigureAwait(false);
+                    await Task.Delay(RefreshInterval - since, Clock).ConfigureAwait(false);
 
-                var startedAt = Stopwatch.GetTimestamp();
+                var startedAt = Clock.GetTimestamp();
                 IReadOnlyDictionary<string, StoredMachineDocument> stored;
                 try
                 {
@@ -303,17 +282,17 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
                 {
                     // The store could not be read: the ids stay unseen, answered as retryable, and the next miss asks
                     // again no sooner than the interval.
-                    _state = _state! with
+                    _state = _state.NotNull() with
                     {
-                        ReadFinishedAt = Stopwatch.GetTimestamp(),
+                        ReadFinishedAt = Clock.GetTimestamp(),
                     };
                     continue;
                 }
-                _state = _state! with
+                _state = _state.NotNull() with
                 {
                     Stored = stored,
                     ReadStartedAt = startedAt,
-                    ReadFinishedAt = Stopwatch.GetTimestamp(),
+                    ReadFinishedAt = Clock.GetTimestamp(),
                 };
             }
         }
@@ -333,29 +312,5 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         IReadOnlyDictionary<string, StoredMachineDocument> Stored,
         long ReadStartedAt,
         long ReadFinishedAt
-    );
-}
-
-/// <summary>
-/// The instruments that alert on a machine document whose stored body does not match its id: a lookup refused, and a
-/// row startup wrote back.
-/// </summary>
-internal static class MachineDocumentInstruments
-{
-    /// <summary>The meter both instruments belong to.</summary>
-    public const string MeterName = "Trax.Api.PersistedOperations";
-
-    private static readonly Meter Meter = new(MeterName);
-
-    /// <summary>A lookup refused because the stored body does not hash to its id.</summary>
-    public static readonly Counter<long> Mismatches = Meter.CreateCounter<long>(
-        "trax.persisted_operations.machine_document_mismatches",
-        description: "Lookups of a machine document refused because the stored body does not match its id."
-    );
-
-    /// <summary>A stored machine document startup wrote back because its body did not match its id.</summary>
-    public static readonly Counter<long> Repairs = Meter.CreateCounter<long>(
-        "trax.persisted_operations.machine_document_repairs",
-        description: "Machine documents written back at startup because the stored body did not match its id."
     );
 }

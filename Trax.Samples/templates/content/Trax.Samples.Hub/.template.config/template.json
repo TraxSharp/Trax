@@ -10,5 +10,13 @@
   "tags": {
     "language": "C#",
     "type": "project"
+  },
+  "symbols": {
+    "strict": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Reference Trax.Analyzers in the project and its tests, so the build holds the code to the analyzer profile Trax holds its own code to."
+    }
   }
 }

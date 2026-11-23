@@ -51,12 +51,10 @@ public class ConcurrentSubscribeTests
                 .Select(_ =>
                     Task.Run(async () =>
                     {
-                        await start.Task;
-                        return await TopicSubscribe.OneAtATimeAsync<string>(
-                            receiver,
-                            Topic,
-                            CancellationToken.None
-                        );
+                        await start.Task.ConfigureAwait(false);
+                        return await TopicSubscribe
+                            .OneAtATimeAsync<string>(receiver, Topic, CancellationToken.None)
+                            .ConfigureAwait(false);
                     })
                 )
                 .ToArray();
@@ -88,7 +86,9 @@ public class ConcurrentSubscribeTests
     {
         try
         {
-            await foreach (var message in stream.ReadEventsAsync().WithCancellation(ct))
+            await foreach (
+                var message in stream.ReadEventsAsync().WithCancellation(ct).ConfigureAwait(false)
+            )
                 return message;
         }
         catch (OperationCanceledException) { }

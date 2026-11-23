@@ -1,0 +1,543 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.RemoveEmptyBlockAnalyzer,
+    Trax.Analyzers.Rules.RemoveEmptyBlockFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class RemoveEmptyBlockAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task EmptyElseBlock()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                    {|TRX0090:else
+                    {
+                    }|}
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyElseBlock_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                    {|TRX0090:else
+                    {
+                    }|}
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyElseBlock_FollowedByElseOfOuterIf_AddBraces()
+    {
+        var test = CreateTest();
+
+        // Removing the empty else block without braces would make the else of the outer if statement bind to the inner if statement
+        test.TestCode = """
+            class Test
+            {
+                void A(bool a, bool b)
+                {
+                    if (a)
+                        if (b)
+                            A(a, b);
+                        {|TRX0090:else
+                        {
+                        }|}
+                    else
+                        A(a, b);
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void A(bool a, bool b)
+                {
+                    if (a)
+                    {
+                        if (b)
+                            A(a, b);
+                    }
+                    else
+                        A(a, b);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyElseBlock_InLoop_FollowedByElseOfOuterIf_AddBraces()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool a, bool b)
+                {
+                    if (a)
+                        while (b)
+                            if (b)
+                                A(a, b);
+                            {|TRX0090:else
+                            {
+                            }|}
+                    else
+                        A(a, b);
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void A(bool a, bool b)
+                {
+                    if (a)
+                        while (b)
+                        {
+                            if (b)
+                                A(a, b);
+                        }
+                    else
+                        A(a, b);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyElseBlock_NestedIfWithoutOuterElse_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool a, bool b)
+                {
+                    if (a)
+                        if (b)
+                            A(a, b);
+                        {|TRX0090:else
+                        {
+                        }|}
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void A(bool a, bool b)
+                {
+                    if (a)
+                        if (b)
+                            A(a, b);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ElseBlockContainingABlock()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                    else
+                    {
+                        {
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ElseBlockWithComment()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                    else
+                    {
+                        // Comment
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ElseBlockWithMultilineComment()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                    else
+                    {
+                        /*
+                            Comment
+                        */
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ElseBlockWithStatement()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                    }
+                    else
+                    {
+                        _ = condition;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyFinallyBlock()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A()
+                {
+                    try
+                    {
+                    }
+                    {|TRX0090:finally
+                    {
+                    }|}
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyFinallyBlock_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A()
+                {
+                    try
+                    {
+                    }
+                    {|TRX0090:finally
+                    {
+                    }|}
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void A()
+                {
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyFinallyBlock_WithCatch_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A()
+                {
+                    try
+                    {
+                    }
+                    catch
+                    {
+                    }
+                    {|TRX0090:finally
+                    {
+                    }|}
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void A()
+                {
+                    try
+                    {
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyBlockWithComment()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        // Comment
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyBlockWithMultilineComment()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A()
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        /*
+                            Comment
+                        */
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FinallyBlockWithStatement()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void A(bool condition)
+                {
+                    try
+                    {
+                    }
+                    finally
+                    {
+                        _ = condition;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyFinallyBlockInsideElseBlock_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void Foo() => throw null;
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                        Foo();
+                    }
+                    else
+                    {
+                        try
+                        {
+                            Foo();
+                        }
+                        {|TRX0090:finally
+                        {
+                        }|}
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void Foo() => throw null;
+                void A(bool condition)
+                {
+                    if (condition)
+                    {
+                        Foo();
+                    }
+                    else
+                    {
+                        {
+                            Foo();
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EmptyElseBlockInsideFinallyBlock_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class Test
+            {
+                void Foo() => throw null;
+                void A(bool condition)
+                {
+                    try
+                    {
+                        Foo();
+                    }
+                    finally
+                    {
+                        if (condition)
+                        {
+                            Foo();
+                        }
+                        {|TRX0090:else
+                        {
+                        }|}
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Test
+            {
+                void Foo() => throw null;
+                void A(bool condition)
+                {
+                    try
+                    {
+                        Foo();
+                    }
+                    finally
+                    {
+                        if (condition)
+                        {
+                            Foo();
+                        }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.E2E.Factories;
 using Trax.Samples.Auth.E2E.Utilities;
@@ -35,14 +36,14 @@ public class DemoCredentialsEnvironmentTests
 
     private const string BotKey = "a-real-key-that-only-configuration-holds";
 
-    private TestJwksServer _identityProvider = null!;
+    private TestJwksServer? _identityProvider;
 
     [OneTimeSetUp]
     public async Task StartIdentityProvider() =>
         _identityProvider = await TestJwksServer.StartAsync();
 
     [OneTimeTearDown]
-    public async Task StopIdentityProvider() => await _identityProvider.DisposeAsync();
+    public async Task StopIdentityProvider() => await _identityProvider.NotNull().DisposeAsync();
 
     [Test]
     public async Task Development_RegistersTheDemoSchemes()
@@ -121,7 +122,8 @@ public class DemoCredentialsEnvironmentTests
 
         // A token from the identity provider authenticates through the JWT scheme.
         var idpToken = _identityProvider
-            .CreateIssuer("trax-samples-auth")
+            .NotNull()
+            .CreateIssuer("trax-samples-auth", TimeProvider.System)
             .Mint(b => b.WithSubject("u-123").WithRole(AuthRoles.Operator));
         var viaIdp = await graphQL.SendAsync(WhoAmI, Caller.WithToken("idp user", idpToken));
         viaIdp.HasErrors.Should().BeFalse(viaIdp.Raw);
@@ -137,7 +139,10 @@ public class DemoCredentialsEnvironmentTests
     private static Caller DemoOscarKey => Caller.WithApiKey("demo oscar", DemoCredentials.OscarKey);
 
     private static Caller DemoAliceToken =>
-        Caller.WithToken("demo alice", DemoCredentials.MintToken(DemoCredentials.Alice));
+        Caller.WithToken(
+            "demo alice",
+            DemoCredentials.MintToken(DemoCredentials.Alice, TimeProvider.System)
+        );
 
     private ProductionAuthApiFactory ConfiguredProductionHost()
     {
@@ -146,13 +151,13 @@ public class DemoCredentialsEnvironmentTests
         var hash = SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes(BotKey)]);
 
         return new ProductionAuthApiFactory(
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Auth:ApiKeys:0:Id"] = "ops-bot",
                 ["Auth:ApiKeys:0:Salt"] = Convert.ToBase64String(salt),
                 ["Auth:ApiKeys:0:Hash"] = Convert.ToBase64String(hash),
                 ["Auth:ApiKeys:0:Roles:0"] = AuthRoles.Operator,
-                ["Auth:Jwt:Authority"] = _identityProvider.Issuer,
+                ["Auth:Jwt:Authority"] = _identityProvider.NotNull().Issuer,
                 ["Auth:Jwt:Audience"] = "trax-samples-auth",
             },
             builder =>
@@ -171,7 +176,8 @@ public class DemoCredentialsEnvironmentTests
     {
         var schemes = await factory
             .Services.GetRequiredService<IAuthenticationSchemeProvider>()
-            .GetAllSchemesAsync();
+            .GetAllSchemesAsync()
+            .ConfigureAwait(false);
         return schemes.Select(s => s.Name).ToList();
     }
 }

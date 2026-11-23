@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
@@ -46,16 +47,110 @@ public class RemoteParallelRunTests(ClusterStore store)
 {
     private const string WorkerUrl = "http://worker.test/trax/execute";
 
-    private InvokeCluster _cluster = null!;
-    private IHost _worker = null!;
-    private ClusterHost _scheduler = null!;
+    private InvokeCluster? _cluster;
+    private IHost? _worker;
+    private ClusterHost? _scheduler;
 
     [OneTimeSetUp]
     public async Task CreateHosts()
     {
         _cluster = await InvokeCluster.Create(store);
 
-        _worker = await new HostBuilder()
+        _worker = await StartWorker();
+
+        var toWorker = _worker.NotNull().GetTestServer().CreateHandler();
+        _scheduler = _cluster
+            .NotNull()
+            .Host(
+                machines: false,
+                scheduler: true,
+                scheduling: s =>
+                    s.OverrideSubmitter(x =>
+                        x.AddScoped<IJobSubmitter>(_ => new HttpJobSubmitter(
+                            new HttpClient(toWorker, disposeHandler: false)
+                            {
+                                BaseAddress = new Uri(WorkerUrl),
+                                Timeout = TimeSpan.FromSeconds(30),
+                            },
+                            new RemoteWorkerOptions
+                            {
+                                BaseUrl = WorkerUrl,
+                                Retry = new HttpRetryOptions { MaxRetries = 0 },
+                            },
+                            NullLogger<HttpJobSubmitter>.Instance,
+                            TimeProvider.System
+                        ))
+                    ),
+                // No junction events here: every junction_run row the test reads is the worker's.
+                data: d => d.SaveTrainParameters()
+            );
+    }
+
+    [OneTimeTearDown]
+    public async Task DisposeHosts()
+    {
+        if (_worker is not null)
+        {
+            await _worker.NotNull().StopAsync();
+            _worker?.Dispose();
+        }
+        if (_scheduler is not null)
+            if (_scheduler is not null)
+                await _scheduler.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
+    }
+
+    [SetUp]
+    public Task Reset() => _cluster.NotNull().Reset();
+
+    [Test]
+    public async Task A_parallel_train_runs_end_to_end_on_a_remote_worker()
+    {
+        var (manifest, entry) = await Queue(new ParallelRemoteInput { Topic = "rail" });
+
+        var scope = _scheduler.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default)
+                .WaitAsync(TimeSpan.FromSeconds(60), TimeProvider.System);
+
+        var dispatched = await With(data =>
+            data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entry.Id)
+        );
+        dispatched.Status.Should().Be(WorkQueueStatus.Dispatched);
+        dispatched.DispatchAttempts.Should().Be(0, "the worker took the job on the first delivery");
+
+        var run = await With(data =>
+            data.Metadatas.AsNoTracking().SingleAsync(m => m.ManifestId == manifest.Id)
+        );
+        run.Id.Should().Be(dispatched.MetadataId);
+        run.TrainState.Should().Be(TrainState.Completed, run.FailureReason);
+        run.Output.Should().Contain("left=8, right=40", "the join read both branches' results");
+
+        var rows = await JunctionRuns(run.Id);
+        rows.Should()
+            .OnlyContain(r => r.Kind == JunctionRunKind.Junction)
+            .And.OnlyContain(r => r.State == JunctionRunState.Completed);
+        AssertEveryJunctionRecordedWhereItRan(rows);
+
+        var left = rows.Where(r =>
+                string.Equals(r.BranchPath, "Parallel#0/left", StringComparison.Ordinal)
+            )
+            .ToList();
+        left.Select(r => r.Name)
+            .Should()
+            .Equal(
+                [nameof(ParallelRemoteScoreLeft), nameof(ParallelRemoteRefineLeft)],
+                "a branch's own junctions are recorded in the order they ran"
+            );
+        rows[0].Name.Should().Be(nameof(ParallelRemoteAdmit));
+        rows[^1].Name.Should().Be(nameof(ParallelRemoteCombine));
+    }
+
+    private Task<IHost> StartWorker() =>
+        new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
@@ -66,8 +161,10 @@ public class RemoteParallelRunTests(ClusterStore store)
                             trax.AddEffects(effects =>
                                     (
                                         store == ClusterStore.Postgres
-                                            ? effects.UsePostgres(_cluster.ConnectionString)
-                                            : effects.UseSqlite(_cluster.ConnectionString)
+                                            ? effects.UsePostgres(
+                                                _cluster.NotNull().ConnectionString
+                                            )
+                                            : effects.UseSqlite(_cluster.NotNull().ConnectionString)
                                     )
                                         .SaveTrainParameters()
                                         .AddJunctionEvents()
@@ -95,75 +192,7 @@ public class RemoteParallelRunTests(ClusterStore store)
             )
             .StartAsync();
 
-        var toWorker = _worker.GetTestServer().CreateHandler();
-        _scheduler = _cluster.Host(
-            machines: false,
-            scheduler: true,
-            scheduling: s =>
-                s.OverrideSubmitter(x =>
-                    x.AddScoped<IJobSubmitter>(_ => new HttpJobSubmitter(
-                        new HttpClient(toWorker, disposeHandler: false)
-                        {
-                            BaseAddress = new Uri(WorkerUrl),
-                            Timeout = TimeSpan.FromSeconds(30),
-                        },
-                        new RemoteWorkerOptions
-                        {
-                            BaseUrl = WorkerUrl,
-                            Retry = new HttpRetryOptions { MaxRetries = 0 },
-                        },
-                        NullLogger<HttpJobSubmitter>.Instance
-                    ))
-                ),
-            // No junction events here: every junction_run row the test reads is the worker's.
-            data: d => d.SaveTrainParameters()
-        );
-    }
-
-    [OneTimeTearDown]
-    public async Task DisposeHosts()
-    {
-        if (_worker is not null)
-        {
-            await _worker.StopAsync();
-            _worker.Dispose();
-        }
-        if (_scheduler is not null)
-            await _scheduler.DisposeAsync();
-        await _cluster.DisposeAsync();
-    }
-
-    [SetUp]
-    public Task Reset() => _cluster.Reset();
-
-    [Test]
-    public async Task A_parallel_train_runs_end_to_end_on_a_remote_worker()
-    {
-        var (manifest, entry) = await Queue(new ParallelRemoteInput { Topic = "rail" });
-
-        using (var scope = _scheduler.Services.CreateScope())
-            await scope
-                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
-                .Run(Unit.Default)
-                .WaitAsync(TimeSpan.FromSeconds(60));
-
-        var dispatched = await With(data =>
-            data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entry.Id)
-        );
-        dispatched.Status.Should().Be(WorkQueueStatus.Dispatched);
-        dispatched.DispatchAttempts.Should().Be(0, "the worker took the job on the first delivery");
-
-        var run = await With(data =>
-            data.Metadatas.AsNoTracking().SingleAsync(m => m.ManifestId == manifest.Id)
-        );
-        run.Id.Should().Be(dispatched.MetadataId);
-        run.TrainState.Should().Be(TrainState.Completed, run.FailureReason);
-        run.Output.Should().Contain("left=8, right=40", "the join read both branches' results");
-
-        var rows = await JunctionRuns(run.Id);
-        rows.Should()
-            .OnlyContain(r => r.Kind == JunctionRunKind.Junction)
-            .And.OnlyContain(r => r.State == JunctionRunState.Completed);
+    private static void AssertEveryJunctionRecordedWhereItRan(List<JunctionRun> rows) =>
         rows.Select(r => (r.Name, r.NodeId, r.BranchPath))
             .Should()
             .BeEquivalentTo([
@@ -186,25 +215,14 @@ public class RemoteParallelRunTests(ClusterStore store)
                 (nameof(ParallelRemoteCombine), "ParallelRemoteCombine#0", (string?)null),
             ]);
 
-        var left = rows.Where(r => r.BranchPath == "Parallel#0/left").ToList();
-        left.Select(r => r.Name)
-            .Should()
-            .Equal(
-                [nameof(ParallelRemoteScoreLeft), nameof(ParallelRemoteRefineLeft)],
-                "a branch's own junctions are recorded in the order they ran"
-            );
-        rows.First().Name.Should().Be(nameof(ParallelRemoteAdmit));
-        rows.Last().Name.Should().Be(nameof(ParallelRemoteCombine));
-    }
-
     private async Task<(Manifest, WorkQueue)> Queue(ParallelRemoteInput input)
     {
-        using var scope = _scheduler.Services.CreateScope();
+        var scope = _scheduler.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            data,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -217,23 +235,24 @@ public class RemoteParallelRunTests(ClusterStore store)
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await data.Track(manifest);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(manifest).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(IParallelRemoteTrain).FullName!,
+                TrainName = typeof(IParallelRemoteTrain).FullName.NotNull(),
                 Input = JsonSerializer.Serialize(
                     input,
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputTypeName = typeof(ParallelRemoteInput).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
-        await data.Track(entry);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(entry).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return (manifest, entry);
     }
 
@@ -244,26 +263,37 @@ public class RemoteParallelRunTests(ClusterStore store)
     private async Task<List<JunctionRun>> JunctionRuns(long runId)
     {
         // The writer's flush is internal to Trax.Effect.Data, which this assembly cannot see.
-        var writer = _worker.Services.GetRequiredService(
-            typeof(Effect.Data.Extensions.ServiceExtensions).Assembly.GetType(
-                "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
-                throwOnError: true
-            )!
-        );
+        var writer = _worker
+            .NotNull()
+            .Services.GetRequiredService(
+                typeof(Effect.Data.Extensions.ServiceExtensions)
+                    .Assembly.GetType(
+                        "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
+                        throwOnError: true
+                    )
+                    .NotNull()
+            );
         await (
             (Task)
                 writer
                     .GetType()
-                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(writer, [CancellationToken.None])!
-        ).WaitAsync(TimeSpan.FromSeconds(30));
+                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .NotNull()
+                    .Invoke(writer, [CancellationToken.None])
+                    .NotNull()
+        )
+            .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
 
-        return await With(data => data.JunctionRuns.AsNoTracking().ForRun(runId).ToListAsync());
+        return await With(data => data.JunctionRuns.AsNoTracking().ForRun(runId).ToListAsync())
+            .ConfigureAwait(false);
     }
 
     private async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = _scheduler.Services.CreateScope();
-        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>());
+        var scope = _scheduler.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
+            .ConfigureAwait(false);
     }
 }

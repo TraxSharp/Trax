@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence.FromIr;
 
@@ -38,8 +39,17 @@ internal sealed partial class IrTypes
     /// <summary>The machine id in Pascal case, which every emitted type name starts with.</summary>
     internal string Prefix { get; }
 
-    internal Type State { get; private set; } = null!;
-    internal Type Trigger { get; private set; } = null!;
+    internal Type State
+    {
+        get => field.NotNull(nameof(State));
+        private set;
+    }
+
+    internal Type Trigger
+    {
+        get => field.NotNull(nameof(Trigger));
+        private set;
+    }
 
     /// <summary>Each declared state's context record, by state.</summary>
     internal Dictionary<string, Type> Contexts { get; } = new(StringComparer.Ordinal);
@@ -48,7 +58,11 @@ internal sealed partial class IrTypes
     internal Dictionary<string, Type> Inputs { get; } = new(StringComparer.Ordinal);
 
     /// <summary>The record a client starts an instance with: no fields, since an IR declares no start input.</summary>
-    internal Type Start { get; private set; } = null!;
+    internal Type Start
+    {
+        get => field.NotNull(nameof(Start));
+        private set;
+    }
 
     /// <summary>Emits every type the machine needs.</summary>
     /// <exception cref="InvalidOperationException">A name in the IR cannot be emitted; the message names it.</exception>
@@ -76,7 +90,7 @@ internal sealed partial class IrTypes
         var builder = _module.DefineEnum(Name(suffix), TypeAttributes.Public, typeof(int));
         for (var i = 0; i < members.Count; i++)
         {
-            if (!Member().IsMatch(members[i]))
+            if (!Member.IsMatch(members[i]))
                 throw new InvalidOperationException(
                     $"The {what} '{members[i]}' is not a name a machine can have: a capital letter, then letters and "
                         + "digits."
@@ -156,7 +170,12 @@ internal sealed partial class IrTypes
             clr,
             FieldAttributes.Private
         );
-        var property = type.DefineProperty(name, PropertyAttributes.None, clr, null);
+        var property = type.DefineProperty(
+            name,
+            PropertyAttributes.None,
+            clr,
+            parameterTypes: null
+        );
         const MethodAttributes accessor =
             MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.HideBySig;
 
@@ -167,7 +186,7 @@ internal sealed partial class IrTypes
         il.Emit(OpCodes.Ret);
         property.SetGetMethod(get);
 
-        var set = type.DefineMethod($"set_{name}", accessor, null, [clr]);
+        var set = type.DefineMethod($"set_{name}", accessor, returnType: null, [clr]);
         il = set.GetILGenerator();
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Ldarg_1);
@@ -177,7 +196,7 @@ internal sealed partial class IrTypes
 
         property.SetCustomAttribute(
             new CustomAttributeBuilder(
-                typeof(JsonPropertyNameAttribute).GetConstructor([typeof(string)])!,
+                typeof(JsonPropertyNameAttribute).GetConstructor([typeof(string)]).NotNull(),
                 [jsonName]
             )
         );
@@ -196,7 +215,7 @@ internal sealed partial class IrTypes
     /// <summary>A field's property name: its JSON name with the first letter upper-cased, which must be a C# identifier.</summary>
     internal static string PropertyName(string field, string owner)
     {
-        if (!Identifier().IsMatch(field))
+        if (!Identifier.IsMatch(field))
             throw new InvalidOperationException(
                 $"{owner} has the field '{field}', which is not a name a property can have: a letter or '_', then "
                     + "letters, digits and '_'."
@@ -211,9 +230,17 @@ internal sealed partial class IrTypes
                 .Select(word => word.Length == 0 ? "" : char.ToUpperInvariant(word[0]) + word[1..])
         );
 
-    [GeneratedRegex(@"\A[A-Z][A-Za-z0-9]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex Member();
+    [GeneratedRegex(
+        @"\A[A-Z][A-Za-z0-9]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Member { get; }
 
-    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex Identifier();
+    [GeneratedRegex(
+        @"\A[A-Za-z_][A-Za-z0-9_]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Identifier { get; }
 }

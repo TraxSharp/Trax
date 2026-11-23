@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.Checkpoint;
 
@@ -36,7 +37,11 @@ public class Checkpoint
     /// already part of the id. Unique within the run.
     /// </summary>
     [Column("node_id")]
-    public string NodeId { get; set; } = null!;
+    public string NodeId
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The <c>Parallel</c> branch the checkpoint was taken in (<c>Parallel#0/embedding</c>), or null
@@ -51,14 +56,22 @@ public class Checkpoint
     /// row by <see cref="NodeId"/> and checks it by <see cref="StateFingerprint"/>, never by this name.
     /// </summary>
     [Column("state_type")]
-    public string StateType { get; set; } = null!;
+    public string StateType
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The declared state as canonical JSON, under the size cap a requeue's stored input uses. Never a
     /// placeholder: a state over the cap fails the step and stores no row.
     /// </summary>
     [Column("state")]
-    public string State { get; set; } = null!;
+    public string State
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The tracks the routing steps before the checkpoint took, in order, as a JSON array; empty when
@@ -74,7 +87,11 @@ public class Checkpoint
     /// from the running chain's.
     /// </summary>
     [Column("chain_hash")]
-    public string ChainHash { get; set; } = null!;
+    public string ChainHash
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// A fingerprint of the state type's serializer contract when the row was written. A resume refuses
@@ -82,7 +99,11 @@ public class Checkpoint
     /// different value.
     /// </summary>
     [Column("state_fingerprint")]
-    public string StateFingerprint { get; set; } = null!;
+    public string StateFingerprint
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>When the checkpoint was written.</summary>
     [Column("created_at")]

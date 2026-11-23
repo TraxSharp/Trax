@@ -19,7 +19,7 @@ HTTP round trip. Everything runs in memory: no database, no broker.
 |---|---|
 | One consumer, two Trax servers with different schemas, through two keyed clients in one container | `Gateway/Program.cs`, `KeyedClientE2ETests` |
 | A query written for one server refused by the other's client with `GraphQLValidationException`, before any HTTP call | `KeyedClientE2ETests` |
-| Typed requests reaching a Trax namespace with `Path = "discover.<namespace>"` | `Gateway/Requests/KeyedRequests.cs` |
+| Typed requests reaching a Trax namespace with `Path = "discover.<namespace>"` | `Gateway/Requests/GetProductRequest.cs`, `Gateway/Requests/GetInvoiceRequest.cs` |
 | The three ways to write a request: raw string (A), embedded `.graphql` resource (E), typed POCO (D) | `Trax.Samples.GraphQLClient/Requests/` |
 | A client validating against the server's own schema configuration (`UseAssemblySchema`), so the two cannot drift | `Trax.Samples.GraphQLClient/Program.cs` |
 
@@ -129,18 +129,23 @@ var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClient
     "serverC"
 );
 
-var product = await inventoryClient.Run(
-    new GetProductRequest { Input = new GetProductInput("SKU-1") }
-);
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
+
+var product = await inventoryClient
+    .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
+    .ConfigureAwait(false);
 // ...
 try
 {
-    await inventoryClient.Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") });
-    Console.WriteLine("UNEXPECTED: the inventory client accepted a billing query");
+    await inventoryClient
+        .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+        .ConfigureAwait(false);
+    output.Say("UNEXPECTED: the inventory client accepted a billing query");
 }
 catch (GraphQLValidationException)
 {
-    Console.WriteLine("serverB rejected a billing query (schema isolation holds)");
+    output.Say("serverB rejected a billing query (schema isolation holds)");
 }
 ```
 
@@ -152,12 +157,14 @@ inventory executor throws `GraphQLValidationException`, because the inventory sc
 
 ### A typed request into a Trax namespace
 
-```csharp from=Trax.Samples/samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Requests/KeyedRequests.cs
+```csharp from=Trax.Samples/samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Requests/ProductView.cs
 using Trax.Api.GraphQL.Client.Typed;
 // ...
 [GraphQLType("GetProductOutput")]
 public sealed record ProductView(string Sku, string Name, int QuantityOnHand);
+```
 
+```csharp from=Trax.Samples/samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Requests/GetProductRequest.cs
 [GraphQLOperation(OperationType.Query, Path = "discover.inventory", RootField = "getProduct")]
 public sealed class GetProductRequest : TypedRequest<ProductView>
 {

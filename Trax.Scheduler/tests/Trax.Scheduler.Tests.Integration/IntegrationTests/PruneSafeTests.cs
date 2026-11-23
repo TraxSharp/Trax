@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -26,11 +27,11 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class PruneSafeTests : TestSetup
 {
-    private ITraxScheduler _scheduler = null!;
+    private ITraxScheduler? _scheduler;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
     }
 
@@ -43,17 +44,19 @@ public class PruneSafeTests : TestSetup
         var stale = await CreateManifestWithExternalId("customer-old-item");
 
         // Act: schedule a new batch with prune prefix
-        var results = await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["item-1", "item-2"],
-            id => ($"customer-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("customer-")
-        );
+        var results = await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["item-1", "item-2"],
+                id => ($"customer-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("customer-")
+            );
 
         // Assert: new manifests exist, stale one is gone
         results.Should().HaveCount(2);
@@ -76,17 +79,19 @@ public class PruneSafeTests : TestSetup
         await CreateDeadLetter(stale);
 
         // Act
-        var results = await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["new"],
-            id => ($"cascade-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("cascade-")
-        );
+        var results = await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["new"],
+                id => ($"cascade-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("cascade-")
+            );
 
         // Assert: all related data for stale manifest is gone
         DataContext.Reset();
@@ -119,16 +124,18 @@ public class PruneSafeTests : TestSetup
         var existing = await CreateManifestWithExternalId("keep-me");
 
         // Act: schedule without prune prefix
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["other"],
-            id => ($"other-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5)
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["other"],
+                id => ($"other-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5)
+            );
 
         // Assert: existing manifest is untouched
         DataContext.Reset();
@@ -146,17 +153,19 @@ public class PruneSafeTests : TestSetup
         var stale = await CreateManifestWithExternalId("target-old");
 
         // Act: prune only "target-" prefix
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["new"],
-            id => ($"target-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("target-")
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["new"],
+                id => ($"target-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("target-")
+            );
 
         // Assert: unrelated manifest survives
         DataContext.Reset();
@@ -171,17 +180,19 @@ public class PruneSafeTests : TestSetup
     public async Task ScheduleMany_WithPrunePrefix_NothingToPrune_Succeeds()
     {
         // Act: schedule with prune prefix but no stale manifests exist
-        var results = await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["a", "b"],
-            id => ($"fresh-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("fresh-")
-        );
+        var results = await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["a", "b"],
+                id => ($"fresh-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("fresh-")
+            );
 
         // Assert: all manifests created successfully
         results.Should().HaveCount(2);
@@ -201,17 +212,19 @@ public class PruneSafeTests : TestSetup
     public async Task ScheduleMany_WithPrunePrefix_UpsertsAreCommittedRegardlessOfPrune()
     {
         // Arrange: schedule a batch with pruning
-        var results = await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["x", "y", "z"],
-            id => ($"committed-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("committed-")
-        );
+        var results = await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["x", "y", "z"],
+                id => ($"committed-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("committed-")
+            );
 
         // Assert: manifests are committed and visible in a separate context
         results.Should().HaveCount(3);
@@ -232,33 +245,37 @@ public class PruneSafeTests : TestSetup
     public async Task ScheduleManyDependent_WithPrunePrefix_PrunesStaleManifests()
     {
         // Arrange: create parent manifests first
-        var parents = await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["p1", "p2"],
-            id => ($"parent-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5)
-        );
+        var parents = await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["p1", "p2"],
+                id => ($"parent-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5)
+            );
 
         // Create a stale dependent manifest
         var staleParent = await CreateManifestWithExternalId("parent-old");
         var staleDep = await CreateDependentManifest(staleParent, "dep-old");
 
         // Act: schedule dependents with prune
-        var results = await _scheduler.ScheduleManyDependentAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["p1", "p2"],
-            id => ($"dep-{id}", new SchedulerTestInput { Value = id }),
-            id => $"parent-{id}",
-            options => options.PrunePrefix("dep-")
-        );
+        var results = await _scheduler
+            .NotNull()
+            .ScheduleManyDependentAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["p1", "p2"],
+                id => ($"dep-{id}", new SchedulerTestInput { Value = id }),
+                id => $"parent-{id}",
+                options => options.PrunePrefix("dep-")
+            );
 
         // Assert
         results.Should().HaveCount(2);
@@ -281,29 +298,33 @@ public class PruneSafeTests : TestSetup
         await CreateWorkQueueEntry(staleDep);
 
         // Schedule the parent via the scheduler so it's visible for dependency resolution
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["a"],
-            id => ($"depparent-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5)
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["a"],
+                id => ($"depparent-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5)
+            );
 
         // Act: schedule new dependent with prune
-        var results = await _scheduler.ScheduleManyDependentAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["a"],
-            id => ($"depcascade-{id}", new SchedulerTestInput { Value = id }),
-            _ => "depparent-a",
-            options => options.PrunePrefix("depcascade-")
-        );
+        var results = await _scheduler
+            .NotNull()
+            .ScheduleManyDependentAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["a"],
+                id => ($"depcascade-{id}", new SchedulerTestInput { Value = id }),
+                _ => "depparent-a",
+                options => options.PrunePrefix("depcascade-")
+            );
 
         // Assert
         DataContext.Reset();
@@ -333,29 +354,33 @@ public class PruneSafeTests : TestSetup
     public async Task ScheduleMany_MultipleBatches_PruneOnlyAffectsOwnPrefix()
     {
         // Arrange: schedule two independent batches with different prefixes
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["1", "2"],
-            id => ($"alpha-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("alpha-")
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["1", "2"],
+                id => ($"alpha-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("alpha-")
+            );
 
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["a", "b"],
-            id => ($"beta-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("beta-")
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["a", "b"],
+                id => ($"beta-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("beta-")
+            );
 
         // Assert: both batches exist independently
         DataContext.Reset();
@@ -371,30 +396,34 @@ public class PruneSafeTests : TestSetup
     public async Task ScheduleMany_SecondBatchWithSamePrefix_PrunesFirstBatchStaleItems()
     {
         // Arrange: first batch
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["1", "2", "3"],
-            id => ($"evolving-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("evolving-")
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["1", "2", "3"],
+                id => ($"evolving-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("evolving-")
+            );
 
         // Act: second batch removes "3", adds "4"
-        await _scheduler.ScheduleManyAsync<
-            ISchedulerTestTrain,
-            SchedulerTestInput,
-            Trax.Core.Functional.Unit,
-            string
-        >(
-            ["1", "2", "4"],
-            id => ($"evolving-{id}", new SchedulerTestInput { Value = id }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("evolving-")
-        );
+        await _scheduler
+            .NotNull()
+            .ScheduleManyAsync<
+                ISchedulerTestTrain,
+                SchedulerTestInput,
+                Trax.Core.Functional.Unit,
+                string
+            >(
+                ["1", "2", "4"],
+                id => ($"evolving-{id}", new SchedulerTestInput { Value = id }),
+                Every.Minutes(5),
+                options => options.PrunePrefix("evolving-")
+            );
 
         // Assert: "3" is pruned, rest remain
         DataContext.Reset();
@@ -418,17 +447,19 @@ public class PruneSafeTests : TestSetup
         // Act: call twice with same data
         for (int i = 0; i < 2; i++)
         {
-            await _scheduler.ScheduleManyAsync<
-                ISchedulerTestTrain,
-                SchedulerTestInput,
-                Trax.Core.Functional.Unit,
-                string
-            >(
-                items,
-                id => ($"idem-{id}", new SchedulerTestInput { Value = id }),
-                Every.Minutes(5),
-                options => options.PrunePrefix("idem-")
-            );
+            await _scheduler
+                .NotNull()
+                .ScheduleManyAsync<
+                    ISchedulerTestTrain,
+                    SchedulerTestInput,
+                    Trax.Core.Functional.Unit,
+                    string
+                >(
+                    items,
+                    id => ($"idem-{id}", new SchedulerTestInput { Value = id }),
+                    Every.Minutes(5),
+                    options => options.PrunePrefix("idem-")
+                );
         }
 
         // Assert: exactly 2 manifests, not 4
@@ -443,10 +474,8 @@ public class PruneSafeTests : TestSetup
 
     private async Task<Manifest> CreateManifestWithExternalId(string externalId)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -463,8 +492,8 @@ public class PruneSafeTests : TestSetup
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -472,10 +501,8 @@ public class PruneSafeTests : TestSetup
 
     private async Task<Manifest> CreateDependentManifest(Manifest parent, string externalId)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -492,8 +519,8 @@ public class PruneSafeTests : TestSetup
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -504,17 +531,18 @@ public class PruneSafeTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = manifest.ExternalId },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -529,11 +557,12 @@ public class PruneSafeTests : TestSetup
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -541,7 +570,9 @@ public class PruneSafeTests : TestSetup
 
     private async Task<DeadLetter> CreateDeadLetter(Manifest manifest)
     {
-        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloadedManifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
 
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
@@ -549,11 +580,12 @@ public class PruneSafeTests : TestSetup
                 Manifest = reloadedManifest,
                 Reason = "Test dead letter",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(deadLetter);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(deadLetter).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return deadLetter;

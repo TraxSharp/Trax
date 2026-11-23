@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -48,20 +49,20 @@ public static class TestDb
         ISnapshotStore? store = null
     )
     {
-        if (!await (store ?? NewStore()).Upsert(userKey, id, Parse(json)))
+        if (!await (store ?? NewStore()).Upsert(userKey, id, Parse(json)).ConfigureAwait(false))
             throw new InvalidOperationException($"Could not seed draft {id} for {userKey}.");
     }
 
     /// <summary>A snapshot as a client writes it, parsed.</summary>
     public static Snapshot Parse(string json)
     {
-        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json).NotNull().AsObject();
         return new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
         };
     }
 
@@ -72,14 +73,16 @@ public static class TestDb
     /// </summary>
     public static async Task BackdateDraft(string userKey, Guid id, DateTimeOffset updatedAt)
     {
-        await using var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
+        var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connDisposal = conn.ConfigureAwait(false);
+        await conn.OpenAsync().ConfigureAwait(false);
+        var cmd = conn.CreateCommand();
+        await using var cmdDisposal = cmd.ConfigureAwait(false);
         cmd.CommandText =
             "UPDATE trax.snapshot_draft SET updated_at = @ts WHERE user_key = @uk AND id = @id";
         cmd.Parameters.AddWithValue("@ts", updatedAt);
         cmd.Parameters.AddWithValue("@uk", userKey);
         cmd.Parameters.AddWithValue("@id", id);
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

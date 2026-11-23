@@ -15,7 +15,7 @@ namespace Trax.Effect.Data.Sqlite.Services.SqlDialect;
 /// enums for that reason: a label compared against those columns matches nothing, which once
 /// meant the claim never found an entry.
 /// </remarks>
-internal class SqliteSqlDialect : ISqlDialect
+internal sealed class SqliteSqlDialect : ISqlDialect
 {
     private const int Queued = (int)WorkQueueStatus.Queued;
     private const int Dispatched = (int)WorkQueueStatus.Dispatched;

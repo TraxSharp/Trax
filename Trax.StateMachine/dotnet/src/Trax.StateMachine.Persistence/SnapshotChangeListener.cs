@@ -36,6 +36,7 @@ namespace Trax.StateMachine.Persistence;
 /// </remarks>
 internal sealed class SnapshotChangeListener(
     IDataContextProviderFactory contexts,
+    TimeProvider timeProvider,
     ILogger<SnapshotChangeListener>? logger = null,
     ISnapshotNoticeSource? notices = null,
     SnapshotWriteSignal? writes = null
@@ -70,7 +71,7 @@ internal sealed class SnapshotChangeListener(
     private IReadOnlyCollection<long> _lastPolled = [];
 
     private readonly ILogger _logger = logger ?? NullLogger<SnapshotChangeListener>.Instance;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<Reader> _readers = [];
     private readonly CancellationTokenSource _stopping = new();
     private CancellationTokenSource? _run;
@@ -92,7 +93,7 @@ internal sealed class SnapshotChangeListener(
     }
 
     public IAsyncEnumerable<SnapshotChange> ChangesAsync(CancellationToken cancellationToken) =>
-        ChangesAsync(cancellationToken, null);
+        ChangesAsync(cancellationToken, watched: null);
 
     public async IAsyncEnumerable<SnapshotChange> ChangesAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken,
@@ -109,7 +110,10 @@ internal sealed class SnapshotChangeListener(
                 cancellationToken,
                 _stopping.Token
             );
-            while (await reader.TryReadAsync(linked.Token, _stopping.Token) is { } next)
+            while (
+                await reader.TryReadAsync(linked.Token, _stopping.Token).ConfigureAwait(false)
+                    is { } next
+            )
                 yield return next;
         }
         finally
@@ -145,7 +149,7 @@ internal sealed class SnapshotChangeListener(
             {
                 _run = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
                 var token = _run.Token;
-                _loop = Task.Run(() => Run(token));
+                _loop = Task.Run(() => Run(token), CancellationToken.None);
             }
             return true;
         }
@@ -161,14 +165,15 @@ internal sealed class SnapshotChangeListener(
             _stopped = true;
             loop = _loop;
         }
-        await _stopping.CancelAsync();
+        await _stopping.CancelAsync().ConfigureAwait(false);
         if (loop is not null)
             await loop.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     // The container may dispose this more than once (it is registered under several service types), so disposing is
     // stopping, which is idempotent; the token source has no timer, so it is left to the collector.
-    public async ValueTask DisposeAsync() => await StopAsync(CancellationToken.None);
+    public async ValueTask DisposeAsync() =>
+        await StopAsync(CancellationToken.None).ConfigureAwait(false);
 
     public void Dispose()
     {
@@ -191,13 +196,14 @@ internal sealed class SnapshotChangeListener(
         {
             try
             {
-                await using var subscription = await source.SubscribeAsync(stoppingToken);
+                var subscription = await source.SubscribeAsync(stoppingToken).ConfigureAwait(false);
+                await using var subscriptionDisposal = subscription.ConfigureAwait(false);
                 StateMachineMeter.ReportQueueUsage(
                     this,
-                    await subscription.QueueUsageAsync(stoppingToken)
+                    await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                 );
-                var sampled = Stopwatch.GetTimestamp();
-                Live();
+                var sampled = timeProvider.GetTimestamp();
+                Live(CancellationToken.None);
                 delay = ReconnectDelay;
                 while (true)
                 {
@@ -205,21 +211,23 @@ internal sealed class SnapshotChangeListener(
                     // stream of notices (when the queue is most likely to fill) never stops the reading.
                     // The wait is whole milliseconds, and a session's wait of zero is no time-out at all, so less
                     // than one left is due now.
-                    var due = QueueUsageInterval - Stopwatch.GetElapsedTime(sampled);
+                    var due = QueueUsageInterval - timeProvider.GetElapsedTime(sampled);
                     if (due < TimeSpan.FromMilliseconds(1))
                     {
                         StateMachineMeter.ReportQueueUsage(
                             this,
-                            await subscription.QueueUsageAsync(stoppingToken)
+                            await subscription.QueueUsageAsync(stoppingToken).ConfigureAwait(false)
                         );
-                        sampled = Stopwatch.GetTimestamp();
+                        sampled = timeProvider.GetTimestamp();
                         due = QueueUsageInterval;
                     }
-                    var payload = await subscription.NextAsync(due, stoppingToken);
+                    var payload = await subscription
+                        .NextAsync(due, stoppingToken)
+                        .ConfigureAwait(false);
                     if (payload is null)
                         continue;
                     if (TryParseRowId(payload, out var rowId))
-                        Broadcast(new SnapshotChange.Row(rowId));
+                        Broadcast(new SnapshotChange.Row(rowId), CancellationToken.None);
                     else
                         StateMachineMeter.SnapshotNoticeMalformed.Add(1);
                 }
@@ -230,18 +238,18 @@ internal sealed class SnapshotChangeListener(
             }
             catch (Exception ex)
             {
-                Lost();
+                Lost(CancellationToken.None);
                 _logger.LogWarning(
                     ex,
                     "Lost the snapshot change notices; listening again in {Delay}. Watchers re-read their rows when it does.",
                     delay
                 );
-                if (!await Wait(delay, stoppingToken))
+                if (!await Wait(delay, stoppingToken).ConfigureAwait(false))
                     break;
                 delay = delay * 2 > ReconnectDelayCap ? ReconnectDelayCap : delay * 2;
             }
         }
-        Lost();
+        Lost(CancellationToken.None);
     }
 
     // SQLite and InMemory, and Postgres on Poll: compares the (row_id, revision) pairs of the rows the readers watch
@@ -266,34 +274,17 @@ internal sealed class SnapshotChangeListener(
             try
             {
                 var scope = Watched();
-                var current = await ReadRevisions(scope, stoppingToken);
+                var current = await ReadRevisions(scope, stoppingToken).ConfigureAwait(false);
                 Volatile.Write(ref _lastPolled, [.. current.Keys]);
                 if (known is null || (scope.EveryRow && !(knew?.Covers(scope) ?? false)))
                     Live(stoppingToken);
                 else
-                {
-                    foreach (var (rowId, row) in current)
-                        if (
-                            !known.TryGetValue(rowId, out var before)
-                            || before.Revision != row.Revision
-                        )
-                            Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
-                    var gone = new HashSet<long>();
-                    if (scope.EveryRow)
-                        foreach (var (rowId, row) in known)
-                            if (!current.ContainsKey(rowId) && scope.Reads(row.Machine))
-                                gone.Add(rowId);
-                    foreach (var rowId in scope.Rows)
-                        if (!current.ContainsKey(rowId) && !missing.Contains(rowId))
-                            gone.Add(rowId);
-                    foreach (var rowId in gone)
-                        Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
-                }
+                    BroadcastChanges(scope, current, known, missing, stoppingToken);
                 missing = [.. scope.Rows.Where(r => !current.ContainsKey(r))];
                 known = current;
                 knew = scope;
                 delay = ReconnectDelay;
-                if (!await _writes.WaitAsync(PollInterval, stoppingToken))
+                if (!await _writes.WaitAsync(PollInterval, stoppingToken).ConfigureAwait(false))
                     break;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -311,12 +302,36 @@ internal sealed class SnapshotChangeListener(
                     "Could not poll the state-machine table for changes; polling again in {Delay}. Watchers re-read their rows when it succeeds.",
                     delay
                 );
-                if (!await Wait(delay, stoppingToken))
+                if (!await Wait(delay, stoppingToken).ConfigureAwait(false))
                     break;
                 delay = delay * 2 > ReconnectDelayCap ? ReconnectDelayCap : delay * 2;
             }
         }
         Lost(stoppingToken);
+    }
+
+    // Tells the readers about every row this poll read new or moved, and every watched row that is gone since.
+    private void BroadcastChanges(
+        PollScope scope,
+        Dictionary<long, PolledRow> current,
+        Dictionary<long, PolledRow> known,
+        HashSet<long> missing,
+        CancellationToken stoppingToken
+    )
+    {
+        foreach (var (rowId, row) in current)
+            if (!known.TryGetValue(rowId, out var before) || before.Revision != row.Revision)
+                Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
+        var gone = new HashSet<long>();
+        if (scope.EveryRow)
+            foreach (var (rowId, row) in known)
+                if (!current.ContainsKey(rowId) && scope.Reads(row.Machine))
+                    gone.Add(rowId);
+        foreach (var rowId in scope.Rows)
+            if (!current.ContainsKey(rowId) && !missing.Contains(rowId))
+                gone.Add(rowId);
+        foreach (var rowId in gone)
+            Broadcast(new SnapshotChange.Row(rowId), stoppingToken);
     }
 
     // The rows the readers watch one by one, and whether every row is watched as well (when a reader watches every
@@ -354,7 +369,8 @@ internal sealed class SnapshotChangeListener(
         CancellationToken cancellationToken
     )
     {
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = db.SnapshotDrafts.AsNoTracking();
         if (scope.EveryRow && scope.Machines is null)
             return await rows.Select(d => new
@@ -367,7 +383,8 @@ internal sealed class SnapshotChangeListener(
                     r => r.RowId,
                     r => new PolledRow(r.Revision, r.Machine),
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
 
         var revisions = new Dictionary<long, PolledRow>();
         if (scope.EveryRow && scope.Machines is { Count: > 0 } machines)
@@ -382,6 +399,7 @@ internal sealed class SnapshotChangeListener(
                         d.Machine,
                     })
                     .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false)
             )
                 revisions[row.RowId] = new PolledRow(row.Revision, row.Machine);
         }
@@ -395,6 +413,7 @@ internal sealed class SnapshotChangeListener(
                     d.Machine,
                 })
                 .ToListAsync(cancellationToken)
+                .ConfigureAwait(false)
         )
             revisions[row.RowId] = new PolledRow(row.Revision, row.Machine);
         return revisions;
@@ -459,11 +478,11 @@ internal sealed class SnapshotChangeListener(
         }
     }
 
-    private static async Task<bool> Wait(TimeSpan delay, CancellationToken stoppingToken)
+    private async Task<bool> Wait(TimeSpan delay, CancellationToken stoppingToken)
     {
         try
         {
-            await Task.Delay(delay, stoppingToken);
+            await Task.Delay(delay, timeProvider, stoppingToken).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)
@@ -505,7 +524,7 @@ internal sealed class SnapshotChangeListener(
                 return SnapshotChange.Reload.Instance;
             try
             {
-                return await _buffer.Reader.ReadAsync(cancellationToken);
+                return await _buffer.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stopping.IsCancellationRequested)
             {

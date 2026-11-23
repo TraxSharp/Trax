@@ -10,7 +10,7 @@ namespace Trax.Skills.Publish;
 /// marketplace that points Claude Code at the branch is <see cref="MarketplaceManifest"/>, kept at
 /// the root of <c>main</c>.
 /// </summary>
-public static class Stager
+public static partial class Stager
 {
     public const string Marketplace = "traxsharp";
     public const string Plugin = "trax";
@@ -23,14 +23,25 @@ public static class Stager
     public const string Source = "https://github.com/TraxSharp/Trax/tree/main/Trax.Docs/skills";
 
     private const string Description = "Agent skills for building apps on Trax .NET";
-    private static readonly Regex Version = new(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$");
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    [GeneratedRegex(
+        @"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Version { get; }
+    private static readonly JsonSerializerOptions Indented = new()
+    {
+        WriteIndented = true,
+        RespectNullableAnnotations = true,
+        RespectRequiredConstructorParameters = true,
+    };
 
     /// <summary>
     /// Stages the skills under <paramref name="skillsRoot"/> into <paramref name="outDir"/>,
     /// which must be empty or absent. Returns the problems that stopped it, empty on success.
     /// </summary>
-    public static IReadOnlyList<SkillProblem> Stage(
+    public static async Task<IReadOnlyList<SkillProblem>> StageAsync(
         string skillsRoot,
         string version,
         string licenseFile,
@@ -58,21 +69,33 @@ public static class Stager
             foreach (var file in SkillRules.Files(folder))
             {
                 var dest = Path.Combine(target, Path.GetRelativePath(folder, file));
-                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                File.WriteAllText(dest, File.ReadAllText(file));
+                Directory.CreateDirectory(
+                    Path.GetDirectoryName(dest)
+                        ?? throw new InvalidOperationException($"'{dest}' has no directory")
+                );
+                await File.WriteAllTextAsync(
+                        dest,
+                        await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                    )
+                    .ConfigureAwait(false);
             }
 
-            var front = SkillFrontmatter.Parse(File.ReadAllText(Path.Combine(folder, "SKILL.md")));
-            File.WriteAllText(
-                Path.Combine(target, "SKILL.md"),
-                front.Render(SkillRules.Keys, [new(SkillRules.VersionKey, version)])
+            var front = SkillFrontmatter.Parse(
+                await File.ReadAllTextAsync(Path.Combine(folder, "SKILL.md")).ConfigureAwait(false)
             );
+            await File.WriteAllTextAsync(
+                    Path.Combine(target, "SKILL.md"),
+                    front.Render(SkillRules.Keys, [new(SkillRules.VersionKey, version)])
+                )
+                .ConfigureAwait(false);
         }
 
         var manifests = Path.Combine(outDir, ".claude-plugin");
         Directory.CreateDirectory(manifests);
-        Write(Path.Combine(manifests, "plugin.json"), PluginManifest(version));
-        File.WriteAllText(Path.Combine(outDir, "README.md"), Readme(version, folders));
+        await WriteAsync(Path.Combine(manifests, "plugin.json"), PluginManifest(version))
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(outDir, "README.md"), Readme(version, folders))
+            .ConfigureAwait(false);
         File.Copy(licenseFile, Path.Combine(outDir, "LICENSE"));
         return [];
     }
@@ -156,7 +179,7 @@ public static class Stager
 
             ## Skills
 
-            {string.Join("\n", folders.Select(f => $"- `{Path.GetFileName(f)}`"))}
+            {string.Join('\n', folders.Select(f => $"- `{Path.GetFileName(f)}`"))}
 
             Each skill's `metadata.trax-version` names the release it matches.
 
@@ -166,6 +189,6 @@ public static class Stager
 
             """;
 
-    private static void Write(string path, JsonNode node) =>
-        File.WriteAllText(path, node.ToJsonString(Indented) + "\n");
+    private static Task WriteAsync(string path, JsonNode node) =>
+        File.WriteAllTextAsync(path, node.ToJsonString(Indented) + "\n");
 }

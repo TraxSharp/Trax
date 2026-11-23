@@ -19,7 +19,7 @@ namespace Trax.Api.GraphQL.Introspection;
 /// </para>
 /// <para>
 /// A refused request gets 404, the same answer HotChocolate gives when those features are
-/// switched off. An allowed schema download is marked <c>private</c>: it was decided for this
+/// switched off. An allowed schema download is marked <see langword="private"/>: it was decided for this
 /// caller, so a shared cache must not hand it to the next one.
 /// </para>
 /// <para>See <c>docs/adr/0012-introspection-is-decided-per-request.md</c>.</para>

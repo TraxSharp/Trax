@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -22,12 +23,12 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ReapStalePendingMetadataJunctionTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
-    private SchedulerConfiguration _config = null!;
+    private IManifestManagerTrain? _train;
+    private SchedulerConfiguration? _config;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
     }
@@ -43,17 +44,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_StalePendingMetadata_MarkedAsFailed()
     {
         // Arrange — Pending metadata started well beyond the stale pending timeout
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -70,17 +71,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_RecentPendingMetadata_NotAffected()
     {
         // Arrange — Pending metadata started recently (within timeout)
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-2)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -100,17 +101,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_InProgressMetadata_NotAffected()
     {
         // Arrange — InProgress metadata (not Pending) started long ago
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -130,17 +131,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_CompletedMetadata_NotAffected()
     {
         // Arrange — Completed metadata (already terminal)
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -155,17 +156,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_FailedMetadata_NotAffected()
     {
         // Arrange — Failed metadata (already terminal)
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Failed,
-            startTime: DateTime.UtcNow.AddMinutes(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -180,31 +181,31 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_MultipleStalePendingMetadata_AllMarkedAsFailed()
     {
         // Arrange — Three stale Pending metadata records
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest1 = await CreateManifest();
         var metadata1 = await CreateMetadata(
             manifest1,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-20)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
         );
 
         var manifest2 = await CreateManifest();
         var metadata2 = await CreateMetadata(
             manifest2,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-15)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-15)
         );
 
         var manifest3 = await CreateManifest();
         var metadata3 = await CreateMetadata(
             manifest3,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -229,24 +230,24 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_MixOfStaleAndRecent_OnlyStaleFailed()
     {
         // Arrange — One stale, one recent
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var staleManifest = await CreateManifest();
         var staleMetadata = await CreateMetadata(
             staleManifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-20)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
         );
 
         var recentManifest = await CreateManifest();
         var recentMetadata = await CreateMetadata(
             recentManifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-2)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -267,10 +268,10 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_NoManifests_CompletesWithoutErrors()
     {
         // Arrange — No manifests, no metadata
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         // Act & Assert
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -280,17 +281,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         // Arrange — Manifest with maxRetries=0 and one stale Pending metadata.
         // After the reaper marks it Failed, ReapFailedJobsJunction should dead-letter it
         // in the same ManifestManager cycle.
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest(maxRetries: 0);
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-20)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert — metadata should be Failed AND a dead letter should exist
         DataContext.Reset();
@@ -314,18 +315,18 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_TimeoutEdge_ExactlyAtBoundaryNotReaped()
     {
         // Arrange — Pending metadata started exactly at the timeout boundary (should NOT be reaped)
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
             // Use 9 minutes ago — within the 10 min timeout
-            startTime: DateTime.UtcNow.AddMinutes(-9)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-9)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -342,17 +343,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_ConfigurableTimeout_RespectsCustomValue()
     {
         // Arrange — Short timeout, Pending metadata that's old enough
-        _config.StalePendingTimeout = TimeSpan.FromSeconds(30);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromSeconds(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-1)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -369,16 +370,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
     public async Task Run_MetadataWithoutManifest_StillReaped()
     {
         // Arrange — Pending metadata without a manifest (manual/ad-hoc execution)
-        _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(10);
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "ManualTest" },
                 ManifestId = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
 
@@ -388,13 +390,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-20)),
+                s =>
+                    s.SetProperty(
+                        m => m.StartTime,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
+                    ),
                 CancellationToken.None
             );
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -411,10 +417,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
 
     private async Task<Manifest> CreateManifest(int maxRetries = 3)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -429,8 +433,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -445,16 +449,17 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "StalePendingTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         if (startTime.HasValue)
         {
@@ -463,7 +468,8 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.StartTime, startTime.Value),
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
         }
 
         DataContext.Reset();

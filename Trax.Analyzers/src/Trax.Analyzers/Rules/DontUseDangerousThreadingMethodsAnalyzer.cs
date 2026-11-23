@@ -1,0 +1,50 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class DontUseDangerousThreadingMethodsAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DontUseDangerousThreadingMethods,
+        title: "Do not use dangerous threading methods",
+        messageFormat: "Do not use dangerous threading methods",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DontUseDangerousThreadingMethods));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            // The types are looked up once per compilation instead of once per matching invocation
+            var threadSymbols = context.Compilation.GetTypesByMetadataName("System.Threading.Thread");
+            if (threadSymbols.IsEmpty)
+                return;
+
+            context.RegisterOperationAction(context => Analyze(context, threadSymbols), OperationKind.Invocation);
+        });
+    }
+
+    private static void Analyze(OperationAnalysisContext context, ImmutableArray<INamedTypeSymbol> threadSymbols)
+    {
+        var op = (IInvocationOperation)context.Operation;
+        if (string.Equals(op.TargetMethod.Name, "Abort", StringComparison.Ordinal) ||
+            string.Equals(op.TargetMethod.Name, "Suspend", StringComparison.Ordinal) ||
+            string.Equals(op.TargetMethod.Name, "Resume", StringComparison.Ordinal))
+        {
+            foreach (var type in threadSymbols)
+            {
+                if (op.TargetMethod.ContainingType.IsEqualTo(type))
+                {
+                    context.ReportDiagnostic(Rule, op);
+                }
+            }
+        }
+    }
+}

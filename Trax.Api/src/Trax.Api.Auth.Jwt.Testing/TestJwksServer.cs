@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Auth.Jwt.Testing;
 
@@ -41,7 +42,7 @@ public sealed class TestJwksServer : IAsyncDisposable
 {
     private readonly IHost _host;
     private readonly ConcurrentDictionary<string, KeyEntry> _keys = new(StringComparer.Ordinal);
-    private readonly object _currentKidLock = new();
+    private readonly Lock _currentKidLock = new();
     private string _currentKid;
 
     /// <summary>The authority URL (issuer) advertised by this JWKS server.</summary>
@@ -70,6 +71,13 @@ public sealed class TestJwksServer : IAsyncDisposable
     /// </summary>
     public TestTokenIssuer CreateIssuer(string audience) =>
         new(Issuer, audience, SigningCredentials, BuildKeysetSnapshot());
+
+    /// <summary>
+    /// Mint a token issuer as <see cref="CreateIssuer(string)"/> does, whose tokens' default
+    /// <c>nbf</c> and <c>exp</c> are read from <paramref name="clock"/>.
+    /// </summary>
+    public TestTokenIssuer CreateIssuer(string audience, TimeProvider clock) =>
+        new(Issuer, audience, SigningCredentials, BuildKeysetSnapshot(), clock);
 
     /// <summary>
     /// Snapshot of every published signing credential, keyed by <c>kid</c>.
@@ -146,11 +154,12 @@ public sealed class TestJwksServer : IAsyncDisposable
             }
         );
 
-        await app.StartAsync(ct);
+        await app.StartAsync(ct).ConfigureAwait(false);
 
         var addresses = app
             .Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()!
+            .Features.Get<IServerAddressesFeature>()
+            .NotNull()
             .Addresses;
         var authority = addresses.First().TrimEnd('/');
         var resolvedIssuer = options.IssuerOverride ?? $"{authority}{prefix}";
@@ -212,7 +221,7 @@ public sealed class TestJwksServer : IAsyncDisposable
     {
         try
         {
-            await _host.StopAsync(TimeSpan.FromSeconds(2));
+            await _host.StopAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -244,15 +253,15 @@ public sealed class TestJwksServer : IAsyncDisposable
         var keys = _keys
             .Values.Select(k =>
             {
-                var p = k.Rsa.ExportParameters(false);
+                var p = k.Rsa.ExportParameters(includePrivateParameters: false);
                 return new
                 {
                     kty = "RSA",
                     use = "sig",
                     kid = k.Kid,
                     alg = "RS256",
-                    n = Base64UrlEncoder.Encode(p.Modulus!),
-                    e = Base64UrlEncoder.Encode(p.Exponent!),
+                    n = Base64UrlEncoder.Encode(p.Modulus.NotNull()),
+                    e = Base64UrlEncoder.Encode(p.Exponent.NotNull()),
                 };
             })
             .ToArray();
@@ -261,15 +270,15 @@ public sealed class TestJwksServer : IAsyncDisposable
 
     private static string BuildSingleKeyJwksJson(KeyEntry entry)
     {
-        var p = entry.Rsa.ExportParameters(false);
+        var p = entry.Rsa.ExportParameters(includePrivateParameters: false);
         var key = new
         {
             kty = "RSA",
             use = "sig",
             kid = entry.Kid,
             alg = "RS256",
-            n = Base64UrlEncoder.Encode(p.Modulus!),
-            e = Base64UrlEncoder.Encode(p.Exponent!),
+            n = Base64UrlEncoder.Encode(p.Modulus.NotNull()),
+            e = Base64UrlEncoder.Encode(p.Exponent.NotNull()),
         };
         return JsonSerializer.Serialize(new { keys = new[] { key } });
     }

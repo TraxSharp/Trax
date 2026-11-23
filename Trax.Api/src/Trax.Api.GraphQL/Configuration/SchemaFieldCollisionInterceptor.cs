@@ -1,3 +1,4 @@
+using System.Globalization;
 using HotChocolate.Configuration;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors.Configurations;
@@ -87,7 +88,7 @@ internal sealed class SchemaFieldCollisionInterceptor(
                 var ignored in extension
                     .FieldIgnores.Select(b => b.Name)
                     .Concat(extension.Fields.Where(f => f.Ignore).Select(f => f.Name))
-                    .Distinct()
+                    .Distinct(StringComparer.Ordinal)
             )
                 _ignored.Add((typeName, ignored, hostExtension));
 
@@ -105,7 +106,7 @@ internal sealed class SchemaFieldCollisionInterceptor(
 
             if (!_contributions.TryGetValue((typeName, field.Name), out var owners))
                 _contributions[(typeName, field.Name)] = owners = [];
-            if (!owners.Any(o => o.Key == owner.Key))
+            if (!owners.Exists(o => string.Equals(o.Key, owner.Key, StringComparison.Ordinal)))
                 owners.Add(owner);
         }
     }
@@ -179,7 +180,10 @@ internal sealed class SchemaFieldCollisionInterceptor(
 
         return census.FieldOwner(typeName, field.Name) is null
             ? new SchemaNameOwner(
-                $"code:{typeName}.{field.Name}:{field.GetHashCode()}",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"code:{typeName}.{field.Name}:{field.GetHashCode()}"
+                ),
                 "a field a type extension builds in code"
             )
             : null;

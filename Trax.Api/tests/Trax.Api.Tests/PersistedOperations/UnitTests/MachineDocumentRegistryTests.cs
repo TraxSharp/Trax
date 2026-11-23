@@ -38,18 +38,23 @@ public class MachineDocumentRegistryTests
         };
         registry.Publish(
             [new MachineDocument(OwnGet, "wizard", "get", "query { }", OwnHash)],
-            new Dictionary<string, int> { ["wizard"] = 2 },
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["wizard"] = 2 },
             Stored((OwnGet, 2), (OldGet, 1))
         );
         return registry;
     }
 
     private static IReadOnlyDictionary<string, StoredMachineDocument> Empty() =>
-        new Dictionary<string, StoredMachineDocument>();
+        new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal);
 
     private static IReadOnlyDictionary<string, StoredMachineDocument> Stored(
         params (string Id, int Version)[] rows
-    ) => rows.ToDictionary(r => r.Id, r => new StoredMachineDocument(r.Version, true));
+    ) =>
+        rows.ToDictionary(
+            r => r.Id,
+            r => new StoredMachineDocument(r.Version, IsActive: true),
+            StringComparer.Ordinal
+        );
 
     private static Func<
         CancellationToken,
@@ -68,7 +73,7 @@ public class MachineDocumentRegistryTests
         var registry = Registry();
         registry.Publish(
             [new MachineDocument(OwnGet, "wizard", "get", "query { }", OwnHash)],
-            new Dictionary<string, int> { ["wizard"] = 2 },
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["wizard"] = 2 },
             Stored((OwnGet, 2), (ledger, 1))
         );
 
@@ -98,12 +103,12 @@ public class MachineDocumentRegistryTests
                     "client document 'OrderCard'"
                 ),
             ],
-            new Dictionary<string, int> { ["trax_client_OrderCard"] = 3 },
-            new Dictionary<string, StoredMachineDocument>
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["trax_client_OrderCard"] = 3 },
+            new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
             {
-                [own] = new(3, true),
-                [older] = new(2, true),
-                [collected] = new(1, false),
+                [own] = new(3, IsActive: true),
+                [older] = new(2, IsActive: true),
+                [collected] = new(1, IsActive: false),
             }
         );
 
@@ -137,11 +142,11 @@ public class MachineDocumentRegistryTests
         var registry = Registry();
         registry.Publish(
             [new MachineDocument(OwnGet, "wizard", "get", "query { }", OwnHash)],
-            new Dictionary<string, int> { ["wizard"] = 2 },
-            new Dictionary<string, StoredMachineDocument>
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["wizard"] = 2 },
+            new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
             {
-                [OwnGet] = new(2, true),
-                [ledger] = new(1, false),
+                [OwnGet] = new(2, IsActive: true),
+                [ledger] = new(1, IsActive: false),
             }
         );
 
@@ -218,15 +223,17 @@ public class MachineDocumentRegistryTests
     )
     {
         var verdict = MachineDocumentVerdict.ServerOutdated;
-        var deadline = Stopwatch.StartNew();
+        var deadline = TimeProvider.System.GetTimestamp();
         while (
             verdict == MachineDocumentVerdict.ServerOutdated
-            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+            && TimeProvider.System.GetElapsedTime(deadline) < TimeSpan.FromSeconds(10)
         )
         {
             // allowed-delay: polls the answer until the background read has run.
-            await Task.Delay(20);
-            verdict = await registry.ClassifyAsync(id, store, CancellationToken.None);
+            await Task.Delay(20).ConfigureAwait(false);
+            verdict = await registry
+                .ClassifyAsync(id, store, CancellationToken.None)
+                .ConfigureAwait(false);
         }
         return verdict;
     }
@@ -265,7 +272,7 @@ public class MachineDocumentRegistryTests
         > slowStore = async _ =>
         {
             Interlocked.Increment(ref reads);
-            await release.Task;
+            await release.Task.ConfigureAwait(false);
             return Empty();
         };
 
@@ -288,7 +295,8 @@ public class MachineDocumentRegistryTests
         );
         // Bounded: misses that queue behind the read would wait for it forever, since it is released only after.
         // allowed-delay: a bound, not a wait; the misses either finish well inside it or queue forever.
-        var finished = await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5))) == all;
+        var finished =
+            await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5), registry.Clock)) == all;
         release.SetResult();
         finished
             .Should()
@@ -324,10 +332,10 @@ public class MachineDocumentRegistryTests
             .Be(MachineDocumentVerdict.ServerOutdated, "the store has not been read since");
 
         var verdict = MachineDocumentVerdict.ServerOutdated;
-        var deadline = Stopwatch.StartNew();
+        var deadline = TimeProvider.System.GetTimestamp();
         while (
             verdict == MachineDocumentVerdict.ServerOutdated
-            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+            && TimeProvider.System.GetElapsedTime(deadline) < TimeSpan.FromSeconds(10)
         )
         {
             // allowed-delay: polls the answer until the background read has run.
@@ -353,10 +361,10 @@ public class MachineDocumentRegistryTests
         var store = Store(() => Stored((OwnGet, 2), (OldGet, 1), (newer, 3)));
 
         await registry.ClassifyAsync(newer, store, CancellationToken.None);
-        var deadline = Stopwatch.StartNew();
+        var deadline = TimeProvider.System.GetTimestamp();
         while (
             registry.IsNewer("wizard", NewHash) != true
-            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+            && TimeProvider.System.GetElapsedTime(deadline) < TimeSpan.FromSeconds(10)
         )
         {
             (await registry.ClassifyAsync(newer, store, CancellationToken.None))
@@ -384,9 +392,9 @@ public class MachineDocumentRegistryTests
         var reads = 0;
         var store = Store(() => Empty(), () => Interlocked.Increment(ref reads));
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         var i = 0;
-        while (clock.Elapsed < TimeSpan.FromSeconds(1.5))
+        while (TimeProvider.System.GetElapsedTime(clock) < TimeSpan.FromSeconds(1.5))
         {
             await registry.ClassifyAsync(
                 Id("wizard", "get", $"{i++:x8}".PadLeft(MachineDocuments.IrHashLength, 'e')),

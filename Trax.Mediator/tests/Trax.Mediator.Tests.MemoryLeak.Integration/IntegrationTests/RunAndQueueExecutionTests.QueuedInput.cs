@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.ServiceTrain;
@@ -20,21 +21,22 @@ public partial class RunAndQueueExecutionTests
         // One shared row, referenced many times through JSON reference metadata. The caller's
         // JSON is far under the 256 KiB cap; an enqueue that honoured the references would write
         // every one of them out in full when it stores the input.
-        var row = string.Join(",", Enumerable.Repeat("\"x\"", 500));
-        var refs = string.Join(",", Enumerable.Repeat("""{"$ref":"2"}""", 2_000));
+        var row = string.Join(',', Enumerable.Repeat("\"x\"", 500));
+        var refs = string.Join(',', Enumerable.Repeat("""{"$ref":"2"}""", 2_000));
         var inputJson =
             """{"rows":{"$id":"1","$values":[{"$id":"2","$values":[""" + row + "]}," + refs + "]}}";
 
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(64 * 1024);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         QueueTrainResult? queued = null;
 
         try
         {
-            queued = await execution.QueueAsync(typeof(IRowsTrain).FullName!, inputJson);
+            queued = await execution.QueueAsync(typeof(IRowsTrain).FullName.NotNull(), inputJson);
         }
         catch (Exception refused) when (refused is not OutOfMemoryException)
         {
@@ -43,13 +45,14 @@ public partial class RunAndQueueExecutionTests
         }
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
 
         Encoding
-            .UTF8.GetByteCount(stored.Input!)
+            .UTF8.GetByteCount(stored.Input.NotNull())
             .Should()
             .BeLessThanOrEqualTo(
                 262_144,
@@ -60,12 +63,13 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_ListWrittenWithReferenceMetadata_IsRefusedAsAJsonError()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
             execution.QueueAsync(
-                typeof(IRowsTrain).FullName!,
+                typeof(IRowsTrain).FullName.NotNull(),
                 """{"rows":{"$id":"1","$values":[]}}"""
             );
 
@@ -75,22 +79,24 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_ReferenceToAnotherElement_IsNotFollowed()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
-            typeof(IWideTrain).FullName!,
+            typeof(IWideTrain).FullName.NotNull(),
             """{"items":[{"$id":"1","first":5},{"$ref":"1"}]}"""
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
 
         var items = System
-            .Text.Json.JsonDocument.Parse(stored.Input!)
+            .Text.Json.JsonDocument.Parse(stored.Input.NotNull())
             .RootElement.GetProperty("items");
         items[0].GetProperty("first").GetInt64().Should().Be(5);
         items[1]
@@ -105,14 +111,15 @@ public partial class RunAndQueueExecutionTests
     {
         // Each {} is three bytes of caller JSON and is written back with every member of Wide at
         // its default, so the stored form is many times the size of what the caller sent.
-        var elements = string.Join(",", Enumerable.Repeat("{}", 20_000));
+        var elements = string.Join(',', Enumerable.Repeat("{}", 20_000));
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName!, inputJson);
+        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName.NotNull(), inputJson);
 
         var refused = (await act.Should().ThrowAsync<TrainInputValidationException>()).Which;
         refused.MaxBytes.Should().Be(TrainInputReader.StoredInputGrowthFactor * 262_144);
@@ -124,15 +131,16 @@ public partial class RunAndQueueExecutionTests
     {
         // 80,000 empty objects: under the caller cap as sent, and some 20 MB once each is written
         // indented with all eight members. As a string that is twice as much again.
-        var elements = string.Join(",", Enumerable.Repeat("{}", 80_000));
+        var elements = string.Join(',', Enumerable.Repeat("{}", 80_000));
         var inputJson = """{"items":[""" + elements + "]}";
         Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var before = GC.GetTotalAllocatedBytes(precise: true);
-        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName!, inputJson);
+        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName.NotNull(), inputJson);
         await act.Should().ThrowAsync<TrainInputValidationException>();
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
 
@@ -148,16 +156,18 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task QueueAsync_OrdinaryInput_IsStoredAsBefore()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
-            typeof(IRowsTrain).FullName!,
+            typeof(IRowsTrain).FullName.NotNull(),
             """{"rows":[["a","b"],["c"]]}"""
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -168,16 +178,18 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task A_queued_input_keeps_its_dictionary_keys()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var queued = await execution.QueueAsync(
-            typeof(ITotalsTrain).FullName!,
+            typeof(ITotalsTrain).FullName.NotNull(),
             """{"totals":{"Ada":1,"bo":2}}"""
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -185,9 +197,11 @@ public partial class RunAndQueueExecutionTests
         // The dispatcher reads the entry and the job submitter writes it again for the worker,
         // both with ManifestProperties; the local worker reads that copy with the same options.
         var options = TraxJsonSerializationOptions.ManifestProperties;
-        var dispatched = JsonSerializer.Deserialize<TotalsInput>(stored.Input!, options)!;
+        var dispatched = JsonSerializer
+            .Deserialize<TotalsInput>(stored.Input.NotNull(), options)
+            .NotNull();
         var jobInput = JsonSerializer.Serialize(dispatched, options);
-        var seenByTheTrain = JsonSerializer.Deserialize<TotalsInput>(jobInput, options)!;
+        var seenByTheTrain = JsonSerializer.Deserialize<TotalsInput>(jobInput, options).NotNull();
 
         seenByTheTrain
             .Totals.Keys.Should()
@@ -199,7 +213,8 @@ public partial class RunAndQueueExecutionTests
 
     public record TotalsInput
     {
-        public Dictionary<string, int> Totals { get; init; } = [];
+        public IDictionary<string, int> Totals { get; init; } =
+            new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     public interface ITotalsTrain : IServiceTrain<TotalsInput, Unit>;
@@ -212,7 +227,7 @@ public partial class RunAndQueueExecutionTests
 
     public record RowsInput
     {
-        public List<List<string>> Rows { get; init; } = [];
+        public IList<List<string>> Rows { get; init; } = [];
     }
 
     public interface IRowsTrain : IServiceTrain<RowsInput, Unit>;
@@ -239,7 +254,7 @@ public partial class RunAndQueueExecutionTests
 
     public record WideInput
     {
-        public List<Wide> Items { get; init; } = [];
+        public IList<Wide> Items { get; init; } = [];
     }
 
     public interface IWideTrain : IServiceTrain<WideInput, Unit>;

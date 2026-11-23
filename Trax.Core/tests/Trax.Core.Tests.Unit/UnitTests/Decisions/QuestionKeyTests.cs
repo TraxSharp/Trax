@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -179,7 +180,7 @@ namespace Trax.Core.Tests.Unit.UnitTests.Decisions
 
             var failure = result.Swap().ValueUnsafe();
             failure.Message.Should().Contain("under the same question key 'RefundChoice'");
-            ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+            ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
                 .FailureClass.Should()
                 .Be(FailureClass.Permanent);
             decider.Requests.Should().ContainSingle("the second question is never asked");
@@ -282,57 +283,16 @@ namespace Trax.Core.Tests.Unit.UnitTests.Decisions
                     .Resolve();
         }
 
-        private class Start : Junction<string, string>
+        private sealed class Start : Junction<string, string>
         {
             public override Task<string> Run(string input) => Task.FromResult(input);
         }
 
-        private class StringToBool : Junction<string, bool>
+        private sealed class StringToBool : Junction<string, bool>
         {
             public override Task<bool> Run(string input) => Task.FromResult(true);
         }
 
         #endregion
-    }
-}
-
-// The same enum before and after its namespace is renamed, and another of the same name elsewhere.
-namespace Trax.Core.Tests.Unit.UnitTests.Decisions.Keys.Before
-{
-    [Asks("How should the refund be paid?")]
-    public enum RefundChoice
-    {
-        Full,
-        Credit,
-    }
-}
-
-namespace Trax.Core.Tests.Unit.UnitTests.Decisions.Keys.Renamed
-{
-    [Asks("How should the refund be paid?")]
-    public enum RefundChoice
-    {
-        Full,
-        Credit,
-    }
-}
-
-namespace Trax.Core.Tests.Unit.UnitTests.Decisions.Keys.Elsewhere
-{
-    [Asks("Which refund does support offer?")]
-    public enum RefundChoice
-    {
-        Full,
-        Credit,
-    }
-
-    public static class Keyed
-    {
-        [Asks("Which refund does support offer?", Key = "support_refund")]
-        public enum RefundChoice
-        {
-            Full,
-            Credit,
-        }
     }
 }

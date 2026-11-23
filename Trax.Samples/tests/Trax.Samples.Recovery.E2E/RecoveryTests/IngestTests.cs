@@ -159,7 +159,7 @@ public class IngestTests
             .Be(askedBefore + 1);
 
         var review = (await Rows(UnsurePartition)).Single(r =>
-            r.Resolution == Resolutions.NeedsReview
+            string.Equals(r.Resolution, Resolutions.NeedsReview, StringComparison.Ordinal)
         );
         review
             .SourceId.Should()
@@ -244,16 +244,26 @@ public class IngestTests
 
     private static async Task<IngestPartitionResult> Ingest(IngestPartitionInput input)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<IIngestPartitionTrain>().Run(input);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IIngestPartitionTrain>()
+                .Run(input)
+                .ConfigureAwait(false);
+        }
     }
 
     private static async Task<DiscoveredPartitions> Discover(DiscoverPartitionsInput input)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDiscoverPartitionsTrain>()
-            .Run(input);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDiscoverPartitionsTrain>()
+                .Run(input)
+                .ConfigureAwait(false);
+        }
     }
 
     private static Task<TopicMapDbContext> Db() =>
@@ -263,21 +273,29 @@ public class IngestTests
 
     private static async Task<List<SourceRecord>> SeededRecords()
     {
-        await using var db = await Db();
-        return await db
-            .SourceRecords.AsNoTracking()
-            .OrderBy(r => r.Source)
-            .ThenBy(r => r.SourceId)
-            .ToListAsync();
+        var db = await Db().ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .SourceRecords.AsNoTracking()
+                .OrderBy(r => r.Source)
+                .ThenBy(r => r.SourceId)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private static async Task<List<IngestedWork>> Rows(IngestPartitionInput partition)
     {
-        await using var db = await Db();
-        return await db
-            .IngestedWorks.AsNoTracking()
-            .Where(w => w.Source == partition.Source && w.Month == partition.Month)
-            .OrderBy(w => w.SourceId)
-            .ToListAsync();
+        var db = await Db().ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .IngestedWorks.AsNoTracking()
+                .Where(w => w.Source == partition.Source && w.Month == partition.Month)
+                .OrderBy(w => w.SourceId)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 }

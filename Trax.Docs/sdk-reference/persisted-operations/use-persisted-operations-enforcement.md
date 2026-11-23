@@ -12,6 +12,7 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxGraphQLBuilderPersistedOperationsExtensions.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Middleware/PersistedOperationEnforcementMiddleware.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Middleware/PersistedOperationPolicy.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Middleware/PersistedOperationDecision.cs
 ---
 
 # UsePersistedOperationsEnforcement

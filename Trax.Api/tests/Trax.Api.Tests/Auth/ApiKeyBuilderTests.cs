@@ -3,6 +3,7 @@ using System.Text;
 using AwesomeAssertions;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -20,7 +21,7 @@ public class ApiKeyBuilderTests
         var principal = await resolver.ResolveAsync("k1", CancellationToken.None);
 
         principal.Should().NotBeNull();
-        principal!.Id.Should().Be("alice");
+        principal.NotNull().Id.Should().Be("alice");
         principal.DisplayName.Should().Be("alice");
         principal.Roles.Should().BeEquivalentTo(["User"]);
         principal.PrincipalType.Should().Be("apikey");
@@ -34,13 +35,13 @@ public class ApiKeyBuilderTests
 
         var principal = await resolver.ResolveAsync("k1", CancellationToken.None);
 
-        principal!.Roles.Should().BeEmpty();
+        principal.NotNull().Roles.Should().BeEmpty();
     }
 
     [Test]
     public void Add_WithNullKey_Throws()
     {
-        var act = () => new ApiKeyBuilder().Add(null!, id: "alice");
+        var act = () => new ApiKeyBuilder().Add(Null.Of<string>(), id: "alice");
         act.Should().Throw<ArgumentException>();
     }
 
@@ -75,7 +76,7 @@ public class ApiKeyBuilderTests
         var resolver = BuildInternal(builder);
         var principal = await resolver.ResolveAsync("k1", CancellationToken.None);
 
-        principal!.Roles.Should().BeEquivalentTo(["User"]);
+        principal.NotNull().Roles.Should().BeEquivalentTo(["User"]);
     }
 
     #endregion
@@ -93,7 +94,7 @@ public class ApiKeyBuilderTests
 
         var principal = await resolver.ResolveAsync("k1", CancellationToken.None);
 
-        principal!.DisplayName.Should().Be("Alice Liddell");
+        principal.NotNull().DisplayName.Should().Be("Alice Liddell");
     }
 
     [Test]
@@ -120,7 +121,7 @@ public class ApiKeyBuilderTests
     [Test]
     public void Add_WithNullFactory_Throws()
     {
-        var act = () => new ApiKeyBuilder().Add("k1", (Func<TraxPrincipal>)null!);
+        var act = () => new ApiKeyBuilder().Add("k1", (Func<TraxPrincipal>)Null.Of<object>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -140,7 +141,7 @@ public class ApiKeyBuilderTests
         var principal = await resolver.ResolveAsync("secret", CancellationToken.None);
 
         principal.Should().NotBeNull();
-        principal!.Id.Should().Be("alice");
+        principal.NotNull().Id.Should().Be("alice");
         principal.Roles.Should().BeEquivalentTo(["Admin"]);
     }
 
@@ -169,14 +170,14 @@ public class ApiKeyBuilderTests
     [Test]
     public void AddHashed_NullSalt_Throws()
     {
-        var act = () => new ApiKeyBuilder().AddHashed(null!, new byte[32], id: "alice");
+        var act = () => new ApiKeyBuilder().AddHashed(Null.Of<byte[]>(), new byte[32], id: "alice");
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Test]
     public void AddHashed_NullHash_Throws()
     {
-        var act = () => new ApiKeyBuilder().AddHashed(new byte[16], null!, id: "alice");
+        var act = () => new ApiKeyBuilder().AddHashed(new byte[16], Null.Of<byte[]>(), id: "alice");
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -209,8 +210,8 @@ public class ApiKeyBuilderTests
         var b = await resolver.ResolveAsync("k-bob", CancellationToken.None);
         var c = await resolver.ResolveAsync("k-charlie", CancellationToken.None);
 
-        a!.Id.Should().Be("alice");
-        b!.Id.Should().Be("bob");
+        a.NotNull().Id.Should().Be("alice");
+        b.NotNull().Id.Should().Be("bob");
         c.Should().BeNull();
     }
 
@@ -225,10 +226,12 @@ public class ApiKeyBuilderTests
             .AddHashed(salt, hash, id: "bob");
         var resolver = BuildInternal(builder);
 
-        (await resolver.ResolveAsync("cleartext-key", CancellationToken.None))!
+        (await resolver.ResolveAsync("cleartext-key", CancellationToken.None))
+            .NotNull()
             .Id.Should()
             .Be("alice");
-        (await resolver.ResolveAsync("prehashed-key", CancellationToken.None))!
+        (await resolver.ResolveAsync("prehashed-key", CancellationToken.None))
+            .NotNull()
             .Id.Should()
             .Be("bob");
     }

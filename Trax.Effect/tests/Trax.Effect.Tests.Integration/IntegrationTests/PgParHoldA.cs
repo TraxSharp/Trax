@@ -1,0 +1,38 @@
+using System.Collections.Concurrent;
+using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Decisions;
+using Trax.Core.Exceptions;
+using Trax.Core.Functional;
+using Trax.Core.Monad;
+using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.JunctionEvents;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
+using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
+using Trax.Effect.Models.JunctionRun;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.FailureClassifier;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Tests.Integration.Fixtures;
+
+namespace Trax.Effect.Tests.Integration.IntegrationTests;
+
+/// <summary>Says it is waiting, then holds its branch until the test releases it.</summary>
+public class PgParHoldA : EffectJunction<PgParOrder, PgParA>
+{
+    public override async Task<PgParA> Run(PgParOrder input)
+    {
+        PgParSignals.Waiting();
+        await PgParSignals
+            .Released.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+            .ConfigureAwait(false);
+        return new PgParA(0);
+    }
+}

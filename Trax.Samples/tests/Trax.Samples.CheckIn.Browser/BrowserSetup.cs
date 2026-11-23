@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.CheckIn.E2E.Fixtures;
 
 namespace Trax.Samples.CheckIn.Browser;
@@ -26,11 +28,23 @@ public class BrowserSetup
     private static readonly StringBuilder HostLog = new();
     private static IPlaywright? s_playwright;
 
-    public static string Dist { get; private set; } = null!;
+    public static string Dist
+    {
+        get => field.NotNull(nameof(Dist));
+        private set;
+    }
 
-    public static IBrowser Browser { get; private set; } = null!;
+    public static IBrowser Browser
+    {
+        get => field.NotNull(nameof(Browser));
+        private set;
+    }
 
-    public static Uri Api { get; private set; } = null!;
+    public static Uri Api
+    {
+        get => field.NotNull(nameof(Api));
+        private set;
+    }
 
     /// <summary>What the pages' consoles said and which of their requests failed, for a failing test's message.</summary>
     public static System.Collections.Concurrent.ConcurrentQueue<string> Seen { get; } = new();
@@ -50,7 +64,9 @@ public class BrowserSetup
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        Api = new Uri($"http://127.0.0.1:{FreePort()}");
+        Api = new Uri(
+            string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}")
+        );
         s_host = StartHost();
         await WaitForHealth();
         Dist = await Build();
@@ -80,40 +96,46 @@ public class BrowserSetup
     /// <summary>A browser context on the built page: its files from <see cref="Dist"/>, its API calls to the host.</summary>
     public static async Task<IPage> NewPageAsync()
     {
-        var context = await Browser.NewContextAsync();
-        await context.RouteAsync(
-            $"{Api.ToString().TrimEnd('/')}/**",
-            async route =>
-            {
-                var path = new Uri(route.Request.Url).AbsolutePath.TrimStart('/');
-                if (
-                    path.StartsWith("trax/", StringComparison.Ordinal)
-                    || path.StartsWith("dev/", StringComparison.Ordinal)
-                )
+        var context = await Browser.NewContextAsync().ConfigureAwait(false);
+        await context
+            .RouteAsync(
+                $"{Api.ToString().TrimEnd('/')}/**",
+                async route =>
                 {
-                    await route.ContinueAsync();
-                    return;
-                }
-                var file = Path.Combine(Dist, path.Length == 0 ? "index.html" : path);
-                if (!File.Exists(file))
-                    file = Path.Combine(Dist, "index.html");
-                await route.FulfillAsync(
-                    new()
+                    var path = new Uri(route.Request.Url).AbsolutePath.TrimStart('/');
+                    if (
+                        path.StartsWith("trax/", StringComparison.Ordinal)
+                        || path.StartsWith("dev/", StringComparison.Ordinal)
+                    )
                     {
-                        BodyBytes = await File.ReadAllBytesAsync(file),
-                        ContentType =
-                            file.EndsWith(".js") ? "text/javascript"
-                            : file.EndsWith(".css") ? "text/css"
-                            : "text/html",
+                        await route.ContinueAsync().ConfigureAwait(false);
+                        return;
                     }
-                );
-            }
-        );
-        var page = await context.NewPageAsync();
+                    var file = Path.Combine(Dist, path.Length == 0 ? "index.html" : path);
+                    if (!File.Exists(file))
+                        file = Path.Combine(Dist, "index.html");
+                    await route
+                        .FulfillAsync(
+                            new()
+                            {
+                                BodyBytes = await File.ReadAllBytesAsync(file)
+                                    .ConfigureAwait(false),
+                                ContentType =
+                                    file.EndsWith(".js", StringComparison.Ordinal)
+                                        ? "text/javascript"
+                                    : file.EndsWith(".css", StringComparison.Ordinal) ? "text/css"
+                                    : "text/html",
+                            }
+                        )
+                        .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
+        var page = await context.NewPageAsync().ConfigureAwait(false);
         page.Console += (_, message) => Seen.Enqueue($"console: {message.Text}");
         page.RequestFailed += (_, request) =>
             Seen.Enqueue($"failed: {request.Url} {request.Failure}");
-        await page.GotoAsync(Api.ToString());
+        await page.GotoAsync(Api.ToString()).ConfigureAwait(false);
         return page;
     }
 
@@ -143,7 +165,7 @@ public class BrowserSetup
         );
         start.Environment["CheckIn__PageOrigin"] = Api.ToString().TrimEnd('/');
         start.Environment["CheckIn__MachineSweepInterval"] = "00:00:00.200";
-        var process = Process.Start(start)!;
+        var process = Process.Start(start).NotNull();
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is not null)
@@ -164,17 +186,20 @@ public class BrowserSetup
     private static async Task WaitForHealth()
     {
         using var http = new HttpClient { BaseAddress = Api, Timeout = TimeSpan.FromSeconds(2) };
-        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(1);
         var last = "no answer";
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
-            if (s_host!.HasExited)
+            if (s_host.NotNull().HasExited)
                 throw new InvalidOperationException(
-                    $"The CheckIn host exited with {s_host.ExitCode}:\n{HostLog}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The CheckIn host exited with {s_host.ExitCode}:\n{HostLog}"
+                    )
                 );
             try
             {
-                var status = (await http.GetAsync("/trax/health")).StatusCode;
+                var status = (await http.GetAsync("/trax/health").ConfigureAwait(false)).StatusCode;
                 if (status == HttpStatusCode.OK)
                     return;
                 last = status.ToString();
@@ -188,7 +213,7 @@ public class BrowserSetup
                 last = "timed out";
             }
             // determinism: polls the starting host until it answers, bounded by the deadline above.
-            await Task.Delay(250);
+            await Task.Delay(250).ConfigureAwait(false);
         }
         throw new TimeoutException(
             $"The CheckIn host did not answer /trax/health within a minute (last: {last}):\n{HostLog}"
@@ -216,22 +241,27 @@ public class BrowserSetup
         foreach (var arg in new[] { vite, "build", "--outDir", output, "--emptyOutDir" })
             start.ArgumentList.Add(arg);
         start.Environment["VITE_CHECKIN_API"] = Api.ToString().TrimEnd('/');
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var log = new StringBuilder();
         var reading = Task.WhenAll(
             Drain(process.StandardOutput, log),
             Drain(process.StandardError, log)
         );
-        await process.WaitForExitAsync();
-        await reading;
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        await reading.ConfigureAwait(false);
         if (process.ExitCode != 0 || !File.Exists(Path.Combine(output, "index.html")))
-            throw new InvalidOperationException($"vite build failed ({process.ExitCode}):\n{log}");
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"vite build failed ({process.ExitCode}):\n{log}"
+                )
+            );
         return output;
     }
 
     private static async Task Drain(StreamReader reader, StringBuilder log)
     {
-        while (await reader.ReadLineAsync() is { } line)
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
             lock (log)
                 log.AppendLine(line);
     }

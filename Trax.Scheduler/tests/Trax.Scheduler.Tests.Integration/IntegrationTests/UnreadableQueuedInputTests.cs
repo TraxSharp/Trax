@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -36,7 +37,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var sibling = await Queue(
             subject,
             """{"value":"known"}""",
-            typeof(SchedulerTestInput).FullName!
+            typeof(SchedulerTestInput).FullName.NotNull()
         );
 
         await RunDispatcher();
@@ -50,7 +51,9 @@ public class UnreadableQueuedInputTests : TestSetup
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "a host that registers the type may still claim it");
         unknownRow.MetadataId.Should().BeNull("no run is recorded against the manifest");
-        unknownRow.ScheduledAt.Should().BeAfter(DateTime.UtcNow, "it is pushed back");
+        unknownRow
+            .ScheduledAt.Should()
+            .BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime, "it is pushed back");
         unknownRow.DispatchAttempts.Should().Be(1);
         (await DataContext.Metadatas.CountAsync(m => m.ExternalId == unknown.ExternalId))
             .Should()
@@ -114,7 +117,8 @@ public class UnreadableQueuedInputTests : TestSetup
                 Manifest = manifest,
                 Reason = "test",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(deadLetter);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -123,12 +127,13 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value": {"not": "a string"}}""",
-                InputTypeName = typeof(SchedulerTestInput).FullName!,
+                InputTypeName = typeof(SchedulerTestInput).FullName.NotNull(),
                 ManifestId = manifest.Id,
                 DeadLetterId = deadLetter.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -153,7 +158,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = await Queue(
             subject: null,
             """{"value": {"not": "a string"}}""",
-            typeof(SchedulerTestInput).FullName!
+            typeof(SchedulerTestInput).FullName.NotNull()
         );
 
         await RunDispatcher();
@@ -176,10 +181,11 @@ public class UnreadableQueuedInputTests : TestSetup
         var source = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(source);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -187,7 +193,7 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = await Queue(
             subject: null,
             """{"value": {"not": "a string"}}""",
-            typeof(SchedulerTestInput).FullName!,
+            typeof(SchedulerTestInput).FullName.NotNull(),
             replayDecisionsOf: source.Id
         );
 
@@ -212,23 +218,25 @@ public class UnreadableQueuedInputTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = input,
                 InputTypeName = inputTypeName,
                 SubjectKey = subject,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TimeProvider.System
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
 
     private async Task RunDispatcher()
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
     }
 }

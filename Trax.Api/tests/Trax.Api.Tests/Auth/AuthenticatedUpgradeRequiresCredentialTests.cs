@@ -34,7 +34,11 @@ public class AuthenticatedUpgradeRequiresCredentialTests
             new ClaimsIdentity([new Claim(ClaimTypes.Name, "session-user")], "Cookies")
         );
 
-        var status = await interceptor.OnConnectAsync(session, Payload(new { }));
+        var status = await interceptor.OnConnectAsync(
+            session,
+            Payload(new { }),
+            cancellationToken: CancellationToken.None
+        );
 
         status
             .Accepted.Should()
@@ -58,7 +62,8 @@ public class AuthenticatedUpgradeRequiresCredentialTests
 
         var status = await interceptor.OnConnectAsync(
             session,
-            Payload(new { apiKey = TraxCompositeSocketInterceptorTests.ApiKey })
+            Payload(new { apiKey = TraxCompositeSocketInterceptorTests.ApiKey }),
+            cancellationToken: CancellationToken.None
         );
 
         status.Accepted.Should().BeTrue();

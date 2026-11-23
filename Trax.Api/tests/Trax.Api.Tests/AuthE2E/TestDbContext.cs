@@ -1,37 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
 
-/// <summary>
-/// Test entity exposed via <see cref="TraxQueryModelAttribute"/>. Lives in
-/// the isolated <c>test_auth</c> schema so it can coexist with the sample
-/// tables without stepping on them.
-/// </summary>
-[TraxAllowAnonymous]
-[TraxQueryModel(Namespace = "library", Description = "Test books for E2E auth coverage.")]
-[Table("book_records", Schema = "test_auth")]
-public class BookRecord
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("title")]
-    public string Title { get; set; } = "";
-
-    [Column("author")]
-    public string Author { get; set; } = "";
-
-    [Column("rating")]
-    public int Rating { get; set; }
-}
-
 public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
-    public DbSet<BookRecord> Books { get; set; } = null!;
+    public DbSet<BookRecord> Books => Set<BookRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,7 +29,7 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
     public static void EnsureSeeded(string connectionString)
     {
         AuthE2EHost.EnsureDatabaseExists(
-            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database!
+            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database.NotNull()
         );
 
         var opts = new DbContextOptionsBuilder<TestDbContext>().UseNpgsql(connectionString).Options;
@@ -63,7 +40,8 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
         {
             db.Database.ExecuteSqlRaw(db.Database.GenerateCreateScript());
         }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07")
+        catch (Npgsql.PostgresException ex)
+            when (string.Equals(ex.SqlState, "42P07", StringComparison.Ordinal))
         {
             // Table already exists — ignore.
         }
@@ -71,7 +49,12 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
         // Clear and reseed every time so assertions are stable regardless of
         // how many previous test runs touched the table.
         db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_auth.book_records RESTART IDENTITY");
-        db.Books.AddRange(
+        db.Books.AddRange(FixtureBooks());
+        db.SaveChanges();
+    }
+
+    private static BookRecord[] FixtureBooks() =>
+        [
             new BookRecord
             {
                 Title = "The Mythical Man-Month",
@@ -119,8 +102,6 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
                 Title = "Domain-Driven Design",
                 Author = "Evans",
                 Rating = 4,
-            }
-        );
-        db.SaveChanges();
-    }
+            },
+        ];
 }

@@ -205,7 +205,7 @@ public class ChainVerificationTests : TestSetup
         faults[0].Reason.Should().Contain("Guid");
 
         // The other half of the claim: the check is refusing something that really does fail.
-        var running = async () => await new NestedTupleTrain().Run("abc");
+        var running = async () => await new NestedTupleTrain().Run("abc").ConfigureAwait(false);
 
         await running
             .Should()
@@ -310,253 +310,254 @@ public class ChainVerificationTests : TestSetup
 
     private record Ingredient : IIngredient;
 
-    private class StringLength : Junction<string, int>
+    private sealed class StringLength : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class IntToBool : Junction<int, bool>
+    private sealed class IntToBool : Junction<int, bool>
     {
         public override Task<bool> Run(int input) => Task.FromResult(input > 0);
     }
 
-    private class StringToUnit : Junction<string, Trax.Core.Functional.Unit>
+    private sealed class StringToUnit : Junction<string, Trax.Core.Functional.Unit>
     {
         public override Task<Trax.Core.Functional.Unit> Run(string input) =>
             Task.FromResult(Trax.Core.Functional.Unit.Default);
     }
 
-    private class StringToPair : Junction<string, (int Length, bool Empty)>
+    private sealed class StringToPair : Junction<string, (int Length, bool Empty)>
     {
         public override Task<(int, bool)> Run(string input) =>
             Task.FromResult((input.Length, input.Length == 0));
     }
 
-    private class IngredientToBool : Junction<IIngredient, bool>
+    private sealed class IngredientToBool : Junction<IIngredient, bool>
     {
         public override Task<bool> Run(IIngredient input) => Task.FromResult(true);
     }
 
     private interface IAmbient;
 
-    private class PairToFlag : Junction<(int Length, bool Empty), bool>
+    private sealed class PairToFlag : Junction<(int Length, bool Empty), bool>
     {
         public override Task<bool> Run((int Length, bool Empty) input) =>
             Task.FromResult(!input.Empty);
     }
 
-    private class AmbientToFlag : Junction<IAmbient, bool>
+    private sealed class AmbientToFlag : Junction<IAmbient, bool>
     {
         public override Task<bool> Run(IAmbient input) => Task.FromResult(true);
     }
 
-    private class TupleConsumingTrain : Train<string, bool>
+    private sealed class TupleConsumingTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToPair>().Chain<PairToFlag>().Resolve();
     }
 
-    private class StringToNestedPair : Junction<string, (int, (Guid, bool))>
+    private sealed class StringToNestedPair : Junction<string, (int, (Guid, bool))>
     {
         public override Task<(int, (Guid, bool))> Run(string input) =>
             Task.FromResult((input.Length, (Guid.NewGuid(), true)));
     }
 
-    private class GuidToFlag : Junction<Guid, bool>
+    private sealed class GuidToFlag : Junction<Guid, bool>
     {
         public override Task<bool> Run(Guid input) => Task.FromResult(input != Guid.Empty);
     }
 
-    private class StringToWideTuple : Junction<string, (int, int, int, int, int, int, int, int)>
+    private sealed class StringToWideTuple
+        : Junction<string, (int, int, int, int, int, int, int, int)>
     {
         public override Task<(int, int, int, int, int, int, int, int)> Run(string input) =>
             Task.FromResult((1, 2, 3, 4, 5, 6, 7, 8));
     }
 
     /// <summary>Needs a String, which only the inner tuple holds.</summary>
-    private class NestedTupleTrain : Train<string, bool>
+    private sealed class NestedTupleTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToNestedPair>().Chain<GuidToFlag>().Resolve();
     }
 
-    private class WideTupleTrain : Train<string, bool>
+    private sealed class WideTupleTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToWideTuple>().Chain<IntToBool>().Resolve();
     }
 
-    private class ServiceConsumingTrain : Train<string, bool>
+    private sealed class ServiceConsumingTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<AmbientToFlag>().Resolve();
     }
 
-    private class WellFormedTrain : Train<string, bool>
+    private sealed class WellFormedTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringLength>().Chain<IntToBool>().Resolve();
     }
 
-    private class MissingInputTrain : Train<string, bool>
+    private sealed class MissingInputTrain : Train<string, bool>
     {
         // IntToBool needs an int and nothing produces one.
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<IntToBool>().Resolve();
     }
 
-    private class NeverProducesReturnTrain : Train<string, bool>
+    private sealed class NeverProducesReturnTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToUnit>().Resolve();
     }
 
-    private class StringToFlag : Junction<string, bool>
+    private sealed class StringToFlag : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(input.Length > 0);
     }
 
-    private class StringToIngredient : Junction<string, Ingredient>
+    private sealed class StringToIngredient : Junction<string, Ingredient>
     {
         public override Task<Ingredient> Run(string input) => Task.FromResult(new Ingredient());
     }
 
     private interface ILengthJunction : IJunction<string, int>;
 
-    private class Ambient : IAmbient
+    private sealed class Ambient : IAmbient
     {
         public int Level { get; } = 1;
     }
 
-    private record Holder(int Count);
+    private sealed record Holder(int Count);
 
-    private class ShortCircuitOnlyTrain : Train<string, bool>
+    private sealed class ShortCircuitOnlyTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             ShortCircuit<StringToFlag>().Resolve();
     }
 
-    private class ShortCircuitThenProducerTrain : Train<string, bool>
+    private sealed class ShortCircuitThenProducerTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             ShortCircuit<StringToFlag>().Chain<StringToFlag>().Resolve();
     }
 
-    private class ReadsShortCircuitOutputTrain : Train<string, bool>
+    private sealed class ReadsShortCircuitOutputTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             ShortCircuit<StringLength>().Chain<IntToBool>().Resolve();
     }
 
-    private class OutputInterfaceTrain : Train<string, bool>
+    private sealed class OutputInterfaceTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToIngredient>().Chain<IngredientToBool>().Resolve();
     }
 
-    private class AddServicesTrain : Train<string, bool>
+    private sealed class AddServicesTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<IAmbient>(new Ambient()).Chain<AmbientToFlag>().Resolve();
     }
 
-    private class ExtractValueTrain : Train<string, bool>
+    private sealed class ExtractValueTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Extract<Holder, int>(new Holder(2)).Chain<IntToBool>().Resolve();
     }
 
-    private class ExtractFromAmbientTrain : Train<string, bool>
+    private sealed class ExtractFromAmbientTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Extract<IAmbient, int>().Chain<IntToBool>().Resolve();
     }
 
-    private class InterfaceJunctionTrain : Train<string, bool>
+    private sealed class InterfaceJunctionTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             IChain<ILengthJunction>().Chain<IntToBool>().Resolve();
     }
 
-    private class ValueResolvingTrain : Train<string, bool>
+    private sealed class ValueResolvingTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
-            Chain<StringToFlag>().Resolve(true);
+            Chain<StringToFlag>().Resolve(returnType: true);
     }
 
-    private class TupleProducingTrain : Train<string, bool>
+    private sealed class TupleProducingTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToPair>().Resolve();
     }
 
-    private class InterfaceConsumingTrain : Train<Ingredient, bool>
+    private sealed class InterfaceConsumingTrain : Train<Ingredient, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<IngredientToBool>().Resolve();
     }
 
-    private record SpecialIngredient : Ingredient;
+    private sealed record SpecialIngredient : Ingredient;
 
-    private class IngredientToFlag : Junction<Ingredient, bool>
+    private sealed class IngredientToFlag : Junction<Ingredient, bool>
     {
         public override Task<bool> Run(Ingredient input) => Task.FromResult(true);
     }
 
-    private class BaseInputTrain : Train<Ingredient, bool>
+    private sealed class BaseInputTrain : Train<Ingredient, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<IngredientToFlag>().Resolve();
     }
 
-    private class PairWithAmbientToFlag : Junction<(int Length, IAmbient Ambient), bool>
+    private sealed class PairWithAmbientToFlag : Junction<(int Length, IAmbient Ambient), bool>
     {
         public override Task<bool> Run((int Length, IAmbient Ambient) input) =>
             Task.FromResult(true);
     }
 
-    private class AmbientTupleTrain : Train<string, bool>
+    private sealed class AmbientTupleTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringLength>().Chain<PairWithAmbientToFlag>().Resolve();
     }
 
-    private class IncompatibleShortCircuitTrain : Train<string, bool>
+    private sealed class IncompatibleShortCircuitTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             ShortCircuit<StringLength>().Chain<StringToFlag>().Resolve();
     }
 
-    private class StringToIngredientPair : Junction<string, (Ingredient Item, int Count)>
+    private sealed class StringToIngredientPair : Junction<string, (Ingredient Item, int Count)>
     {
         public override Task<(Ingredient, int)> Run(string input) =>
             Task.FromResult<(Ingredient, int)>((new SpecialIngredient(), 1));
     }
 
-    private class TupleBaseElementTrain : Train<string, bool>
+    private sealed class TupleBaseElementTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToIngredientPair>().Chain<IngredientToFlag>().Resolve();
     }
 
-    private class StringToNullPair : Junction<string, (Ingredient? Item, int Count)>
+    private sealed class StringToNullPair : Junction<string, (Ingredient? Item, int Count)>
     {
         public override Task<(Ingredient?, int)> Run(string input) =>
             Task.FromResult<(Ingredient?, int)>((null, 1));
     }
 
-    private class NullTupleElementTrain : Train<string, bool>
+    private sealed class NullTupleElementTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToNullPair>().Chain<IngredientToFlag>().Resolve();
     }
 
-    private class StringToHolder : Junction<string, Holder>
+    private sealed class StringToHolder : Junction<string, Holder>
     {
         public override Task<Holder> Run(string input) => Task.FromResult(new Holder(input.Length));
     }
 
-    private class ExtractFromProducedTrain : Train<string, bool>
+    private sealed class ExtractFromProducedTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToHolder>().Extract<Holder, int>().Chain<IntToBool>().Resolve();

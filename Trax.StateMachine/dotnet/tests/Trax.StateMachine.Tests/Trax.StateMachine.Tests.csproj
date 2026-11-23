@@ -32,4 +32,7 @@
     <ProjectReference Include="../../src/Trax.Client/Trax.Client.csproj" />
     <ProjectReference Include="../../src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Null.cs" Link="Null.cs" Visible="false" />
+  </ItemGroup>
 </Project>

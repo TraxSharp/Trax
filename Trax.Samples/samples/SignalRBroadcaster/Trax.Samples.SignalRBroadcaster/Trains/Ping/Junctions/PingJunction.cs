@@ -4,12 +4,13 @@ using Trax.Core.Junction;
 
 namespace Trax.Samples.SignalRBroadcaster.Trains.Ping.Junctions;
 
-public class PingJunction(ILogger<PingJunction> logger) : Junction<PingInput, PingOutput>
+public class PingJunction(ILogger<PingJunction> logger, TimeProvider clock)
+    : Junction<PingInput, PingOutput>
 {
     public override async Task<PingOutput> Run(PingInput input)
     {
         logger.LogInformation("[{Source}] ping ({Outcome})", input.Source, input.Outcome);
-        await Task.Delay(input.DelayMs);
+        await Task.Delay(input.DelayMs, CancellationToken).ConfigureAwait(false);
 
         return input.Outcome switch
         {
@@ -19,7 +20,7 @@ public class PingJunction(ILogger<PingJunction> logger) : Junction<PingInput, Pi
             PingOutcome.FailUnexpectedly => throw new InvalidOperationException(
                 "Socket to 10.0.4.17:5432 refused (user=svc_ping)."
             ),
-            _ => new PingOutput { Source = input.Source, PingedAt = DateTime.UtcNow },
+            _ => new PingOutput { Source = input.Source, PingedAt = clock.GetUtcNow().UtcDateTime },
         };
     }
 }

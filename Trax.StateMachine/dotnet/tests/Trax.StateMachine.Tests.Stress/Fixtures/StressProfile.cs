@@ -34,5 +34,12 @@ internal static class StressProfile
     public static int MaxConcurrency => Env("TRAX_STRESS_CONCURRENCY", 40);
 
     private static int Env(string key, int fallback) =>
-        int.TryParse(Environment.GetEnvironmentVariable(key), out var v) && v > 0 ? v : fallback;
+        int.TryParse(
+            Environment.GetEnvironmentVariable(key),
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var v
+        )
+        && v > 0
+            ? v
+            : fallback;
 }

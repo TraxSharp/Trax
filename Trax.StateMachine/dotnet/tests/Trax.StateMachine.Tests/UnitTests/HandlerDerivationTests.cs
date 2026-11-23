@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -171,35 +172,46 @@ public class HandlerDerivationTests
         """;
 
     [Test]
-    public void A_checkout_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
+    public async Task A_checkout_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
     {
-        var derived = Derive(Glossary, Features);
+        var derived = await Derive(Glossary, Features).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         derived.Irs["checkout"].Should().Be(FluentCheckout.Export());
     }
 
     [Test]
-    public void The_host_file_names_each_effect_handler_and_migration_the_IR_uses_and_nothing_else()
+    public async Task The_host_file_names_each_effect_handler_and_migration_the_IR_uses_and_nothing_else()
     {
-        var derived = Derive(Glossary, Features);
+        var derived = await Derive(Glossary, Features).ConfigureAwait(false);
 
-        var entry = JsonNode.Parse(derived.Host!)!["machines"]!["checkout"]!;
-        entry["effects"]!
+        var entry = JsonNode
+            .Parse(derived.Host.NotNull())
+            .NotNull()["machines"]
+            .NotNull()["checkout"]
+            .NotNull();
+        entry["effects"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Pay":"Trax.Samples.StateMachine.ICharge"}""");
-        entry["handlers"]!
+        entry["handlers"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be(
                 """{"reductions":{"checkout:add-item":"Trax.Samples.StateMachine.AddItemToCart"},"rules":{"checkout:total-matches-items":"Trax.Samples.StateMachine.TotalMatchesItems"}}"""
             );
-        entry["migrations"]!
+        entry["migrations"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"1":"Trax.Samples.StateMachine.CheckoutFromVersion1"}""");
-        HostFile.Read(derived.Host!).Machines["checkout"].Effects.Should().ContainKey("Pay");
+        HostFile
+            .Read(derived.Host.NotNull())
+            .Machines["checkout"]
+            .Effects.Should()
+            .ContainKey("Pay");
     }
 
     [Test]
@@ -213,26 +225,34 @@ public class HandlerDerivationTests
 
         report
             .Passed.Should()
-            .BeTrue(string.Join("\n", report.Scenarios.Select(s => $"{s.Name}: {s.Status}")));
+            .BeTrue(string.Join('\n', report.Scenarios.Select(s => $"{s.Name}: {s.Status}")));
         report
-            .Scenarios.Single(s => s.Name == "Two items cost twice one")
+            .Scenarios.Single(s =>
+                string.Equals(s.Name, "Two items cost twice one", StringComparison.Ordinal)
+            )
             .Status.Should()
             .Be(FeatureStatus.Skipped);
         report
-            .Scenarios.Where(s => s.Name != "Two items cost twice one")
+            .Scenarios.Where(s =>
+                !string.Equals(s.Name, "Two items cost twice one", StringComparison.Ordinal)
+            )
             .Should()
             .OnlyContain(s => s.Status == FeatureStatus.Passed);
     }
 
     [Test]
-    public void A_scenario_only_the_host_runs_still_has_to_read()
+    public async Task A_scenario_only_the_host_runs_still_has_to_read()
     {
-        var derived = Derive(
-            Glossary,
-            Features.Replace(
-                "When Ada adds \"jam\" to her checkout",
-                "When Ada adds jam to her checkout"
-            )
+        var derived = (
+            await Derive(
+                    Glossary,
+                    Features.Replace(
+                        "When Ada adds \"jam\" to her checkout",
+                        "When Ada adds jam to her checkout",
+                        StringComparison.Ordinal
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("adds jam");
@@ -275,17 +295,20 @@ public class HandlerDerivationTests
     )
     {
         Glossary.Should().Contain(from);
-        var act = () => Trax.StateMachine.Features.Glossary.Read(Glossary.Replace(from, to));
+        var act = () =>
+            Trax.StateMachine.Features.Glossary.Read(
+                Glossary.Replace(from, to, StringComparison.Ordinal)
+            );
 
         act.Should().Throw<FormatException>().WithMessage(message);
     }
 
     [Test]
-    public void A_host_file_that_does_not_pair_its_handlers_with_the_IR_is_refused_when_served()
+    public async Task A_host_file_that_does_not_pair_its_handlers_with_the_IR_is_refused_when_served()
     {
-        var derived = Derive(Glossary, Features);
-        var ir = JsonNode.Parse(derived.Irs["checkout"])!.AsObject();
-        var host = HostFile.Read(derived.Host!).Machines["checkout"];
+        var derived = await Derive(Glossary, Features).ConfigureAwait(false);
+        var ir = JsonNode.Parse(derived.Irs["checkout"]).NotNull().AsObject();
+        var host = HostFile.Read(derived.Host.NotNull()).Machines["checkout"];
 
         foreach (
             var (broken, expected) in new[]
@@ -293,14 +316,17 @@ public class HandlerDerivationTests
                 (
                     host with
                     {
-                        Effects = new Dictionary<string, string>(),
+                        Effects = new Dictionary<string, string>(StringComparer.Ordinal),
                     },
                     "*runs an effect on 'Pay'*"
                 ),
                 (
                     host with
                     {
-                        Rules = new Dictionary<string, string>(host.Rules) { ["extra"] = "A.B" },
+                        Rules = new Dictionary<string, string>(host.Rules, StringComparer.Ordinal)
+                        {
+                            ["extra"] = "A.B",
+                        },
                     },
                     "*rule type for 'extra'*"
                 ),
@@ -427,8 +453,8 @@ public class HandlerDerivationTests
         }
     }
 
-    private static Derived Derive(string glossary, string features) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string glossary, string features) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("checkout.feature", features)]
         );

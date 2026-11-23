@@ -18,7 +18,7 @@ namespace Trax.Api.Auth.Oidc;
 /// <item><c>role</c>, <see cref="ClaimTypes.Role"/>, <c>roles</c>, <c>groups</c> claims → <see cref="TraxPrincipal.Roles"/>.</item>
 /// <item>Other claims pass through verbatim on <see cref="TraxPrincipal.Claims"/>.</item>
 /// </list>
-/// Returns <c>null</c> when the token has no subject claim.
+/// Returns <see langword="null"/> when the token has no subject claim.
 /// </para>
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth">SDK reference</seealso>

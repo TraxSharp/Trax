@@ -29,10 +29,10 @@ internal static class SetUpdateExtensions
         CancellationToken ct
     )
     {
-        var loaded = await rows.ToListAsync(ct);
+        var loaded = await rows.ToListAsync(ct).ConfigureAwait(false);
         foreach (var row in loaded)
             change(row);
-        await context.SaveChanges(ct);
+        await context.SaveChanges(ct).ConfigureAwait(false);
         return loaded.Count;
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using HotChocolate.Execution;
 using HotChocolate.Language;
 using HotChocolate.PersistedOperations;
@@ -113,7 +114,7 @@ internal sealed class DbPersistedOperationStorage
     /// </remarks>
     public async ValueTask<IOperationDocument?> TryReadAsync(
         OperationDocumentId documentId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken = default
     )
     {
         if (documentId.IsEmpty)
@@ -132,18 +133,8 @@ internal sealed class DbPersistedOperationStorage
         var generation = _generation.Current;
         var readAt = _clock.GetTimestamp();
 
-        if (_cache is InMemoryPersistedOperationCache stamped)
-        {
-            if (stamped.TryGet(tenantKey, id, out var hit, out var hitReadAt))
-            {
-                scope?.NoteSource(hitReadAt);
-                return new OperationDocumentSourceText(hit);
-            }
-        }
-        else if (_cache.TryGet(tenantKey, id) is { } cached)
-        {
-            return new OperationDocumentSourceText(cached);
-        }
+        if (TryCached(tenantKey, id, scope) is { } fromCache)
+            return fromCache;
 
         // An id under the reserved prefix is a machine document: only this node's own are read, never one it did
         // not generate, and a miss is not remembered, so the ids a client invents cannot fill the miss cache.
@@ -165,6 +156,54 @@ internal sealed class DbPersistedOperationStorage
         else if (_misses.TryGet(id, out _))
             return null;
 
+        return await ReadFromStoreAsync(
+                id,
+                tenantKey,
+                generation,
+                readAt,
+                own,
+                storedClient,
+                scope,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    // What the cache holds for the id, or null; a stamped entry's read time is noted on the request's scope.
+    private OperationDocumentSourceText? TryCached(
+        string? tenantKey,
+        string id,
+        PersistedOperationRequestScope? scope
+    )
+    {
+        if (_cache is InMemoryPersistedOperationCache stamped)
+        {
+            if (stamped.TryGet(tenantKey, id, out var hit, out var hitReadAt))
+            {
+                scope?.NoteSource(hitReadAt);
+                return new OperationDocumentSourceText(hit);
+            }
+        }
+        else if (_cache.TryGet(tenantKey, id) is { } cached)
+        {
+            return new OperationDocumentSourceText(cached);
+        }
+        return null;
+    }
+
+    // Reads the id's active document from the store, remembers a miss, refuses a body its id does not name, and
+    // caches what it serves under the generation and time taken before the read.
+    private async Task<IOperationDocument?> ReadFromStoreAsync(
+        string id,
+        string? tenantKey,
+        long generation,
+        long readAt,
+        GeneratedDocument? own,
+        bool storedClient,
+        PersistedOperationRequestScope? scope,
+        CancellationToken cancellationToken
+    )
+    {
         var sentinel = Normalize(tenantKey);
         var ctx = await _factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -219,7 +258,7 @@ internal sealed class DbPersistedOperationStorage
     public ValueTask SaveAsync(
         OperationDocumentId documentId,
         IOperationDocument document,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken = default
     ) =>
         // Trax's persisted-operation lifecycle is operator-managed (admin
         // tooling / IPersistedOperationStore.UpsertAsync), never via
@@ -314,11 +353,53 @@ internal sealed class DbPersistedOperationStorage
         var sentinel = Normalize(tenantKey);
         var now = _clock.GetUtcNow().UtcDateTime;
 
+        var upsert = new PreparedUpsert(
+            id,
+            document,
+            options,
+            operationName,
+            version,
+            fingerprint,
+            tenantKey,
+            sentinel,
+            now
+        );
+
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
-            await using var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+            return await SaveUpsertAsync(ctx, upsert, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            await DisposeContextAsync(ctx).ConfigureAwait(false);
+        }
+    }
 
+    // An upsert validated and computed before any database work.
+    private sealed record PreparedUpsert(
+        string Id,
+        string Document,
+        UpsertOptions? Options,
+        string OperationName,
+        int Version,
+        string Fingerprint,
+        string? TenantKey,
+        string Sentinel,
+        DateTime Now
+    );
+
+    // Writes the row and its history under the row's lock, commits, and applies the change.
+    private async Task<PersistedOperation> SaveUpsertAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        PreparedUpsert upsert,
+        CancellationToken ct
+    )
+    {
+        var (id, document, options, _, _, fingerprint, tenantKey, sentinel, now) = upsert;
+        var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+        await using (DisposalOf(tx))
+        {
             var existing = await ctx
                 .PersistedOperations.FirstOrDefaultAsync(
                     p => p.TenantKey == sentinel && p.Id == id,
@@ -326,52 +407,7 @@ internal sealed class DbPersistedOperationStorage
                 )
                 .ConfigureAwait(false);
 
-            if (existing is null)
-            {
-                existing = new PersistedOperation
-                {
-                    TenantKey = sentinel,
-                    Id = id,
-                    OperationName = operationName,
-                    Version = version,
-                    Document = document,
-                    ShapeFingerprint = fingerprint,
-                    IsActive = true,
-                    Description = options?.Description,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                };
-                ctx.PersistedOperations.Add(existing);
-            }
-            else
-            {
-                // Shape-diff guardrail: an edit that changes the response
-                // shape would silently break every shipped client that is
-                // reading by the same id. Reject unless BypassShapeDiff is
-                // set (the operator's documented escape hatch for cases
-                // where they have verified the change is shape-safe).
-                if (
-                    !string.Equals(existing.ShapeFingerprint, fingerprint, StringComparison.Ordinal)
-                    && options?.BypassShapeDiff != true
-                )
-                {
-                    throw new ShapeDiffViolationException(
-                        id,
-                        existing.ShapeFingerprint,
-                        fingerprint
-                    );
-                }
-
-                existing.OperationName = operationName;
-                existing.Version = version;
-                existing.Document = document;
-                existing.ShapeFingerprint = fingerprint;
-                existing.IsActive = true;
-                existing.DeprecationReason = null;
-                if (options?.Description is { } d)
-                    existing.Description = d;
-                existing.UpdatedAt = now;
-            }
+            existing = UpsertRow(ctx, existing, upsert);
 
             ctx.PersistedOperationHistories.Add(
                 new PersistedOperationHistory
@@ -395,10 +431,60 @@ internal sealed class DbPersistedOperationStorage
                 .ConfigureAwait(false);
             return saved;
         }
-        finally
+    }
+
+    // Adds the row when the id is new, or replaces its document, refusing a change of shape unless bypassed.
+    private static PersistedOperation UpsertRow(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        PersistedOperation? found,
+        PreparedUpsert upsert
+    )
+    {
+        var (id, document, options, operationName, version, fingerprint, _, sentinel, now) = upsert;
+        var existing = found;
+        if (existing is null)
         {
-            await DisposeContextAsync(ctx).ConfigureAwait(false);
+            existing = new PersistedOperation
+            {
+                TenantKey = sentinel,
+                Id = id,
+                OperationName = operationName,
+                Version = version,
+                Document = document,
+                ShapeFingerprint = fingerprint,
+                IsActive = true,
+                Description = options?.Description,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            ctx.PersistedOperations.Add(existing);
         }
+        else
+        {
+            // Shape-diff guardrail: an edit that changes the response
+            // shape would silently break every shipped client that is
+            // reading by the same id. Reject unless BypassShapeDiff is
+            // set (the operator's documented escape hatch for cases
+            // where they have verified the change is shape-safe).
+            if (
+                !string.Equals(existing.ShapeFingerprint, fingerprint, StringComparison.Ordinal)
+                && options?.BypassShapeDiff != true
+            )
+            {
+                throw new ShapeDiffViolationException(id, existing.ShapeFingerprint, fingerprint);
+            }
+
+            existing.OperationName = operationName;
+            existing.Version = version;
+            existing.Document = document;
+            existing.ShapeFingerprint = fingerprint;
+            existing.IsActive = true;
+            existing.DeprecationReason = null;
+            if (options?.Description is { } d)
+                existing.Description = d;
+            existing.UpdatedAt = now;
+        }
+        return existing;
     }
 
     public async Task DeactivateAsync(
@@ -417,42 +503,49 @@ internal sealed class DbPersistedOperationStorage
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
-            await using var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+            var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+            await using (DisposalOf(tx))
+            {
+                var row =
+                    await ctx
+                        .PersistedOperations.FirstOrDefaultAsync(
+                            p => p.TenantKey == sentinel && p.Id == id,
+                            ct
+                        )
+                        .ConfigureAwait(false)
+                    ?? throw new InvalidOperationException(
+                        $"Persisted operation '{id}' not found for tenant '{tenantKey ?? "(none)"}'."
+                    );
 
-            var row =
-                await ctx
-                    .PersistedOperations.FirstOrDefaultAsync(
-                        p => p.TenantKey == sentinel && p.Id == id,
-                        ct
-                    )
-                    .ConfigureAwait(false)
-                ?? throw new InvalidOperationException(
-                    $"Persisted operation '{id}' not found for tenant '{tenantKey ?? "(none)"}'."
+                row.IsActive = false;
+                row.DeprecationReason = reason;
+                row.UpdatedAt = now;
+
+                ctx.PersistedOperationHistories.Add(
+                    new PersistedOperationHistory
+                    {
+                        TenantKey = sentinel,
+                        Id = id,
+                        Document = row.Document,
+                        ShapeFingerprint = row.ShapeFingerprint,
+                        ChangeType = PersistedOperationChangeType.Deactivate,
+                        ChangedAt = now,
+                        ChangedReason = reason,
+                    }
                 );
 
-            row.IsActive = false;
-            row.DeprecationReason = reason;
-            row.UpdatedAt = now;
+                await ctx.SaveChanges(ct).ConfigureAwait(false);
+                if (tx is not null)
+                    await tx.CommitAsync(ct).ConfigureAwait(false);
 
-            ctx.PersistedOperationHistories.Add(
-                new PersistedOperationHistory
-                {
-                    TenantKey = sentinel,
-                    Id = id,
-                    Document = row.Document,
-                    ShapeFingerprint = row.ShapeFingerprint,
-                    ChangeType = PersistedOperationChangeType.Deactivate,
-                    ChangedAt = now,
-                    ChangedReason = reason,
-                }
-            );
-
-            await ctx.SaveChanges(ct).ConfigureAwait(false);
-            if (tx is not null)
-                await tx.CommitAsync(ct).ConfigureAwait(false);
-
-            await ApplyChangeAsync(tenantKey, id, PersistedOperationChangeType.Deactivate, null)
-                .ConfigureAwait(false);
+                await ApplyChangeAsync(
+                        tenantKey,
+                        id,
+                        PersistedOperationChangeType.Deactivate,
+                        saved: null
+                    )
+                    .ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -470,42 +563,49 @@ internal sealed class DbPersistedOperationStorage
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
-            await using var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+            var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+            await using (DisposalOf(tx))
+            {
+                var row =
+                    await ctx
+                        .PersistedOperations.FirstOrDefaultAsync(
+                            p => p.TenantKey == sentinel && p.Id == id,
+                            ct
+                        )
+                        .ConfigureAwait(false)
+                    ?? throw new InvalidOperationException(
+                        $"Persisted operation '{id}' not found for tenant '{tenantKey ?? "(none)"}'."
+                    );
 
-            var row =
-                await ctx
-                    .PersistedOperations.FirstOrDefaultAsync(
-                        p => p.TenantKey == sentinel && p.Id == id,
-                        ct
-                    )
-                    .ConfigureAwait(false)
-                ?? throw new InvalidOperationException(
-                    $"Persisted operation '{id}' not found for tenant '{tenantKey ?? "(none)"}'."
+                row.IsActive = true;
+                row.DeprecationReason = null;
+                row.UpdatedAt = now;
+
+                ctx.PersistedOperationHistories.Add(
+                    new PersistedOperationHistory
+                    {
+                        TenantKey = sentinel,
+                        Id = id,
+                        Document = row.Document,
+                        ShapeFingerprint = row.ShapeFingerprint,
+                        ChangeType = PersistedOperationChangeType.Restore,
+                        ChangedAt = now,
+                        ChangedReason = null,
+                    }
                 );
 
-            row.IsActive = true;
-            row.DeprecationReason = null;
-            row.UpdatedAt = now;
+                await ctx.SaveChanges(ct).ConfigureAwait(false);
+                if (tx is not null)
+                    await tx.CommitAsync(ct).ConfigureAwait(false);
 
-            ctx.PersistedOperationHistories.Add(
-                new PersistedOperationHistory
-                {
-                    TenantKey = sentinel,
-                    Id = id,
-                    Document = row.Document,
-                    ShapeFingerprint = row.ShapeFingerprint,
-                    ChangeType = PersistedOperationChangeType.Restore,
-                    ChangedAt = now,
-                    ChangedReason = null,
-                }
-            );
-
-            await ctx.SaveChanges(ct).ConfigureAwait(false);
-            if (tx is not null)
-                await tx.CommitAsync(ct).ConfigureAwait(false);
-
-            await ApplyChangeAsync(tenantKey, id, PersistedOperationChangeType.Restore, null)
-                .ConfigureAwait(false);
+                await ApplyChangeAsync(
+                        tenantKey,
+                        id,
+                        PersistedOperationChangeType.Restore,
+                        saved: null
+                    )
+                    .ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -572,128 +672,189 @@ internal sealed class DbPersistedOperationStorage
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
-            await using var tx = await LockAsync(
-                    ctx,
-                    NoTenantSentinel,
-                    MachineDocuments.ReservedIdPrefix,
-                    ct
-                )
+            var tx = await LockAsync(ctx, NoTenantSentinel, MachineDocuments.ReservedIdPrefix, ct)
                 .ConfigureAwait(false);
-
-            // Only the rows a host generated, and this node's own whatever their body, so a body that no longer
-            // matches its id is written back. A row uploaded under a reserved prefix before it was reserved is left
-            // as it is: never numbered against, marked or collected.
-            var own = documents.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
-            var rows = (
-                await ctx
-                    .PersistedOperations.Where(p =>
-                        p.TenantKey == NoTenantSentinel
-                        && (
-                            p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
-                            || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
-                            || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
-                            || p.Id.StartsWith(ViewDocuments.ReservedIdPrefix)
-                            || p.Id.StartsWith(ClientDocuments.ReservedIdPrefix)
-                            || p.Id.StartsWith(ConsoleDocuments.ReservedIdPrefix)
-                        )
-                    )
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false)
-            )
-                .Where(r => own.Contains(r.Id) || GeneratedDocuments.IsGenerated(r.Id, r.Document))
-                .ToList();
-            var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
-            var activeSince = await ActiveSinceAsync(ctx, documents, byId, now, ct)
-                .ConfigureAwait(false);
-
-            foreach (var machine in documents.GroupBy(d => d.Slot, StringComparer.Ordinal))
+            await using (DisposalOf(tx))
             {
-                var mine = machine.ToList();
-                var ownIds = mine.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
-                var ofMachine = rows.Where(r =>
-                        GeneratedDocuments.SlotOf(r.Id, [machine.Key]) is not null
-                    )
-                    .ToList();
-                // A set already stored keeps the number it registered under; a new one goes after every other.
-                var version = mine.All(d => byId.ContainsKey(d.Id))
-                    ? mine.Max(d => byId[d.Id].Version)
-                    : checked(ofMachine.Select(r => r.Version).DefaultIfEmpty(0).Max() + 1);
-                ownVersions[machine.Key] = version;
+                var rows = await ReadGeneratedRowsAsync(ctx, documents, ct).ConfigureAwait(false);
+                var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
+                var activeSince = await ActiveSinceAsync(ctx, documents, byId, now, ct)
+                    .ConfigureAwait(false);
 
-                foreach (var document in mine)
-                    marked |= Register(ctx, document, version, byId, rows, changed, now, refresh);
+                foreach (var machine in documents.GroupBy(d => d.Slot, StringComparer.Ordinal))
+                    marked |= RegisterMachine(
+                        ctx,
+                        machine,
+                        byId,
+                        rows,
+                        changed,
+                        ownVersions,
+                        activeSince,
+                        now,
+                        refresh,
+                        grace
+                    );
 
-                // Another version no node has registered for the grace period is not coming back: its nodes were
-                // stopped or rolled back, so its clients reload rather than retry. Counted from no earlier than this
-                // version last became active, so a node that never writes updated_at again keeps its documents for
-                // the grace period after this one appears, or comes back after a rollback.
-                var registeredAt = mine.Max(d => activeSince[d.Id]);
-                foreach (
-                    var stale in ofMachine.Where(r =>
-                        r.IsActive
-                        && !ownIds.Contains(r.Id)
-                        && now - (r.UpdatedAt > registeredAt ? r.UpdatedAt : registeredAt)
-                            >= grace + refresh
-                    )
-                )
-                {
-                    var reason =
-                        $"collected: no node has registered version {stale.Version} of '{machine.Key}' for longer than {grace}";
-                    stale.IsActive = false;
-                    stale.DeprecationReason = reason;
-                    stale.UpdatedAt = now;
-                    History(ctx, stale, PersistedOperationChangeType.Deactivate, now, reason);
-                    changed.Add((stale.Id, PersistedOperationChangeType.Deactivate));
-                }
+                marked |= MarkOrCollectUnserved(ctx, rows, ownVersions, changed, now, grace);
+
+                if (changed.Count > 0 || marked)
+                    await ctx.SaveChanges(ct).ConfigureAwait(false);
+                if (tx is not null)
+                    await tx.CommitAsync(ct).ConfigureAwait(false);
+
+                stored = rows.ToDictionary(
+                    r => r.Id,
+                    r => new StoredMachineDocument(r.Version, r.IsActive),
+                    StringComparer.Ordinal
+                );
             }
-
-            var served = ownVersions.Keys.ToList();
-            foreach (
-                var row in rows.Where(r =>
-                    r.IsActive && GeneratedDocuments.SlotOf(r.Id, served) is null
-                )
-            )
-            {
-                if (!IsUnexposedMark(row.DeprecationReason))
-                {
-                    row.DeprecationReason =
-                        $"{UnexposedMark} not served by a node that registered its generated documents at {now:O}";
-                    row.UpdatedAt = now;
-                    marked = true;
-                }
-                else if (now - row.UpdatedAt >= grace)
-                {
-                    var reason =
-                        $"collected: no node registering its generated documents has served it for longer than {grace}";
-                    row.IsActive = false;
-                    row.DeprecationReason = reason;
-                    row.UpdatedAt = now;
-                    History(ctx, row, PersistedOperationChangeType.Deactivate, now, reason);
-                    changed.Add((row.Id, PersistedOperationChangeType.Deactivate));
-                }
-            }
-
-            if (changed.Count > 0 || marked)
-                await ctx.SaveChanges(ct).ConfigureAwait(false);
-            if (tx is not null)
-                await tx.CommitAsync(ct).ConfigureAwait(false);
-
-            stored = rows.ToDictionary(
-                r => r.Id,
-                r => new StoredMachineDocument(r.Version, r.IsActive),
-                StringComparer.Ordinal
-            );
         }
         finally
         {
             await DisposeContextAsync(ctx).ConfigureAwait(false);
         }
 
+        await ApplyChangesAsync(changed).ConfigureAwait(false);
+
+        return (ownVersions, stored);
+    }
+
+    private static async Task<List<PersistedOperation>> ReadGeneratedRowsAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        IReadOnlyList<GeneratedDocument> documents,
+        CancellationToken ct
+    )
+    {
+        // Only the rows a host generated, and this node's own whatever their body, so a body that no longer
+        // matches its id is written back. A row uploaded under a reserved prefix before it was reserved is left
+        // as it is: never numbered against, marked or collected.
+        var own = documents.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
+        var rows = (
+            await ctx
+                .PersistedOperations.Where(p =>
+                    p.TenantKey == NoTenantSentinel
+                    && (
+                        p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(ViewDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(ClientDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(ConsoleDocuments.ReservedIdPrefix)
+                    )
+                )
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        )
+            .Where(r => own.Contains(r.Id) || GeneratedDocuments.IsGenerated(r.Id, r.Document))
+            .ToList();
+        return rows;
+    }
+
+    // Registers one machine's documents under one version, and collects its other versions. Returns whether it
+    // changed a row without a history entry.
+    private bool RegisterMachine(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        IGrouping<string, GeneratedDocument> machine,
+        Dictionary<string, PersistedOperation> byId,
+        List<PersistedOperation> rows,
+        List<(string Id, string ChangeType)> changed,
+        Dictionary<string, int> ownVersions,
+        Dictionary<string, DateTime> activeSince,
+        DateTime now,
+        TimeSpan refresh,
+        TimeSpan grace
+    )
+    {
+        var marked = false;
+        var mine = machine.ToList();
+        var ownIds = mine.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
+        var ofMachine = rows.Where(r => GeneratedDocuments.SlotOf(r.Id, [machine.Key]) is not null)
+            .ToList();
+        // A set already stored keeps the number it registered under; a new one goes after every other.
+        var version = mine.TrueForAll(d => byId.ContainsKey(d.Id))
+            ? mine.Max(d => byId[d.Id].Version)
+            : checked(ofMachine.Select(r => r.Version).DefaultIfEmpty(0).Max() + 1);
+        ownVersions[machine.Key] = version;
+
+        foreach (var document in mine)
+            marked |= Register(ctx, document, version, byId, rows, changed, now, refresh);
+
+        // Another version no node has registered for the grace period is not coming back: its nodes were
+        // stopped or rolled back, so its clients reload rather than retry. Counted from no earlier than this
+        // version last became active, so a node that never writes updated_at again keeps its documents for
+        // the grace period after this one appears, or comes back after a rollback.
+        var registeredAt = mine.Max(d => activeSince[d.Id]);
+        foreach (
+            var stale in ofMachine.Where(r =>
+                r.IsActive
+                && !ownIds.Contains(r.Id)
+                && now - (r.UpdatedAt > registeredAt ? r.UpdatedAt : registeredAt)
+                    >= grace + refresh
+            )
+        )
+        {
+            var reason = string.Create(
+                CultureInfo.InvariantCulture,
+                $"collected: no node has registered version {stale.Version} of '{machine.Key}' for longer than {grace}"
+            );
+            stale.IsActive = false;
+            stale.DeprecationReason = reason;
+            stale.UpdatedAt = now;
+            History(ctx, stale, PersistedOperationChangeType.Deactivate, now, reason);
+            changed.Add((stale.Id, PersistedOperationChangeType.Deactivate));
+        }
+        return marked;
+    }
+
+    // Marks each active row of a slot no registering node serves, and collects one marked for longer than grace.
+    // Returns whether it marked a row.
+    private static bool MarkOrCollectUnserved(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        List<PersistedOperation> rows,
+        Dictionary<string, int> ownVersions,
+        List<(string Id, string ChangeType)> changed,
+        DateTime now,
+        TimeSpan grace
+    )
+    {
+        var marked = false;
+        var served = ownVersions.Keys.ToList();
+        foreach (
+            var row in rows.Where(r =>
+                r.IsActive && GeneratedDocuments.SlotOf(r.Id, served) is null
+            )
+        )
+        {
+            if (!IsUnexposedMark(row.DeprecationReason))
+            {
+                row.DeprecationReason =
+                    $"{UnexposedMark} not served by a node that registered its generated documents at {now:O}";
+                row.UpdatedAt = now;
+                marked = true;
+            }
+            else if (now - row.UpdatedAt >= grace)
+            {
+                var reason =
+                    $"collected: no node registering its generated documents has served it for longer than {grace}";
+                row.IsActive = false;
+                row.DeprecationReason = reason;
+                row.UpdatedAt = now;
+                History(ctx, row, PersistedOperationChangeType.Deactivate, now, reason);
+                changed.Add((row.Id, PersistedOperationChangeType.Deactivate));
+            }
+        }
+        return marked;
+    }
+
+    // Tells the other nodes of each change once it is committed.
+    private async Task ApplyChangesAsync(List<(string Id, string ChangeType)> changed)
+    {
         foreach (var (id, changeType) in changed)
         {
             try
             {
-                await ApplyChangeAsync(null, id, changeType, null).ConfigureAwait(false);
+                await ApplyChangeAsync(tenantKey: null, id, changeType, saved: null)
+                    .ConfigureAwait(false);
             }
             catch (PersistedOperationNotBroadcastException)
             {
@@ -701,8 +862,6 @@ internal sealed class DbPersistedOperationStorage
                 // these only to drop what it cached, which its maximum age bounds.
             }
         }
-
-        return (ownVersions, stored);
     }
 
     // When each of this node's documents last became active: now for one this registration inserts or restores, else
@@ -794,36 +953,14 @@ internal sealed class DbPersistedOperationStorage
         }
         else if (!string.Equals(row.Document, document.Text, StringComparison.Ordinal))
         {
-            row.Document = document.Text;
-            row.ShapeFingerprint = ShapeFingerprintComputer.Compute(document.Text);
-            row.OperationName = ExtractOperationName(document.Text);
-            row.IsActive = true;
-            row.DeprecationReason = null;
-            row.UpdatedAt = now;
-            History(
-                ctx,
-                row,
-                PersistedOperationChangeType.Upsert,
-                now,
-                "repaired: the stored body did not match its id"
-            );
-            changed.Add((row.Id, PersistedOperationChangeType.Upsert));
-            MachineDocumentInstruments.Repairs.Add(
-                1,
-                new KeyValuePair<string, object?>("slot", document.Slot)
-            );
-            _logger.LogError(
-                "The stored body of generated document '{Id}' did not match its id, so it was written back. Find who "
-                    + "changed the row.",
-                row.Id
-            );
+            Repair(ctx, row, document, changed, now);
         }
         else if (!row.IsActive)
         {
             row.IsActive = true;
             row.DeprecationReason = null;
             row.UpdatedAt = now;
-            History(ctx, row, PersistedOperationChangeType.Restore, now, null);
+            History(ctx, row, PersistedOperationChangeType.Restore, now, reason: null);
             changed.Add((row.Id, PersistedOperationChangeType.Restore));
         }
         else if (IsUnexposedMark(row.DeprecationReason))
@@ -838,6 +975,40 @@ internal sealed class DbPersistedOperationStorage
             return true;
         }
         return false;
+    }
+
+    // Writes back a stored body that does not match its id.
+    private void Repair(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        PersistedOperation row,
+        GeneratedDocument document,
+        List<(string Id, string ChangeType)> changed,
+        DateTime now
+    )
+    {
+        row.Document = document.Text;
+        row.ShapeFingerprint = ShapeFingerprintComputer.Compute(document.Text);
+        row.OperationName = ExtractOperationName(document.Text);
+        row.IsActive = true;
+        row.DeprecationReason = null;
+        row.UpdatedAt = now;
+        History(
+            ctx,
+            row,
+            PersistedOperationChangeType.Upsert,
+            now,
+            "repaired: the stored body did not match its id"
+        );
+        changed.Add((row.Id, PersistedOperationChangeType.Upsert));
+        MachineDocumentInstruments.Repairs.Add(
+            1,
+            new KeyValuePair<string, object?>("slot", document.Slot)
+        );
+        _logger.LogError(
+            "The stored body of generated document '{Id}' did not match its id, so it was written back. Find who "
+                + "changed the row.",
+            row.Id
+        );
     }
 
     /// <summary>
@@ -942,6 +1113,18 @@ internal sealed class DbPersistedOperationStorage
 
     // ----- helpers -----
 
+    // The in-memory provider has no transaction to dispose; await using takes a disposable that does nothing.
+    private static System.Runtime.CompilerServices.ConfiguredAsyncDisposable DisposalOf(
+        IDbContextTransaction? tx
+    ) => (tx ?? (IAsyncDisposable)NoTransaction.Instance).ConfigureAwait(false);
+
+    private sealed class NoTransaction : IAsyncDisposable
+    {
+        public static readonly NoTransaction Instance = new();
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// Opens a transaction that holds the only write lock on <c>(tenant, id)</c> until it ends, so
     /// changes to one id are applied one at a time and each reads the row the previous one left.
@@ -1043,7 +1226,10 @@ internal sealed class DbPersistedOperationStorage
         var operations = parsed.Definitions.OfType<OperationDefinitionNode>().Count();
         if (operations != 1)
             throw new PersistedOperationInputException(
-                $"A persisted operation document must contain exactly one operation; this one contains {operations}."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A persisted operation document must contain exactly one operation; this one contains {operations}."
+                )
             );
     }
 

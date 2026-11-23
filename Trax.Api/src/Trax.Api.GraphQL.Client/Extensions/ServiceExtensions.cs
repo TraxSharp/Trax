@@ -80,7 +80,7 @@ public static class ServiceExtensions
 
     /// <summary>
     /// Registers the four client services either unkeyed (<paramref name="serviceKey"/> is
-    /// <c>null</c>) or keyed, and the named HttpClient they send through. Keyed registrations
+    /// <see langword="null"/>) or keyed, and the named HttpClient they send through. Keyed registrations
     /// resolve their dependencies by the same key, because Microsoft DI does not cascade the key to
     /// a service's own constructor arguments. The configuration is built lazily so chained builder
     /// calls can mutate state before DI resolves the singleton.

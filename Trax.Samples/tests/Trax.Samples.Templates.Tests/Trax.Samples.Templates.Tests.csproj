@@ -13,6 +13,17 @@
     <ProjectReference Include="..\..\templates\content\Trax.Samples.Api\Trax.Samples.Api.csproj" />
   </ItemGroup>
 
+  <!-- The scaffold feed packs Trax.Analyzers for the templates' strict option. Referencing its
+       packaging project puts it, and the Roslyn builds it packs, in this project's restore graph,
+       so the packages are restored before the tests run, which may not reach the network. -->
+  <ItemGroup>
+    <ProjectReference
+      Include="..\..\..\Trax.Analyzers\src\Trax.Analyzers.Package\Trax.Analyzers.Package.csproj"
+      ReferenceOutputAssembly="false"
+      PrivateAssets="all"
+    />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestSigning;
@@ -18,7 +19,11 @@ namespace Trax.Scheduler.Sqs.Services;
 /// A Lambda function (or other SQS consumer) runs <see cref="Trains.JobRunner.JobRunnerTrain"/>
 /// to execute the train.
 /// </remarks>
-internal class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) : IJobSubmitter
+internal sealed class SqsJobSubmitter(
+    IAmazonSQS sqsClient,
+    SqsWorkerOptions options,
+    TimeProvider timeProvider
+) : IJobSubmitter
 {
     /// <inheritdoc />
     public Task<string> EnqueueAsync(long metadataId) =>
@@ -32,7 +37,7 @@ internal class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) :
     public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
     {
         var request = new RemoteJobRequest(metadataId);
-        return await SendMessageAsync(request, cancellationToken);
+        return await SendMessageAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -49,7 +54,7 @@ internal class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) :
         );
 
         var request = new RemoteJobRequest(metadataId, inputJson, input.GetType().FullName);
-        return await SendMessageAsync(request, cancellationToken);
+        return await SendMessageAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<string> SendMessageAsync(
@@ -66,7 +71,9 @@ internal class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) :
         };
 
         if (options.SigningKey is { } key)
-            sendRequest.MessageAttributes = new Dictionary<string, MessageAttributeValue>
+            sendRequest.MessageAttributes = new Dictionary<string, MessageAttributeValue>(
+                StringComparer.Ordinal
+            )
             {
                 [RunnerRequestSignature.HeaderName] = new()
                 {
@@ -74,12 +81,15 @@ internal class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) :
                     StringValue = RunnerRequestSignature.Create(
                         key,
                         RunnerRequestPurpose.Execute,
-                        Encoding.UTF8.GetBytes(body)
+                        Encoding.UTF8.GetBytes(body),
+                        timeProvider
                     ),
                 },
             };
 
-        var isFifo = options.QueueUrl.EndsWith(".fifo", StringComparison.OrdinalIgnoreCase);
+        var isFifo = options
+            .QueueUrl.NotNull()
+            .EndsWith(".fifo", StringComparison.OrdinalIgnoreCase);
 
         if (isFifo)
         {
@@ -87,7 +97,9 @@ internal class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) :
             sendRequest.MessageDeduplicationId = Guid.NewGuid().ToString("N");
         }
 
-        var response = await sqsClient.SendMessageAsync(sendRequest, cancellationToken);
+        var response = await sqsClient
+            .SendMessageAsync(sendRequest, cancellationToken)
+            .ConfigureAwait(false);
         return $"sqs-{response.MessageId}";
     }
 }

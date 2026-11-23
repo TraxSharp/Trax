@@ -10,7 +10,7 @@ namespace Trax.Api.Tests.AuthE2E;
 /// <summary>
 /// Security E2E suite for <see cref="Trax.Api.Auth.TraxCaller.IsTrusted"/>.
 /// Each test fires a deliberately hostile HTTP request against a real server
-/// and asserts the server-observed <c>IsTrusted</c> stays <c>false</c>.
+/// and asserts the server-observed <c>IsTrusted</c> stays <see langword="false"/>.
 ///
 /// <para>
 /// The threat model: an attacker has HTTP access to the GraphQL endpoint but
@@ -501,7 +501,8 @@ public class TraxCallerAttackVectorE2ETests
 
         try
         {
-            await Task.WhenAny(hold.Entered.Task, holdTask).WaitAsync(TimeSpan.FromSeconds(15));
+            await Task.WhenAny(hold.Entered.Task, holdTask)
+                .WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
             hold.Entered.Task.IsCompleted.Should().BeTrue("request A opened its trusted scope");
 
             using var parallelDoc = await host.PostGraphQLAsync(WhoAmIQuery);

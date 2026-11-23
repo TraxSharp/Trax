@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -47,8 +48,14 @@ public class CheckpointFingerprintTests : TestSetup
     /// </summary>
     private static void Differ(Type before, Type after, string because)
     {
-        var shape = CheckpointState.Shape(before).Replace(before.FullName!, "T");
-        CheckpointState.Shape(after).Replace(after.FullName!, "T").Should().NotBe(shape, because);
+        var shape = CheckpointState
+            .Shape(before)
+            .Replace(before.FullName.NotNull(), "T", StringComparison.Ordinal);
+        CheckpointState
+            .Shape(after)
+            .Replace(after.FullName.NotNull(), "T", StringComparison.Ordinal)
+            .Should()
+            .NotBe(shape, because);
     }
 
     public enum LaneBefore

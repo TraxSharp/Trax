@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Tests.Meta.Tests;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0001-schema-changes-are-hand-written-sql.md")]
 [TestFixture]
-public class MigrationsIntegrityTests
+public partial class MigrationsIntegrityTests
 {
     public static IEnumerable<TestCaseData> MigrationProjects()
     {
@@ -36,26 +38,29 @@ public class MigrationsIntegrityTests
         var sqlFiles = Directory
             .EnumerateFiles(migrationsDir, "*.sql")
             .Select(Path.GetFileName)
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         sqlFiles
             .Should()
             .NotBeEmpty($"{provider} migrations folder must contain at least one .sql file.");
-
-        var numberPattern = new Regex(@"^(?<num>\d{3})_[^/]+\.sql$", RegexOptions.Compiled);
         var seenNumbers = new List<int>();
         var malformed = new List<string>();
 
         foreach (var file in sqlFiles)
         {
-            var match = numberPattern.Match(file!);
+            var match = NumberPattern.Match(file.NotNull());
             if (!match.Success)
             {
-                malformed.Add(file!);
+                malformed.Add(file.NotNull());
                 continue;
             }
-            seenNumbers.Add(int.Parse(match.Groups["num"].Value));
+            seenNumbers.Add(
+                int.Parse(
+                    match.Groups["num"].Value,
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            );
         }
 
         malformed
@@ -67,9 +72,14 @@ public class MigrationsIntegrityTests
                     + string.Join("\n  ", malformed)
             );
 
+        AssertSequentialFromOne(seenNumbers, provider);
+    }
+
+    private static void AssertSequentialFromOne(List<int> seenNumbers, string provider)
+    {
         // sequential from 1 with no gaps and no duplicates
         seenNumbers.Should().OnlyHaveUniqueItems($"{provider} migration numbers must be unique.");
-        var ordered = seenNumbers.OrderBy(n => n).ToList();
+        var ordered = seenNumbers.Order().ToList();
         ordered[0].Should().Be(1, $"{provider} migrations must start at 001.");
         for (var i = 0; i < ordered.Count; i++)
         {
@@ -96,14 +106,14 @@ public class MigrationsIntegrityTests
 
         csproj.Should().NotBeNull($"no .csproj found at {projectDir}.");
 
-        var doc = XDocument.Load(csproj!);
+        var doc = XDocument.Load(csproj.NotNull());
         var embeddedResources = doc.Descendants("EmbeddedResource")
             .Select(e => e.Attribute("Include")?.Value)
             .Where(v => v is not null)
-            .Select(v => v!.Replace('\\', '/'))
+            .Select(v => v.NotNull().Replace('\\', '/'))
             .ToList();
 
-        var hasWildcard = embeddedResources.Any(v =>
+        var hasWildcard = embeddedResources.Exists(v =>
             v.Equals("Migrations/*.sql", StringComparison.Ordinal)
             || v.Equals("Migrations/**/*.sql", StringComparison.Ordinal)
         );
@@ -119,7 +129,7 @@ public class MigrationsIntegrityTests
 
         var missing = sqlFiles
             .Where(name =>
-                !embeddedResources.Any(er =>
+                !embeddedResources.Exists(er =>
                     er.EndsWith($"Migrations/{name}", StringComparison.Ordinal)
                 )
             )
@@ -134,4 +144,11 @@ public class MigrationsIntegrityTests
                     + string.Join("\n  ", missing)
             );
     }
+
+    [GeneratedRegex(
+        @"^(?<num>\d{3})_[^/]+\.sql$",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex NumberPattern { get; }
 }

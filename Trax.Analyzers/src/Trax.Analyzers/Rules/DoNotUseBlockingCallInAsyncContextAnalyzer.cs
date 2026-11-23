@@ -1,0 +1,1007 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using Trax.Analyzers.Configurations;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class DoNotUseBlockingCallInAsyncContextAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.DoNotUseBlockingCallInAsyncContext,
+        title: "Do not use blocking calls when the calling method is async",
+        messageFormat: "{0}",
+        RuleCategories.Design,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotUseBlockingCallInAsyncContext));
+
+    private static readonly DiagnosticDescriptor Rule2 = new(
+        RuleIdentifiers.DoNotUseBlockingCall,
+        title: "Do not use blocking calls, even when the calling method must become async",
+        messageFormat: "{0}",
+        RuleCategories.Design,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: false,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.DoNotUseBlockingCall));
+
+    private static readonly ConfigurationDefinition<bool> EnableSqliteSpecialCasesInAsyncContextConfiguration = new(RuleIdentifiers.DoNotUseBlockingCallInAsyncContext + ".enable_sqlite_special_cases", defaultValue: true);
+    private static readonly ConfigurationDefinition<bool> EnableSqliteSpecialCasesConfiguration = new(RuleIdentifiers.DoNotUseBlockingCall + ".enable_sqlite_special_cases", defaultValue: true);
+    private static readonly ConfigurationDefinition<bool> EnableDbSpecialCasesInAsyncContextConfiguration = new(RuleIdentifiers.DoNotUseBlockingCallInAsyncContext + ".enable_db_special_cases", defaultValue: true);
+    private static readonly ConfigurationDefinition<bool> EnableDbSpecialCasesConfiguration = new(RuleIdentifiers.DoNotUseBlockingCall + ".enable_db_special_cases", defaultValue: true);
+    private static readonly ConfigurationDefinition<bool> IncludeExtensionMethodsFromNotImportedNamespacesInAsyncContextConfiguration = new(RuleIdentifiers.DoNotUseBlockingCallInAsyncContext + ".include_extension_methods_from_not_imported_namespaces", defaultValue: false);
+    private static readonly ConfigurationDefinition<bool> IncludeExtensionMethodsFromNotImportedNamespacesConfiguration = new(RuleIdentifiers.DoNotUseBlockingCall + ".include_extension_methods_from_not_imported_namespaces", defaultValue: false);
+    private static readonly ConfigurationDefinition<bool> ReportCollectionInitializersInAsyncContextConfiguration = new(RuleIdentifiers.DoNotUseBlockingCallInAsyncContext + ".report_collection_initializers", defaultValue: false);
+    private static readonly ConfigurationDefinition<bool> ReportCollectionInitializersConfiguration = new(RuleIdentifiers.DoNotUseBlockingCall + ".report_collection_initializers", defaultValue: false);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule, Rule2);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzerContext = new Context(ctx.Compilation);
+            if (analyzerContext.IsValid)
+            {
+                ctx.RegisterSymbolStartAction(symbolContext =>
+                {
+                    var lookupCache = new OverloadLookupCache();
+                    symbolContext.RegisterOperationAction(operationContext => analyzerContext.AnalyzeInvocation(operationContext, lookupCache), OperationKind.Invocation);
+                }, SymbolKind.NamedType);
+                ctx.RegisterOperationAction(analyzerContext.AnalyzePropertyReference, OperationKind.PropertyReference);
+                ctx.RegisterOperationAction(analyzerContext.AnalyzeUsing, OperationKind.Using);
+                ctx.RegisterOperationAction(analyzerContext.AnalyzeUsingDeclaration, OperationKind.UsingDeclaration);
+            }
+        });
+    }
+
+        private sealed class Context
+        {
+            private static readonly Version Version6 = new(6, 0, 0, 0);
+            private readonly AwaitableTypes _awaitableTypes;
+            private readonly OverloadFinder _overloadFinder;
+
+        private readonly INamedTypeSymbol[] _taskAwaiterLikeSymbols;
+        private readonly HashSet<ISymbol> _excludedDiagnosticSymbols;
+        private readonly HashSet<INamedTypeSymbol> _nonAsyncDisposableTypes;
+        private readonly ConcurrentDictionary<LookupScope, ConcurrentHashSet<IMethodSymbol>> _symbolsWithNoAsyncOverloads = new();
+
+        public Context(Compilation compilation)
+        {
+            _awaitableTypes = new AwaitableTypes(compilation);
+            _overloadFinder = new OverloadFinder(compilation);
+
+            var consoleSymbol = compilation.GetTypeByMetadataName("System.Console");
+            if (consoleSymbol is not null)
+            {
+                ConsoleErrorAndOutSymbols = [.. consoleSymbol.GetMembers("Out"), .. consoleSymbol.GetMembers("Error")];
+            }
+            else
+            {
+                ConsoleErrorAndOutSymbols = [];
+            }
+
+            ProcessSymbol = compilation.GetTypeByMetadataName("System.Diagnostics.Process");
+            StreamSymbol = compilation.GetTypeByMetadataName("System.IO.Stream");
+            TextWriterSymbol = compilation.GetTypeByMetadataName("System.IO.TextWriter");
+            DbConnectionSymbol = compilation.GetTypeByMetadataName("System.Data.Common.DbConnection");
+            DbCommandSymbol = compilation.GetTypeByMetadataName("System.Data.Common.DbCommand");
+            DbDataReaderSymbol = compilation.GetTypeByMetadataName("System.Data.Common.DbDataReader");
+            DbTransactionSymbol = compilation.GetTypeByMetadataName("System.Data.Common.DbTransaction");
+            DbBatchSymbol = compilation.GetTypeByMetadataName("System.Data.Common.DbBatch");
+            SqliteConnectionSymbol = compilation.GetTypeByMetadataName("Microsoft.Data.Sqlite.SqliteConnection");
+            SqliteCommandSymbol = compilation.GetTypeByMetadataName("Microsoft.Data.Sqlite.SqliteCommand");
+            SqliteDataReaderSymbol = compilation.GetTypeByMetadataName("Microsoft.Data.Sqlite.SqliteDataReader");
+            CancellationTokenSymbol = compilation.GetTypeByMetadataName("System.Threading.CancellationToken");
+            ObsoleteAttributeSymbol = compilation.GetTypeByMetadataName("System.ObsoleteAttribute");
+
+            TaskSymbol = compilation.GetTypeByMetadataName("System.Threading.Tasks.Task");
+            TaskOfTSymbol = compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1");
+            TaskAwaiterSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.TaskAwaiter");
+            TaskAwaiterOfTSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.TaskAwaiter`1");
+
+            ValueTaskSymbol = compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask");
+            ValueTaskOfTSymbol = compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask`1");
+            ValueTaskAwaiterSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ValueTaskAwaiter");
+            ValueTaskAwaiterOfTSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ValueTaskAwaiter`1");
+            ConfiguredTaskAwaiterSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ConfiguredTaskAwaitable+ConfiguredTaskAwaiter");
+            ConfiguredTaskAwaiterOfTSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ConfiguredTaskAwaitable`1+ConfiguredTaskAwaiter");
+            ConfiguredValueTaskAwaiterSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable+ConfiguredValueTaskAwaiter");
+            ConfiguredValueTaskAwaiterOfTSymbol = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ConfiguredValueTaskAwaitable`1+ConfiguredValueTaskAwaiter");
+
+            ThreadSymbol = compilation.GetTypeByMetadataName("System.Threading.Thread");
+            SemaphoreSlimSymbol = compilation.GetTypeByMetadataName("System.Threading.SemaphoreSlim");
+            TimeSpanSymbol = compilation.GetTypeByMetadataName("System.TimeSpan");
+
+            DbContextSymbol = compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext");
+            DbSetSymbol = compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbSet`1");
+            DbContextFactorySymbol = compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.IDbContextFactory`1");
+
+            ServiceProviderServiceExtensionsSymbol = compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
+            if (ServiceProviderServiceExtensionsSymbol is not null)
+            {
+                ServiceProviderServiceExtensions_CreateScopeSymbol = ServiceProviderServiceExtensionsSymbol.GetMembers("CreateScope").FirstOrDefault();
+                ServiceProviderServiceExtensions_CreateAsyncScopeSymbol = ServiceProviderServiceExtensionsSymbol.GetMembers("CreateAsyncScope").FirstOrDefault();
+            }
+
+            Moq_MockSymbol = compilation.GetTypeByMetadataName("Moq.Mock`1");
+
+            // Detect test frameworks
+            var xunitAssertSymbol = compilation.GetTypeByMetadataName("Xunit.Assert");
+            var nunitAssertSymbol = compilation.GetTypeByMetadataName("NUnit.Framework.Assert");
+            var msTestAssertSymbol = compilation.GetTypeByMetadataName("Microsoft.VisualStudio.TestTools.UnitTesting.Assert");
+            IsTestProject = xunitAssertSymbol is not null || nunitAssertSymbol is not null || msTestAssertSymbol is not null;
+
+            TemporaryDirectorySymbol = compilation.GetTypeByMetadataName("Meziantou.Framework.TemporaryDirectory");
+
+            var taskAwaiterLikeSymbols = new List<INamedTypeSymbol>(8);
+            taskAwaiterLikeSymbols.AddIfNotNull(TaskAwaiterSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(TaskAwaiterOfTSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(ValueTaskAwaiterSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(ValueTaskAwaiterOfTSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(ConfiguredTaskAwaiterSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(ConfiguredTaskAwaiterOfTSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(ConfiguredValueTaskAwaiterSymbol);
+            taskAwaiterLikeSymbols.AddIfNotNull(ConfiguredValueTaskAwaiterOfTSymbol);
+            _taskAwaiterLikeSymbols = [.. taskAwaiterLikeSymbols];
+            _excludedDiagnosticSymbols = CreateExcludedDiagnosticSymbols(compilation);
+            _nonAsyncDisposableTypes = CreateNonAsyncDisposableTypes(compilation);
+        }
+
+        private ISymbol? StreamSymbol { get; }
+        private INamedTypeSymbol? TextWriterSymbol { get; }
+        private ISymbol? ProcessSymbol { get; }
+        private INamedTypeSymbol? DbConnectionSymbol { get; }
+        private INamedTypeSymbol? DbCommandSymbol { get; }
+        private INamedTypeSymbol? DbDataReaderSymbol { get; }
+        private INamedTypeSymbol? DbTransactionSymbol { get; }
+        private INamedTypeSymbol? DbBatchSymbol { get; }
+        private INamedTypeSymbol? SqliteConnectionSymbol { get; }
+        private INamedTypeSymbol? SqliteCommandSymbol { get; }
+        private INamedTypeSymbol? SqliteDataReaderSymbol { get; }
+
+        /// <summary>
+        /// Indicates whether the compilation references <c>Microsoft.Data.Sqlite</c>. When it does not, the Sqlite special cases can never apply.
+        /// </summary>
+        private bool HasSqliteSymbols => SqliteConnectionSymbol is not null || SqliteCommandSymbol is not null || SqliteDataReaderSymbol is not null;
+
+        private ISymbol[] ConsoleErrorAndOutSymbols { get; }
+        private INamedTypeSymbol? CancellationTokenSymbol { get; }
+        private INamedTypeSymbol? ObsoleteAttributeSymbol { get; }
+        private INamedTypeSymbol? ServiceProviderServiceExtensionsSymbol { get; }
+        private ISymbol? ServiceProviderServiceExtensions_CreateScopeSymbol { get; }
+        private ISymbol? ServiceProviderServiceExtensions_CreateAsyncScopeSymbol { get; }
+
+        private INamedTypeSymbol? TaskSymbol { get; }
+        private INamedTypeSymbol? TaskOfTSymbol { get; }
+        private INamedTypeSymbol? TaskAwaiterSymbol { get; }
+        private INamedTypeSymbol? TaskAwaiterOfTSymbol { get; }
+
+        private INamedTypeSymbol? ValueTaskSymbol { get; }
+        private INamedTypeSymbol? ValueTaskOfTSymbol { get; }
+        private INamedTypeSymbol? ValueTaskAwaiterSymbol { get; }
+        private INamedTypeSymbol? ValueTaskAwaiterOfTSymbol { get; }
+
+        private INamedTypeSymbol? ConfiguredTaskAwaiterSymbol { get; }
+        private INamedTypeSymbol? ConfiguredTaskAwaiterOfTSymbol { get; }
+        private INamedTypeSymbol? ConfiguredValueTaskAwaiterSymbol { get; }
+        private INamedTypeSymbol? ConfiguredValueTaskAwaiterOfTSymbol { get; }
+
+        private INamedTypeSymbol? ThreadSymbol { get; }
+        private INamedTypeSymbol? SemaphoreSlimSymbol { get; }
+        private INamedTypeSymbol? TimeSpanSymbol { get; }
+
+        private INamedTypeSymbol? DbContextSymbol { get; }
+        private INamedTypeSymbol? DbSetSymbol { get; }
+        private INamedTypeSymbol? DbContextFactorySymbol { get; }
+
+        public INamedTypeSymbol? Moq_MockSymbol { get; }
+
+        private bool IsTestProject { get; }
+        private INamedTypeSymbol? TemporaryDirectorySymbol { get; }
+
+        public bool IsValid => TaskSymbol is not null && TaskOfTSymbol is not null && TaskAwaiterSymbol is not null;
+
+        internal void AnalyzeInvocation(OperationAnalysisContext context, OverloadLookupCache lookupCache)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+
+            // The implicit invocations are not written in the code, so they cannot be replaced. The Add methods of a collection initializer
+            // are reported only when the option is enabled, as the collection initializer must be rewritten to await them.
+            if (operation.IsImplicit && !(operation.Parent is IObjectOrCollectionInitializerOperation && IsCollectionInitializersReportingEnabled(context, operation)))
+                return;
+
+            var targetMethod = operation.TargetMethod;
+            if (IsExcludedDiagnosticSymbol(targetMethod))
+                return;
+
+            // Nothing is reported when the enclosing method cannot await, so the async equivalent of the
+            // called method, whose search is expensive, is only looked for when a diagnostic can be reported.
+            var asyncContextKind = GetAsyncContextKind(operation, context.CancellationToken);
+            if (asyncContextKind is AsyncContextKind.None)
+                return;
+
+            // The cache only contains methods with no async equivalent methods.
+            // This optimizes the best-case scenario where code is correctly written according to this analyzer.
+            // The async equivalent is searched from the call site, so the same method can have an async equivalent in
+            // one scope and none in another one. The cache is therefore per scope, and the results depending on the
+            // instance or on the arguments of the call, such as the Sqlite special cases, are never added to it.
+            var scope = LookupScope.Create(operation.Syntax);
+            _symbolsWithNoAsyncOverloads.TryGetValue(scope, out var methodsWithNoAsyncOverload);
+            if (methodsWithNoAsyncOverload is not null && methodsWithNoAsyncOverload.Contains(targetMethod))
+                return;
+
+            // The options are the same for all the call sites of a file, so they can be used to search the async equivalent
+            // cached per scope. Whether the rule reported at the call site includes the extension methods from not imported
+            // namespaces is checked once the async equivalent is found.
+            var sqliteSpecialCasesEnabled = IsSqliteSpecialCasesEnabled(context, operation);
+            var includeExtensionMethodsFromNotImportedNamespaces = context.Options.GetConfigurationValue(operation, IncludeExtensionMethodsFromNotImportedNamespacesInAsyncContextConfiguration)
+                || context.Options.GetConfigurationValue(operation, IncludeExtensionMethodsFromNotImportedNamespacesConfiguration);
+            var result = FindAsyncEquivalent(operation, sqliteSpecialCasesEnabled, includeExtensionMethodsFromNotImportedNamespaces, lookupCache, context.CancellationToken, out var diagnosticMessage);
+            if (diagnosticMessage is not null)
+            {
+                ReportDiagnosticIfNeeded(context, diagnosticMessage.CreateProperties(), operation, diagnosticMessage.DiagnosticMessage, asyncContextKind, requiresNamespaceImport: diagnosticMessage.NamespaceToImport is not null);
+            }
+            else if (result is AsyncEquivalentSearchResult.NotFound)
+            {
+                methodsWithNoAsyncOverload ??= _symbolsWithNoAsyncOverloads.GetOrAdd(scope, static _ => new ConcurrentHashSet<IMethodSymbol>(SymbolEqualityComparer.Default));
+                methodsWithNoAsyncOverload.Add(targetMethod);
+            }
+        }
+
+        /// <summary>
+        /// Searches for an async equivalent of the called method, visible from the call site. <paramref name="data"/>
+        /// is set when the result is <see cref="AsyncEquivalentSearchResult.Found"/>.
+        /// </summary>
+        private AsyncEquivalentSearchResult FindAsyncEquivalent(IInvocationOperation operation, bool sqliteSpecialCasesEnabled, bool includeExtensionMethodsFromNotImportedNamespaces, OverloadLookupCache lookupCache, CancellationToken cancellationToken, out DiagnosticData? data)
+        {
+            data = null;
+            var targetMethod = operation.TargetMethod;
+
+            if (_awaitableTypes.IsAwaitable(targetMethod.ReturnType, operation.SemanticModel!, operation.Syntax.SpanStart))
+                return AsyncEquivalentSearchResult.NotFound;
+
+            // Process.WaitForExit => Skip because the async method is not equivalent https://github.com/dotnet/runtime/issues/42556
+            if (targetMethod.Name == nameof(System.Diagnostics.Process.WaitForExit) && targetMethod.ContainingType.IsEqualTo(ProcessSymbol))
+            {
+                if (targetMethod.ContainingType.ContainingAssembly.Identity.Version < Version6)
+                    return AsyncEquivalentSearchResult.NotFound;
+            }
+
+            // Task.Wait()
+            // Task`1.Wait()
+            else if (targetMethod.Name == nameof(Task.Wait) && targetMethod.ContainingType.OriginalDefinition.IsEqualToAny(TaskSymbol, TaskOfTSymbol))
+            {
+                if (operation.Arguments.Length == 0)
+                {
+                    data = new("Use await instead of 'Wait()'", DoNotUseBlockingCallInAsyncContextData.Task_Wait);
+                    return AsyncEquivalentSearchResult.Found;
+                }
+                else
+                {
+                    data = new("Use 'WaitAsync' instead of 'Wait()'", DoNotUseBlockingCallInAsyncContextData.Task_Wait_Delay);
+                    return AsyncEquivalentSearchResult.Found;
+                }
+            }
+
+            // Task.GetAwaiter().GetResult()
+            // Task.ConfigureAwait(false).GetAwaiter().GetResult()
+            else if (targetMethod.Name == nameof(TaskAwaiter.GetResult))
+            {
+                if (targetMethod.ContainingType.OriginalDefinition.IsEqualToAny(_taskAwaiterLikeSymbols))
+                {
+                    data = new("Use await instead of 'GetResult()'", DoNotUseBlockingCallInAsyncContextData.TaskAwaiter_GetResult);
+                    return AsyncEquivalentSearchResult.Found;
+                }
+            }
+
+            // Thread.Sleep => Task.Delay
+            else if (targetMethod.Name == "Sleep")
+            {
+                if (targetMethod.ContainingType.IsEqualTo(ThreadSymbol))
+                {
+                    data = new("Use await and 'Task.Delay()' instead of 'Thread.Sleep()'", DoNotUseBlockingCallInAsyncContextData.Thread_Sleep);
+                    return AsyncEquivalentSearchResult.Found;
+                }
+            }
+
+            // Console.Out|Error.Write
+            else if (targetMethod.Name is "WriteLine" or "Write" or "Flush")
+            {
+                var left = operation.GetChildOperations().FirstOrDefault();
+                if (left is IMemberReferenceOperation memberReference)
+                {
+                    if (ConsoleErrorAndOutSymbols.Contains(memberReference.Member, SymbolEqualityComparer.Default))
+                        return AsyncEquivalentSearchResult.NotFoundForThisCall;
+                }
+            }
+
+            else if (ServiceProviderServiceExtensions_CreateAsyncScopeSymbol is not null && ServiceProviderServiceExtensions_CreateScopeSymbol is not null && targetMethod.IsEqualTo(ServiceProviderServiceExtensions_CreateScopeSymbol))
+            {
+                data = new($"Use 'CreateAsyncScope' instead of '{targetMethod.Name}'", DoNotUseBlockingCallInAsyncContextData.CreateAsyncScope);
+                return AsyncEquivalentSearchResult.Found;
+            }
+
+            // https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.dbcontext.addasync?view=efcore-6.0&WT.mc_id=DT-MVP-5003978#overloads
+            else if ((DbContextSymbol is not null || DbSetSymbol is not null) && targetMethod.Name is "Add" or "AddRange" && targetMethod.ContainingType.OriginalDefinition.IsEqualToAny(DbContextSymbol, DbSetSymbol))
+            {
+                return AsyncEquivalentSearchResult.NotFound;
+            }
+
+            // IDbContextFactory<TContext>.CreateDbContext() - CreateDbContextAsync() is only for specific edge-cases
+            // https://github.com/dotnet/efcore/issues/26630
+            else if (DbContextFactorySymbol is not null && targetMethod.Name is "CreateDbContext" &&
+                     (targetMethod.ContainingType.OriginalDefinition.IsEqualTo(DbContextFactorySymbol) ||
+                      targetMethod.ContainingType.ImplementsGenericInterface(DbContextFactorySymbol)))
+            {
+                return AsyncEquivalentSearchResult.NotFound;
+            }
+
+            // Async APIs in Microsoft.Data.Sqlite have documented limitations.
+            // Ignore any invocation on SqliteConnection, SqliteCommand, or SqliteDataReader by default.
+            // https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/async
+            else if (sqliteSpecialCasesEnabled && IsSqliteSpecialCaseMethod(operation, cancellationToken))
+            {
+                return AsyncEquivalentSearchResult.NotFoundForThisCall;
+            }
+
+            else if (Moq_MockSymbol is not null && targetMethod.Name is "Raise" && targetMethod.ContainingType.OriginalDefinition.IsEqualTo(Moq_MockSymbol))
+            {
+                return AsyncEquivalentSearchResult.NotFound;
+            }
+
+            // SemaphoreSlim.Wait(0) is a non-blocking try-acquire pattern, skip it
+            else if (SemaphoreSlimSymbol is not null && targetMethod.Name == "Wait" && targetMethod.ContainingType.IsEqualTo(SemaphoreSlimSymbol) && IsSemaphoreSlimWaitWithZeroTimeout(operation, cancellationToken))
+            {
+                return AsyncEquivalentSearchResult.NotFoundForThisCall;
+            }
+
+            // Search async equivalent: sample.Write() => sample.WriteAsync()
+            if (!targetMethod.ReturnType.OriginalDefinition.IsEqualToAny(TaskSymbol, TaskOfTSymbol))
+            {
+                // The extension methods declared in a namespace that is not imported are only used when no method is in scope,
+                // as the code fix must add a using directive to call them
+                IMethodSymbol? notImportedAsyncEquivalentMethod = null;
+                string? namespaceToImport = null;
+                var asyncEquivalentMethod = FindPotentialAsyncEquivalent(operation, targetMethod, targetMethod.Name, includeExtensionMethodsFromNotImportedNamespaces, lookupCache, ref notImportedAsyncEquivalentMethod, ref namespaceToImport);
+                if (asyncEquivalentMethod is null && !targetMethod.Name.EndsWith("Async", StringComparison.Ordinal))
+                {
+                    asyncEquivalentMethod = FindPotentialAsyncEquivalent(operation, targetMethod, targetMethod.Name + "Async", includeExtensionMethodsFromNotImportedNamespaces, lookupCache, ref notImportedAsyncEquivalentMethod, ref namespaceToImport);
+                }
+
+                if (asyncEquivalentMethod is null)
+                {
+                    asyncEquivalentMethod = notImportedAsyncEquivalentMethod;
+                }
+                else
+                {
+                    namespaceToImport = null;
+                }
+
+                if (asyncEquivalentMethod is not null)
+                {
+                    data = new($"Use '{asyncEquivalentMethod.Name}' instead of '{targetMethod.Name}'", DoNotUseBlockingCallInAsyncContextData.Overload, asyncEquivalentMethod.Name, namespaceToImport);
+                    return AsyncEquivalentSearchResult.Found;
+                }
+            }
+
+            return AsyncEquivalentSearchResult.NotFound;
+        }
+
+        private static bool IsSqliteSpecialCasesEnabled(OperationAnalysisContext context, IOperation operation)
+        {
+            var defaultValue = context.Options.GetConfigurationValue(operation, EnableSqliteSpecialCasesInAsyncContextConfiguration);
+            return context.Options.GetConfigurationValue(operation, EnableSqliteSpecialCasesConfiguration, defaultValue);
+        }
+
+        private static bool IsDbSpecialCasesEnabled(OperationAnalysisContext context, IOperation operation)
+        {
+            var defaultValue = context.Options.GetConfigurationValue(operation, EnableDbSpecialCasesInAsyncContextConfiguration);
+            return context.Options.GetConfigurationValue(operation, EnableDbSpecialCasesConfiguration, defaultValue);
+        }
+
+        private static bool IsCollectionInitializersReportingEnabled(OperationAnalysisContext context, IOperation operation)
+        {
+            var defaultValue = context.Options.GetConfigurationValue(operation, ReportCollectionInitializersInAsyncContextConfiguration);
+            return context.Options.GetConfigurationValue(operation, ReportCollectionInitializersConfiguration, defaultValue);
+        }
+
+        private static HashSet<ISymbol> CreateExcludedDiagnosticSymbols(Compilation compilation)
+        {
+            return AnnotationExclusions.GetExcludedSymbols(compilation, AnnotationAttributes.IsExcludeFromBlockingCallAnalysisAttributeSymbol);
+        }
+
+        private bool IsNonAsyncDisposableType(ITypeSymbol? symbol)
+        {
+            if (_nonAsyncDisposableTypes.Count == 0 || symbol is not INamedTypeSymbol namedType)
+                return false;
+
+            return IsConfiguredType(namedType, _nonAsyncDisposableTypes);
+        }
+
+        private static HashSet<INamedTypeSymbol> CreateNonAsyncDisposableTypes(Compilation compilation)
+        {
+            var result = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            foreach (var attribute in compilation.Assembly.GetAttributes())
+            {
+                if (!AnnotationAttributes.IsNonAsyncDisposableTypeAttributeSymbol(attribute.AttributeClass))
+                    continue;
+
+                var constructorArguments = attribute.ConstructorArguments;
+                if (constructorArguments is [{ Value: INamedTypeSymbol type }])
+                {
+                    result.Add(type);
+                    if (!ReferenceEquals(type, type.OriginalDefinition))
+                    {
+                        result.Add(type.OriginalDefinition);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static bool IsConfiguredType(INamedTypeSymbol type, HashSet<INamedTypeSymbol> configuredTypes)
+        {
+            if (configuredTypes.Contains(type))
+                return true;
+
+            if (!ReferenceEquals(type, type.OriginalDefinition) && configuredTypes.Contains(type.OriginalDefinition))
+                return true;
+
+            return false;
+        }
+
+        private bool IsExcludedDiagnosticSymbol(ISymbol symbol)
+        {
+            if (_excludedDiagnosticSymbols.Count == 0)
+                return false;
+
+            if (_excludedDiagnosticSymbols.Contains(symbol))
+                return true;
+
+            var originalDefinition = symbol.OriginalDefinition;
+            return !ReferenceEquals(symbol, originalDefinition) && _excludedDiagnosticSymbols.Contains(originalDefinition);
+        }
+
+        private bool IsSqliteSpecialCaseType(INamedTypeSymbol type)
+        {
+            return type.IsEqualToAny(SqliteConnectionSymbol, SqliteCommandSymbol, SqliteDataReaderSymbol);
+        }
+
+        /// <summary>
+        /// Indicates whether a value of the declared type <paramref name="type"/> could hold an instance of a Sqlite special-case type.
+        /// </summary>
+        private bool CanHoldSqliteSpecialCaseType(INamedTypeSymbol type)
+        {
+            return CanHold(SqliteConnectionSymbol, type) || CanHold(SqliteCommandSymbol, type) || CanHold(SqliteDataReaderSymbol, type);
+
+            static bool CanHold(INamedTypeSymbol? sqliteType, INamedTypeSymbol declaredType)
+                => sqliteType is not null && sqliteType.IsAssignableTo(declaredType);
+        }
+
+        private bool IsSqliteSpecialCaseMethod(IInvocationOperation operation, CancellationToken cancellationToken)
+        {
+            if (!HasSqliteSymbols)
+                return false;
+
+            if (IsSqliteSpecialCaseType(operation.TargetMethod.ContainingType))
+                return true;
+
+            if (operation.TargetMethod.IsExtensionMethod)
+                return false;
+
+            if (operation.TargetMethod.IsStatic)
+                return false;
+
+            if (operation.Instance is not { } instance)
+                return false;
+
+            // The data flow analysis walks the whole syntax tree, so only run it when the declared type of the instance
+            // could actually hold a Sqlite instance.
+            if (instance.GetActualType(useDataFlowAnalysis: false, cancellationToken) is not INamedTypeSymbol declaredType)
+                return false;
+
+            if (IsSqliteSpecialCaseType(declaredType))
+                return true;
+
+            if (!CanHoldSqliteSpecialCaseType(declaredType))
+                return false;
+
+            return instance.GetActualType(cancellationToken) is INamedTypeSymbol type && IsSqliteSpecialCaseType(type);
+        }
+
+        /// <summary>
+        /// Searches for an async equivalent in scope at the call site. When <paramref name="includeExtensionMethodsFromNotImportedNamespaces"/>
+        /// is set, the first async equivalent that requires to import its namespace is set to <paramref name="notImportedMethod"/>, and its
+        /// namespace to <paramref name="namespaceToImport"/>, if they are not already set.
+        /// </summary>
+        private IMethodSymbol? FindPotentialAsyncEquivalent(IInvocationOperation operation, IMethodSymbol targetMethod, string methodName, bool includeExtensionMethodsFromNotImportedNamespaces, OverloadLookupCache lookupCache, ref IMethodSymbol? notImportedMethod, ref string? namespaceToImport)
+        {
+            var options = new OverloadOptions(
+                AllowOptionalParameters: false,
+                IncludeExtensionsMethods: true,
+                SyntaxNode: operation.Syntax,
+                IncludeExtensionMethodsFromNotImportedNamespaces: includeExtensionMethodsFromNotImportedNamespaces,
+                LookupCache: lookupCache);
+
+            // When the method name is the same as the original method, and the original is non-generic
+            // while a candidate is generic, the compiler will always prefer the non-generic original
+            // over the generic candidate. Awaiting the call would therefore still resolve to the
+            // non-generic (non-awaitable) method, making the suggested fix invalid.
+            var sameNameSearch = string.Equals(methodName, targetMethod.Name, StringComparison.Ordinal);
+
+            foreach (var candidateMethod in _overloadFinder.FindSimilarMethods(targetMethod, options, methodName, default))
+            {
+                if (IsPotentialAsyncEquivalent(operation, targetMethod, candidateMethod, sameNameSearch, includeExtensionMethodsFromNotImportedNamespaces, ref notImportedMethod, ref namespaceToImport))
+                    return candidateMethod;
+            }
+
+            if (CancellationTokenSymbol is not null)
+            {
+                foreach (var candidateMethod in _overloadFinder.FindSimilarMethods(targetMethod, options, methodName, [new OverloadParameterType(CancellationTokenSymbol)]))
+                {
+                    if (IsPotentialAsyncEquivalent(operation, targetMethod, candidateMethod, sameNameSearch, includeExtensionMethodsFromNotImportedNamespaces, ref notImportedMethod, ref namespaceToImport))
+                        return candidateMethod;
+                }
+            }
+
+            return null;
+        }
+
+        private bool IsPotentialAsyncEquivalent(IInvocationOperation operation, IMethodSymbol targetMethod, IMethodSymbol candidateMethod, bool sameNameSearch, bool includeExtensionMethodsFromNotImportedNamespaces, ref IMethodSymbol? notImportedMethod, ref string? namespaceToImport)
+        {
+            if (sameNameSearch && !targetMethod.IsGenericMethod && candidateMethod.IsGenericMethod)
+                return false;
+
+            if (!IsPotentialAsyncEquivalent(operation, candidateMethod))
+                return false;
+
+            if (includeExtensionMethodsFromNotImportedNamespaces && _overloadFinder.GetNamespaceToImport(candidateMethod, operation.Syntax) is { } candidateNamespaceToImport)
+            {
+                if (notImportedMethod is null)
+                {
+                    notImportedMethod = candidateMethod;
+                    namespaceToImport = candidateNamespaceToImport;
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsPotentialAsyncEquivalent(IInvocationOperation operation, IMethodSymbol methodSymbol)
+        {
+            if (!_awaitableTypes.IsAwaitable(methodSymbol.ReturnType, operation.SemanticModel!, operation.Syntax.SpanStart))
+                return false;
+
+            // In test projects, exclude async methods from Meziantou.Framework.TemporaryDirectory
+            if (IsTestProject && TemporaryDirectorySymbol is not null && methodSymbol.ContainingType.IsEqualTo(TemporaryDirectorySymbol))
+                return false;
+
+            return true;
+        }
+
+        private bool IsSemaphoreSlimWaitWithZeroTimeout(IInvocationOperation operation, CancellationToken cancellationToken)
+        {
+            if (operation.Arguments.Length == 0)
+                return false;
+
+            var firstArgument = operation.Arguments[0];
+            // Check for Wait(0) - integer literal 0
+            if (firstArgument.Value.TryGetConstantValue(out var constantValue, cancellationToken) && constantValue is int intValue && intValue == 0)
+                return true;
+
+            // Check for Wait(TimeSpan.Zero)
+            if (TimeSpanSymbol is not null && firstArgument.Value is IMemberReferenceOperation memberRef)
+            {
+                if (memberRef.Member.Name == nameof(TimeSpan.Zero) && memberRef.Member.ContainingType.IsEqualTo(TimeSpanSymbol))
+                    return true;
+            }
+
+            return false;
+        }
+
+        internal void AnalyzePropertyReference(OperationAnalysisContext context)
+        {
+            var operation = (IPropertyReferenceOperation)context.Operation;
+
+            if (operation.IsInNameofOperation())
+                return;
+
+            if (IsExcludedDiagnosticSymbol(operation.Property))
+                return;
+
+            // Task`1.Result
+            if (string.Equals(operation.Property.Name, nameof(Task<>.Result), StringComparison.Ordinal))
+            {
+                if (operation.Member.ContainingType.OriginalDefinition.IsEqualToAny(TaskOfTSymbol, ValueTaskOfTSymbol))
+                {
+                    var asyncContextKind = GetAsyncContextKind(operation, context.CancellationToken);
+                    var data = new DiagnosticData("Use await instead of 'Result'", DoNotUseBlockingCallInAsyncContextData.Task_Result);
+                    ReportDiagnosticIfNeeded(context, data.CreateProperties(), operation, data.DiagnosticMessage, asyncContextKind);
+                }
+            }
+        }
+
+        /// <param name="requiresNamespaceImport">Indicates the fix calls an extension method declared in a namespace that is not imported, so the diagnostic is only reported when the rule is configured to include them.</param>
+        private static void ReportDiagnosticIfNeeded(OperationAnalysisContext context, ImmutableDictionary<string, string?>? properties, IOperation operation, string message, AsyncContextKind asyncContextKind, bool requiresNamespaceImport = false)
+        {
+            if (asyncContextKind is AsyncContextKind.AsyncContext)
+            {
+                if (requiresNamespaceImport && !context.Options.GetConfigurationValue(operation, IncludeExtensionMethodsFromNotImportedNamespacesInAsyncContextConfiguration))
+                    return;
+
+                context.ReportDiagnostic(Rule, properties, operation, message);
+            }
+            else if (asyncContextKind is AsyncContextKind.CanBecomeAsyncContext)
+            {
+                if (requiresNamespaceImport && !context.Options.GetConfigurationValue(operation, IncludeExtensionMethodsFromNotImportedNamespacesConfiguration))
+                    return;
+
+                context.ReportDiagnostic(Rule2, properties, operation, message + " and make method async");
+            }
+        }
+
+        /// <summary>
+        /// Indicates which rule can be reported at the location of the operation, or <see cref="AsyncContextKind.None"/>
+        /// when neither can. Nothing is reported in a method that cannot await, so this is checked before looking for a
+        /// blocking call, which is much more expensive.
+        /// </summary>
+        private AsyncContextKind GetAsyncContextKind(IOperation operation, CancellationToken cancellationToken)
+        {
+            if (IsInLock(operation))
+                return AsyncContextKind.None;
+
+            // lambda, delegate, method, local function
+            if (operation.SemanticModel!.GetEnclosingSymbol(operation.Syntax.SpanStart, cancellationToken) is not IMethodSymbol methodSymbol)
+                return AsyncContextKind.None;
+
+            // Check if returns Task or async void
+            if (_awaitableTypes.DoesNotReturnVoidAndCanUseAsyncKeyword(methodSymbol, operation.SemanticModel, cancellationToken))
+                return AsyncContextKind.AsyncContext;
+
+            if (!methodSymbol.IsOverrideOrInterfaceImplementation() && !methodSymbol.IsVisibleOutsideOfAssembly())
+                return AsyncContextKind.CanBecomeAsyncContext;
+
+            return AsyncContextKind.None;
+        }
+
+        /// <summary>
+        /// Indicates whether the operation is in a lock statement of its enclosing method. A lambda or a local function declared
+        /// in a lock statement is not executed while the lock is held, so it can await.
+        /// </summary>
+        private static bool IsInLock(IOperation operation)
+        {
+            for (var current = operation.Parent; current is not null; current = current.Parent)
+            {
+                if (current is ILockOperation)
+                    return true;
+
+                if (current is IAnonymousFunctionOperation or ILocalFunctionOperation)
+                    return false;
+            }
+
+            return false;
+        }
+
+        private bool HasDisposeAsyncMethod(INamedTypeSymbol symbol)
+        {
+            var members = symbol.GetAllMembers("DisposeAsync", includeInterfaceMembers: true);
+            foreach (var member in members.OfType<IMethodSymbol>())
+            {
+                if (member.Parameters.Length != 0)
+                    continue;
+
+                if (member.IsGenericMethod)
+                    continue;
+
+                if (member.IsStatic)
+                    continue;
+
+                if (!member.ReturnType.IsEqualTo(ValueTaskSymbol))
+                    continue;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks whether any type in the hierarchy from <paramref name="symbol"/> up to (but NOT including)
+        /// <paramref name="baseTypeSymbol"/> declares or overrides a <c>DisposeAsync</c> method.
+        /// Used to detect whether a subclass has a meaningful (truly async) <c>DisposeAsync</c> override,
+        /// as opposed to relying on an inherited implementation that is not truly asynchronous.
+        /// </summary>
+        private bool HasDisposeAsyncMethodDeclaredInSubclass(INamedTypeSymbol symbol, INamedTypeSymbol baseTypeSymbol)
+        {
+            var current = symbol;
+            while (current is not null && !current.IsEqualTo(baseTypeSymbol))
+            {
+                foreach (var member in current.GetMembers("DisposeAsync").OfType<IMethodSymbol>())
+                {
+                    if (member.Parameters.Length != 0)
+                        continue;
+
+                    if (member.IsGenericMethod)
+                        continue;
+
+                    if (member.IsStatic)
+                        continue;
+
+                    if (!member.ReturnType.IsEqualTo(ValueTaskSymbol))
+                        continue;
+
+                    return true;
+                }
+
+                current = current.BaseType;
+            }
+
+            return false;
+        }
+
+        private bool CanBeAwaitUsing(IOperation operation, bool sqliteSpecialCasesEnabled, bool dbSpecialCasesEnabled, CancellationToken cancellationToken)
+        {
+            var unwrappedOperation = operation.UnwrapImplicitConversions();
+            if (unwrappedOperation is IInvocationOperation invocationOperation)
+            {
+                if (sqliteSpecialCasesEnabled && IsSqliteSpecialCaseMethod(invocationOperation, cancellationToken))
+                    return false;
+            }
+
+            if (operation.GetActualType(cancellationToken) is not INamedTypeSymbol type)
+                return false;
+
+            if (IsNonAsyncDisposableType(type))
+                return false;
+
+            var isSqliteSpecialCaseType = IsSqliteSpecialCaseType(type);
+
+            // For Stream subclasses (including MemoryStream) created directly (new T()), only report
+            // if the concrete type being instantiated (or an intermediate subclass up to but not
+            // including Stream) actually overrides DisposeAsync. Stream.DisposeAsync merely calls
+            // Dispose() synchronously by default, so it is not a meaningful async override.
+            if (StreamSymbol is INamedTypeSymbol streamSymbol && type.InheritsFrom(streamSymbol))
+            {
+                if (unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, streamSymbol);
+            }
+
+            // DbConnection DisposeAsync has a synchronous fallback in the base implementation.
+            // When db special-cases are enabled, treat the compile-time DbConnection type
+            // hierarchy as final and only report when there is a DisposeAsync override below
+            // DbConnection, even for factory-returned instances.
+            if (DbConnectionSymbol is not null && type.InheritsFrom(DbConnectionSymbol))
+            {
+                if ((dbSpecialCasesEnabled && !isSqliteSpecialCaseType) || unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, DbConnectionSymbol);
+            }
+
+            // DbCommand DisposeAsync has a synchronous fallback in the base implementation.
+            // When db special-cases are enabled, treat the compile-time DbCommand type
+            // hierarchy as final and only report when there is a DisposeAsync override below
+            // DbCommand, even for factory-returned instances.
+            if (DbCommandSymbol is not null && type.InheritsFrom(DbCommandSymbol))
+            {
+                if ((dbSpecialCasesEnabled && !isSqliteSpecialCaseType) || unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, DbCommandSymbol);
+            }
+
+            // DbDataReader DisposeAsync has a synchronous fallback in the base implementation.
+            // When db special-cases are enabled, treat the compile-time DbDataReader type
+            // hierarchy as final and only report when there is a DisposeAsync override below
+            // DbDataReader, even for factory-returned instances.
+            if (DbDataReaderSymbol is not null && type.InheritsFrom(DbDataReaderSymbol))
+            {
+                if ((dbSpecialCasesEnabled && !isSqliteSpecialCaseType) || unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, DbDataReaderSymbol);
+            }
+
+            // DbTransaction DisposeAsync has a synchronous fallback in the base implementation.
+            // When db special-cases are enabled, treat the compile-time DbTransaction type
+            // hierarchy as final and only report when there is a DisposeAsync override below
+            // DbTransaction, even for factory-returned instances.
+            if (DbTransactionSymbol is not null && type.InheritsFrom(DbTransactionSymbol))
+            {
+                if (dbSpecialCasesEnabled || unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, DbTransactionSymbol);
+            }
+
+            // DbBatch DisposeAsync has a synchronous fallback in the base implementation.
+            // When db special-cases are enabled, treat the compile-time DbBatch type
+            // hierarchy as final and only report when there is a DisposeAsync override below
+            // DbBatch, even for factory-returned instances.
+            if (DbBatchSymbol is not null && type.InheritsFrom(DbBatchSymbol))
+            {
+                if (dbSpecialCasesEnabled || unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, DbBatchSymbol);
+            }
+
+            // For TextWriter subclasses created directly (new T()), only report if the exact
+            // type being instantiated (or an intermediate subclass up to but not including
+            // TextWriter) actually overrides DisposeAsync. TextWriter.DisposeAsync just calls
+            // Dispose() synchronously by default, so it is not a meaningful async override.
+            if (TextWriterSymbol is not null && type.InheritsFrom(TextWriterSymbol))
+            {
+                if (unwrappedOperation is IObjectCreationOperation)
+                    return HasDisposeAsyncMethodDeclaredInSubclass(type, TextWriterSymbol);
+            }
+
+            return HasDisposeAsyncMethod(type);
+        }
+
+        private bool ReportIfCanBeAwaitUsing(OperationAnalysisContext context, IOperation usingOperation, IVariableDeclarationGroupOperation operation, bool sqliteSpecialCasesEnabled, bool dbSpecialCasesEnabled, AsyncContextKind asyncContextKind)
+        {
+            foreach (var declaration in operation.Declarations)
+            {
+                if ((declaration.Initializer?.Value) is not null)
+                {
+                    if (CanBeAwaitUsing(declaration.Initializer.Value, sqliteSpecialCasesEnabled, dbSpecialCasesEnabled, context.CancellationToken))
+                    {
+                        var data = new DiagnosticData("Prefer using 'await using'", DoNotUseBlockingCallInAsyncContextData.Using);
+                        ReportDiagnosticIfNeeded(context, data.CreateProperties(), usingOperation, data.DiagnosticMessage, asyncContextKind);
+                        return true;
+                    }
+                }
+
+                foreach (var declarator in declaration.Declarators)
+                {
+                    if (declarator.Initializer is not null && CanBeAwaitUsing(declarator.Initializer.Value, sqliteSpecialCasesEnabled, dbSpecialCasesEnabled, context.CancellationToken))
+                    {
+                        var data = new DiagnosticData("Prefer using 'await using'", DoNotUseBlockingCallInAsyncContextData.UsingDeclarator);
+                        ReportDiagnosticIfNeeded(context, data.CreateProperties(), usingOperation, data.DiagnosticMessage, asyncContextKind);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        internal void AnalyzeUsing(OperationAnalysisContext context)
+        {
+            var operation = (IUsingOperation)context.Operation;
+            if (operation.IsAsynchronous)
+                return;
+
+            var asyncContextKind = GetAsyncContextKind(operation, context.CancellationToken);
+            if (asyncContextKind is AsyncContextKind.None)
+                return;
+
+            var sqliteSpecialCasesEnabled = IsSqliteSpecialCasesEnabled(context, operation);
+            var dbSpecialCasesEnabled = IsDbSpecialCasesEnabled(context, operation);
+            if (operation.Resources is IVariableDeclarationGroupOperation variableDeclarationGroupOperation)
+            {
+                if (ReportIfCanBeAwaitUsing(context, operation, variableDeclarationGroupOperation, sqliteSpecialCasesEnabled, dbSpecialCasesEnabled, asyncContextKind))
+                    return;
+            }
+
+            if (CanBeAwaitUsing(operation.Resources, sqliteSpecialCasesEnabled, dbSpecialCasesEnabled, context.CancellationToken))
+            {
+                var data = new DiagnosticData("Prefer using 'await using'", DoNotUseBlockingCallInAsyncContextData.Using);
+                ReportDiagnosticIfNeeded(context, data.CreateProperties(), operation, data.DiagnosticMessage, asyncContextKind);
+            }
+        }
+
+        internal void AnalyzeUsingDeclaration(OperationAnalysisContext context)
+        {
+            var operation = (IUsingDeclarationOperation)context.Operation;
+            if (operation.IsAsynchronous)
+                return;
+
+            var asyncContextKind = GetAsyncContextKind(operation, context.CancellationToken);
+            if (asyncContextKind is AsyncContextKind.None)
+                return;
+
+            var sqliteSpecialCasesEnabled = IsSqliteSpecialCasesEnabled(context, operation);
+            var dbSpecialCasesEnabled = IsDbSpecialCasesEnabled(context, operation);
+            ReportIfCanBeAwaitUsing(context, operation, operation.DeclarationGroup, sqliteSpecialCasesEnabled, dbSpecialCasesEnabled, asyncContextKind);
+        }
+    }
+
+    /// <summary>
+    /// Indicates whether a blocking call can be reported at a location, and with which rule.
+    /// </summary>
+    private enum AsyncContextKind
+    {
+        /// <summary>The enclosing method cannot await, so nothing is reported.</summary>
+        None,
+
+        /// <summary>The enclosing method can already await, so <see cref="Rule"/> is reported.</summary>
+        AsyncContext,
+
+        /// <summary>The enclosing method can be made async, so <see cref="Rule2"/> is reported.</summary>
+        CanBecomeAsyncContext,
+    }
+
+    /// <summary>
+    /// The scope in which the async equivalent of a call is searched. The members in scope at the call site depend
+    /// on the using directives of the file and of the enclosing namespaces, and their accessibility depends on the
+    /// enclosing type: both are the same for all the positions of a type declaration. The editorconfig options are
+    /// also the same, as they are configured per file.
+    /// </summary>
+    private readonly record struct LookupScope(SyntaxTree SyntaxTree, TextSpan Span)
+    {
+        /// <summary>
+        /// Creates the scope of a node: the type declaration containing it, or the whole file when there is none,
+        /// such as for the top-level statements.
+        /// </summary>
+        public static LookupScope Create(SyntaxNode node)
+        {
+            var current = node;
+            while (current is not TypeDeclarationSyntax && current.Parent is not null)
+            {
+                current = current.Parent;
+            }
+
+            return new LookupScope(current.SyntaxTree, current.Span);
+        }
+    }
+
+    private enum AsyncEquivalentSearchResult
+    {
+        /// <summary>An async equivalent is available at the call site.</summary>
+        Found,
+
+        /// <summary>
+        /// No async equivalent is available. The result only depends on the called method and on the scope of the
+        /// call site, so it can be cached for the other calls to the same method in the same scope.
+        /// </summary>
+        NotFound,
+
+        /// <summary>
+        /// No async equivalent is available for this call. The result depends on the instance or on the arguments
+        /// of the call, so it must not be cached.
+        /// </summary>
+        NotFoundForThisCall,
+    }
+
+    private sealed class DiagnosticData
+    {
+        public string DiagnosticMessage { get; }
+        public DoNotUseBlockingCallInAsyncContextData Data { get; }
+        public string? AsyncMethodName { get; }
+
+        /// <summary>
+        /// The namespace declaring the async extension method, when it is not imported at the call site.
+        /// </summary>
+        public string? NamespaceToImport { get; }
+
+        public DiagnosticData(string diagnosticMessage, DoNotUseBlockingCallInAsyncContextData data)
+            : this(diagnosticMessage, data, asyncMethodName: null, namespaceToImport: null)
+        {
+        }
+
+        public DiagnosticData(string diagnosticMessage, DoNotUseBlockingCallInAsyncContextData data, string? asyncMethodName, string? namespaceToImport)
+        {
+            DiagnosticMessage = diagnosticMessage ?? throw new ArgumentNullException(nameof(diagnosticMessage));
+            Data = data;
+            AsyncMethodName = asyncMethodName;
+            NamespaceToImport = namespaceToImport;
+        }
+
+        public ImmutableDictionary<string, string?> CreateProperties()
+        {
+            var properties = ImmutableDictionary<string, string?>.Empty
+                .Add(DoNotUseBlockingCallInAsyncContextAnalyzerCommon.DataKey, Data.ToString())
+                .Add(DoNotUseBlockingCallInAsyncContextAnalyzerCommon.MethodNameKey, AsyncMethodName);
+
+            if (NamespaceToImport is not null)
+            {
+                properties = properties.Add(OverloadFinder.NamespaceToImportPropertyName, NamespaceToImport);
+            }
+
+            return properties;
+        }
+    }
+}

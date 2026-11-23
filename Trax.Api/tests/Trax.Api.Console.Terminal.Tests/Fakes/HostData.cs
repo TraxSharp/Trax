@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Trax.Api.Console.Terminal.Tests.Fakes;
@@ -11,7 +12,9 @@ internal static class HostData
         string state = "FAILED",
         string? reason = "card_declined"
     ) =>
-        $$"""
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
             {"id":{{id}},"externalId":"run-{{id}}","name":"{{train}}","trainState":"{{state}}",
              "startTime":"2026-10-22T10:00:00Z","endTime":null,"failureJunction":{{(
                 reason is null ? "null" : "\"ChargeCard\""
@@ -20,24 +23,34 @@ internal static class HostData
                 reason is null ? "null" : $"\"{reason}\""
             )}},"manifestId":null,"hostName":"web-2",
              "failureClass":"UNCLASSIFIED","cancellationRequested":false,"parentId":null,"currentlyRunningJunction":null}
-            """;
+            """
+        );
 
     public static string Runs(int total, long? next, params string[] rows) =>
         """{"operations":{"executions":{"items":["""
-        + string.Join(",", rows)
-        + $"],\"totalCount\":{total},\"isEstimatedCount\":false,\"nextCursor\":{Cursor(next)}}}}}}}";
+        + string.Join(',', rows)
+        + string.Create(
+            CultureInfo.InvariantCulture,
+            $"],\"totalCount\":{total},\"isEstimatedCount\":false,\"nextCursor\":{Cursor(next)}}}}}}}"
+        );
 
     public static string DeadLetter(long id, string manifest) =>
-        $$"""
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
             {"id":{{id}},"manifestId":3,"manifestName":"{{manifest}}","manifestExternalId":null,"status":"AWAITING_INTERVENTION",
              "deadLetteredAt":"2026-10-22T10:00:00Z","reason":"Retries exhausted","retryCountAtDeadLetter":3,
              "resolvedAt":null,"resolutionNote":null}
-            """;
+            """
+        );
 
     public static string DeadLetters(int total, params string[] rows) =>
         """{"operations":{"deadLetters":{"deadLetters":{"items":["""
-        + string.Join(",", rows)
-        + $"],\"totalCount\":{total},\"isEstimatedCount\":false,\"nextCursor\":null}}}}}}}}";
+        + string.Join(',', rows)
+        + string.Create(
+            CultureInfo.InvariantCulture,
+            $"],\"totalCount\":{total},\"isEstimatedCount\":false,\"nextCursor\":null}}}}}}}}"
+        );
 
     public const string NoQueue =
         """{"operations":{"workQueue":{"workQueues":{"items":[],"totalCount":0,"isEstimatedCount":false,"nextCursor":null}}}}""";
@@ -54,9 +67,9 @@ internal static class HostData
                 "Executions",
                 Runs(
                     2,
-                    null,
+                    next: null,
                     Run(4812, "SendInvoice"),
-                    Run(4807, "SyncCustomers", "COMPLETED", null)
+                    Run(4807, "SyncCustomers", "COMPLETED", reason: null)
                 )
             )
             .Answer("DeadLetters", DeadLetters(1, DeadLetter(7, "NightlyBilling")))
@@ -70,5 +83,6 @@ internal static class HostData
 
     public static string Variables(JsonObject variables) => variables.ToJsonString();
 
-    private static string Cursor(long? next) => next?.ToString() ?? "null";
+    private static string Cursor(long? next) =>
+        next?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null";
 }

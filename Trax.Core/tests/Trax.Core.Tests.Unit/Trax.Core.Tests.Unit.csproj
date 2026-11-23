@@ -29,4 +29,10 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Core/Trax.Core.csproj" />
   </ItemGroup>
+  <!-- Null.Of<T>() names a null a test passes on purpose. Linked only where it is used, because
+       an internal type nothing uses is itself an error under the analyzer profile. -->
+  <ItemGroup>
+    <Compile Include="../Null.cs" Link="Null.cs" Visible="false" />
+    <Using Include="Trax.Testing" />
+  </ItemGroup>
 </Project>

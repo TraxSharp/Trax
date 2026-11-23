@@ -36,8 +36,8 @@ Discovered --Ingest--> Ingesting --done, unsure--> NeedsReview --Approve--> Appr
             .Context<PartitionContext>()
             .Invokes<IIngestPartitionTrain, IngestPartitionInput, IngestPartitionResult>(
                 ctx => new IngestPartitionInput(
-                    ctx["source"]!.GetValue<string>(),
-                    ctx["month"]!.GetValue<string>()
+                    ctx["source"].NotNull().GetValue<string>(),
+                    ctx["month"].NotNull().GetValue<string>()
                 )
             )
             // Tried in order: an unsure ingest goes to review, any other to Ingested.

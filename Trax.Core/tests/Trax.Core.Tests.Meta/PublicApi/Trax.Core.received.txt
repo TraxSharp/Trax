@@ -333,6 +333,8 @@ namespace Trax.Core.Extensions
     {
         public static void AssertEachLoaded<T, U>([System.Diagnostics.CodeAnalysis.NotNull] this System.Collections.Generic.IEnumerable<T> values, System.Func<T, U> selector, [System.Runtime.CompilerServices.CallerArgumentExpression("values")] string? valuesExpr = null, [System.Runtime.CompilerServices.CallerArgumentExpression("selector")] string? selectorExpr = null) { }
         public static void AssertLoaded<T>([System.Diagnostics.CodeAnalysis.NotNull] this T? value, [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? valueExpr = null) { }
+        [return: System.Diagnostics.CodeAnalysis.NotNull]
+        public static T NotNull<T>([System.Diagnostics.CodeAnalysis.NotNull] this T? value, [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? valueExpr = null) { }
     }
 }
 namespace Trax.Core.Functional
@@ -350,7 +352,7 @@ namespace Trax.Core.Functional
         public bool IsRight { get; }
         public Trax.Core.Functional.EitherStatus State { get; }
         public bool Equals(Trax.Core.Functional.Either<TLeft, TRight> other) { }
-        public override bool Equals(object? obj) { }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] object? obj) { }
         public override int GetHashCode() { }
         public Trax.Core.Functional.Unit IfLeft(System.Action<TLeft> action) { }
         public Trax.Core.Functional.Unit IfRight(System.Action<TRight> action) { }
@@ -373,11 +375,15 @@ namespace Trax.Core.Functional
         public static readonly Trax.Core.Functional.Unit Default;
         public int CompareTo(Trax.Core.Functional.Unit other) { }
         public bool Equals(Trax.Core.Functional.Unit other) { }
-        public override bool Equals(object? obj) { }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] object? obj) { }
         public override int GetHashCode() { }
         public override string ToString() { }
         public static bool operator !=(Trax.Core.Functional.Unit a, Trax.Core.Functional.Unit b) { }
+        public static bool operator <(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
+        public static bool operator <=(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
         public static bool operator ==(Trax.Core.Functional.Unit a, Trax.Core.Functional.Unit b) { }
+        public static bool operator >(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
+        public static bool operator >=(Trax.Core.Functional.Unit left, Trax.Core.Functional.Unit right) { }
     }
 }
 namespace Trax.Core.Junction
@@ -434,7 +440,7 @@ namespace Trax.Core.Monad
         public string Train { get; init; }
         public static string? CurrentBranchPath { get; }
         public static string? CurrentNodeId { get; }
-        public bool Equals(Trax.Core.Monad.ChainGraph? other) { }
+        public bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Trax.Core.Monad.ChainGraph? other) { }
         public override int GetHashCode() { }
         public string ToJson() { }
         public static Trax.Core.Monad.ChainGraph From(Trax.Core.Monad.ChainRecorder chain, System.Type train, System.Type input, System.Type output) { }
@@ -449,7 +455,7 @@ namespace Trax.Core.Monad
         public bool Opaque { get; init; }
         public string? Out { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphTrack> Tracks { get; init; }
-        public bool Equals(Trax.Core.Monad.ChainGraphNode? other) { }
+        public bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Trax.Core.Monad.ChainGraphNode? other) { }
         public override int GetHashCode() { }
     }
     public sealed class ChainGraphTrack : System.IEquatable<Trax.Core.Monad.ChainGraphTrack>
@@ -459,7 +465,7 @@ namespace Trax.Core.Monad
         public bool IsFallback { get; init; }
         public string Name { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes { get; init; }
-        public bool Equals(Trax.Core.Monad.ChainGraphTrack? other) { }
+        public bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Trax.Core.Monad.ChainGraphTrack? other) { }
         public override int GetHashCode() { }
     }
     public sealed class ChainRecorder
@@ -508,7 +514,7 @@ namespace Trax.Core.Monad
     {
         System.Threading.Tasks.Task Initialize(System.IServiceProvider run, System.IServiceProvider branch, System.Threading.CancellationToken cancellationToken);
     }
-    public class Monad<TInput, TReturn>
+    public sealed class Monad<TInput, TReturn>
     {
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1>(T1 service) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1, T2>(T1 service1, T2 service2) { }

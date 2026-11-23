@@ -2,52 +2,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.Client;
 
-/// <summary>One error of a GraphQL answer.</summary>
-/// <param name="Message">What the host said.</param>
-/// <param name="Code">Its <c>extensions.code</c> (<c>CLIENT_OUTDATED</c>, <c>AUTH_NOT_AUTHORIZED</c>), when it has one.</param>
-/// <param name="Path">The path of the field it belongs to, when it belongs to one.</param>
-/// <param name="Extensions">Its <c>extensions</c> as sent.</param>
-public sealed record TraxGraphQLError(
-    string Message,
-    string? Code,
-    JsonArray? Path,
-    JsonObject? Extensions
-)
-{
-    internal static IReadOnlyList<TraxGraphQLError> ListOf(JsonNode? errors) =>
-        errors is JsonArray array ? array.Select(OfNode).ToList() : [];
-
-    private static TraxGraphQLError OfNode(JsonNode? node)
-    {
-        var error = node as JsonObject;
-        var extensions = error?["extensions"] as JsonObject;
-        return new TraxGraphQLError(
-            Text(error?["message"]) ?? "The host answered with an error.",
-            Text(extensions?["code"]),
-            error?["path"]?.DeepClone() as JsonArray,
-            extensions?.DeepClone() as JsonObject
-        );
-    }
-
-    private static string? Text(JsonNode? node) =>
-        node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
-}
-
-/// <summary>A request that got no GraphQL answer: the host could not be reached, or answered with something else.</summary>
-/// <param name="Message">What went wrong.</param>
-/// <param name="Status">The HTTP status, when a response arrived.</param>
-public sealed record TraxTransportFailure(string Message, int? Status = null)
-{
-    /// <summary>The code a transport failure is reported under, as the state-machine clients report it.</summary>
-    public const string Code = "TRANSPORT_ERROR";
-
-    /// <summary>
-    /// The close code the host closed the socket with when it turned a stream away for good (4401 unauthorized, 4403
-    /// forbidden); null for any other failure.
-    /// </summary>
-    public int? CloseStatus { get; init; }
-}
-
 /// <summary>
 /// A GraphQL answer as it arrived: its <c>data</c> and <c>errors</c>, or the <see cref="Failure"/> that kept it from
 /// arriving. What an <see cref="ITraxTransport"/> returns; <see cref="TraxClient"/> reads it into a

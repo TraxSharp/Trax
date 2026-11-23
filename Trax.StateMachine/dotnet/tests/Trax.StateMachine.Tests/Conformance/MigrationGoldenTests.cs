@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -17,14 +18,14 @@ public class MigrationGoldenTests
     public static IEnumerable<TestCaseData> MigrationCases()
     {
         var file = FixturePaths.MigrationFile("turnstile");
-        var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(file))!;
-        foreach (var node in (JsonArray)golden["cases"]!)
+        var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(file)).NotNull();
+        foreach (var node in (JsonArray)golden["cases"].NotNull())
         {
-            var @case = (JsonObject)node!;
-            var name = @case["name"]!.GetValue<string>();
+            var @case = (JsonObject)node.NotNull();
+            var name = @case["name"].NotNull().GetValue<string>();
             yield return new TestCaseData(
-                @case["stored"]!.GetValue<string>(),
-                @case["expected"]!.GetValue<string>()
+                @case["stored"].NotNull().GetValue<string>(),
+                @case["expected"].NotNull().GetValue<string>()
             ).SetName($"migration/{name}");
         }
     }

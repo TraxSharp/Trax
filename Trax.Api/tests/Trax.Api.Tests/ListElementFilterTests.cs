@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Data;
@@ -15,6 +16,7 @@ using Trax.Api.GraphQL.Filtering.ListElements;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -38,8 +40,11 @@ namespace Trax.Api.Tests;
 /// motivates the change, against the real provider.
 /// </remarks>
 [TestFixture]
-public class ListElementFilterTests
+public partial class ListElementFilterTests
 {
+    [GeneratedRegex("@>", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Containment { get; }
+
     #region Schema — neq is removed, in list position only
 
     [Test]
@@ -48,7 +53,7 @@ public class ListElementFilterTests
         var schema = await BuildSchemaAsync();
 
         var element = schema.Types.GetType<InputObjectType>("BadgeElementFilterInput");
-        var names = element.Fields.Select(f => f.Name).ToHashSet();
+        var names = element.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         names.Should().NotContain("neq");
         // Everything that does translate is still offered.
@@ -84,12 +89,14 @@ public class ListElementFilterTests
         var schema = await BuildSchemaAsync();
 
         var stringElement = schema.Types.GetType<InputObjectType>("StringElementFilterInput");
-        var stringNames = stringElement.Fields.Select(f => f.Name).ToHashSet();
+        var stringNames = stringElement
+            .Fields.Select(f => f.Name)
+            .ToHashSet(StringComparer.Ordinal);
         stringNames.Should().NotContain("neq");
         stringNames.Should().Contain(["eq", "contains", "startsWith", "in"]);
 
         var intElement = schema.Types.GetType<InputObjectType>("IntElementFilterInput");
-        var intNames = intElement.Fields.Select(f => f.Name).ToHashSet();
+        var intNames = intElement.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
         intNames.Should().NotContain("neq");
         // Comparable operators translate inside a collection and must survive.
         intNames.Should().Contain(["eq", "gt", "gte", "lt", "lte", "in", "nin"]);
@@ -98,13 +105,13 @@ public class ListElementFilterTests
     [Test]
     public async Task Schema_ListBackedByListOfT_IsRestrictedToo()
     {
-        // The trap is the same whether the property is Badge[] or List<Badge>; both bind
-        // to the restricted element input.
+        // The trap is the same whether the property is Badge[] or a list (IList<Badge>); both
+        // bind to the restricted element input.
         var schema = await BuildSchemaAsync();
 
         var field = schema
             .Types.GetType<InputObjectType>("PlayerRowFilterInput")
-            .Fields.Single(f => f.Name == "legacyBadges");
+            .Fields.Single(f => string.Equals(f.Name, "legacyBadges", StringComparison.Ordinal));
 
         field.Type.NamedType().Name.Should().Be("ListBadgeElementFilterInput");
     }
@@ -118,10 +125,12 @@ public class ListElementFilterTests
 
         var field = schema
             .Types.GetType<InputObjectType>("ShelfFilterInput")
-            .Fields.Single(f => f.Name == "books");
+            .Fields.Single(f => string.Equals(f.Name, "books", StringComparison.Ordinal));
 
         var listType = schema.Types.GetType<InputObjectType>(field.Type.NamedType().Name);
-        var some = listType.Fields.Single(f => f.Name == "some");
+        var some = listType.Fields.Single(f =>
+            string.Equals(f.Name, "some", StringComparison.Ordinal)
+        );
 
         // The element is the Book filter, and its scalar fields keep the full operation
         // set including neq.
@@ -162,7 +171,10 @@ public class ListElementFilterTests
         var filterInput = schema.Types.GetType<InputObjectType>("AllScalarKindsRowFilterInput");
 
         string ListTypeOf(string field) =>
-            filterInput.Fields.Single(f => f.Name == field).Type.NamedType().Name;
+            filterInput
+                .Fields.Single(f => string.Equals(f.Name, field, StringComparison.Ordinal))
+                .Type.NamedType()
+                .Name;
 
         // The pairs stock HotChocolate would have collapsed onto one name.
         ListTypeOf("floats").Should().NotBe(ListTypeOf("doubles"));
@@ -177,7 +189,10 @@ public class ListElementFilterTests
         var elementInputs = schema
             .Types.OfType<InputObjectType>()
             // The list wrappers share the suffix but hold all/none/some/any, not operations.
-            .Where(t => t.Name.EndsWith("ElementFilterInput") && !t.Name.StartsWith("List"))
+            .Where(t =>
+                t.Name.EndsWith("ElementFilterInput", StringComparison.Ordinal)
+                && !t.Name.StartsWith("List", StringComparison.Ordinal)
+            )
             .ToList();
 
         // One per distinct bound element type on the entity.
@@ -185,7 +200,7 @@ public class ListElementFilterTests
 
         foreach (var input in elementInputs)
         {
-            var names = input.Fields.Select(f => f.Name).ToHashSet();
+            var names = input.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
             names.Should().NotContain("neq", $"{input.Name} is an element input");
             names.Should().Contain("eq", $"{input.Name} must keep the operations that translate");
         }
@@ -203,7 +218,7 @@ public class ListElementFilterTests
         string ListInput(string field) =>
             schema
                 .Types.GetType<InputObjectType>("AllScalarKindsRowFilterInput")
-                .Fields.Single(f => f.Name == field)
+                .Fields.Single(f => string.Equals(f.Name, field, StringComparison.Ordinal))
                 .Type.NamedType()
                 .Name;
 
@@ -211,7 +226,7 @@ public class ListElementFilterTests
 
         var element = schema
             .Types.GetType<InputObjectType>(ListInput("optionalScores"))
-            .Fields.Single(f => f.Name == "some")
+            .Fields.Single(f => string.Equals(f.Name, "some", StringComparison.Ordinal))
             .Type.NamedType()
             .Name;
 
@@ -246,7 +261,7 @@ public class ListElementFilterTests
 
         var restricted = schema
             .Types.OfType<InputObjectType>()
-            .Where(t => t.Name.EndsWith("ElementFilterInput"))
+            .Where(t => t.Name.EndsWith("ElementFilterInput", StringComparison.Ordinal))
             .Select(t => t.Name)
             .ToList();
 
@@ -270,7 +285,7 @@ public class ListElementFilterTests
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
-        op.Errors!.Should().Contain(e => e.Message.Contains("neq"));
+        op.Errors.NotNull().Should().Contain(e => e.Message.Contains("neq"));
         // Rejected outright rather than reaching a resolver, so `data` is absent.
         op.Data.Should().BeNull();
     }
@@ -392,8 +407,8 @@ public class ListElementFilterTests
 
         errors.Should().BeNullOrEmpty();
         sql.Should().Contain("@>");
-        System
-            .Text.RegularExpressions.Regex.Matches(sql!, "@>")
+        Containment
+            .Matches(sql.NotNull())
             .Count.Should()
             .Be(2, "each membership test contributes its own containment predicate");
     }
@@ -454,7 +469,7 @@ public class ListElementFilterTests
         var (sql, errors) = await NpgsqlFilterAsync("badges: { some: { neq: CHAMPION } }");
 
         errors.Should().NotBeNullOrEmpty();
-        errors!.Should().Contain(e => e.Message.Contains("neq"));
+        errors.NotNull().Should().Contain(e => e.Message.Contains("neq"));
         // Rejected during validation, so no query was ever compiled.
         sql.Should().BeNull();
         errors.Should().NotContain(e => e.Message.Contains("could not be translated"));
@@ -495,7 +510,7 @@ public class ListElementFilterTests
     [Test]
     public void SqlShape_ListOfT_WithGinDeclared_AlsoUsesArrayContainment()
     {
-        // List<T> and T[] both map to a PostgreSQL array and behave identically. The
+        // IList<T> and T[] both map to a PostgreSQL array and behave identically. The
         // collection type is not what decides the operator.
         using var db = new NpgsqlShapeDbContext();
 
@@ -536,7 +551,7 @@ public class ListElementFilterTests
         bindings
             .Select(b => b.Key)
             .Should()
-            .Contain([typeof(Badge[]), typeof(string[]), typeof(int[]), typeof(List<Badge>)]);
+            .Contain([typeof(Badge[]), typeof(string[]), typeof(int[]), typeof(IList<Badge>)]);
     }
 
     [Test]
@@ -680,7 +695,7 @@ public class ListElementFilterTests
                         .Use(next =>
                             async context =>
                             {
-                                await next(context);
+                                await next(context).ConfigureAwait(false);
                                 if (context.Result is IQueryable<ShapeRow> queryable)
                                 {
                                     captured = queryable.ToQueryString();
@@ -700,22 +715,30 @@ public class ListElementFilterTests
                 ListElementFilterBinding.Apply(convention, bindings);
             });
 
-        await using var provider = services.BuildServiceProvider();
-        var executor = await provider
-            .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync();
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            var executor = await provider
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync()
+                .ConfigureAwait(false);
 
-        var result = await executor.ExecuteAsync($"{{ rows(where: {{ {where} }}) {{ id }} }}");
-        var op = result.ExpectOperationResult();
+            var result = await executor
+                .ExecuteAsync($"{{ rows(where: {{ {where} }}) {{ id }} }}")
+                .ConfigureAwait(false);
+            var op = result.ExpectOperationResult();
 
-        return (captured, op.Errors);
+            return (captured, op.Errors);
+        }
     }
 
     private static async Task<List<int>> QueryIdsAsync(IRequestExecutor executor, string where)
     {
-        var result = await executor.ExecuteAsync(
-            $"{{ discover {{ players(where: {{ {where} }}) {{ nodes {{ id }} }} }} }}"
-        );
+        var result = await executor
+            .ExecuteAsync(
+                $"{{ discover {{ players(where: {{ {where} }}) {{ nodes {{ id }} }} }} }}"
+            )
+            .ConfigureAwait(false);
 
         var op = result.ExpectOperationResult();
         op.Errors.Should()
@@ -724,18 +747,24 @@ public class ListElementFilterTests
                 string.Join(" | ", op.Errors?.Select(e => e.Message) ?? [])
             );
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var players = (IReadOnlyDictionary<string, object?>)discover["players"]!;
-        var nodes = (IReadOnlyList<object?>)players["nodes"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var players = (IReadOnlyDictionary<string, object?>)discover["players"].NotNull();
+        var nodes = (IReadOnlyList<object?>)players["nodes"].NotNull();
 
         return nodes
-            .Select(n => Convert.ToInt32(((IReadOnlyDictionary<string, object?>)n!)["id"]))
-            .OrderBy(id => id)
+            .Select(n =>
+                Convert.ToInt32(
+                    ((IReadOnlyDictionary<string, object?>)n.NotNull())["id"],
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            )
+            .Order()
             .ToList();
     }
 
     private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>()
-        where TContext : DbContext => (await BuildExecutorAsync<TContext>()).Schema;
+        where TContext : DbContext =>
+        (await BuildExecutorAsync<TContext>().ConfigureAwait(false)).Schema;
 
     private static Task<ISchemaDefinition> BuildSchemaAsync() =>
         BuildSchemaAsync<PlayersDbContext>();
@@ -789,9 +818,12 @@ public class ListElementFilterTests
         var provider = services.BuildServiceProvider();
 
         if (seedData)
-            await SeedAsync<TContext>(provider);
+            await SeedAsync<TContext>(provider).ConfigureAwait(false);
 
-        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
+        return await provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .ConfigureAwait(false);
     }
 
     private static async Task SeedAsync<TContext>(IServiceProvider provider)
@@ -835,7 +867,7 @@ public class ListElementFilterTests
             }
         );
 
-        await players.SaveChangesAsync();
+        await players.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public class ListElemRootQuery
@@ -851,153 +883,3 @@ public class ListElementFilterTests
 
     #endregion
 }
-
-#region Test entities and contexts
-
-public enum Badge
-{
-    Founder,
-    Veteran,
-    Champion,
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "players")]
-public class PlayerRow
-{
-    public int Id { get; set; }
-
-    /// <summary>Scalar enum: keeps the full operation set, `neq` included.</summary>
-    public Badge Tier { get; set; }
-
-    /// <summary>Scalar string: same, and gives the schema a StringOperationFilterInput.</summary>
-    public string Name { get; set; } = "";
-
-    public Badge[] Badges { get; set; } = [];
-
-    public string[] Tags { get; set; } = [];
-
-    public int[] Scores { get; set; } = [];
-
-    /// <summary>The List&lt;T&gt; shape carries the same trap and is restricted too.</summary>
-    public List<Badge> LegacyBadges { get; set; } = [];
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "others")]
-public class OtherRow
-{
-    public int Id { get; set; }
-    public Badge[] Badges { get; set; } = [];
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "edgeCases")]
-public class EdgeCaseRow
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public byte[] Blob { get; set; } = [];
-    public int[] Mapped { get; set; } = [];
-
-    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public int[] Unmapped { get; set; } = [];
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "readOnlyRows")]
-public class ReadOnlyRow
-{
-    public int Id { get; set; }
-    public int[] Computed { get; } = [];
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "books")]
-public class Book
-{
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "shelves")]
-public class Shelf
-{
-    public int Id { get; set; }
-    public List<Book> Books { get; set; } = [];
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "allScalarKinds")]
-public class AllScalarKindsRow
-{
-    public int Id { get; set; }
-
-    public short[] Shorts { get; set; } = [];
-    public int[] Scores { get; set; } = [];
-    public int?[] OptionalScores { get; set; } = [];
-    public long[] Counts { get; set; } = [];
-    public List<byte> Bytes { get; set; } = [];
-    public float[] Floats { get; set; } = [];
-    public double[] Doubles { get; set; } = [];
-    public decimal[] Amounts { get; set; } = [];
-    public bool[] Flags { get; set; } = [];
-    public string[] Tags { get; set; } = [];
-    public Guid[] Keys { get; set; } = [];
-    public DateTime[] Stamps { get; set; } = [];
-    public DateTimeOffset[] Offsets { get; set; } = [];
-    public Badge[] Badges { get; set; } = [];
-}
-
-public class AllScalarKindsDbContext(DbContextOptions<AllScalarKindsDbContext> options)
-    : DbContext(options)
-{
-    public DbSet<AllScalarKindsRow> Rows => Set<AllScalarKindsRow>();
-}
-
-public class PlayersDbContext(DbContextOptions<PlayersDbContext> options) : DbContext(options)
-{
-    public DbSet<PlayerRow> Players => Set<PlayerRow>();
-}
-
-public class LibraryDbContext(DbContextOptions<LibraryDbContext> options) : DbContext(options)
-{
-    public DbSet<Shelf> Shelves => Set<Shelf>();
-    public DbSet<Book> Books => Set<Book>();
-}
-
-/// <summary>
-/// A real Npgsql model used only to compile queries and read back the SQL. It never
-/// opens a connection, so it needs no database.
-/// </summary>
-public class NpgsqlShapeDbContext : DbContext
-{
-    public DbSet<ShapeRow> Rows => Set<ShapeRow>();
-
-    protected override void OnConfiguring(DbContextOptionsBuilder options) =>
-        options.UseNpgsql(
-            "Host=localhost;Database=shape;Username=shape;Password=shape",
-            npgsql => npgsql.MapEnum<Badge>("badge")
-        );
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.HasPostgresEnum<Badge>();
-        // Declared on Badges (an array) and LegacyTags (a List<T>) but deliberately not
-        // on Tags or Scores, so the tests can compare the two translations.
-        modelBuilder.Entity<ShapeRow>().HasIndex(r => r.Badges).HasMethod("gin");
-        modelBuilder.Entity<ShapeRow>().HasIndex(r => r.LegacyTags).HasMethod("gin");
-    }
-}
-
-public class ShapeRow
-{
-    public int Id { get; set; }
-    public Badge[] Badges { get; set; } = [];
-    public string[] Tags { get; set; } = [];
-    public int[] Scores { get; set; } = [];
-    public List<string> LegacyTags { get; set; } = [];
-}
-
-#endregion

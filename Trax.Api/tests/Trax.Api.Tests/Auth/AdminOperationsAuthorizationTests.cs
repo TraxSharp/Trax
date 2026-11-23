@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.DTOs;
+using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Attributes;
@@ -77,60 +78,7 @@ public class AdminOperationsAuthorizationTests
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-
-                        // API-key scheme registers the combined TraxAuthPolicy that
-                        // the builder's RequireAuthorization() gates on by default.
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(AdminApiKey, id: "admin", "Admin")
-                                .Add(ReaderApiKey, id: "reader", "Reader")
-                        );
-
-                        // Minimal graph the GraphQL builder needs, plus the backing
-                        // services the exposed operations resolvers require.
-                        services.AddSingleton<TraxMarker>();
-                        var discovery = Substitute.For<ITrainDiscoveryService>();
-                        discovery.DiscoverTrains().Returns([]);
-                        services.AddSingleton(discovery);
-                        services.AddSingleton(Substitute.For<IEffectRegistry>());
-
-                        services.AddTraxGraphQL(graphql =>
-                        {
-                            graphql.ExposeOperationQueries();
-                            graphql.AddTypeExtension<PublicRootQueryExtension>();
-
-                            switch (posture)
-                            {
-                                case Posture.EndpointGated:
-                                    graphql.RequireAuthorization().GateOperations(roles: "Admin");
-                                    break;
-                                case Posture.AnonymousAcknowledged:
-                                    graphql.AllowAnonymousOperations();
-                                    break;
-                                case Posture.NamespaceGated:
-                                    graphql.GateOperationsToAuthenticatedUsers();
-                                    break;
-                                case Posture.NamespaceGatedByRole:
-                                    graphql.GateOperations(roles: "Admin");
-                                    break;
-                            }
-
-                            return graphql;
-                        });
-
-                        // Registered AFTER AddTraxGraphQL so these stubs win over the real
-                        // backing services the stack registers (which would need a database).
-                        // Last registration wins for resolution.
-                        services.AddScoped(_ => health);
-                        services.AddScoped(_ => Substitute.For<IOperationsService>());
-                        services.AddScoped(_ =>
-                            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
-                        );
-                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                    })
+                    .ConfigureServices(services => ConfigureHostServices(services, posture, health))
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -141,8 +89,71 @@ public class AdminOperationsAuthorizationTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureHostServices(
+        IServiceCollection services,
+        Posture posture,
+        ITraxHealthService health
+    )
+    {
+        services.AddLogging();
+        services.AddRouting();
+
+        // API-key scheme registers the combined TraxAuthPolicy that
+        // the builder's RequireAuthorization() gates on by default.
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(AdminApiKey, id: "admin", "Admin").Add(ReaderApiKey, id: "reader", "Reader")
+        );
+
+        // Minimal graph the GraphQL builder needs, plus the backing
+        // services the exposed operations resolvers require.
+        services.AddSingleton<TraxMarker>();
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+
+        services.AddTraxGraphQL(graphql =>
+        {
+            graphql.ExposeOperationQueries();
+            graphql.AddTypeExtension<PublicRootQueryExtension>();
+
+            ApplyPosture(graphql, posture);
+
+            return graphql;
+        });
+
+        // Registered AFTER AddTraxGraphQL so these stubs win over the real
+        // backing services the stack registers (which would need a database).
+        // Last registration wins for resolution.
+        services.AddScoped(_ => health);
+        services.AddScoped(_ => Substitute.For<IOperationsService>());
+        services.AddScoped(_ =>
+            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+        );
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+    }
+
+    private static void ApplyPosture(TraxGraphQLBuilder graphql, Posture posture)
+    {
+        switch (posture)
+        {
+            case Posture.EndpointGated:
+                graphql.RequireAuthorization().GateOperations(roles: "Admin");
+                break;
+            case Posture.AnonymousAcknowledged:
+                graphql.AllowAnonymousOperations();
+                break;
+            case Posture.NamespaceGated:
+                graphql.GateOperationsToAuthenticatedUsers();
+                break;
+            case Posture.NamespaceGatedByRole:
+                graphql.GateOperations(roles: "Admin");
+                break;
+        }
     }
 
     internal static async Task<JsonDocument> PostAsync(
@@ -159,8 +170,8 @@ public class AdminOperationsAuthorizationTests
         if (apiKey is not null)
             req.Headers.Add("X-Api-Key", apiKey);
 
-        var res = await client.SendAsync(req);
-        return JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        var res = await client.SendAsync(req).ConfigureAwait(false);
+        return JsonDocument.Parse(await res.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     internal static bool HasErrorCode(JsonDocument doc, string code) =>
@@ -170,7 +181,7 @@ public class AdminOperationsAuthorizationTests
             .Any(e =>
                 e.TryGetProperty("extensions", out var ext)
                 && ext.TryGetProperty("code", out var c)
-                && c.GetString() == code
+                && string.Equals(c.GetString(), code, StringComparison.Ordinal)
             );
 
     [Test]
@@ -365,165 +376,4 @@ public class AdminOperationsAuthorizationTests
 
         await host.StopAsync();
     }
-}
-
-/// <summary>
-/// <c>[TraxAuthorize]</c> and <c>[TraxAllowAnonymous]</c> on a resolver, end to end over HTTP.
-/// The census refuses a field that declares nothing; these prove the other half, that a field
-/// which does declare is actually enforced rather than merely annotated.
-///
-/// <para>Enforces <c>docs/adr/0003-a-type-extension-field-declares-its-own-posture.md</c>.</para>
-/// </summary>
-[Property("adr", "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md")]
-[TestFixture]
-public class ResolverAuthorizationTests
-{
-    private const string Adr = "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md";
-
-    // ── [TraxAuthorize] on a resolver is a real gate ─────────────────────
-
-    /// <summary>
-    /// The whole point of owning the vocabulary: Trax reads its own attribute off the resolver
-    /// and emits the server's directive, so the field is enforced, not merely annotated.
-    /// </summary>
-    [Test]
-    public async Task TraxAuthorizeOnAResolver_RefusesAnAnonymousCaller()
-    {
-        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
-            AdminOperationsAuthorizationTests.Posture.NamespaceGated
-        );
-
-        var doc = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            query: AdminOperationsAuthorizationTests.GatedQuery
-        );
-
-        AdminOperationsAuthorizationTests
-            .HasErrorCode(doc, "TRAX_AUTHORIZATION")
-            .Should()
-            .BeTrue(
-                "[TraxAuthorize] on a resolver method emits @authorize on that field, per " + Adr
-            );
-
-        await host.StopAsync();
-    }
-
-    [Test]
-    public async Task TraxAuthorizeOnAResolver_RefusesAnAuthenticatedCallerWithoutTheRole()
-    {
-        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
-            AdminOperationsAuthorizationTests.Posture.NamespaceGated
-        );
-
-        var doc = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: AdminOperationsAuthorizationTests.ReaderApiKey,
-            query: AdminOperationsAuthorizationTests.GatedQuery
-        );
-
-        AdminOperationsAuthorizationTests
-            .HasErrorCode(doc, "TRAX_AUTHORIZATION")
-            .Should()
-            .BeTrue("Roles on the attribute reach the directive, not just the census");
-
-        await host.StopAsync();
-    }
-
-    [Test]
-    public async Task TraxAuthorizeOnAResolver_ServesTheRoleHolder()
-    {
-        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
-            AdminOperationsAuthorizationTests.Posture.NamespaceGated
-        );
-
-        var doc = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: AdminOperationsAuthorizationTests.AdminApiKey,
-            query: AdminOperationsAuthorizationTests.GatedQuery
-        );
-
-        doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
-        doc.RootElement.GetProperty("data")
-            .GetProperty("gatedPing")
-            .GetString()
-            .Should()
-            .Be("pong");
-
-        await host.StopAsync();
-    }
-
-    /// <summary>
-    /// A bare [TraxAuthorize] with no policy and no roles asks only for an authenticated caller,
-    /// the same as it does on a train or an entity.
-    /// </summary>
-    [Test]
-    public async Task BareTraxAuthorizeOnAResolver_AsksOnlyForAuthentication()
-    {
-        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
-            AdminOperationsAuthorizationTests.Posture.NamespaceGated
-        );
-
-        var anonymous = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            query: AdminOperationsAuthorizationTests.AuthenticatedQuery
-        );
-        AdminOperationsAuthorizationTests
-            .HasErrorCode(anonymous, "TRAX_AUTHORIZATION")
-            .Should()
-            .BeTrue();
-
-        var reader = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: AdminOperationsAuthorizationTests.ReaderApiKey,
-            query: AdminOperationsAuthorizationTests.AuthenticatedQuery
-        );
-        reader
-            .RootElement.TryGetProperty("errors", out _)
-            .Should()
-            .BeFalse("any authenticated caller satisfies a bare [TraxAuthorize]");
-
-        await host.StopAsync();
-    }
-
-    /// <summary>
-    /// The sibling stays open. Gating one field on a root type must not gate the root.
-    /// </summary>
-    [Test]
-    public async Task TraxAllowAnonymousSibling_StaysOpenBesideAGatedField()
-    {
-        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
-            AdminOperationsAuthorizationTests.Posture.NamespaceGated
-        );
-
-        var doc = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            query: AdminOperationsAuthorizationTests.PublicQuery
-        );
-
-        doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
-
-        await host.StopAsync();
-    }
-}
-
-/// <summary>
-/// Two root-type extension fields, one of each posture. Both declare, because a root-type
-/// extension field inherits nothing. <c>publicPing</c> stands in for the pre-login surfaces a
-/// host cannot gate; <c>gatedPing</c> is what proves Trax's own attribute produces a working
-/// gate and not just a schema annotation.
-/// </summary>
-[ExtendObjectType("RootQuery")]
-public sealed class PublicRootQueryExtension
-{
-    [TraxAllowAnonymous]
-    public string PublicPing() => "pong";
-
-    [TraxAuthorize(Roles = "Admin")]
-    public string GatedPing() => "pong";
-
-    [TraxAuthorize]
-    public string AuthenticatedPing() => "pong";
 }

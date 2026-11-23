@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
 using Trax.Effect.Models.Manifest;
@@ -27,14 +29,14 @@ public class ModelCoverageGapTests
         act.Should().Throw<Exception>().WithMessage("*full name*");
     }
 
-    private class GenericMarker<T> { }
+    private static class GenericMarker<T>;
 
     [Test]
     public void Manifest_NameType_ResolvesTypeFromOtherAssembly()
     {
         // Type.GetType only finds types in mscorlib + executing assembly. Forcing
         // resolution via FullName routes through the loaded-assembly fallback path.
-        var m = new Manifest { Name = typeof(Manifest).FullName! };
+        var m = new Manifest { Name = typeof(Manifest).FullName.NotNull() };
 
         m.NameType.Should().Be(typeof(Manifest));
     }
@@ -221,7 +223,7 @@ public class ModelCoverageGapTests
     private static string RecordJson(int failureClass) =>
         "{\"trainName\":\"a\",\"trainExternalId\":\"b\",\"type\":\"X\",\"junction\":\"J\","
         + "\"message\":\"m\",\"failureClass\":"
-        + failureClass
+        + failureClass.ToString(CultureInfo.InvariantCulture)
         + "}";
 
     private static Metadata NewMetadata() =>
@@ -231,7 +233,8 @@ public class ModelCoverageGapTests
                 Name = "X",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
     #endregion
@@ -247,7 +250,7 @@ public class ModelCoverageGapTests
             {
                 Name = "Jx",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                StartTimeUtc = DateTime.UtcNow,
+                StartTimeUtc = TestTime.UtcDateTime,
                 InputType = typeof(int),
                 OutputType = typeof(string),
                 State = Trax.Core.Functional.EitherStatus.IsRight,
@@ -275,7 +278,7 @@ public class ModelCoverageGapTests
             {
                 Name = "Jx",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                StartTimeUtc = DateTime.UtcNow,
+                StartTimeUtc = TestTime.UtcDateTime,
                 InputType = typeof(int),
                 OutputType = typeof(string),
                 State = Trax.Core.Functional.EitherStatus.IsRight,
@@ -299,7 +302,7 @@ public class ModelCoverageGapTests
             {
                 Name = "Jx",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                StartTimeUtc = DateTime.UtcNow,
+                StartTimeUtc = TestTime.UtcDateTime,
                 InputType = typeof(int),
                 OutputType = typeof(string),
                 State = Trax.Core.Functional.EitherStatus.IsRight,

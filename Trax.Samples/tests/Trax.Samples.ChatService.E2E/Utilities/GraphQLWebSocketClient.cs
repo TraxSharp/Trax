@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.TestHost;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.ChatService.E2E.Utilities;
 
@@ -9,11 +11,13 @@ public class GraphQLWebSocketClient : IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
     };
 
-    private WebSocket _webSocket = null!;
+    private WebSocket? _webSocket;
 
     public static async Task<GraphQLWebSocketClient> ConnectAsync(
         WebSocketClient wsClient,
@@ -31,18 +35,20 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         };
 
         var uri = new Uri($"ws://localhost{path}");
-        client._webSocket = await wsClient.ConnectAsync(uri, CancellationToken.None);
+        client._webSocket = await wsClient
+            .ConnectAsync(uri, CancellationToken.None)
+            .ConfigureAwait(false);
 
         // Send connection_init. Subscription auth travels in the payload because
         // browsers cannot attach custom headers to a WebSocket upgrade.
         object initMessage = apiKey is null
             ? new { type = "connection_init" }
             : new { type = "connection_init", payload = new { apiKey } };
-        await client.SendMessageAsync(initMessage);
+        await client.SendMessageAsync(initMessage).ConfigureAwait(false);
 
-        var ack = await client.ReceiveMessageAsync(effectiveTimeout);
+        var ack = await client.ReceiveMessageAsync(effectiveTimeout).ConfigureAwait(false);
         var ackType = ack.GetProperty("type").GetString();
-        if (ackType != "connection_ack")
+        if (!string.Equals(ackType, "connection_ack", StringComparison.Ordinal))
             throw new InvalidOperationException($"Expected connection_ack but got {ackType}");
 
         return client;
@@ -51,41 +57,45 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     public async Task SubscribeAsync(string id, string query)
     {
         await SendMessageAsync(
-            new
-            {
-                id,
-                type = "subscribe",
-                payload = new { query },
-            }
-        );
+                new
+                {
+                    id,
+                    type = "subscribe",
+                    payload = new { query },
+                }
+            )
+            .ConfigureAwait(false);
     }
 
     public async Task<JsonElement> ReceiveNextAsync(TimeSpan? timeout = null)
     {
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
-        var deadline = DateTime.UtcNow + effectiveTimeout;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + effectiveTimeout;
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime;
             if (remaining <= TimeSpan.Zero)
                 break;
 
-            var message = await ReceiveMessageAsync(remaining);
+            var message = await ReceiveMessageAsync(remaining).ConfigureAwait(false);
             var type = message.GetProperty("type").GetString();
 
-            if (type == "next")
+            if (string.Equals(type, "next", StringComparison.Ordinal))
                 return message.GetProperty("payload");
-            if (type == "error")
+            if (string.Equals(type, "error", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"Subscription error: {message.GetProperty("payload")}"
                 );
-            if (type == "complete")
+            if (string.Equals(type, "complete", StringComparison.Ordinal))
                 throw new InvalidOperationException("Subscription completed unexpectedly");
         }
 
         throw new TimeoutException(
-            $"No subscription event received within {effectiveTimeout.TotalSeconds}s"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"No subscription event received within {effectiveTimeout.TotalSeconds}s"
+            )
         );
     }
 
@@ -100,7 +110,7 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     {
         try
         {
-            await ReceiveNextAsync(timeout);
+            await ReceiveNextAsync(timeout).ConfigureAwait(false);
             return true;
         }
         catch (TimeoutException)
@@ -113,12 +123,15 @@ public class GraphQLWebSocketClient : IAsyncDisposable
     {
         var json = JsonSerializer.Serialize(message, JsonOptions);
         var bytes = Encoding.UTF8.GetBytes(json);
-        await _webSocket.SendAsync(
-            new ArraySegment<byte>(bytes),
-            WebSocketMessageType.Text,
-            true,
-            CancellationToken.None
-        );
+        await _webSocket
+            .NotNull()
+            .SendAsync(
+                new ArraySegment<byte>(bytes),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<JsonElement> ReceiveMessageAsync(TimeSpan timeout)
@@ -132,8 +145,11 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             WebSocketReceiveResult result;
             do
             {
-                result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-                ms.Write(buffer, 0, result.Count);
+                result = await _webSocket
+                    .NotNull()
+                    .ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token)
+                    .ConfigureAwait(false);
+                await ms.WriteAsync(buffer, 0, result.Count, cts.Token).ConfigureAwait(false);
             } while (!result.EndOfMessage);
 
             if (result.MessageType == WebSocketMessageType.Close)
@@ -145,25 +161,32 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             ms.Position = 0;
             return JsonSerializer.Deserialize<JsonElement>(ms.ToArray(), JsonOptions);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             throw new TimeoutException(
-                $"No WebSocket message received within {timeout.TotalSeconds}s"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"No WebSocket message received within {timeout.TotalSeconds}s"
+                ),
+                inner
             );
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_webSocket.State == WebSocketState.Open)
+        if (_webSocket.NotNull().State == WebSocketState.Open)
         {
             try
             {
-                await _webSocket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "Test complete",
-                    CancellationToken.None
-                );
+                await _webSocket
+                    .NotNull()
+                    .CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Test complete",
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
             }
             catch
             {
@@ -171,15 +194,6 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             }
         }
 
-        _webSocket.Dispose();
+        _webSocket.NotNull().Dispose();
     }
-}
-
-/// <summary>The server closed the socket; carries the close code and reason it sent.</summary>
-public sealed class WebSocketClosedException(WebSocketCloseStatus? status, string? description)
-    : InvalidOperationException($"WebSocket closed by server: {(int?)status} {description}")
-{
-    public WebSocketCloseStatus? Status { get; } = status;
-
-    public string? Description { get; } = description;
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 
 namespace Trax.Effect.Data.Testing.Tests;
@@ -30,7 +31,8 @@ public class OwnerScopeFilterBypassTests
         {
             OwnerType = typeof(Account),
             PrincipalAccessorType = typeof(IOwnerPrincipal),
-            FilterBypassAllowlist = allowlist ?? new Dictionary<string, string>(),
+            FilterBypassAllowlist =
+                allowlist ?? new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
     private static IReadOnlyList<IReadOnlyModel> Models<TContext>()
@@ -40,7 +42,7 @@ public class OwnerScopeFilterBypassTests
             .UseNpgsql("Host=localhost;Database=offline_model_only")
             .Options;
         using var context = (TContext)
-            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal())!;
+            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal()).NotNull();
         return [context.Model];
     }
 
@@ -200,7 +202,7 @@ public class OwnerScopeFilterBypassTests
         var result = Scan(
             repo,
             census: Census(
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["src/Api/NoteResolver.cs"] =
                         "the account-deletion job erases every owner's notes on purpose",
@@ -221,7 +223,12 @@ public class OwnerScopeFilterBypassTests
 
         Scan(
             repo,
-            census: Census(new Dictionary<string, string> { ["src/Api/NoteResolver.cs"] = " " })
+            census: Census(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["src/Api/NoteResolver.cs"] = " ",
+                }
+            )
         )
             .Offenders.Should()
             .ContainSingle()
@@ -237,7 +244,10 @@ public class OwnerScopeFilterBypassTests
         Scan(
             repo,
             census: Census(
-                new Dictionary<string, string> { ["src/Api/NoteResolver.cs"] = "used to" }
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["src/Api/NoteResolver.cs"] = "used to",
+                }
             )
         )
             .Offenders.Should()

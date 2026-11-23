@@ -1,3 +1,4 @@
+using System.Globalization;
 using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Types;
@@ -56,7 +57,10 @@ internal sealed class OperationCountValidatorRule(int maxOperations) : IDocument
                 ErrorBuilder
                     .New()
                     .SetMessage(
-                        $"The request exceeds the maximum allowed operations per request ({maxOperations})."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"The request exceeds the maximum allowed operations per request ({maxOperations})."
+                        )
                     )
                     .SetCode("TRAX_TOO_MANY_OPERATIONS")
                     .Build()

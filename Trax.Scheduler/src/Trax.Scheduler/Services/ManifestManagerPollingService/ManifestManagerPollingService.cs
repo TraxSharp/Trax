@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -29,7 +30,7 @@ namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 /// The resolved <see cref="IManifestManagerTrain"/> is <see cref="InMemoryManifestManagerTrain"/>
 /// which dispatches jobs inline via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
 /// </remarks>
-internal class ManifestManagerPollingService(
+internal sealed class ManifestManagerPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     ILogger<ManifestManagerPollingService> logger,
@@ -43,17 +44,20 @@ internal class ManifestManagerPollingService(
             configuration.ManifestManagerPollingInterval
         );
 
-        await RunManifestManager(stoppingToken);
+        await RunManifestManager(stoppingToken).ConfigureAwait(false);
 
         // The interval is read each cycle, so a runtime change applies to the next wait.
         while (
-            await PollingDelay.WaitAsync(
-                () => configuration.ManifestManagerPollingInterval,
-                stoppingToken
-            )
+            await PollingDelay
+                .WaitAsync(
+                    () => configuration.ManifestManagerPollingInterval,
+                    serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System,
+                    stoppingToken
+                )
+                .ConfigureAwait(false)
         )
         {
-            await RunManifestManager(stoppingToken);
+            await RunManifestManager(stoppingToken).ConfigureAwait(false);
         }
 
         logger.LogInformation("ManifestManagerPollingService stopping");
@@ -74,60 +78,73 @@ internal class ManifestManagerPollingService(
 
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
 
             // Advisory lock: single-leader election for manifest evaluation.
             // Prevents duplicate WorkQueue entries when multiple servers poll simultaneously.
             // InMemory has no transactions or advisory locks, and a single-writer database (SQLite)
             // has no leader to elect: both run without the lock.
-            if (configuration.HasDatabaseProvider && !sqlDialect!.HasSingleWriter)
+            if (configuration.HasDatabaseProvider && !sqlDialect.NotNull().HasSingleWriter)
             {
-                var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-                using var transaction = await dataContext.BeginTransaction(cancellationToken);
-
-                var acquired = await ((DbContext)dataContext)
-                    .Database.SqlQuery<bool>(
-                        sqlDialect.TryAcquireLeaderLock("trax_manifest_manager")
-                    )
-                    .FirstAsync(cancellationToken);
-
-                if (!acquired)
-                {
-                    logger.LogDebug("Another server is running ManifestManager, skipping cycle");
-                    await dataContext.RollbackTransaction();
-                    return;
-                }
-
-                // Run train within the advisory lock transaction
-                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-
-                logger.LogDebug("ManifestManager polling cycle starting");
-                await train.Run(Unit.Default, cancellationToken);
-                logger.LogDebug("ManifestManager polling cycle completed");
-
-                await dataContext.CommitTransaction();
-
-                // The runs the cycle failed are committed now, so their lifecycle events go out.
-                if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
-                    await outcomeEvents.FlushAsync();
+                await RunUnderLeaderLockAsync(scope.ServiceProvider, cancellationToken)
+                    .ConfigureAwait(false);
             }
             else
             {
                 var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
 
                 logger.LogDebug("ManifestManager polling cycle starting");
-                await train.Run(Unit.Default, cancellationToken);
+                await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
                 logger.LogDebug("ManifestManager polling cycle completed");
 
                 // Nothing is held with no transaction open, but flushing keeps the paths alike.
                 if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
-                    await outcomeEvents.FlushAsync();
+                    await outcomeEvents.FlushAsync().ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error during ManifestManager polling cycle");
         }
+    }
+
+    private async Task RunUnderLeaderLockAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken
+    )
+    {
+        var dataContext = services.GetRequiredService<IDataContext>();
+
+        using var transaction = await dataContext
+            .BeginTransaction(cancellationToken)
+            .ConfigureAwait(false);
+
+        var acquired = await ((DbContext)dataContext)
+            .Database.SqlQuery<bool>(
+                sqlDialect.NotNull().TryAcquireLeaderLock("trax_manifest_manager")
+            )
+            .FirstAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!acquired)
+        {
+            logger.LogDebug("Another server is running ManifestManager, skipping cycle");
+            await dataContext.RollbackTransaction().ConfigureAwait(false);
+            return;
+        }
+
+        // Run train within the advisory lock transaction
+        var train = services.GetRequiredService<IManifestManagerTrain>();
+
+        logger.LogDebug("ManifestManager polling cycle starting");
+        await train.Run(Unit.Default, cancellationToken).ConfigureAwait(false);
+        logger.LogDebug("ManifestManager polling cycle completed");
+
+        await dataContext.CommitTransaction().ConfigureAwait(false);
+
+        // The runs the cycle failed are committed now, so their lifecycle events go out.
+        if (services.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
+            await outcomeEvents.FlushAsync().ConfigureAwait(false);
     }
 }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -22,20 +23,20 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ReapStaleInProgressMetadataJunctionTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
-    private SchedulerConfiguration _config = null!;
+    private IManifestManagerTrain? _train;
+    private SchedulerConfiguration? _config;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
 
         // Prevent the stale-pending reaper from interfering with test data. The default job timeout
         // is kept below every stale timeout the tests set, so a run is reaped at exactly the stale
         // timeout: a longer DefaultJobTimeout would extend the reaper's threshold to match it.
-        _config.StalePendingTimeout = TimeSpan.FromHours(24);
-        _config.DefaultJobTimeout = TimeSpan.FromSeconds(1);
+        _config.NotNull().StalePendingTimeout = TimeSpan.FromHours(24);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromSeconds(1);
     }
 
     [TearDown]
@@ -51,17 +52,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_StaleInProgressMetadata_MarkedAsFailed()
     {
         // Arrange — InProgress metadata started well beyond the stale in-progress timeout
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -83,17 +84,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_RecentInProgressMetadata_NotAffected()
     {
         // Arrange — InProgress metadata started recently (within timeout)
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-10)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -110,17 +111,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_PendingMetadata_NotAffected()
     {
         // Arrange — Pending metadata (not InProgress) started long ago
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Pending,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -140,17 +141,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_CompletedMetadata_NotAffected()
     {
         // Arrange — Completed metadata (already terminal)
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -165,17 +166,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_FailedMetadata_NotAffected()
     {
         // Arrange — Failed metadata (already terminal)
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Failed,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -190,17 +191,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_CancelledMetadata_NotAffected()
     {
         // Arrange — Cancelled metadata (already terminal)
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.Cancelled,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -219,31 +220,31 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_MultipleStaleInProgressMetadata_AllMarkedAsFailed()
     {
         // Arrange — Three stale InProgress metadata records
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest1 = await CreateManifest();
         var metadata1 = await CreateMetadata(
             manifest1,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-45)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-45)
         );
 
         var manifest2 = await CreateManifest();
         var metadata2 = await CreateMetadata(
             manifest2,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         var manifest3 = await CreateManifest();
         var metadata3 = await CreateMetadata(
             manifest3,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -271,24 +272,24 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_MixOfStaleAndRecent_OnlyStaleFailed()
     {
         // Arrange — One stale, one recent
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var staleManifest = await CreateManifest();
         var staleMetadata = await CreateMetadata(
             staleManifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         var recentManifest = await CreateManifest();
         var recentMetadata = await CreateMetadata(
             recentManifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -315,10 +316,10 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_NoManifests_CompletesWithoutErrors()
     {
         // Arrange — No manifests, no metadata
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         // Act & Assert
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -326,17 +327,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_ConfigurableTimeout_RespectsCustomValue()
     {
         // Arrange — Short timeout, InProgress metadata that's old enough
-        _config.StaleInProgressTimeout = TimeSpan.FromSeconds(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromSeconds(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-1)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -356,17 +357,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_TimeoutEdge_WithinBoundaryNotReaped()
     {
         // Arrange — InProgress metadata started within the timeout boundary
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest();
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-25)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-25)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -385,17 +386,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         // Arrange — Manifest with maxRetries=0 and one stale InProgress metadata.
         // After the reaper marks it Failed, ReapFailedJobsJunction should dead-letter it
         // in the same ManifestManager cycle.
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var manifest = await CreateManifest(maxRetries: 0);
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-60)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert — metadata should be Failed AND a dead letter should exist
         DataContext.Reset();
@@ -419,16 +420,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
     public async Task Run_MetadataWithoutManifest_StillReaped()
     {
         // Arrange — InProgress metadata without a manifest (manual/ad-hoc execution)
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "ManualTest" },
                 ManifestId = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.InProgress;
 
@@ -438,13 +440,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-60)),
+                s =>
+                    s.SetProperty(
+                        m => m.StartTime,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-60)
+                    ),
                 CancellationToken.None
             );
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -463,10 +469,8 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
 
     private async Task<Manifest> CreateManifest(int maxRetries = 3)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -481,8 +485,8 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -497,16 +501,17 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "StaleInProgressTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         if (startTime.HasValue)
         {
@@ -515,7 +520,8 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.StartTime, startTime.Value),
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
         }
 
         DataContext.Reset();

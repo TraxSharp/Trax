@@ -15,7 +15,8 @@ namespace Trax.Effect.Provider.Json.Services.JsonEffectFactory;
 /// the models it tracked, for the life of the process. The run disposes the provider it is given.
 /// </remarks>
 /// <param name="serviceProvider">The provider the effect provider's dependencies are resolved from.</param>
-internal class JsonEffectProviderFactory(IServiceProvider serviceProvider) : IEffectProviderFactory
+internal sealed class JsonEffectProviderFactory(IServiceProvider serviceProvider)
+    : IEffectProviderFactory
 {
     /// <summary>
     /// Creates a new JSON effect provider, owned by the caller.

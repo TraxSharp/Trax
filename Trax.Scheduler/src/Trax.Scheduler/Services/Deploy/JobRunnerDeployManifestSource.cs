@@ -32,11 +32,3 @@ internal sealed class JobRunnerDeployManifestSource : IDeployManifestSource
         return Task.CompletedTask;
     }
 }
-
-/// <summary>Marks the endpoints that receive work from a remote scheduler.</summary>
-internal sealed class JobRunnerEndpointMetadata
-{
-    public static readonly JobRunnerEndpointMetadata Instance = new();
-
-    private JobRunnerEndpointMetadata() { }
-}

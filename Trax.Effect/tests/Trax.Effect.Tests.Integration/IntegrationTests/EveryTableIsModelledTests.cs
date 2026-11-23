@@ -33,13 +33,14 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Every_migrated_table_is_mapped_by_the_data_context()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
         var unmapped = migrated
             .Keys.Where(table => !mapped.ContainsKey(table) && !Unmodelled.ContainsKey(table))
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         unmapped
@@ -54,7 +55,8 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Every_mapped_column_exists_in_its_migrated_table()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -67,7 +69,7 @@ public class EveryTableIsModelledTests : TestSetup
                     )
                     .Select(column => $"{table.Key}.{column}")
             )
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         missing
@@ -81,7 +83,8 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Runner_nonce_is_mapped_column_for_column()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -102,7 +105,8 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Decision_is_mapped_column_for_column()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -123,7 +127,8 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Junction_run_is_mapped_column_for_column()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -144,7 +149,8 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Checkpoint_is_mapped_column_for_column()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -165,7 +171,8 @@ public class EveryTableIsModelledTests : TestSetup
     [Test]
     public async Task HostHeartbeat_is_mapped_column_for_column()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -187,7 +194,8 @@ public class EveryTableIsModelledTests : TestSetup
     [TestCase("effect_claim")]
     public async Task State_machine_tables_are_mapped_column_for_column(string table)
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns((DbContext)context);
         var mapped = MappedColumns((DbContext)context);
 
@@ -210,14 +218,16 @@ public class EveryTableIsModelledTests : TestSetup
     )
     {
         // The context's own connection: its connection string no longer carries the password.
-        await context.Database.OpenConnectionAsync();
-        await using var command = context.Database.GetDbConnection().CreateCommand();
+        await context.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var command = context.Database.GetDbConnection().CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'trax'";
 
         var tables = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var table = reader.GetString(0);
             if (!tables.TryGetValue(table, out var columns))

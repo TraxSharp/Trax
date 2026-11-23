@@ -1,10 +1,12 @@
 using System.Data.Common;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -381,7 +383,9 @@ public class OrphanManifestPruningTests : TestSetup
         var kept = await CreateAndSaveManifestWithExternalId("kept-manifest");
 
         for (var i = 0; i < orphanCount; i++)
-            await CreateAndSaveManifestWithExternalId($"orphan-{i}");
+            await CreateAndSaveManifestWithExternalId(
+                string.Create(CultureInfo.InvariantCulture, $"orphan-{i}")
+            );
 
         var configuration = CreateConfiguration(
             expectedExternalIds: ["kept-manifest"],
@@ -413,13 +417,15 @@ public class OrphanManifestPruningTests : TestSetup
         var expectedIds = new List<string>();
         for (var i = 0; i < expectedCount; i++)
         {
-            var externalId = $"expected-{i}";
+            var externalId = string.Create(CultureInfo.InvariantCulture, $"expected-{i}");
             await CreateAndSaveManifestWithExternalId(externalId);
             expectedIds.Add(externalId);
         }
 
         for (var i = 0; i < orphanCount; i++)
-            await CreateAndSaveManifestWithExternalId($"orphan-{i}");
+            await CreateAndSaveManifestWithExternalId(
+                string.Create(CultureInfo.InvariantCulture, $"orphan-{i}")
+            );
 
         var configuration = CreateConfiguration(
             expectedExternalIds: expectedIds,
@@ -447,7 +453,7 @@ public class OrphanManifestPruningTests : TestSetup
         var expectedIds = new List<string>();
         for (var i = 0; i < 50; i++)
         {
-            var externalId = $"expected-{i}";
+            var externalId = string.Create(CultureInfo.InvariantCulture, $"expected-{i}");
             await CreateAndSaveManifestWithExternalId(externalId);
             expectedIds.Add(externalId);
         }
@@ -643,7 +649,7 @@ public class OrphanManifestPruningTests : TestSetup
                 {
                     ExternalId = "test-pending-manifest",
                     ExpectedExternalIds = externalIds,
-                    ScheduleFunc = (_, _) => Task.FromResult<Manifest>(null!),
+                    ScheduleFunc = (_, _) => Task.CompletedTask,
                 }
             );
         }
@@ -659,10 +665,11 @@ public class OrphanManifestPruningTests : TestSetup
     {
         if (groupId is null)
         {
-            var group = await TestSetup.CreateAndSaveManifestGroup(
-                DataContext,
-                name: $"group-{Guid.NewGuid():N}"
-            );
+            var group = await CreateAndSaveManifestGroup(
+                    DataContext,
+                    name: $"group-{Guid.NewGuid():N}"
+                )
+                .ConfigureAwait(false);
             groupId = group.Id;
         }
 
@@ -682,8 +689,8 @@ public class OrphanManifestPruningTests : TestSetup
         manifest.ManifestGroupId = groupId.Value;
         manifest.Owner = owner;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -691,10 +698,8 @@ public class OrphanManifestPruningTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveDependentManifest(Manifest parent, string externalId)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -712,8 +717,8 @@ public class OrphanManifestPruningTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.Owner = Owner;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -724,17 +729,18 @@ public class OrphanManifestPruningTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -742,7 +748,9 @@ public class OrphanManifestPruningTests : TestSetup
 
     private async Task<DeadLetter> CreateAndSaveDeadLetter(Manifest manifest)
     {
-        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloadedManifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
 
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
@@ -750,11 +758,12 @@ public class OrphanManifestPruningTests : TestSetup
                 Manifest = reloadedManifest,
                 Reason = "Test dead letter",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(deadLetter);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(deadLetter).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return deadLetter;
@@ -769,11 +778,12 @@ public class OrphanManifestPruningTests : TestSetup
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;

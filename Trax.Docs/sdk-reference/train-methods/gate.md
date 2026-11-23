@@ -10,6 +10,7 @@ namespace:
 source:
   - Trax.Core/src/Trax.Core/Monad/Monad.Decisions.cs
   - Trax.Core/src/Trax.Core/Decisions/Tracks.cs
+  - Trax.Core/src/Trax.Core/Decisions/GateTracks.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 12

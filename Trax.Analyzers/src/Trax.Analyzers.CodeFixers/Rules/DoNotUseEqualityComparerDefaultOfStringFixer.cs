@@ -1,0 +1,52 @@
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class DoNotUseEqualityComparerDefaultOfStringFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.DoNotUseEqualityComparerDefaultOfString);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null)
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null)
+            return;
+
+        var stringComparerSymbol = semanticModel.Compilation.GetTypeByMetadataName("System.StringComparer");
+        if (stringComparerSymbol is null)
+            return;
+
+        RegisterCodeFix(nameof(StringComparer.Ordinal));
+        RegisterCodeFix(nameof(StringComparer.OrdinalIgnoreCase));
+
+        void RegisterCodeFix(string comparerName)
+        {
+            var title = "Use StringComparer." + comparerName;
+            var codeAction = CodeAction.Create(
+                title,
+                ct => MakeConstructorProtected(context.Document, nodeToFix, comparerName, stringComparerSymbol, ct),
+                equivalenceKey: title);
+
+            context.RegisterCodeFix(codeAction, context.Diagnostics);
+        }
+    }
+
+    private static async Task<Document> MakeConstructorProtected(Document document, SyntaxNode nodeToFix, string comparerName, INamedTypeSymbol stringComparer, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+
+        var syntax = (MemberAccessExpressionSyntax)nodeToFix;
+
+        var newSyntax = generator.TypeMemberAccessExpression(stringComparer, comparerName);
+
+        editor.ReplaceNode(syntax, newSyntax);
+        return editor.GetChangedDocument();
+    }
+}

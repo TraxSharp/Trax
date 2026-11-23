@@ -62,12 +62,12 @@ public class ReflectionHelpersTests : TestSetup
 
     #region Test helpers
 
-    private class TestJunction : Junction<string, int>
+    private sealed class TestJunction : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class NotAJunction { }
+    private sealed class NotAJunction;
 
     #endregion
 }

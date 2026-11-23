@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 
 /// <summary>
@@ -67,7 +65,8 @@ public static class MemoryProfiler
         TimeSpan? maxWait = null
     )
     {
-        var deadline = DateTime.UtcNow + (maxWait ?? TimeSpan.FromSeconds(5));
+        var deadline =
+            TimeProvider.System.GetUtcNow().UtcDateTime + (maxWait ?? TimeSpan.FromSeconds(5));
 
         while (true)
         {
@@ -77,11 +76,11 @@ public static class MemoryProfiler
 
             var alive = references.Count(reference => reference.IsAlive);
 
-            if (alive == 0 || DateTime.UtcNow >= deadline)
+            if (alive == 0 || TimeProvider.System.GetUtcNow().UtcDateTime >= deadline)
                 return alive;
 
             // allowed-delay: waiting for the finalizer thread, not for a signal we could await.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
     }
 
@@ -100,11 +99,11 @@ public static class MemoryProfiler
         }
 
         return new MemorySnapshot(
-            GC.GetTotalMemory(false),
+            GC.GetTotalMemory(forceFullCollection: false),
             GC.CollectionCount(0),
             GC.CollectionCount(1),
             GC.CollectionCount(2),
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
     }
 
@@ -117,11 +116,11 @@ public static class MemoryProfiler
     public static MemoryMonitorResult MonitorMemoryUsage(Action action, string description = "")
     {
         var beforeSnapshot = TakeSnapshot(forceGC: true);
-        var stopwatch = Stopwatch.StartNew();
+        var start = TimeProvider.System.GetTimestamp();
 
         action();
 
-        stopwatch.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(start);
         var afterSnapshot = TakeSnapshot(forceGC: false);
         var afterGCSnapshot = TakeSnapshot(forceGC: true);
 
@@ -130,7 +129,7 @@ public static class MemoryProfiler
             beforeSnapshot,
             afterSnapshot,
             afterGCSnapshot,
-            stopwatch.Elapsed
+            elapsed
         );
     }
 
@@ -146,11 +145,11 @@ public static class MemoryProfiler
     )
     {
         var beforeSnapshot = TakeSnapshot(forceGC: true);
-        var stopwatch = Stopwatch.StartNew();
+        var start = TimeProvider.System.GetTimestamp();
 
-        await action();
+        await action().ConfigureAwait(false);
 
-        stopwatch.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(start);
         var afterSnapshot = TakeSnapshot(forceGC: false);
         var afterGCSnapshot = TakeSnapshot(forceGC: true);
 
@@ -159,7 +158,7 @@ public static class MemoryProfiler
             beforeSnapshot,
             afterSnapshot,
             afterGCSnapshot,
-            stopwatch.Elapsed
+            elapsed
         );
     }
 
@@ -199,16 +198,16 @@ public static class MemoryProfiler
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        var startTime = DateTime.UtcNow;
+        var startTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Wait for objects to be collected
-        while (DateTime.UtcNow - startTime < maxWaitTime)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime - startTime < maxWaitTime)
         {
             var aliveCount = weakReferences.Count(wr => wr.IsAlive);
             if (aliveCount == 0)
                 return true;
 
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
@@ -216,57 +215,6 @@ public static class MemoryProfiler
         }
 
         // Check final count
-        return weakReferences.All(wr => !wr.IsAlive);
-    }
-}
-
-/// <summary>
-/// Results of memory monitoring operation.
-/// </summary>
-public record MemoryMonitorResult(
-    string Description,
-    MemoryProfiler.MemorySnapshot Before,
-    MemoryProfiler.MemorySnapshot After,
-    MemoryProfiler.MemorySnapshot AfterGC,
-    TimeSpan Duration
-)
-{
-    /// <summary>
-    /// Memory allocated during the operation (before GC).
-    /// </summary>
-    public long MemoryAllocated => After.TotalMemory - Before.TotalMemory;
-
-    /// <summary>
-    /// Memory that remained after GC, as a delta of the whole process's managed heap.
-    /// </summary>
-    /// <remarks>
-    /// Good for "nothing ran away" — a bound in megabytes. Not good for "everything was freed": see
-    /// <see cref="MemoryProfiler.RetainedNoiseFloorBytes"/> for why, and use
-    /// <see cref="MemoryProfiler.CountAliveAsync"/> for that claim instead. Do not bound this
-    /// against <see cref="MemoryAllocated"/> either; both sides are the same noisy measurement, so
-    /// the ratio tightens on its own whenever a collection happens to land inside the window.
-    /// </remarks>
-    public long MemoryRetained => AfterGC.TotalMemory - Before.TotalMemory;
-
-    /// <summary>
-    /// Memory that was freed by GC.
-    /// </summary>
-    public long MemoryFreed => After.TotalMemory - AfterGC.TotalMemory;
-
-    /// <summary>
-    /// Gets a formatted summary of the memory monitoring results.
-    /// </summary>
-    public string GetSummary()
-    {
-        return $"""
-            Memory Monitor Results: {Description}
-            Duration: {Duration.TotalMilliseconds:F2}ms
-            Memory Allocated: {MemoryAllocated:N0} bytes
-            Memory Retained: {MemoryRetained:N0} bytes
-            Memory Freed: {MemoryFreed:N0} bytes
-            GC Collections: Gen0={After.Gen0Collections
-                - Before.Gen0Collections}, Gen1={After.Gen1Collections
-                - Before.Gen1Collections}, Gen2={After.Gen2Collections - Before.Gen2Collections}
-            """;
+        return weakReferences.TrueForAll(wr => !wr.IsAlive);
     }
 }

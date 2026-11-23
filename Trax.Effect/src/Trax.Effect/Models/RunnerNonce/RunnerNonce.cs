@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.RunnerNonce;
 
@@ -20,7 +21,11 @@ public class RunnerNonce
     /// insert of the same nonce is refused by the database.
     /// </summary>
     [Column("nonce")]
-    public string Nonce { get; set; } = null!;
+    public string Nonce
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// When the record may be forgotten: the signature's timestamp plus the runner's allowed clock

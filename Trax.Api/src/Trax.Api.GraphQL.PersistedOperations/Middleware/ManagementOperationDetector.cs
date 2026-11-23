@@ -37,7 +37,7 @@ internal static class ManagementOperationDetector
         if (operations.Count == 0)
             return false;
 
-        return operations.All(operation =>
+        return operations.TrueForAll(operation =>
             SelectsOnly(operation.SelectionSet, PersistedOperationsField)
         );
     }

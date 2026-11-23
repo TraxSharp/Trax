@@ -16,7 +16,9 @@ public class ProductionAuthApiFactory(
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
-        foreach (var (key, value) in settings ?? new Dictionary<string, string>())
+        foreach (
+            var (key, value) in settings ?? new Dictionary<string, string>(StringComparer.Ordinal)
+        )
             builder.UseSetting(key, value);
         configure?.Invoke(builder);
     }

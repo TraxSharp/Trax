@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using NSubstitute;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
@@ -13,14 +14,14 @@ namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 [TestFixture]
 public class BroadcastLifecycleHookTests
 {
-    private ITrainEventBroadcaster _broadcaster = null!;
-    private BroadcastLifecycleHook _hook = null!;
+    private ITrainEventBroadcaster? _broadcaster;
+    private BroadcastLifecycleHook? _hook;
 
     [SetUp]
     public void SetUp()
     {
         _broadcaster = Substitute.For<ITrainEventBroadcaster>();
-        _hook = new BroadcastLifecycleHook(_broadcaster);
+        _hook = new BroadcastLifecycleHook(_broadcaster.NotNull(), timeProvider: TestTime.Clock);
     }
 
     private static Metadata CreateMetadata(
@@ -36,7 +37,8 @@ public class BroadcastLifecycleHookTests
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = state;
 
@@ -48,18 +50,21 @@ public class BroadcastLifecycleHookTests
     {
         var metadata = CreateMetadata(TrainState.InProgress);
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnStarted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnStarted(metadata, CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(Arg.Any<TrainLifecycleEventMessage>(), Arg.Any<CancellationToken>());
         captured.Should().NotBeNull();
-        captured!.EventType.Should().Be("Started");
+        captured.NotNull().EventType.Should().Be("Started");
         captured.TrainName.Should().Be("TestTrain");
         captured.ExternalId.Should().Be(metadata.ExternalId);
         captured.MetadataId.Should().Be(metadata.Id);
@@ -70,9 +75,10 @@ public class BroadcastLifecycleHookTests
     {
         var metadata = CreateMetadata(TrainState.Completed);
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m =>
@@ -89,13 +95,12 @@ public class BroadcastLifecycleHookTests
     {
         var metadata = CreateMetadata(TrainState.Failed);
 
-        await _hook.OnFailed(
-            metadata,
-            new InvalidOperationException("boom"),
-            CancellationToken.None
-        );
+        await _hook
+            .NotNull()
+            .OnFailed(metadata, new InvalidOperationException("boom"), CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m =>
@@ -110,9 +115,10 @@ public class BroadcastLifecycleHookTests
     {
         var metadata = CreateMetadata(TrainState.Cancelled);
 
-        await _hook.OnCancelled(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCancelled(metadata, CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m =>
@@ -127,21 +133,23 @@ public class BroadcastLifecycleHookTests
     {
         var metadata = CreateMetadata();
         // Simulate a cross-process scenario: metadata was created by a different process
-        typeof(Metadata).GetProperty("Executor")!.SetValue(metadata, "SomeOtherProcess");
+        typeof(Metadata).GetProperty("Executor").NotNull().SetValue(metadata, "SomeOtherProcess");
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnStarted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnStarted(metadata, CancellationToken.None);
 
         captured.Should().NotBeNull();
 
         // Executor should reflect the broadcasting process, not metadata.Executor
         var expectedExecutor = System.Reflection.Assembly.GetEntryAssembly()?.GetAssemblyProject();
-        captured!.Executor.Should().Be(expectedExecutor);
+        captured.NotNull().Executor.Should().Be(expectedExecutor);
         captured.Executor.Should().NotBe("SomeOtherProcess");
     }
 
@@ -153,14 +161,16 @@ public class BroadcastLifecycleHookTests
         metadata.EndTime = endTime;
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        captured!.Timestamp.Should().Be(endTime);
+        captured.NotNull().Timestamp.Should().Be(endTime);
     }
 
     [Test]
@@ -170,16 +180,16 @@ public class BroadcastLifecycleHookTests
         metadata.EndTime = null;
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        var before = DateTime.UtcNow;
-        await _hook.OnStarted(metadata, CancellationToken.None);
-        var after = DateTime.UtcNow;
+        await _hook.NotNull().OnStarted(metadata, CancellationToken.None);
 
-        captured!.Timestamp.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        captured.NotNull().Timestamp.Should().Be(TestTime.UtcDateTime);
     }
 
     [Test]
@@ -189,18 +199,22 @@ public class BroadcastLifecycleHookTests
         metadata.AddException(new InvalidOperationException("something broke"));
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnFailed(
-            metadata,
-            new InvalidOperationException("something broke"),
-            CancellationToken.None
-        );
+        await _hook
+            .NotNull()
+            .OnFailed(
+                metadata,
+                new InvalidOperationException("something broke"),
+                CancellationToken.None
+            );
 
-        captured!.FailureJunction.Should().NotBeNull();
+        captured.NotNull().FailureJunction.Should().NotBeNull();
         captured.FailureReason.Should().Be("something broke");
     }
 
@@ -212,14 +226,16 @@ public class BroadcastLifecycleHookTests
         metadata.AddException(exception);
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnFailed(metadata, exception, CancellationToken.None);
+        await _hook.NotNull().OnFailed(metadata, exception, CancellationToken.None);
 
-        captured!.FailureException.Should().Be(nameof(TrainException));
+        captured.NotNull().FailureException.Should().Be(nameof(TrainException));
         captured.FailureException.Should().Be(metadata.FailureException);
     }
 
@@ -227,14 +243,18 @@ public class BroadcastLifecycleHookTests
     public async Task OnCompleted_BroadcastsNoFailureException()
     {
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnCompleted(CreateMetadata(TrainState.Completed), CancellationToken.None);
+        await _hook
+            .NotNull()
+            .OnCompleted(CreateMetadata(TrainState.Completed), CancellationToken.None);
 
-        captured!.FailureException.Should().BeNull();
+        captured.NotNull().FailureException.Should().BeNull();
     }
 
     [Test]
@@ -255,14 +275,16 @@ public class BroadcastLifecycleHookTests
         metadata.AddException(exception);
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnFailed(metadata, exception, CancellationToken.None);
+        await _hook.NotNull().OnFailed(metadata, exception, CancellationToken.None);
 
-        captured!.FailureJunction.Should().Be("DatabaseJunction");
+        captured.NotNull().FailureJunction.Should().Be("DatabaseJunction");
         captured.FailureReason.Should().Be("connection refused");
     }
 
@@ -284,15 +306,17 @@ public class BroadcastLifecycleHookTests
         metadata.AddException(exception);
 
         TrainLifecycleEventMessage? captured = null;
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnFailed(metadata, exception, CancellationToken.None);
+        await _hook.NotNull().OnFailed(metadata, exception, CancellationToken.None);
 
         // The broadcaster should not receive a JSON blob as the failure reason
-        captured!.FailureReason.Should().NotStartWith("{");
+        captured.NotNull().FailureReason.Should().NotStartWith("{");
         captured.FailureReason.Should().Be("500 Internal Server Error");
     }
 
@@ -303,9 +327,12 @@ public class BroadcastLifecycleHookTests
         using var cts = new CancellationTokenSource();
         var token = cts.Token;
 
-        await _hook.OnStarted(metadata, token);
+        await _hook.NotNull().OnStarted(metadata, token);
 
-        await _broadcaster.Received(1).PublishAsync(Arg.Any<TrainLifecycleEventMessage>(), token);
+        await _broadcaster
+            .NotNull()
+            .Received(1)
+            .PublishAsync(Arg.Any<TrainLifecycleEventMessage>(), token);
     }
 
     [Test]
@@ -314,15 +341,17 @@ public class BroadcastLifecycleHookTests
         var metadata = CreateMetadata();
         var eventTypes = new List<string>();
 
-        await _broadcaster.PublishAsync(
-            Arg.Do<TrainLifecycleEventMessage>(m => eventTypes.Add(m.EventType)),
-            Arg.Any<CancellationToken>()
-        );
+        await _broadcaster
+            .NotNull()
+            .PublishAsync(
+                Arg.Do<TrainLifecycleEventMessage>(m => eventTypes.Add(m.EventType)),
+                Arg.Any<CancellationToken>()
+            );
 
-        await _hook.OnStarted(metadata, CancellationToken.None);
-        await _hook.OnCompleted(metadata, CancellationToken.None);
-        await _hook.OnFailed(metadata, new Exception(), CancellationToken.None);
-        await _hook.OnCancelled(metadata, CancellationToken.None);
+        await _hook.NotNull().OnStarted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnFailed(metadata, new Exception(), CancellationToken.None);
+        await _hook.NotNull().OnCancelled(metadata, CancellationToken.None);
 
         eventTypes.Should().BeEquivalentTo(["Started", "Completed", "Failed", "Cancelled"]);
     }
@@ -332,9 +361,10 @@ public class BroadcastLifecycleHookTests
     {
         var metadata = CreateMetadata(TrainState.InProgress);
 
-        await _hook.OnStateChanged(metadata, CancellationToken.None);
+        await _hook.NotNull().OnStateChanged(metadata, CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m =>

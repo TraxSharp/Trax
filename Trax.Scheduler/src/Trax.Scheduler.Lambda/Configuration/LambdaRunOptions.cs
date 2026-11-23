@@ -1,4 +1,5 @@
 using Amazon.Lambda;
+using Trax.Core.Extensions;
 
 namespace Trax.Scheduler.Lambda.Configuration;
 
@@ -19,7 +20,7 @@ public class LambdaRunOptions
     /// The Lambda function name, ARN, or partial ARN to invoke.
     /// </summary>
     /// <example>content-shield-runner</example>
-    public string FunctionName { get; set; } = null!;
+    public string? FunctionName { get; set; }
 
     /// <summary>
     /// Optional callback to configure the <see cref="AmazonLambdaConfig"/> used to create the Lambda client.

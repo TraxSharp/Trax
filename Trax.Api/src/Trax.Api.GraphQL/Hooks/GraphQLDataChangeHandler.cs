@@ -39,7 +39,13 @@ public class GraphQLDataChangeHandler : ITrainEventHandler
     /// <param name="ct">Cancels the send.</param>
     public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
-        if (message.EventType != TrainLifecycleEventMessage.DataChangedEventType)
+        if (
+            !string.Equals(
+                message.EventType,
+                TrainLifecycleEventMessage.DataChangedEventType,
+                StringComparison.Ordinal
+            )
+        )
             return;
 
         if (!Enum.TryParse<ChangeDomain>(message.ChangeDomain, out var domain))
@@ -51,11 +57,13 @@ public class GraphQLDataChangeHandler : ITrainEventHandler
             return;
         }
 
-        await _eventSender.SendAsync(
-            nameof(LifecycleSubscriptions.OnDataChanged),
-            new DataChangedEvent(domain, message.Timestamp),
-            ct
-        );
+        await _eventSender
+            .SendAsync(
+                nameof(LifecycleSubscriptions.OnDataChanged),
+                new DataChangedEvent(domain, message.Timestamp),
+                ct
+            )
+            .ConfigureAwait(false);
 
         _logger?.LogDebug(
             "Forwarded remote data-change signal for domain {Domain} to GraphQL subscriptions.",

@@ -30,10 +30,10 @@ public class PostgresJobSubmitter(IDataContext dataContext) : IJobSubmitter
     {
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadataId });
 
-        await dataContext.Track(job);
-        await dataContext.SaveChanges(cancellationToken);
+        await dataContext.Track(job).ConfigureAwait(false);
+        await dataContext.SaveChanges(cancellationToken).ConfigureAwait(false);
 
-        return job.Id.ToString();
+        return job.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <inheritdoc />
@@ -58,10 +58,10 @@ public class PostgresJobSubmitter(IDataContext dataContext) : IJobSubmitter
             }
         );
 
-        await dataContext.Track(job);
-        await dataContext.SaveChanges(cancellationToken);
+        await dataContext.Track(job).ConfigureAwait(false);
+        await dataContext.SaveChanges(cancellationToken).ConfigureAwait(false);
 
-        return job.Id.ToString();
+        return job.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <inheritdoc />
@@ -75,10 +75,10 @@ public class PostgresJobSubmitter(IDataContext dataContext) : IJobSubmitter
             new CreateBackgroundJob { MetadataId = metadataId, Priority = priority }
         );
 
-        await dataContext.Track(job);
-        await dataContext.SaveChanges(cancellationToken);
+        await dataContext.Track(job).ConfigureAwait(false);
+        await dataContext.SaveChanges(cancellationToken).ConfigureAwait(false);
 
-        return job.Id.ToString();
+        return job.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <inheritdoc />
@@ -105,9 +105,9 @@ public class PostgresJobSubmitter(IDataContext dataContext) : IJobSubmitter
             }
         );
 
-        await dataContext.Track(job);
-        await dataContext.SaveChanges(cancellationToken);
+        await dataContext.Track(job).ConfigureAwait(false);
+        await dataContext.SaveChanges(cancellationToken).ConfigureAwait(false);
 
-        return job.Id.ToString();
+        return job.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 }

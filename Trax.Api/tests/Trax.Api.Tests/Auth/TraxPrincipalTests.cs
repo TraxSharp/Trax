@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AwesomeAssertions;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -31,7 +32,7 @@ public class TraxPrincipalTests
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
 
-        claimsPrincipal.Identity!.Name.Should().Be("Alice");
+        claimsPrincipal.Identity.NotNull().Name.Should().Be("Alice");
     }
 
     [Test]
@@ -75,7 +76,11 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme", ["tier"] = "enterprise" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tenant"] = "acme",
+                ["tier"] = "enterprise",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -111,7 +116,7 @@ public class TraxPrincipalTests
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
 
-        claimsPrincipal.Identity!.AuthenticationType.Should().Be(Scheme);
+        claimsPrincipal.Identity.NotNull().AuthenticationType.Should().Be(Scheme);
     }
 
     [Test]
@@ -121,7 +126,7 @@ public class TraxPrincipalTests
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
 
-        claimsPrincipal.Identity!.IsAuthenticated.Should().BeTrue();
+        claimsPrincipal.Identity.NotNull().IsAuthenticated.Should().BeTrue();
     }
 
     [Test]
@@ -147,14 +152,14 @@ public class TraxPrincipalTests
             "alice",
             "Alice Liddell",
             ["User", "Admin"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme" },
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal) { ["tenant"] = "acme" },
             PrincipalType: "apikey"
         );
 
         var roundtripped = original.ToClaimsPrincipal(Scheme).TryGetTraxPrincipal(out var result);
 
         roundtripped.Should().BeTrue();
-        result!.Id.Should().Be("TestScheme:alice");
+        result.NotNull().Id.Should().Be("TestScheme:alice");
         result.DisplayName.Should().Be("Alice Liddell");
         result.Roles.Should().BeEquivalentTo(["User", "Admin"]);
         result.Claims.Should().ContainKey("tenant").WhoseValue.Should().Be("acme");
@@ -183,7 +188,7 @@ public class TraxPrincipalTests
         var claimsPrincipal = new ClaimsPrincipal(identity);
 
         claimsPrincipal.TryGetTraxPrincipal(out var result).Should().BeTrue();
-        result!.DisplayName.Should().Be("alice");
+        result.NotNull().DisplayName.Should().Be("alice");
     }
 
     [Test]
@@ -218,7 +223,7 @@ public class TraxPrincipalTests
     [Test]
     public void Ctor_NullId_Throws()
     {
-        var act = () => new TraxPrincipal(null!, "Alice", []);
+        var act = () => new TraxPrincipal(Null.Of<string>(), "Alice", []);
 
         act.Should().Throw<ArgumentException>().And.ParamName.Should().Be("Id");
     }
@@ -242,7 +247,7 @@ public class TraxPrincipalTests
     [Test]
     public void Ctor_NullDisplayName_Throws()
     {
-        var act = () => new TraxPrincipal("alice", null!, []);
+        var act = () => new TraxPrincipal("alice", Null.Of<string>(), []);
 
         act.Should().Throw<ArgumentException>().And.ParamName.Should().Be("DisplayName");
     }
@@ -294,7 +299,10 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { [ClaimTypes.Role] = "Admin" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [ClaimTypes.Role] = "Admin",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -311,7 +319,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [TraxAuthClaimTypes.PrincipalId] = "forged-id",
             }
@@ -333,7 +341,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [TraxAuthClaimTypes.PrincipalType] = "forged-scheme",
             },
@@ -356,14 +364,17 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { [ClaimTypes.Name] = "Mallory" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [ClaimTypes.Name] = "Mallory",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
 
         var names = claimsPrincipal.FindAll(ClaimTypes.Name).Select(c => c.Value).ToList();
         names.Should().BeEquivalentTo(["Alice"]);
-        claimsPrincipal.Identity!.Name.Should().Be("Alice");
+        claimsPrincipal.Identity.NotNull().Name.Should().Be("Alice");
     }
 
     [Test]
@@ -373,7 +384,11 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme", ["region"] = "us-west-2" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tenant"] = "acme",
+                ["region"] = "us-west-2",
+            }
         );
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
@@ -389,7 +404,7 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string>
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 // Reserved, should be stripped on the way out.
                 [ClaimTypes.Role] = "Admin",
@@ -405,12 +420,12 @@ public class TraxPrincipalTests
         var roundtripped = original.ToClaimsPrincipal(Scheme).TryGetTraxPrincipal(out var result);
 
         roundtripped.Should().BeTrue();
-        result!.Id.Should().Be("TestScheme:alice");
+        result.NotNull().Id.Should().Be("TestScheme:alice");
         result.DisplayName.Should().Be("Alice");
         result.Roles.Should().BeEquivalentTo(["User"]);
         result.PrincipalType.Should().Be("apikey");
         result.Claims.Should().NotBeNull();
-        result.Claims!.Keys.Should().NotContain(ClaimTypes.Role);
+        result.Claims.NotNull().Keys.Should().NotContain(ClaimTypes.Role);
         result.Claims.Keys.Should().NotContain(ClaimTypes.Name);
         result.Claims.Keys.Should().NotContain(TraxAuthClaimTypes.PrincipalId);
         result.Claims.Keys.Should().NotContain(TraxAuthClaimTypes.PrincipalType);
@@ -429,7 +444,7 @@ public class TraxPrincipalTests
         var claimsPrincipal = new TraxPrincipal("alice", "Alice", ["User"]).ToClaimsPrincipal(
             Scheme
         );
-        var identity = (ClaimsIdentity)claimsPrincipal.Identity!;
+        var identity = (ClaimsIdentity)claimsPrincipal.Identity.NotNull();
         identity.AddClaim(new Claim("permission", "orders:read"));
         identity.AddClaim(new Claim("permission", "orders:write"));
 
@@ -437,9 +452,9 @@ public class TraxPrincipalTests
 
         read.Should().NotThrow();
         claimsPrincipal.TryGetTraxPrincipal(out var principal).Should().BeTrue();
-        principal!.Id.Should().Be($"{Scheme}:alice");
+        principal.NotNull().Id.Should().Be($"{Scheme}:alice");
         principal
-            .Claims!["permission"]
+            .Claims.NotNull()["permission"]
             .Should()
             .Be("orders:read", "the first value of a type wins, as FindFirst does");
     }
@@ -454,13 +469,19 @@ public class TraxPrincipalTests
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["iss"] = "https://a.example" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["iss"] = "https://a.example",
+            }
         ).ToClaimsPrincipal("SchemeA");
         var second = new TraxPrincipal(
             "alice",
             "Alice",
             ["User"],
-            Claims: new Dictionary<string, string> { ["iss"] = "https://b.example" }
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["iss"] = "https://b.example",
+            }
         ).ToClaimsPrincipal("SchemeB");
         var merged = new ClaimsPrincipal(first.Identities.Concat(second.Identities));
 
@@ -468,10 +489,11 @@ public class TraxPrincipalTests
 
         read.Should().NotThrow();
         merged.TryGetTraxPrincipal(out var principal).Should().BeTrue();
-        principal!
+        principal
+            .NotNull()
             .Id.Should()
             .Be("SchemeA:alice", "the id and the claims come from the first identity");
-        principal.Claims!["iss"].Should().Be("https://a.example");
+        principal.Claims.NotNull()["iss"].Should().Be("https://a.example");
     }
 
     #endregion

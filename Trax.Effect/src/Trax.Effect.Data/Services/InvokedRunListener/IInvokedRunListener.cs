@@ -17,6 +17,9 @@ namespace Trax.Effect.Data.Services.InvokedRunListener;
 /// <para>Infrastructure for <c>Trax.StateMachine.Persistence</c>, which alone sees it; a host does not
 /// implement or call it.</para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal interface IInvokedRunListener
 {
     /// <summary>
@@ -24,14 +27,4 @@ internal interface IInvokedRunListener
     /// disposed.
     /// </summary>
     Task<IInvokedRunSubscription> SubscribeAsync(CancellationToken cancellationToken);
-}
-
-/// <summary>One listening session opened by <see cref="IInvokedRunListener.SubscribeAsync"/>.</summary>
-internal interface IInvokedRunSubscription : IAsyncDisposable
-{
-    /// <summary>
-    /// Completes with the external id of the next invoked run that ended. Throws when the session is lost, for
-    /// example when its database connection is closed; dispose it and subscribe again.
-    /// </summary>
-    Task<string> NextAsync(CancellationToken cancellationToken);
 }

@@ -78,7 +78,7 @@ public partial class TraxEffectBuilder
     }
 
     /// <summary>
-    /// When <c>true</c>, <see cref="Extensions.ServiceExtensions"/> skips the automatic database
+    /// When <see langword="true"/>, <see cref="Extensions.ServiceExtensions"/> skips the automatic database
     /// migration that normally runs inside <c>UsePostgres()</c>. Use this in Lambda runners or
     /// other environments where migrations are managed externally.
     /// </summary>
@@ -86,7 +86,7 @@ public partial class TraxEffectBuilder
     public bool MigrationsDisabled { get; set; }
 
     /// <summary>
-    /// Set to <c>true</c> by <c>AddJunctionProgress()</c>. Building the effect configuration then throws
+    /// Set to <see langword="true"/> by <c>AddJunctionProgress()</c>. Building the effect configuration then throws
     /// <see cref="InvalidOperationException"/> unless a data provider is also configured, because progress and
     /// cancellation checks read and write the train's metadata row. Infrastructure; not intended to be set directly.
     /// </summary>
@@ -95,7 +95,7 @@ public partial class TraxEffectBuilder
 
     /// <summary>
     /// Whether the junction logger serializes each junction's output into <c>JunctionMetadata.OutputJson</c>.
-    /// Defaults to <c>false</c>; set from the <c>serializeJunctionData</c> argument of <c>AddJunctionLogger()</c> and
+    /// Defaults to <see langword="false"/>; set from the <c>serializeJunctionData</c> argument of <c>AddJunctionLogger()</c> and
     /// copied into <see cref="TraxEffectConfiguration.ITraxEffectConfiguration.SerializeJunctionData"/>.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
@@ -48,7 +49,7 @@ public class RemoteWorkerOptionsTests
         var options = new RemoteWorkerOptions { ConfigureHttpClient = _ => called = true };
 
         options.ConfigureHttpClient.Should().NotBeNull();
-        options.ConfigureHttpClient!(new HttpClient());
+        options.ConfigureHttpClient.NotNull()(new HttpClient());
         called.Should().BeTrue();
     }
 }

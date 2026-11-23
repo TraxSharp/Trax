@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -5,6 +6,7 @@ using Npgsql;
 using Trax.Api.Tests.Stress.Fakes.Trains;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -29,8 +31,10 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 public class SeederTimeZoneTests
 {
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress_tz;Username=trax;"
-        + "Password=trax123;Timezone=Pacific/Kiritimati;Include Error Detail=true";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress_tz;Username=trax;"
+        ) + "Password=trax123;Timezone=Pacific/Kiritimati;Include Error Detail=true";
 
     [Test]
     public async Task SeedAsync_InANonUtcSession_StampsTheNewestRowsAtNow()
@@ -66,7 +70,7 @@ public class SeederTimeZoneTests
                 PersistedOperations: 10,
                 Decisions: 100
             ),
-            _ => { }
+            _ => Task.CompletedTask
         );
 
         await using var connection = new NpgsqlConnection(ConnectionString);
@@ -83,7 +87,7 @@ public class SeederTimeZoneTests
             await using var command = connection.CreateCommand();
             command.CommandText =
                 $"SELECT extract(epoch FROM now() - max({column}))::float8 FROM trax.{table}";
-            var lagSeconds = (double)(await command.ExecuteScalarAsync())!;
+            var lagSeconds = (double)(await command.ExecuteScalarAsync()).NotNull();
 
             lagSeconds
                 .Should()

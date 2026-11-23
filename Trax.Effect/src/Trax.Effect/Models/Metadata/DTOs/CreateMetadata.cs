@@ -3,7 +3,7 @@ using System.ComponentModel;
 namespace Trax.Effect.Models.Metadata.DTOs;
 
 /// <summary>
-/// The starting values <see cref="Metadata.Create"/> needs for a new run's row. Infrastructure used
+/// The starting values <see cref="Metadata.Create(CreateMetadata)"/> needs for a new run's row. Infrastructure used
 /// by service trains, the mediator and the scheduler to pre-create a run; not intended to be used
 /// directly.
 /// </summary>

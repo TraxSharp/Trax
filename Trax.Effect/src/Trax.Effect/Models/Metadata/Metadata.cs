@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
@@ -73,7 +74,11 @@ public class Metadata : IModel, IDisposable
     /// to be shared across system boundaries.
     /// </remarks>
     [Column("external_id")]
-    public string ExternalId { get; set; } = null!;
+    public string ExternalId
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// Gets or sets the name of the train.
@@ -84,7 +89,11 @@ public class Metadata : IModel, IDisposable
     /// train by the interface FullName, not the class name.
     /// </remarks>
     [Column("name")]
-    public string Name { get; set; } = null!;
+    public string Name
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// Gets the name of the assembly that executed the train.
@@ -496,7 +505,7 @@ public class Metadata : IModel, IDisposable
     /// from child to parent. It is populated by the ORM when the metadata is
     /// loaded from the database.
     /// </remarks>
-    public Metadata Parent { get; private set; } = null!;
+    public Metadata? Parent { get; private set; }
 
     /// <summary>
     /// Gets the collection of child train metadata records, if this train
@@ -507,7 +516,7 @@ public class Metadata : IModel, IDisposable
     /// from parent to children. It is populated by the ORM when the metadata is
     /// loaded from the database.
     /// </remarks>
-    public ICollection<Metadata> Children { get; private set; } = null!;
+    public ICollection<Metadata>? Children { get; private set; }
 
     /// <summary>
     /// Gets the collection of log entries associated with this train.
@@ -517,7 +526,7 @@ public class Metadata : IModel, IDisposable
     /// that were recorded during the train execution. It is populated by
     /// the ORM when the metadata is loaded from the database.
     /// </remarks>
-    public ICollection<Log.Log> Logs { get; private set; } = null!;
+    public ICollection<Log.Log>? Logs { get; private set; }
 
     #endregion
 
@@ -544,6 +553,15 @@ public class Metadata : IModel, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static Metadata Create(CreateMetadata metadata)
     {
+        return Create(metadata, TimeProvider.System);
+    }
+
+    /// <summary>Creates a new Metadata as the overload without a clock does, with its start time read from the given clock.</summary>
+    /// <param name="metadata">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static Metadata Create(CreateMetadata metadata, TimeProvider timeProvider)
+    {
         var host = TraxHostInfo.Current;
 
         var newTrain = new Metadata
@@ -552,7 +570,7 @@ public class Metadata : IModel, IDisposable
             ExternalId = metadata.ExternalId,
             TrainState = TrainState.Pending,
             Executor = Assembly.GetEntryAssembly()?.GetAssemblyProject(),
-            StartTime = DateTime.UtcNow,
+            StartTime = timeProvider.GetUtcNow().UtcDateTime,
             ParentId = metadata.ParentId,
             ManifestId = metadata.ManifestId,
             ReplayDecisionsOf = metadata.ReplayDecisionsOf,
@@ -785,7 +803,7 @@ public class Metadata : IModel, IDisposable
     /// Gets the deserialized input object cast to the specified type.
     /// The input is set before the train's junctions execute, so it is available in all
     /// lifecycle hooks (<c>OnStarted</c>, <c>OnCompleted</c>, <c>OnFailed</c>, <c>OnCancelled</c>).
-    /// Returns <c>default</c> if the input is null or not of type <typeparamref name="T"/>.
+    /// Returns <see langword="default"/> if the input is null or not of type <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
     /// For per-train lifecycle hooks, prefer the <c>TrainInput</c> property on
@@ -797,8 +815,8 @@ public class Metadata : IModel, IDisposable
     /// <summary>
     /// Gets the deserialized output object cast to the specified type.
     /// The output is set after a successful run, so it is only meaningful in <c>OnCompleted</c>.
-    /// Returns <c>default</c> in <c>OnStarted</c>, <c>OnFailed</c>, and <c>OnCancelled</c>.
-    /// Returns <c>default</c> if the output is null or not of type <typeparamref name="T"/>.
+    /// Returns <see langword="default"/> in <c>OnStarted</c>, <c>OnFailed</c>, and <c>OnCancelled</c>.
+    /// Returns <see langword="default"/> if the output is null or not of type <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
     /// For per-train lifecycle hooks, prefer the <c>TrainOutput</c> property on

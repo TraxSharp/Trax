@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,6 +6,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Api.Tests.Stress.Utils;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
 
@@ -61,19 +63,17 @@ public class MachineInstanceStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new OperationsQueries().GetMachineInstances(
-                    Operations(sp),
-                    ct,
-                    machine,
-                    state,
-                    ownerKind,
-                    skip,
-                    take
-                );
-                TestContext.Out.WriteLine(
-                    $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
-                        + (page.IsCountCapped ? " (capped)" : "")
-                );
+                var page = await new OperationsQueries()
+                    .GetMachineInstances(Operations(sp), ct, machine, state, ownerKind, skip, take)
+                    .ConfigureAwait(false);
+                await TestContext
+                    .Out.WriteLineAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"  {label}: {page.Items.Count} rows, total {page.TotalCount}"
+                        ) + (page.IsCountCapped ? " (capped)" : "")
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Select(i => i.UpdatedAt)
                     .Should()
                     .BeInDescendingOrder("the list is newest first");
@@ -92,7 +92,11 @@ public class MachineInstanceStressTests : StressTestSetup
     public Task OneMachine_FirstPage_WithinBudget() =>
         MeasureList(
             "operations.machineInstances (machine)",
-            p => p.Items.Count == 25 && p.Items.All(i => i.Machine == UserMachine),
+            p =>
+                p.Items.Count == 25
+                && p.Items.All(i =>
+                    string.Equals(i.Machine, UserMachine, StringComparison.Ordinal)
+                ),
             machine: UserMachine
         );
 
@@ -102,7 +106,10 @@ public class MachineInstanceStressTests : StressTestSetup
             "operations.machineInstances (machine + state)",
             p =>
                 p.Items.Count == 25
-                && p.Items.All(i => i.Machine == SystemMachine && i.State == "State3"),
+                && p.Items.All(i =>
+                    string.Equals(i.Machine, SystemMachine, StringComparison.Ordinal)
+                    && string.Equals(i.State, "State3", StringComparison.Ordinal)
+                ),
             machine: SystemMachine,
             state: "State3",
             ownerKind: SnapshotOwnerKind.System
@@ -151,14 +158,16 @@ public class MachineInstanceStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var instance = await new OperationsQueries().GetMachineInstance(
-                    first.Machine,
-                    SnapshotOwnerKind.System,
-                    first.Id,
-                    Operations(sp),
-                    ct
-                );
-                instance!.RowId.Should().Be(first.RowId);
+                var instance = await new OperationsQueries()
+                    .GetMachineInstance(
+                        first.Machine,
+                        SnapshotOwnerKind.System,
+                        first.Id,
+                        Operations(sp),
+                        ct
+                    )
+                    .ConfigureAwait(false);
+                instance.NotNull().RowId.Should().Be(first.RowId);
             }
         );
     }
@@ -179,28 +188,31 @@ public class MachineInstanceStressTests : StressTestSetup
             prepare: async () =>
             {
                 await ExecSqlAsync(
-                    $"DELETE FROM trax.metadata WHERE invoking_instance_id = '{first.Id}'"
-                );
+                        $"DELETE FROM trax.metadata WHERE invoking_instance_id = '{first.Id}'"
+                    )
+                    .ConfigureAwait(false);
                 await ExecSqlAsync(
-                    "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, "
-                        + "failure_class, invoking_machine, invoking_instance_id, invoking_owner_kind) "
-                        + $"SELECT '{marker}-' || g, 'Stress.IInvokedTrain', 'completed', "
-                        + "now() - (g * interval '1 minute'), now() - (g * interval '1 minute') + interval '5 seconds', "
-                        + $"'unclassified', '{first.Machine}', '{first.Id}', 'system' "
-                        + $"FROM generate_series(1, {InvokedRunsPerInstance}) g"
-                );
+                        "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, "
+                            + "failure_class, invoking_machine, invoking_instance_id, invoking_owner_kind) "
+                            + $"SELECT '{marker}-' || g, 'Stress.IInvokedTrain', 'completed', "
+                            + "now() - (g * interval '1 minute'), now() - (g * interval '1 minute') + interval '5 seconds', "
+                            + $"'unclassified', '{first.Machine}', '{first.Id}', 'system' "
+                            + $"FROM generate_series(1, {InvokedRunsPerInstance}) g"
+                    )
+                    .ConfigureAwait(false);
             },
             action: async (_, ct) =>
             {
                 var instance = await OperationsFieldAsync(
-                    "{ operations { machineInstance(machine: \""
-                        + first.Machine
-                        + "\", ownerKind: SYSTEM, id: \""
-                        + first.Id
-                        + "\") { rowId state isInvokedRunsCapped invokedRuns { id externalId name "
-                        + "trainState startTime endTime failureClass isLive } } } }",
-                    ct
-                );
+                        "{ operations { machineInstance(machine: \""
+                            + first.Machine
+                            + "\", ownerKind: SYSTEM, id: \""
+                            + first.Id
+                            + "\") { rowId state isInvokedRunsCapped invokedRuns { id externalId name "
+                            + "trainState startTime endTime failureClass isLive } } } }",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 instance.GetProperty("invokedRuns").GetArrayLength().Should().Be(50);
                 instance.GetProperty("isInvokedRunsCapped").GetBoolean().Should().BeTrue();
                 instance.GetRawText().Should().NotContain("stress-context-");
@@ -218,10 +230,15 @@ public class MachineInstanceStressTests : StressTestSetup
 
         async Task Restore()
         {
-            await ExecSqlAsync($"DELETE FROM trax.work_queue WHERE external_id = '{token}'");
+            await ExecSqlAsync($"DELETE FROM trax.work_queue WHERE external_id = '{token}'")
+                .ConfigureAwait(false);
             await ExecSqlAsync(
-                $"UPDATE trax.snapshot_draft SET invoke_token = NULL WHERE row_id = {first.RowId}"
-            );
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"UPDATE trax.snapshot_draft SET invoke_token = NULL WHERE row_id = {first.RowId}"
+                    )
+                )
+                .ConfigureAwait(false);
         }
 
         await MeasureWriteAsync(
@@ -229,41 +246,52 @@ public class MachineInstanceStressTests : StressTestSetup
             ListBudget,
             prepare: async () =>
             {
-                await Restore();
+                await Restore().ConfigureAwait(false);
                 await ExecSqlAsync(
-                    "INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at, "
-                        + "invoking_machine, invoking_instance_id, invoking_owner_kind) "
-                        + $"VALUES ('{token}', 'Stress.IInvokedTrain', 'queued', 0, now(), "
-                        + $"'{first.Machine}', '{first.Id}', 'system')"
-                );
+                        "INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at, "
+                            + "invoking_machine, invoking_instance_id, invoking_owner_kind) "
+                            + $"VALUES ('{token}', 'Stress.IInvokedTrain', 'queued', 0, now(), "
+                            + $"'{first.Machine}', '{first.Id}', 'system')"
+                    )
+                    .ConfigureAwait(false);
                 await ExecSqlAsync(
-                    $"UPDATE trax.snapshot_draft SET invoke_token = '{token}' WHERE row_id = {first.RowId}"
-                );
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"UPDATE trax.snapshot_draft SET invoke_token = '{token}' WHERE row_id = {first.RowId}"
+                        )
+                    )
+                    .ConfigureAwait(false);
             },
-            action: async (sp, ct) =>
-            {
-                var response = await ExecuteGraphQLAsync(
-                    "mutation { operations { cancelMachineInstance(machine: \""
-                        + first.Machine
-                        + "\", ownerKind: SYSTEM, id: \""
-                        + first.Id
-                        + "\") { success outcome message } } }",
-                    ct
-                );
-                response.TryGetProperty("errors", out _).Should().BeFalse(response.GetRawText());
-                var result = response
-                    .GetProperty("data")
-                    .GetProperty("operations")
-                    .GetProperty("cancelMachineInstance");
-                result.GetProperty("success").GetBoolean().Should().BeTrue();
-                result
-                    .GetProperty("outcome")
-                    .GetString()
-                    .Should()
-                    .Be("RUN_CANCELLED", "this host registers no machines to apply the outcome");
-            },
+            action: (sp, ct) => AssertCancelledThroughSchemaAsync(first, ct),
             restore: Restore
         );
+    }
+
+    private async Task AssertCancelledThroughSchemaAsync(
+        MachineInstanceRecord first,
+        CancellationToken ct
+    )
+    {
+        var response = await ExecuteGraphQLAsync(
+                "mutation { operations { cancelMachineInstance(machine: \""
+                    + first.Machine
+                    + "\", ownerKind: SYSTEM, id: \""
+                    + first.Id
+                    + "\") { success outcome message } } }",
+                ct
+            )
+            .ConfigureAwait(false);
+        response.TryGetProperty("errors", out _).Should().BeFalse(response.GetRawText());
+        var result = response
+            .GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("cancelMachineInstance");
+        result.GetProperty("success").GetBoolean().Should().BeTrue();
+        result
+            .GetProperty("outcome")
+            .GetString()
+            .Should()
+            .Be("RUN_CANCELLED", "this host registers no machines to apply the outcome");
     }
 
     private async Task<MachineInstanceRecord> FirstSystemInstanceAsync() =>
@@ -277,6 +305,7 @@ public class MachineInstanceStressTests : StressTestSetup
                     ),
                     CancellationToken.None
                 )
+                .ConfigureAwait(false)
         ).Items.Single();
 
     // A history longer than any instance builds in practice, on one instance, for the history reads to page through.
@@ -301,19 +330,21 @@ public class MachineInstanceStressTests : StressTestSetup
     private async Task<MachineInstanceRecord> SystemInstanceAsync(bool withHistory)
     {
         var id = await ScalarAsync<string>(
-            "SELECT d.id::text FROM trax.snapshot_draft d "
-                + $"WHERE d.machine = '{SystemMachine}' AND d.owner_kind = 'system' AND "
-                + (withHistory ? "" : "NOT ")
-                + "EXISTS (SELECT 1 FROM trax.snapshot_transition t WHERE t.draft_row_id = d.row_id) "
-                + "LIMIT 1"
-        );
+                "SELECT d.id::text FROM trax.snapshot_draft d "
+                    + $"WHERE d.machine = '{SystemMachine}' AND d.owner_kind = 'system' AND "
+                    + (withHistory ? "" : "NOT ")
+                    + "EXISTS (SELECT 1 FROM trax.snapshot_transition t WHERE t.draft_row_id = d.row_id) "
+                    + "LIMIT 1"
+            )
+            .ConfigureAwait(false);
         return (
             await Operations(Services)
                 .GetMachineInstanceAsync(
                     new MachineInstanceKey(SystemMachine, SnapshotOwnerKind.System, Guid.Parse(id)),
                     CancellationToken.None
                 )
-        )!;
+                .ConfigureAwait(false)
+        ).NotNull();
     }
 
     [Test]
@@ -331,9 +362,10 @@ public class MachineInstanceStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var instanceField = await OperationsFieldAsync(
-                    HistoryDocument(instance, "first: 25"),
-                    ct
-                );
+                        HistoryDocument(instance, "first: 25"),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 var page = instanceField.GetProperty("transitions");
                 page.GetProperty("items")
                     .EnumerateArray()
@@ -361,23 +393,6 @@ public class MachineInstanceStressTests : StressTestSetup
     {
         var instance = await SystemInstanceAsync(withHistory: false);
 
-        Task Clear() =>
-            ExecSqlAsync(
-                $"DELETE FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
-            );
-        async Task Prepare()
-        {
-            await Clear();
-            await ExecSqlAsync(
-                "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, from_state, "
-                    + "to_state, occurred_at) "
-                    + $"SELECT {instance.RowId}, r, 'command', 'Tick', 'host', 'State' || (r % 8), "
-                    + $"'State' || ((r + 1) % 8), now() - (({DeepHistory} - r) * interval '1 second') "
-                    + $"FROM generate_series(1, {DeepHistory}) r"
-            );
-            await ExecSqlAsync("ANALYZE trax.snapshot_transition");
-        }
-
         try
         {
             foreach (
@@ -392,39 +407,80 @@ public class MachineInstanceStressTests : StressTestSetup
                     ("oldest page", "first: 100, after: 101", 100L),
                 }
             )
-                await MeasureWriteAsync(
-                    $"operations.machineInstance {{ transitions }} over {DeepHistory:N0} rows ({label})",
-                    ListBudget,
-                    prepare: async () =>
-                    {
-                        if (
-                            await ScalarAsync<long>(
-                                $"SELECT count(*) FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
-                            ) != DeepHistory
-                        )
-                            await Prepare();
-                    },
-                    action: async (_, ct) =>
-                    {
-                        var page = (
-                            await OperationsFieldAsync(HistoryDocument(instance, arguments), ct)
-                        ).GetProperty("transitions");
-                        var items = page.GetProperty("items").EnumerateArray().ToList();
-                        items[0].GetProperty("revision").GetInt64().Should().Be(newest);
-                        items.Should().HaveCount(100);
-                        items[^1]
-                            .GetProperty("previousAt")
-                            .ValueKind.Should()
-                            .Be(newest == 100 ? JsonValueKind.Null : JsonValueKind.String);
-                    },
-                    restore: () => Task.CompletedTask
-                );
+                await MeasureHistoryPageAsync(instance, label, arguments, newest);
         }
         finally
         {
-            await Clear();
+            await ClearDeepHistoryAsync(instance);
         }
     }
+
+    private static Task ClearDeepHistoryAsync(MachineInstanceRecord instance) =>
+        ExecSqlAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"DELETE FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
+            )
+        );
+
+    private static async Task PrepareDeepHistoryAsync(MachineInstanceRecord instance)
+    {
+        await ClearDeepHistoryAsync(instance).ConfigureAwait(false);
+        await ExecSqlAsync(
+                "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, from_state, "
+                    + "to_state, occurred_at) "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"SELECT {instance.RowId}, r, 'command', 'Tick', 'host', 'State' || (r % 8), "
+                    )
+                    + $"'State' || ((r + 1) % 8), now() - (({DeepHistory} - r) * interval '1 second') "
+                    + $"FROM generate_series(1, {DeepHistory}) r"
+            )
+            .ConfigureAwait(false);
+        await ExecSqlAsync("ANALYZE trax.snapshot_transition").ConfigureAwait(false);
+    }
+
+    private Task MeasureHistoryPageAsync(
+        MachineInstanceRecord instance,
+        string label,
+        string arguments,
+        long newest
+    ) =>
+        MeasureWriteAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"operations.machineInstance {{ transitions }} over {DeepHistory:N0} rows ({label})"
+            ),
+            ListBudget,
+            prepare: async () =>
+            {
+                if (
+                    await ScalarAsync<long>(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"SELECT count(*) FROM trax.snapshot_transition WHERE draft_row_id = {instance.RowId}"
+                            )
+                        )
+                        .ConfigureAwait(false) != DeepHistory
+                )
+                    await PrepareDeepHistoryAsync(instance).ConfigureAwait(false);
+            },
+            action: async (_, ct) =>
+            {
+                var page = (
+                    await OperationsFieldAsync(HistoryDocument(instance, arguments), ct)
+                        .ConfigureAwait(false)
+                ).GetProperty("transitions");
+                var items = page.GetProperty("items").EnumerateArray().ToList();
+                items[0].GetProperty("revision").GetInt64().Should().Be(newest);
+                items.Should().HaveCount(100);
+                items[^1]
+                    .GetProperty("previousAt")
+                    .ValueKind.Should()
+                    .Be(newest == 100 ? JsonValueKind.Null : JsonValueKind.String);
+            },
+            restore: () => Task.CompletedTask
+        );
 
     // How many instances the stuck tests make overdue: a handful among millions, as a real host
     // has when one machine's timers stop being fired.
@@ -450,11 +506,12 @@ public class MachineInstanceStressTests : StressTestSetup
             action: async (_, ct) =>
             {
                 var page = await OperationsFieldAsync(
-                    "{ operations { machineInstances(stuck: true, take: 100) { totalCount isCountCapped "
-                        + "items { rowId machine state dueAt overdue stuck inStateSince "
-                        + "waitingOn { executionId trainState workQueueEntryId } } } } }",
-                    ct
-                );
+                        "{ operations { machineInstances(stuck: true, take: 100) { totalCount isCountCapped "
+                            + "items { rowId machine state dueAt overdue stuck inStateSince "
+                            + "waitingOn { executionId trainState workQueueEntryId } } } } }",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 page.GetProperty("totalCount").GetInt32().Should().Be(OverdueInstances);
                 page.GetProperty("items")
                     .EnumerateArray()
@@ -478,10 +535,11 @@ public class MachineInstanceStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var page = await OperationsFieldAsync(
-                    "{ operations { machineInstances(take: 500) { items { rowId hasLiveInvokedRun dueAt "
-                        + "overdue stuck inStateSince waitingOn { executionId trainState workQueueEntryId } } } } }",
-                    ct
-                );
+                        "{ operations { machineInstances(take: 500) { items { rowId hasLiveInvokedRun dueAt "
+                            + "overdue stuck inStateSince waitingOn { executionId trainState workQueueEntryId } } } } }",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 page.GetProperty("items").GetArrayLength().Should().Be(500);
             }
         );
@@ -495,10 +553,9 @@ public class MachineInstanceStressTests : StressTestSetup
             CountsBudget,
             async (sp, ct) =>
             {
-                var counts = await new OperationsQueries().GetMachineInstanceCounts(
-                    Operations(sp),
-                    ct
-                );
+                var counts = await new OperationsQueries()
+                    .GetMachineInstanceCounts(Operations(sp), ct)
+                    .ConfigureAwait(false);
                 counts.Should().HaveCount(BulkSeeder.SnapshotMachines * BulkSeeder.SnapshotStates);
                 counts.Sum(c => c.Count).Should().BeGreaterThanOrEqualTo(Profile.SnapshotDrafts);
             }
@@ -514,10 +571,11 @@ public class MachineInstanceStressTests : StressTestSetup
             async (_, ct) =>
             {
                 var page = await OperationsFieldAsync(
-                    "{ operations { machineInstances(take: 100) { totalCount isCountCapped "
-                        + "items { rowId machine ownerKind id state version createdAt updatedAt hasLiveInvokedRun } } } }",
-                    ct
-                );
+                        "{ operations { machineInstances(take: 100) { totalCount isCountCapped "
+                            + "items { rowId machine ownerKind id state version createdAt updatedAt hasLiveInvokedRun } } } }",
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 page.GetProperty("items").GetArrayLength().Should().Be(100);
                 page.GetRawText()
                     .Should()

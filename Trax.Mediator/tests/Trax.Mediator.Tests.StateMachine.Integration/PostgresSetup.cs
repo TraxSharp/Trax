@@ -1,3 +1,4 @@
+using System.Globalization;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -13,13 +14,21 @@ namespace Trax.Mediator.Tests.StateMachine.Integration;
 [SetUpFixture]
 public class PostgresSetup
 {
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true"
+    );
 
-    private static readonly string Database = $"trax_mediator_sm_it_{Environment.ProcessId}";
+    private static readonly string Database = string.Create(
+        CultureInfo.InvariantCulture,
+        $"trax_mediator_sm_it_{Environment.ProcessId}"
+    );
 
     public static string ConnectionString { get; } =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40"
+        );
 
     [OneTimeSetUp]
     public async Task Up()
@@ -45,8 +54,11 @@ public class PostgresSetup
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
+        {
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
     }
 }

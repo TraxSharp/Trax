@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Shared.Testing;
 
@@ -43,22 +44,5 @@ public static class SampleTestContext
 
     private static TContext Construct<TContext>(DbContextOptions<TContext> options)
         where TContext : DbContext =>
-        (TContext)Activator.CreateInstance(typeof(TContext), options)!;
-}
-
-/// <summary>
-/// Owns an open in-memory SQLite connection and the context bound to it. Disposing closes both,
-/// dropping the in-memory database.
-/// </summary>
-public sealed class SqliteContextHolder<TContext>(SqliteConnection connection, TContext context)
-    : IDisposable
-    where TContext : DbContext
-{
-    public TContext Context { get; } = context;
-
-    public void Dispose()
-    {
-        Context.Dispose();
-        connection.Dispose();
-    }
+        (TContext)Activator.CreateInstance(typeof(TContext), options).NotNull();
 }

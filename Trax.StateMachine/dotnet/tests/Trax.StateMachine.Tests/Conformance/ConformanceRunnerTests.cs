@@ -13,22 +13,26 @@ namespace Trax.StateMachine.Tests.Conformance;
 public class ConformanceRunnerTests
 {
     [Test]
-    public void The_CSharp_engine_passes_every_case_of_the_kit()
+    public async Task The_CSharp_engine_passes_every_case_of_the_kit()
     {
         var testee = new ConformanceTestee();
 
-        var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
+        var (exitCode, report) = await TwinEngine
+            .RunConformanceAsync(testee.Answer)
+            .ConfigureAwait(false);
 
         exitCode.Should().Be(0, report);
         report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed, 0 expected failures\.");
     }
 
     [Test]
-    public void The_CSharp_engine_built_from_each_IR_passes_every_case_of_the_kit()
+    public async Task The_CSharp_engine_built_from_each_IR_passes_every_case_of_the_kit()
     {
         var testee = new ConformanceTestee(fromIr: true);
 
-        var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
+        var (exitCode, report) = await TwinEngine
+            .RunConformanceAsync(testee.Answer)
+            .ConfigureAwait(false);
 
         exitCode.Should().Be(0, report);
         report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed, 0 expected failures\.");

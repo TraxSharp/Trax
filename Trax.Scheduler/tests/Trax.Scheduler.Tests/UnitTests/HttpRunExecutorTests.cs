@@ -4,6 +4,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.RunExecutor;
@@ -49,7 +50,7 @@ public class HttpRunExecutorTests
         result.MetadataId.Should().Be(42);
         result.Output.Should().NotBeNull();
         result.Output.Should().BeOfType<TestOutput>();
-        var output = (TestOutput)result.Output!;
+        var output = (TestOutput)result.Output.NotNull();
         output.Value.Should().Be("hello");
         output.Count.Should().Be(7);
     }
@@ -97,7 +98,7 @@ public class HttpRunExecutorTests
         );
 
         result.Output.Should().BeAssignableTo(declaredOutput);
-        ((ITestOutput)result.Output!).Value.Should().Be("hello");
+        ((ITestOutput)result.Output.NotNull()).Value.Should().Be("hello");
     }
 
     [TestCase(typeof(ITestOutput))]
@@ -175,11 +176,13 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestInput { Name = "fail" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestInput { Name = "fail" },
+                    typeof(TestOutput)
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainException>()
@@ -211,14 +214,16 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestInput { Name = "fail" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestInput { Name = "fail" },
+                    typeof(TestOutput)
+                )
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
-        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message)!;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message).NotNull();
         data.Message.Should().Be("row changed");
         data.FailureClass.Should().Be(FailureClass.Unclassified);
     }
@@ -243,15 +248,18 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestInput { Name = "fail" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestInput { Name = "fail" },
+                    typeof(TestOutput)
+                )
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         JsonSerializer
-            .Deserialize<TrainExceptionData>(ex.Message)!
+            .Deserialize<TrainExceptionData>(ex.Message)
+            .NotNull()
             .FailureClass.Should()
             .Be(FailureClass.Conflict);
     }
@@ -272,18 +280,20 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestInput { Name = "fail" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestInput { Name = "fail" },
+                    typeof(TestOutput)
+                )
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
 
         // The exception message should be valid TrainExceptionData JSON
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("InvalidOperationException");
+        data.NotNull().Type.Should().Be("InvalidOperationException");
         data.Junction.Should().Be("ValidateInputJunction");
         data.Message.Should().Be("Validation failed");
     }
@@ -303,16 +313,14 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "x" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "x" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("ArgumentException");
+        data.NotNull().Type.Should().Be("ArgumentException");
         data.Junction.Should().Be("ProcessDataJunction");
     }
 
@@ -333,17 +341,15 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "x" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "x" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         // The exception message should contain the structured data (type preserved)
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("NullReferenceException");
+        data.NotNull().Type.Should().Be("NullReferenceException");
     }
 
     [Test]
@@ -360,11 +366,9 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "x" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "x" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         ex.Message.Should().Contain("Something failed");
@@ -387,17 +391,15 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "x" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "x" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         // The exception is thrown — MetadataId from the response is preserved in TrainExceptionData
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
-        data!.Type.Should().Be("TrainException");
+        data.NotNull().Type.Should().Be("TrainException");
     }
 
     #endregion
@@ -416,11 +418,9 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "error" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "error" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         ex.Message.Should().Contain("500");
@@ -435,11 +435,9 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "error" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "error" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         ex.Message.Should().Contain("502");
@@ -458,11 +456,9 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "error" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "error" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         ex.Message.Should().Contain("503");
@@ -480,11 +476,9 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "error" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "error" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<RemoteRunException>())
             .Which.PublicMessage.Should()
@@ -509,11 +503,13 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestInput { Name = "fail" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.FailingTrain",
+                    new TestInput { Name = "fail" },
+                    typeof(TestOutput)
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<RemoteRunException>())
             .Which.PublicMessage.Should()
@@ -532,11 +528,9 @@ public class HttpRunExecutorTests
         var executor = CreateExecutor(client);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "null" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "null" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*null response*");
     }
@@ -555,7 +549,10 @@ public class HttpRunExecutorTests
             response,
             onRequest: async content =>
             {
-                capturedRequest = await content!.ReadFromJsonAsync<RemoteRunRequest>();
+                capturedRequest = await content
+                    .NotNull()
+                    .ReadFromJsonAsync<RemoteRunRequest>()
+                    .ConfigureAwait(false);
             }
         );
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
@@ -565,7 +562,8 @@ public class HttpRunExecutorTests
         await executor.ExecuteAsync("My.Train.FullName", input, typeof(TestOutput));
 
         capturedRequest.Should().NotBeNull();
-        capturedRequest!
+        capturedRequest
+            .NotNull()
             .TrainName.Should()
             .Be(
                 "My.Train.FullName",
@@ -588,17 +586,19 @@ public class HttpRunExecutorTests
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
         var executor = CreateExecutor(client);
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "cancel" },
-                typeof(TestOutput),
-                cts.Token
-            );
+            await executor
+                .ExecuteAsync(
+                    "My.Train",
+                    new TestInput { Name = "cancel" },
+                    typeof(TestOutput),
+                    cts.Token
+                )
+                .ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -624,7 +624,8 @@ public class HttpRunExecutorTests
                     BaseDelay = TimeSpan.FromMilliseconds(1),
                 },
             },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
         var result = await executor.ExecuteAsync(
@@ -657,15 +658,14 @@ public class HttpRunExecutorTests
                     BaseDelay = TimeSpan.FromMilliseconds(1),
                 },
             },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestInput { Name = "fail" },
-                typeof(TestOutput)
-            );
+            await executor
+                .ExecuteAsync("My.Train", new TestInput { Name = "fail" }, typeof(TestOutput))
+                .ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
         ex.Message.Should().Contain("429");
@@ -680,7 +680,8 @@ public class HttpRunExecutorTests
         new(
             client,
             new RemoteRunOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
     #endregion
@@ -711,7 +712,7 @@ public class HttpRunExecutorTests
 
     #region Fake HTTP Handler
 
-    private class FakeHttpMessageHandler : HttpMessageHandler
+    private sealed class FakeHttpMessageHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _statusCode;
         private readonly string _responseBody;
@@ -744,7 +745,7 @@ public class HttpRunExecutorTests
             cancellationToken.ThrowIfCancellationRequested();
 
             if (_onRequest is not null)
-                await _onRequest(request.Content);
+                await _onRequest(request.Content).ConfigureAwait(false);
 
             return new HttpResponseMessage(_statusCode)
             {
@@ -757,7 +758,7 @@ public class HttpRunExecutorTests
         }
     }
 
-    private class SequentialFakeHandler(List<(HttpStatusCode Status, string Body)> responses)
+    private sealed class SequentialFakeHandler(List<(HttpStatusCode Status, string Body)> responses)
         : HttpMessageHandler
     {
         private int _callIndex;

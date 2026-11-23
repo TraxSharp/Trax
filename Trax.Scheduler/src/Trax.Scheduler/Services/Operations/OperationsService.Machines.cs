@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
 
@@ -52,7 +53,7 @@ public partial class OperationsService
             .DistinctBy(m => m.Name, StringComparer.Ordinal)
             .ToDictionary(
                 m => m.Name,
-                m => JsonNode.Parse(m.ExportIr())!.AsObject(),
+                m => JsonNode.Parse(m.ExportIr()).NotNull().AsObject(),
                 StringComparer.Ordinal
             );
         var drawn = Board.Draw(irs, host);
@@ -61,12 +62,16 @@ public partial class OperationsService
         var byId = drawn.Stickies.ToDictionary(s => s.Id, StringComparer.Ordinal);
         bool IsActor(string id) => byId[id].Kind == Board.Kind.Actor;
         var lane = drawn
-            .Stickies.Where(s => s.Machine == machine && s.Kind != Board.Kind.Actor)
+            .Stickies.Where(s =>
+                string.Equals(s.Machine, machine, StringComparison.Ordinal)
+                && s.Kind != Board.Kind.Actor
+            )
             .Select(s => s.Id)
             .ToHashSet(StringComparer.Ordinal);
         var joined = drawn
-            .Links.Where(l => !IsActor(l.From) && !IsActor(l.To))
-            .Where(l => lane.Contains(l.From) || lane.Contains(l.To))
+            .Links.Where(l =>
+                !IsActor(l.From) && !IsActor(l.To) && (lane.Contains(l.From) || lane.Contains(l.To))
+            )
             .SelectMany(l => new[] { l.From, l.To })
             .Select(id => byId[id].Machine)
             .Append(machine)
@@ -78,16 +83,42 @@ public partial class OperationsService
         // An actor is shown when an arrow ties it to a sticky on this board: in its own lane if it is tied to that
         // machine, otherwise in the first lane it is tied to, the asked-for machine's first.
         var lanes = joined
-            .OrderBy(m => m == machine ? 0 : 1)
+            .OrderBy(m => string.Equals(m, machine, StringComparison.Ordinal) ? 0 : 1)
             .ThenBy(m => m, StringComparer.Ordinal)
             .ToList();
-        var actors = drawn
+        var actors = TiedActors(drawn, here, byId, lanes);
+        var stickies = drawnHere
+            .Concat(actors)
+            .OrderBy(s => s.Machine, StringComparer.Ordinal)
+            .ThenBy(s => s.Kind)
+            .ThenBy(s => s.Id, StringComparer.Ordinal)
+            .ToList();
+        var shown = stickies.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        return Task.FromResult<MachineBoardDescription?>(
+            BoardDescription(machine, lanes, stickies, shown, drawn)
+        );
+    }
+
+    // An actor tied by an arrow to a sticky on this board, in its own lane if it is tied to that
+    // machine, otherwise in the first lane it is tied to.
+    private static IEnumerable<Board.Sticky> TiedActors(
+        Board.Drawn drawn,
+        HashSet<string> here,
+        Dictionary<string, Board.Sticky> byId,
+        List<string> lanes
+    ) =>
+        drawn
             .Stickies.Where(s => s.Kind == Board.Kind.Actor)
             .Select(actor =>
             {
                 var tied = drawn
-                    .Links.Where(l => l.From == actor.Id || l.To == actor.Id)
-                    .Select(l => l.From == actor.Id ? l.To : l.From)
+                    .Links.Where(l =>
+                        string.Equals(l.From, actor.Id, StringComparison.Ordinal)
+                        || string.Equals(l.To, actor.Id, StringComparison.Ordinal)
+                    )
+                    .Select(l =>
+                        string.Equals(l.From, actor.Id, StringComparison.Ordinal) ? l.To : l.From
+                    )
                     .Where(here.Contains)
                     .Select(id => byId[id].Machine)
                     .ToHashSet(StringComparer.Ordinal);
@@ -101,38 +132,36 @@ public partial class OperationsService
                     };
             })
             .OfType<Board.Sticky>();
-        var stickies = drawnHere
-            .Concat(actors)
-            .OrderBy(s => s.Machine, StringComparer.Ordinal)
-            .ThenBy(s => s.Kind)
-            .ThenBy(s => s.Id, StringComparer.Ordinal)
-            .ToList();
-        var shown = stickies.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
-        return Task.FromResult<MachineBoardDescription?>(
-            new MachineBoardDescription(
-                machine,
-                lanes,
-                stickies
-                    .Select(s => new MachineStickyDescription(
-                        s.Id,
-                        s.Kind.ToString().ToLowerInvariant(),
-                        s.Machine,
-                        s.Label,
-                        s.Scenarios.Select(p => new MachineScenarioDescription(
-                                p.File,
-                                p.Line,
-                                p.Scenario
-                            ))
-                            .ToList()
-                    ))
-                    .ToList(),
-                drawn
-                    .Links.Where(l => shown.Contains(l.From) && shown.Contains(l.To))
-                    .Select(l => new MachineBoardLinkDescription(l.From, l.To))
-                    .ToList()
-            )
+
+    private static MachineBoardDescription BoardDescription(
+        string machine,
+        List<string> lanes,
+        List<Board.Sticky> stickies,
+        HashSet<string> shown,
+        Board.Drawn drawn
+    ) =>
+        new MachineBoardDescription(
+            machine,
+            lanes,
+            stickies
+                .Select(s => new MachineStickyDescription(
+                    s.Id,
+                    s.Kind.ToString().ToLowerInvariant(),
+                    s.Machine,
+                    s.Label,
+                    s.Scenarios.Select(p => new MachineScenarioDescription(
+                            p.File,
+                            p.Line,
+                            p.Scenario
+                        ))
+                        .ToList()
+                ))
+                .ToList(),
+            drawn
+                .Links.Where(l => shown.Contains(l.From) && shown.Contains(l.To))
+                .Select(l => new MachineBoardLinkDescription(l.From, l.To))
+                .ToList()
         );
-    }
 
     private static readonly ConditionalWeakTable<IMachine, MachineDescription> Descriptions = new();
 
@@ -178,49 +207,72 @@ public partial class OperationsService
 
         return new MachineDescription(
             machine.Name,
-            internals?.Version ?? (int.TryParse(graph.Version, out var v) ? v : 0),
+            internals?.Version
+                ?? (
+                    int.TryParse(
+                        graph.Version,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var v
+                    )
+                        ? v
+                        : 0
+                ),
             internals?.SystemOwned ?? false
         )
         {
             SchemaHash = machine.SchemaHash,
             InitialState = graph.Initial,
-            States = graph
-                .States.Select(s => new MachineStateDescription(s)
-                {
-                    IsInitial = s == graph.Initial,
-                    IsFinal = !left.Contains(s),
-                    IsCommitted = graph.Committed.Contains(s),
-                    InvokesTrain = spawns.ContainsKey(s) ? null : invokes.GetValueOrDefault(s),
-                    SpawnsMachine = spawns.GetValueOrDefault(s),
-                })
-                .ToList(),
-            Transitions = graph
-                .Transitions.Select(t => new MachineTransitionDescription(
-                    t.From,
-                    t.Trigger,
-                    t.To,
-                    t.Kind switch
-                    {
-                        MachineEdgeKind.Timer => MachineTransitionKind.Timer,
-                        MachineEdgeKind.Outcome => MachineTransitionKind.Outcome,
-                        _ => MachineTransitionKind.Command,
-                    }
-                )
-                {
-                    Guard = t.Guard,
-                    Effect = t.Effect,
-                    After = t.Timer,
-                })
-                .ToList(),
-            Timers = graph
-                .Timers.Select(t => new MachineTimerDescription(t.State, t.Trigger, t.Target)
-                {
-                    After = t.After,
-                    Field = t.Field,
-                    Min = t.Min,
-                    Max = t.Max,
-                })
-                .ToList(),
+            States = StateDescriptions(graph, left, invokes, spawns),
+            Transitions = TransitionDescriptions(graph),
+            Timers = TimerDescriptions(graph),
         };
     }
+
+    private static List<MachineStateDescription> StateDescriptions(
+        MachineGraph graph,
+        HashSet<string> left,
+        Dictionary<string, string> invokes,
+        Dictionary<string, string> spawns
+    ) =>
+        graph
+            .States.Select(s => new MachineStateDescription(s)
+            {
+                IsInitial = string.Equals(s, graph.Initial, StringComparison.Ordinal),
+                IsFinal = !left.Contains(s),
+                IsCommitted = graph.Committed.Contains(s),
+                InvokesTrain = spawns.ContainsKey(s) ? null : invokes.GetValueOrDefault(s),
+                SpawnsMachine = spawns.GetValueOrDefault(s),
+            })
+            .ToList();
+
+    private static List<MachineTransitionDescription> TransitionDescriptions(MachineGraph graph) =>
+        graph
+            .Transitions.Select(t => new MachineTransitionDescription(
+                t.From,
+                t.Trigger,
+                t.To,
+                t.Kind switch
+                {
+                    MachineEdgeKind.Timer => MachineTransitionKind.Timer,
+                    MachineEdgeKind.Outcome => MachineTransitionKind.Outcome,
+                    _ => MachineTransitionKind.Command,
+                }
+            )
+            {
+                Guard = t.Guard,
+                Effect = t.Effect,
+                After = t.Timer,
+            })
+            .ToList();
+
+    private static List<MachineTimerDescription> TimerDescriptions(MachineGraph graph) =>
+        graph
+            .Timers.Select(t => new MachineTimerDescription(t.State, t.Trigger, t.Target)
+            {
+                After = t.After,
+                Field = t.Field,
+                Min = t.Min,
+                Max = t.Max,
+            })
+            .ToList();
 }

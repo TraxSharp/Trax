@@ -22,7 +22,7 @@ namespace Trax.Effect.Data.Services.DataContextTransaction;
 /// By wrapping the EF Core transaction, this class simplifies transaction management for consumers
 /// and ensures that transactions are properly managed regardless of the specific database provider.
 /// </remarks>
-internal class DataContextTransaction(IDataContext db, IDbContextTransaction tx)
+internal sealed class DataContextTransaction(IDataContext db, IDbContextTransaction tx)
     : IDataContextTransaction
 {
     /// <summary>
@@ -35,7 +35,7 @@ internal class DataContextTransaction(IDataContext db, IDbContextTransaction tx)
     ///
     /// It should be called after all operations within the transaction have completed successfully.
     /// </remarks>
-    public async Task Commit() => await db.CommitTransaction();
+    public async Task Commit() => await db.CommitTransaction().ConfigureAwait(false);
 
     /// <summary>
     /// Rolls back the transaction.
@@ -48,7 +48,7 @@ internal class DataContextTransaction(IDataContext db, IDbContextTransaction tx)
     /// It should be called when an error occurs within the transaction and the changes
     /// should not be persisted.
     /// </remarks>
-    public async Task Rollback() => await db.RollbackTransaction();
+    public async Task Rollback() => await db.RollbackTransaction().ConfigureAwait(false);
 
     /// <summary>
     /// Disposes the underlying transaction, releasing any resources used.

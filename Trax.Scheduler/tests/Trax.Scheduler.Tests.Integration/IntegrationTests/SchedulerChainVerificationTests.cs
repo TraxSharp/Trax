@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -54,7 +55,13 @@ public class SchedulerChainVerificationTests
         var isService = scope.ServiceProvider.GetRequiredService<IServiceProviderIsService>();
 
         var train = scope.ServiceProvider.GetRequiredService(service);
-        var chain = (ChainRecorder)train.GetType().GetMethod("DeclaredChain")!.Invoke(train, null)!;
+        var chain = (ChainRecorder)
+            train
+                .GetType()
+                .GetMethod("DeclaredChain")
+                .NotNull()
+                .Invoke(train, parameters: null)
+                .NotNull();
 
         chain.Steps.Should().NotBeEmpty("the train must actually declare its chain");
         ChainVerification

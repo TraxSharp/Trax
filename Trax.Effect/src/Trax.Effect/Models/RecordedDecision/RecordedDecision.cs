@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.RecordedDecision;
 
@@ -30,7 +31,11 @@ public class RecordedDecision
     /// enum or marker type it is about, or else that type's name without its namespace.
     /// </summary>
     [Column("question_key")]
-    public string QuestionKey { get; set; } = null!;
+    public string QuestionKey
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The <c>Parallel</c> branch that asked, as Trax.Core names it (<c>Parallel#0/cocitation</c>),
@@ -50,11 +55,19 @@ public class RecordedDecision
 
     /// <summary><c>choice</c>, <c>score</c> or <c>yes_no</c>.</summary>
     [Column("kind")]
-    public string Kind { get; set; } = null!;
+    public string Kind
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>The question as asked, with its instructions and criteria, as JSON.</summary>
     [Column("question")]
-    public string Question { get; set; } = null!;
+    public string Question
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The answer the run acted on, as JSON. Carries <c>replay_refused</c> when an earlier run's
@@ -80,7 +93,11 @@ public class RecordedDecision
     /// replayed into is not acted on.
     /// </summary>
     [Column("fingerprint")]
-    public string Fingerprint { get; set; } = null!;
+    public string Fingerprint
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The model that answered, as the decider named it (for a System One model, the name the

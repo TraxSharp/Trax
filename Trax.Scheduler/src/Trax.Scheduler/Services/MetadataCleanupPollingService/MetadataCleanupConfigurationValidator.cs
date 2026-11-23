@@ -27,24 +27,25 @@ namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 /// .NET starts hosted services in registration order and that service sweeps as soon as it
 /// starts.</para>
 /// </remarks>
-internal class MetadataCleanupConfigurationValidator(
+internal sealed class MetadataCleanupConfigurationValidator(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration
 ) : IHostedService, ITraxStartupCheck
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         var cleanupConfig = configuration.MetadataCleanup;
         if (cleanupConfig is null)
-            return Task.CompletedTask;
+            return;
 
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var discoveryService = scope.ServiceProvider.GetService<ITrainDiscoveryService>();
 
         MetadataRetentionPlan.Build(cleanupConfig, discoveryService, out var conflicts);
 
         if (conflicts.Count == 0)
-            return Task.CompletedTask;
+            return;
 
         throw new InvalidOperationException(
             "Metadata cleanup has conflicting retention periods for the same train:"

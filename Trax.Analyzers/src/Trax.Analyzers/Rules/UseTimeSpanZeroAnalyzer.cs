@@ -1,0 +1,70 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UseTimeSpanZeroAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UseTimeSpanZero,
+        title: "Use TimeSpan.Zero instead of TimeSpan.FromXXX(0)",
+        messageFormat: "Use TimeSpan.Zero instead of TimeSpan.{0}(0)",
+        RuleCategories.Design,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseTimeSpanZero));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var timeSpanType = compilationContext.Compilation.GetTypeByMetadataName("System.TimeSpan");
+            if (timeSpanType is null)
+                return;
+
+            compilationContext.RegisterOperationAction(context => AnalyzeInvocationOperation(context, timeSpanType), OperationKind.Invocation);
+        });
+    }
+
+    private static void AnalyzeInvocationOperation(OperationAnalysisContext context, INamedTypeSymbol timeSpanType)
+    {
+        var operation = (IInvocationOperation)context.Operation;
+
+        // Check if the method is a static method on System.TimeSpan
+        if (!operation.TargetMethod.IsStatic)
+            return;
+
+        if (!operation.TargetMethod.ContainingType.IsEqualTo(timeSpanType))
+            return;
+
+        // Check if it's one of the From methods
+        var methodName = operation.TargetMethod.Name;
+        if (!IsTimeSpanFromMethod(methodName))
+            return;
+
+        // Check if the method has exactly one argument
+        if (operation.Arguments.Length == 0)
+            return;
+
+        // Check if the argument is a constant value of 0
+        foreach (var argument in operation.Arguments)
+        {
+            if (!argument.Value.TryGetConstantValue(out var constantValue, context.CancellationToken))
+                return;
+
+            if (!NumericHelpers.IsZero(constantValue))
+                return;
+        }
+
+        context.ReportDiagnostic(Rule, operation, methodName);
+    }
+
+    private static bool IsTimeSpanFromMethod(string methodName)
+    {
+        return methodName is "FromDays" or "FromHours" or "FromMinutes" or "FromSeconds" or "FromMilliseconds" or "FromMicroseconds" or "FromTicks";
+    }
+}

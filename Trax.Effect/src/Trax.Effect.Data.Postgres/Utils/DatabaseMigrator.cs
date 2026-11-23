@@ -1,8 +1,11 @@
+using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using DbUp;
 using DbUp.Engine;
+using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
 namespace Trax.Effect.Data.Postgres.Utils;
@@ -91,12 +94,36 @@ public static partial class DatabaseMigrator
     /// <para>
     /// <c>UsePostgres</c> calls this during service registration unless migrations are skipped.
     /// </para>
+    /// <para>
+    /// This overload reports nothing while it runs; a failure still reaches the caller as the
+    /// exception. <see cref="Migrate(string, ILogger)"/> also logs each rerun and the failure.
+    /// </para>
     /// </remarks>
     public static Task Migrate(string connectionString) =>
-        Migrate(connectionString, MigrationLockPolicy.Default);
+        Migrate(connectionString, MigrationLockPolicy.Default, logger: null, TimeProvider.System);
 
-    internal static async Task Migrate(string connectionString, MigrationLockPolicy policy)
+    /// <summary>
+    /// Applies the pending scripts as <see cref="Migrate(string)"/> does, logging to
+    /// <paramref name="logger"/> each time it runs the pending scripts again and the error it
+    /// fails with.
+    /// </summary>
+    /// <param name="connectionString">The connection string to the PostgreSQL database</param>
+    /// <param name="logger">Where reruns (warning) and the failure (error) are logged.</param>
+    /// <returns>A task representing the asynchronous operation</returns>
+    /// <exception cref="Exception">Thrown if the migration fails</exception>
+    public static Task Migrate(string connectionString, ILogger? logger) =>
+        Migrate(connectionString, MigrationLockPolicy.Default, logger, TimeProvider.System);
+
+    internal static async Task Migrate(
+        string connectionString,
+        MigrationLockPolicy policy,
+        ILogger? logger,
+        TimeProvider? timeProvider = null
+    )
     {
+        // A static entry point with no container: it waits on the system clock unless a test
+        // hands it another.
+        var clock = timeProvider ?? TimeProvider.System;
         // The lock is held on one connection while DbUp runs the scripts on another, so the
         // migration's connections must not come from the host's pool: a host that caps its pool
         // at one connection would otherwise wait on itself until the pool timeout.
@@ -107,68 +134,98 @@ public static partial class DatabaseMigrator
         };
         var migrationConnectionString = migrationConnection.ConnectionString;
 
-        // Only the script session carries the lock timeout. The advisory-lock session polls and
-        // never waits on a table lock.
-        var lockTimeoutMs = (long)policy.LockTimeout.TotalMilliseconds;
-        migrationConnection.Options = string.IsNullOrWhiteSpace(migrationConnection.Options)
-            ? $"-c lock_timeout={lockTimeoutMs}"
-            : $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}";
+        AddLockTimeout(migrationConnection, policy);
         var scriptConnectionString = migrationConnection.ConnectionString;
 
         try
         {
-            await using var lockConnection = new NpgsqlConnection(migrationConnectionString);
-            await lockConnection.OpenAsync();
-            await AcquireMigrationLock(lockConnection);
+            var lockConnection = new NpgsqlConnection(migrationConnectionString);
+            await using var lockConnectionDisposal = lockConnection.ConfigureAwait(false);
+            await lockConnection.OpenAsync().ConfigureAwait(false);
+            await AcquireMigrationLock(lockConnection, clock).ConfigureAwait(false);
 
             try
             {
-                await lockConnection.ReloadTypesAsync();
-                await Execute(lockConnection, "create schema if not exists trax;");
+                await lockConnection.ReloadTypesAsync().ConfigureAwait(false);
+                await Execute(lockConnection, "create schema if not exists trax;")
+                    .ConfigureAwait(false);
 
                 // Set as a server option, not as Search Path: DbUp reads Search Path from the
                 // connection string as one schema name and creates it.
-                if (await ScriptSearchPath(lockConnection) is { } searchPath)
+                if (await ScriptSearchPath(lockConnection).ConfigureAwait(false) is { } searchPath)
                 {
                     migrationConnection.SearchPath = null;
                     migrationConnection.Options +=
-                        $" -c search_path={searchPath.Replace(@"\", @"\\").Replace(" ", @"\ ")}";
+                        $" -c search_path={searchPath.Replace(@"\", @"\\", StringComparison.Ordinal).Replace(" ", @"\ ", StringComparison.Ordinal)}";
                     scriptConnectionString = migrationConnection.ConnectionString;
                 }
 
-                for (var attempt = 1; ; attempt++)
-                {
-                    // Again before every attempt: a concurrent index build that gave up on its
-                    // lock leaves its index invalid.
-                    await DropInvalidIndexes(lockConnection);
-
-                    var result = CreateEngineWithEmbeddedScripts(scriptConnectionString)
-                        .PerformUpgrade();
-
-                    if (result.Successful)
-                        break;
-
-                    if (!IsRetryable(result.Error) || attempt >= policy.Attempts)
-                        ExceptionDispatchInfo.Capture(result.Error).Throw();
-
-                    Console.WriteLine(
-                        $"A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
-                    );
-                    if (policy.Backoff > TimeSpan.Zero)
-                        await Task.Delay(policy.Backoff * attempt);
-                }
+                await RunScripts(lockConnection, scriptConnectionString, policy, logger, clock)
+                    .ConfigureAwait(false);
             }
             finally
             {
-                await Execute(lockConnection, $"SELECT pg_advisory_unlock({MigrationLockKey});");
+                await Execute(lockConnection, $"SELECT pg_advisory_unlock({MigrationLockKey});")
+                    .ConfigureAwait(false);
             }
         }
         catch (Exception e)
         {
-            Console.WriteLine(
-                $"Caught Exception ({e.GetType()}) while attempting to migrate Trax.Core database: {e}"
-            );
+            logger?.LogError(e, "Migrating the Trax database failed.");
             throw;
+        }
+    }
+
+    // Only the script session carries the lock timeout. The advisory-lock session polls and
+    // never waits on a table lock.
+    private static void AddLockTimeout(
+        NpgsqlConnectionStringBuilder migrationConnection,
+        MigrationLockPolicy policy
+    )
+    {
+        var lockTimeoutMs = (long)policy.LockTimeout.TotalMilliseconds;
+        migrationConnection.Options = string.IsNullOrWhiteSpace(migrationConnection.Options)
+            ? string.Create(CultureInfo.InvariantCulture, $"-c lock_timeout={lockTimeoutMs}")
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}"
+            );
+    }
+
+    // Runs the pending scripts, again after a retryable failure, until they succeed or the
+    // policy's attempts are spent.
+    private static async Task RunScripts(
+        NpgsqlConnection lockConnection,
+        string scriptConnectionString,
+        MigrationLockPolicy policy,
+        ILogger? logger,
+        TimeProvider clock
+    )
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            // Again before every attempt: a concurrent index build that gave up on its
+            // lock leaves its index invalid.
+            await DropInvalidIndexes(lockConnection).ConfigureAwait(false);
+
+            var result = CreateEngineWithEmbeddedScripts(scriptConnectionString).PerformUpgrade();
+
+            if (result.Successful)
+                return;
+
+            if (
+                !await IsRetryableAsync(result.Error).ConfigureAwait(false)
+                || attempt >= policy.Attempts
+            )
+                ExceptionDispatchInfo.Capture(result.Error).Throw();
+
+            logger?.LogWarning(
+                "A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {Attempt} of {Attempts}); running the pending scripts again.",
+                attempt,
+                policy.Attempts
+            );
+            if (policy.Backoff > TimeSpan.Zero)
+                await Task.Delay(policy.Backoff * attempt, clock).ConfigureAwait(false);
         }
     }
 
@@ -181,23 +238,26 @@ public static partial class DatabaseMigrator
     /// is satisfied by a <c>pg_trgm</c> in any schema, while <c>gin_trgm_ops</c> is found only
     /// through the search path. A database restored from a dump taken as another role can carry
     /// the extension in that role's schema. Only the script session's path changes; the host's
-    /// connections keep theirs. <c>null</c> when nothing needs adding.
+    /// connections keep theirs. <see langword="null"/> when nothing needs adding.
     /// </remarks>
     private static async Task<string?> ScriptSearchPath(NpgsqlConnection connection)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             SELECT current_setting('search_path'), n.nspname
             FROM pg_extension e
             JOIN pg_namespace n ON n.oid = e.extnamespace
             WHERE e.extname = 'pg_trgm' AND NOT n.nspname = ANY(current_schemas(false));
             """;
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        if (!await reader.ReadAsync().ConfigureAwait(false))
             return null;
 
         var path = reader.GetString(0);
-        var schema = "\"" + reader.GetString(1).Replace("\"", "\"\"") + "\"";
+        var schema =
+            "\"" + reader.GetString(1).Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
         return string.IsNullOrWhiteSpace(path) ? schema : $"{path}, {schema}";
     }
 
@@ -206,8 +266,9 @@ public static partial class DatabaseMigrator
     /// gave up waiting for a lock, or a unique index a script builds met a duplicate, which the
     /// script's own clean-up resolves when it runs again.
     /// </summary>
-    internal static bool IsRetryable(Exception? error)
+    internal static async Task<bool> IsRetryableAsync(Exception? error)
     {
+        var scriptIndexNames = await ScriptIndexNamesAsync().ConfigureAwait(false);
         for (var current = error; current is not null; current = current.InnerException)
             switch (current)
             {
@@ -217,7 +278,7 @@ public static partial class DatabaseMigrator
                 {
                     SqlState: PostgresErrorCodes.UniqueViolation,
                     ConstraintName: { } index,
-                } when ScriptIndexNames.Contains(index):
+                } when scriptIndexNames.Contains(index):
                     return true;
             }
         return false;
@@ -235,7 +296,8 @@ public static partial class DatabaseMigrator
     private static async Task DropInvalidIndexes(NpgsqlConnection connection)
     {
         var invalid = new List<string>();
-        await using (var command = connection.CreateCommand())
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
         {
             command.CommandText = """
                 SELECT c.relname
@@ -244,16 +306,21 @@ public static partial class DatabaseMigrator
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = 'trax' AND NOT i.indisvalid AND c.relname = ANY(@names);
                 """;
-            command.Parameters.AddWithValue("names", ScriptIndexNames.ToArray());
-            await using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
+            command.Parameters.AddWithValue(
+                "names",
+                (await ScriptIndexNamesAsync().ConfigureAwait(false)).ToArray()
+            );
+            var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+            await using var readerDisposal = reader.ConfigureAwait(false);
+            while (await reader.ReadAsync().ConfigureAwait(false))
                 invalid.Add(reader.GetString(0));
         }
 
         foreach (var index in invalid)
         {
-            var quoted = "\"" + index.Replace("\"", "\"\"") + "\"";
-            await Execute(connection, $"DROP INDEX CONCURRENTLY IF EXISTS trax.{quoted};");
+            var quoted = "\"" + index.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+            await Execute(connection, $"DROP INDEX CONCURRENTLY IF EXISTS trax.{quoted};")
+                .ConfigureAwait(false);
         }
     }
 
@@ -261,9 +328,13 @@ public static partial class DatabaseMigrator
     /// The name of every index a shipped migration script creates, read from the scripts
     /// themselves, lower-cased as Postgres folds an unquoted name.
     /// </summary>
-    internal static IReadOnlySet<string> ScriptIndexNames { get; } = ReadScriptIndexNames();
+    internal static Task<IReadOnlySet<string>> ScriptIndexNamesAsync() => ScriptIndexNames.Value;
 
-    private static System.Collections.Generic.HashSet<string> ReadScriptIndexNames()
+    private static readonly Lazy<Task<IReadOnlySet<string>>> ScriptIndexNames = new(
+        ReadScriptIndexNamesAsync
+    );
+
+    private static async Task<IReadOnlySet<string>> ReadScriptIndexNamesAsync()
     {
         var assembly = typeof(AssemblyMarker).Assembly;
         var names = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
@@ -271,9 +342,11 @@ public static partial class DatabaseMigrator
         {
             if (!resource.EndsWith(".sql", StringComparison.Ordinal))
                 continue;
-            using var stream = assembly.GetManifestResourceStream(resource)!;
+            var stream = assembly.GetManifestResourceStream(resource).NotNull();
+            await using var streamDisposal = stream.ConfigureAwait(false);
             using var reader = new StreamReader(stream);
-            foreach (Match match in CreateIndexName().Matches(reader.ReadToEnd()))
+            var script = await reader.ReadToEndAsync().ConfigureAwait(false);
+            foreach (Match match in CreateIndexName.Matches(script))
                 names.Add(match.Groups["name"].Value.Trim('"').ToLowerInvariant());
         }
         return names;
@@ -281,9 +354,10 @@ public static partial class DatabaseMigrator
 
     [GeneratedRegex(
         @"\bcreate\s+(?:unique\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?(?:\w+\.)?(?<name>""[^""]+""|\w+)\s+on\b",
-        RegexOptions.IgnoreCase
+        RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex CreateIndexName();
+    private static partial Regex CreateIndexName { get; }
 
     /// <summary>
     /// Takes the migration lock, polling with <c>pg_try_advisory_lock</c> rather than waiting in
@@ -296,16 +370,17 @@ public static partial class DatabaseMigrator
     /// for it, forever, and Postgres cannot see that as a deadlock. Between two tries the waiter
     /// holds no snapshot, so the build finishes and the lock is released.
     /// </remarks>
-    private static async Task AcquireMigrationLock(NpgsqlConnection connection)
+    private static async Task AcquireMigrationLock(NpgsqlConnection connection, TimeProvider clock)
     {
         while (true)
         {
-            await using var command = connection.CreateCommand();
+            var command = connection.CreateCommand();
+            await using var commandDisposal = command.ConfigureAwait(false);
             command.CommandText = $"SELECT pg_try_advisory_lock({MigrationLockKey});";
-            if ((bool)(await command.ExecuteScalarAsync())!)
+            if ((bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull())
                 return;
 
-            await Task.Delay(MigrationLockPollInterval);
+            await Task.Delay(MigrationLockPollInterval, clock).ConfigureAwait(false);
         }
     }
 
@@ -313,8 +388,9 @@ public static partial class DatabaseMigrator
 
     private static async Task Execute(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -11,7 +12,7 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 [TestFixture]
 public class InMemoryBuilderFlagTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void Setup()
@@ -22,19 +23,23 @@ public class InMemoryBuilderFlagTests
     }
 
     [OneTimeTearDown]
-    public async Task TearDown() => await _provider.DisposeAsync();
+    public async Task TearDown()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public void UseInMemory_DoesNotRegister_ISqlDialect()
     {
-        var dialect = _provider.GetService<ISqlDialect>();
+        var dialect = _provider.NotNull().GetService<ISqlDialect>();
         dialect.Should().BeNull();
     }
 
     [Test]
     public void UseInMemory_RegistersIDataContext()
     {
-        using var scope = _provider.CreateScope();
+        using var scope = _provider.NotNull().CreateScope();
         var context = scope.ServiceProvider.GetService<IDataContext>();
         context.Should().NotBeNull();
     }
@@ -42,7 +47,7 @@ public class InMemoryBuilderFlagTests
     [Test]
     public void UseInMemory_RegistersIDataContextProviderFactory()
     {
-        var factory = _provider.GetService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetService<IDataContextProviderFactory>();
         factory.Should().NotBeNull();
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
@@ -235,31 +236,7 @@ public class TypeExtensionRegistrationTests
     {
         // Arrange — build a real HotChocolate executor with a type extension
         // that adds a "ping" field to the operations query type.
-        var discoveryService = Substitute.For<ITrainDiscoveryService>();
-        discoveryService
-            .DiscoverTrains()
-            .Returns([
-                new TrainRegistration
-                {
-                    ServiceType = typeof(IFakeTrainForExtTest),
-                    ImplementationType = typeof(FakeTrainForExtTest),
-                    InputType = typeof(FakeExtTestInput),
-                    OutputType = typeof(Unit),
-                    Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = nameof(IFakeTrainForExtTest),
-                    ImplementationTypeName = nameof(FakeTrainForExtTest),
-                    HasAllowAnonymousAttribute = true,
-                    InputTypeName = nameof(FakeExtTestInput),
-                    OutputTypeName = nameof(Unit),
-                    RequiredPolicies = [],
-                    RequiredRoles = [],
-                    IsQuery = true,
-                    IsMutation = false,
-                    IsRemote = false,
-                    IsBroadcastEnabled = false,
-                    GraphQLOperations = GraphQLOperation.Run,
-                },
-            ]);
+        var discoveryService = DiscoveryOfOneFakeQueryTrain();
 
         var services = new ServiceCollection();
         services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
@@ -289,10 +266,40 @@ public class TypeExtensionRegistrationTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
 
         var data = operationResult.Data;
         data.Should().NotBeNull();
+    }
+
+    private static ITrainDiscoveryService DiscoveryOfOneFakeQueryTrain()
+    {
+        var discoveryService = Substitute.For<ITrainDiscoveryService>();
+        discoveryService
+            .DiscoverTrains()
+            .Returns([
+                new TrainRegistration
+                {
+                    ServiceType = typeof(IFakeTrainForExtTest),
+                    ImplementationType = typeof(FakeTrainForExtTest),
+                    InputType = typeof(FakeExtTestInput),
+                    OutputType = typeof(Unit),
+                    Lifetime = ServiceLifetime.Scoped,
+                    ServiceTypeName = nameof(IFakeTrainForExtTest),
+                    ImplementationTypeName = nameof(FakeTrainForExtTest),
+                    HasAllowAnonymousAttribute = true,
+                    InputTypeName = nameof(FakeExtTestInput),
+                    OutputTypeName = nameof(Unit),
+                    RequiredPolicies = [],
+                    RequiredRoles = [],
+                    IsQuery = true,
+                    IsMutation = false,
+                    IsRemote = false,
+                    IsBroadcastEnabled = false,
+                    GraphQLOperations = GraphQLOperation.Run,
+                },
+            ]);
+        return discoveryService;
     }
 
     [Test]
@@ -353,7 +360,7 @@ public class TypeExtensionRegistrationTests
         // Assert
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
     }
 
     #endregion
@@ -366,12 +373,12 @@ public class TypeExtensionRegistrationTests
     [ExtendObjectType(typeof(object))]
     public class StubTypeExtensionB;
 
-    public class NotATypeExtension;
+    public static class NotATypeExtension;
 
     [ExtendObjectType(typeof(object))]
     public abstract class AbstractTypeExtension;
 
-    private class StubTypeModuleForExtTest : HotChocolate.Execution.Configuration.TypeModule
+    private sealed class StubTypeModuleForExtTest : HotChocolate.Execution.Configuration.TypeModule
     {
         public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
             HotChocolate.Types.Descriptors.IDescriptorContext context,
@@ -389,9 +396,9 @@ public class TypeExtensionRegistrationTests
 
     private interface IFakeTrainForExtTest;
 
-    private class FakeTrainForExtTest;
+    private static class FakeTrainForExtTest;
 
-    private record FakeExtTestInput;
+    private sealed record FakeExtTestInput;
 
     #endregion
 }

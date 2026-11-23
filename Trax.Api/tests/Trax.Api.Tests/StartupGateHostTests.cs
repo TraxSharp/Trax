@@ -42,7 +42,7 @@ public class StartupGateHostTests
             afterGraphQL: () => trains.Add(Train<ILateMutationTrain>(isQuery: false))
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<Exception>())
             .Which.ToString()
@@ -70,7 +70,7 @@ public class StartupGateHostTests
             graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<Exception>())
             .Which.ToString()

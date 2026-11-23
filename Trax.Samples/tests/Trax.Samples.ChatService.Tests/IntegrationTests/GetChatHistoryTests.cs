@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
 using Trax.Samples.ChatService.Data;
@@ -16,7 +17,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_ReturnsMessagesInChronologicalOrder()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 5);
 
         var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId });
@@ -28,7 +29,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_RespectsTake()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 10);
 
         var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId, Take = 3 });
@@ -39,7 +40,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_DefaultsTake_WhenOmitted()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, GetChatHistoryInput.DefaultTake + 5);
 
         var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId });
@@ -50,7 +51,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_ClampsTakeToTheMaximum()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, GetChatHistoryInput.MaxTake + 5);
 
         var result = await Fetch(
@@ -64,7 +65,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_BeforeFilter_ReturnsOlderMessages()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 5);
 
         var result = await Fetch(
@@ -78,7 +79,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_EmptyRoom_ReturnsEmpty()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 0);
 
         var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId });
@@ -89,7 +90,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_DifferentRoom_DoesNotCrossContaminate()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomA = await SeedRoomWithMessages(db, 3);
         await SeedRoomWithMessages(db, 4);
 
@@ -101,7 +102,7 @@ public class GetChatHistoryTests
     [Test]
     public async Task FetchMessages_CallerNotParticipant_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 2);
         var junction = new FetchMessagesJunction(db, ChatUsers.Bob);
 
@@ -115,7 +116,7 @@ public class GetChatHistoryTests
 
     private static async Task<Guid> SeedRoomWithMessages(ChatDbContext db, int count)
     {
-        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice).ConfigureAwait(false);
         for (var i = 0; i < count; i++)
             db.ChatMessages.Add(
                 new ChatMessage
@@ -124,11 +125,11 @@ public class GetChatHistoryTests
                     ChatRoomId = roomId,
                     SenderUserId = ChatUsers.Alice.Id,
                     SenderDisplayName = "Alice",
-                    Content = $"Message {i}",
+                    Content = string.Create(CultureInfo.InvariantCulture, $"Message {i}"),
                     SentAt = BaseTime.AddMinutes(i),
                 }
             );
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync().ConfigureAwait(false);
         return roomId;
     }
 }

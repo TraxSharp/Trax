@@ -40,14 +40,14 @@ public static class TraxClientExport
         ArgumentNullException.ThrowIfNull(args);
         for (var i = 0; i < args.Count; i++)
         {
-            if (args[i] == Argument)
+            if (string.Equals(args[i], Argument, StringComparison.Ordinal))
                 return i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
                     ? args[i + 1]
-                    : throw NoPath();
+                    : throw NoPath(nameof(args));
             if (args[i].StartsWith(Argument + "=", StringComparison.Ordinal))
                 return args[i][(Argument.Length + 1)..] is { Length: > 0 } path
                     ? path
-                    : throw NoPath();
+                    : throw NoPath(nameof(args));
         }
         return null;
     }
@@ -67,53 +67,10 @@ public static class TraxClientExport
         return true;
     }
 
-    private static ArgumentException NoPath() =>
+    private static ArgumentException NoPath(string paramName) =>
         new(
             $"The process was started with {Argument} and no path after it. Give the file to write the client "
-                + $"manifest to, as in '{Argument} client.json', or start it without {Argument} to serve."
+                + $"manifest to, as in '{Argument} client.json', or start it without {Argument} to serve.",
+            paramName
         );
-}
-
-/// <summary>
-/// The export flag of one command line, read when first asked, so a bad argument is reported where it is used and not
-/// as a type initializer's failure.
-/// </summary>
-internal sealed class ClientExportFlag(Func<IReadOnlyList<string>> args)
-{
-    private readonly Lazy<string?> _path = new(() => TraxClientExport.PathIn(args()));
-
-    public string? Path => _path.Value;
-
-    public bool Requested => Path is not null;
-}
-
-/// <summary>
-/// Refuses to start a host that was started to export its client manifest and is serving instead. Its data provider
-/// skipped the migration for the export, so serving would answer on an unmigrated database. An export runs only the
-/// <see cref="ITraxStartupCheck"/> services, and this is not one, so it fires only for a host that serves.
-/// </summary>
-internal sealed class ClientExportServeGate : IHostedLifecycleService
-{
-    private bool _checked;
-
-    public Task StartingAsync(CancellationToken cancellationToken)
-    {
-        _checked = true;
-        throw new InvalidOperationException(
-            $"This process was started with {TraxClientExport.Argument}, so its database was not migrated, but the "
-                + "host is starting to serve. Call 'await app.RunTraxAsync(args)' in place of 'app.Run()' so the "
-                + $"export is written and the host exits, or start it without {TraxClientExport.Argument}."
-        );
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken) =>
-        _checked ? Task.CompletedTask : StartingAsync(cancellationToken);
-
-    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

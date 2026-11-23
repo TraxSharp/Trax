@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.MachinePolicyFire;
@@ -37,8 +38,8 @@ public class PolicyRunnerTests(StoreProvider provider)
         ["constraints"] = new JsonArray(),
     };
 
-    private InstanceHost _host = null!;
-    private MachinePolicies _policies = null!;
+    private InstanceHost? _host;
+    private MachinePolicies? _policies;
 
     [SetUp]
     public async Task SetUp()
@@ -50,7 +51,7 @@ public class PolicyRunnerTests(StoreProvider provider)
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private InstanceHost Host(
         IReadOnlyList<IMachine> machines,
@@ -64,13 +65,13 @@ public class PolicyRunnerTests(StoreProvider provider)
             services: s =>
             {
                 s.AddIrMachines(machines);
-                s.AddSingleton(policies ?? _policies);
+                s.AddSingleton(policies ?? _policies.NotNull());
                 s.AddSingleton(new PolicyRunnerOptions { BatchSize = 100, FanOutCap = cap });
                 s.AddSingleton<MachinePolicyRunner>();
             }
         );
 
-    private MachinePolicyRunner Runner(InstanceHost host) =>
+    private static MachinePolicyRunner Runner(InstanceHost host) =>
         host.Services.GetRequiredService<MachinePolicyRunner>();
 
     private static string NewUser() => $"policy-{Guid.NewGuid():N}";
@@ -113,7 +114,7 @@ public class PolicyRunnerTests(StoreProvider provider)
             .ContainSingle()
             .Which.Policy.Should()
             .Be(Linked, "the transition queued its fire as it committed");
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(adasReceipt)).Should().Be("Void");
         (await StateOf(adasOther)).Should().Be("Issued", "it links another order");
@@ -148,7 +149,7 @@ public class PolicyRunnerTests(StoreProvider provider)
         );
 
         await Advance(ada, "p-order", order, "Expire");
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Void");
         (await StateOf(other)).Should().Be("Issued", "it links another order");
@@ -169,10 +170,10 @@ public class PolicyRunnerTests(StoreProvider provider)
         );
         await Advance(ada, "p-order", order, "Expire");
 
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
-        var row = (await _host.Rows(receipt)).Single().RowId;
-        using var scope = _host.Scope();
+        var row = (await _host.NotNull().Rows(receipt)).Single().RowId;
+        using var scope = _host.NotNull().Scope();
         var last = await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotTransitions.AsNoTracking()
@@ -201,10 +202,10 @@ public class PolicyRunnerTests(StoreProvider provider)
         (await Owed()).Should().ContainSingle();
 
         // Another host, as after a restart, over the same database.
-        using var next = Host(Machines().Machines, cap: 3, sameDatabaseAs: _host);
+        using var next = Host(Machines().Machines, cap: 3, sameDatabaseAs: _host.NotNull());
         (await Owed(next)).Should().ContainSingle("the next host reads the same database");
         await Runner(next).PassOnce(CancellationToken.None);
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Void");
         (await PolicyFires(receipt))
@@ -231,8 +232,12 @@ public class PolicyRunnerTests(StoreProvider provider)
         using var older = Host(
             Machines().Machines,
             cap: 3,
-            sameDatabaseAs: _host,
-            policies: new MachinePolicies(_policies.ById.Values.Where(p => p.Id != Linked))
+            sameDatabaseAs: _host.NotNull(),
+            policies: new MachinePolicies(
+                _policies
+                    .NotNull()
+                    .ById.Values.Where(p => !string.Equals(p.Id, Linked, StringComparison.Ordinal))
+            )
         );
         (await Runner(older).PassOnce(CancellationToken.None)).Should().Be(0);
         (await Owed())
@@ -241,7 +246,7 @@ public class PolicyRunnerTests(StoreProvider provider)
             .Which.Policy.Should()
             .Be(Linked);
 
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
         (await StateOf(receipt)).Should().Be("Void");
         (await Owed()).Should().BeEmpty();
     }
@@ -263,9 +268,11 @@ public class PolicyRunnerTests(StoreProvider provider)
 
         // It serves the policy but not the receipt it fires on.
         using var partial = Host(
-            Machines().Machines.Where(m => m.Name != "p-receipt").ToList(),
+            Machines()
+                .Machines.Where(m => !string.Equals(m.Name, "p-receipt", StringComparison.Ordinal))
+                .ToList(),
             cap: 3,
-            sameDatabaseAs: _host
+            sameDatabaseAs: _host.NotNull()
         );
         (await Runner(partial).PassOnce(CancellationToken.None)).Should().Be(0);
         (await Owed())
@@ -274,7 +281,7 @@ public class PolicyRunnerTests(StoreProvider provider)
             .Which.Policy.Should()
             .Be(Linked);
 
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
         (await StateOf(receipt)).Should().Be("Void");
         (await Owed()).Should().BeEmpty();
     }
@@ -293,10 +300,10 @@ public class PolicyRunnerTests(StoreProvider provider)
             new JsonObject { ["orderId"] = order.ToString() }
         );
         await Advance(ada, "p-order", order, "Expire");
-        using var other = Host(Machines().Machines, cap: 3, sameDatabaseAs: _host);
+        using var other = Host(Machines().Machines, cap: 3, sameDatabaseAs: _host.NotNull());
 
         // A pass that loses SQLite's write lock throws and is tried again, so each host passes until nothing is owed.
-        await Task.WhenAll(Drain(_host), Drain(other));
+        await Task.WhenAll(Drain(_host.NotNull()), Drain(other));
 
         (await StateOf(receipt)).Should().Be("Void");
         (await PolicyFires(receipt))
@@ -318,29 +325,32 @@ public class PolicyRunnerTests(StoreProvider provider)
         var held = await Queue(Broadcast);
 
         // Another host holds the second row, as it would while expanding it.
-        await using var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-        await using (
-            var hold = new NpgsqlCommand(
-                "SELECT id FROM trax.machine_policy_fire WHERE id = @id FOR UPDATE",
-                connection,
-                transaction
-            )
-        )
+        var transaction = await connection.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
+        var hold = new NpgsqlCommand(
+            "SELECT id FROM trax.machine_policy_fire WHERE id = @id FOR UPDATE",
+            connection,
+            transaction
+        );
+        await using (hold.ConfigureAwait(false))
         {
             hold.Parameters.AddWithValue("id", held);
             await hold.ExecuteScalarAsync();
         }
 
-        var pass = Runner(_host).PassOnce(CancellationToken.None);
+        var pass = Runner(_host.NotNull()).PassOnce(CancellationToken.None);
         // negative-wait: a pass that waits on the held row never ends while it is held.
-        var finished = await Task.WhenAny(pass, Task.Delay(TimeSpan.FromSeconds(10))) == pass;
+        var finished =
+            await Task.WhenAny(pass, Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System))
+            == pass;
         await transaction.RollbackAsync();
         await pass;
 
         finished.Should().BeTrue("a host coalesces only the rows it can claim");
-        await Drain(_host);
+        await Drain(_host.NotNull());
         (await StateOf(order)).Should().Be("Baking");
         (await Owed()).Should().BeEmpty();
     }
@@ -361,13 +371,13 @@ public class PolicyRunnerTests(StoreProvider provider)
         await Advance(ada, "p-order", order, "Expire");
         await HoldEffect(receipt, Guid.NewGuid());
 
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Issued", "an effect in flight holds the receipt");
         (await Owed()).Should().ContainSingle("the fire is still owed while its target is held");
 
-        await HoldEffect(receipt, null);
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await HoldEffect(receipt, token: null);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Void");
         (await Owed()).Should().BeEmpty();
@@ -382,10 +392,10 @@ public class PolicyRunnerTests(StoreProvider provider)
         await Queue(Broadcast);
         await HoldEffect(order, Guid.NewGuid());
 
-        await Runner(_host).PassOnce(CancellationToken.None);
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
-        var row = (await _host.Rows(order)).Single().RowId;
+        var row = (await _host.NotNull().Rows(order)).Single().RowId;
         (await StateOf(order)).Should().Be("Placed");
         (await Owed())
             .Should()
@@ -394,8 +404,8 @@ public class PolicyRunnerTests(StoreProvider provider)
                 "the expanded fire is still owed while its target is held"
             );
 
-        await HoldEffect(order, null);
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await HoldEffect(order, token: null);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(order)).Should().Be("Baking");
         (await Owed()).Should().BeEmpty();
@@ -426,12 +436,12 @@ public class PolicyRunnerTests(StoreProvider provider)
         await Queue(Broadcast);
         await Queue(Broadcast);
 
-        await Runner(_host).PassOnce(CancellationToken.None);
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         var baking = 0;
         foreach (var order in orders)
-            if (await StateOf(order) == "Baking")
+            if (string.Equals(await StateOf(order), "Baking", StringComparison.Ordinal))
                 baking++;
         baking
             .Should()
@@ -455,17 +465,17 @@ public class PolicyRunnerTests(StoreProvider provider)
 
         // While the runner expands the first fire, the second order enters Placed and the shop owes the broadcast again:
         // the second fire reaches an instance the first read did not see, so it must not be coalesced into the first.
-        var runner = Runner(_host);
+        var runner = Runner(_host.NotNull());
         var once = false;
         runner.AfterWaitingRead = async () =>
         {
             if (once)
                 return;
             once = true;
-            await Advance(second, "p-order", late, "Place");
-            await Queue(Broadcast);
+            await Advance(second, "p-order", late, "Place").ConfigureAwait(false);
+            await Queue(Broadcast).ConfigureAwait(false);
         };
-        await Drain(_host);
+        await Drain(_host.NotNull());
 
         (await StateOf(early)).Should().Be("Baking");
         (await StateOf(late))
@@ -488,17 +498,18 @@ public class PolicyRunnerTests(StoreProvider provider)
             new JsonObject { ["orderId"] = order.ToString() }
         );
         await Advance(ada, "p-order", order, "Expire");
-        var signal = _host.Services.GetRequiredService<SnapshotWriteSignal>();
+        var signal = _host.NotNull().Services.GetRequiredService<SnapshotWriteSignal>();
         // The writes above signalled already; take that one so only the pass's can wake the wait below.
         await signal.WaitAsync(TimeSpan.Zero, CancellationToken.None);
 
-        await Runner(_host).PassOnce(CancellationToken.None);
+        await Runner(_host.NotNull()).PassOnce(CancellationToken.None);
 
         (await StateOf(receipt)).Should().Be("Void");
-        var waited = System.Diagnostics.Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await signal.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
-        waited
-            .Elapsed.Should()
+        TimeProvider
+            .System.GetElapsedTime(started)
+            .Should()
             .BeLessThan(
                 TimeSpan.FromSeconds(5),
                 "a poll is woken by the policy's write, not left to its next interval"
@@ -518,9 +529,10 @@ public class PolicyRunnerTests(StoreProvider provider)
             new JsonObject { ["orderId"] = Guid.NewGuid().ToString() }
         );
 
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         (
             await _host
+                .NotNull()
                 .Service(scope, "p-receipt")
                 .Advance(DeskRoles.Client(ada), receipt, "Cancel", requestId: "c1")
         )
@@ -532,11 +544,13 @@ public class PolicyRunnerTests(StoreProvider provider)
 
     private async Task<Guid> Start(string user, string machine)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return (
             await _host
+                .NotNull()
                 .Service(scope, machine)
                 .Start(DeskRoles.Client(user), new JsonObject(), $"s-{Guid.NewGuid():N}")
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<StartOutcome.Started>()
@@ -551,11 +565,13 @@ public class PolicyRunnerTests(StoreProvider provider)
         JsonObject? input = null
     )
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         (
             await _host
+                .NotNull()
                 .Service(scope, machine)
                 .Advance(DeskRoles.Client(user), id, trigger, input, $"a-{Guid.NewGuid():N}")
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -565,39 +581,45 @@ public class PolicyRunnerTests(StoreProvider provider)
     // be read by this one. SQLite is a new file per test, so this finds nothing there.
     private async Task Clean()
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         string[] ours = ["p-order", "p-receipt", "p-shop"];
         var rows = context.SnapshotDrafts.Where(d => ours.Contains(d.Machine)).Select(d => d.RowId);
         await context
             .SnapshotTransitions.Where(t => rows.Contains(t.DraftRowId))
-            .ExecuteDeleteAsync();
-        await context.SnapshotDrafts.Where(d => ours.Contains(d.Machine)).ExecuteDeleteAsync();
-        await context.MachinePolicyFires.ExecuteDeleteAsync();
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+        await context
+            .SnapshotDrafts.Where(d => ours.Contains(d.Machine))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+        await context.MachinePolicyFires.ExecuteDeleteAsync().ConfigureAwait(false);
     }
 
-    private async Task<string> StateOf(Guid id) => (await _host.Rows(id)).Single().State;
+    private async Task<string> StateOf(Guid id) =>
+        (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single().State;
 
     private async Task<List<MachinePolicyFire>> Owed(InstanceHost? host = null)
     {
-        using var scope = (host ?? _host).Scope();
+        using var scope = (host ?? _host.NotNull()).Scope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await context.MachinePolicyFires.AsNoTracking().ToListAsync();
+        return await context.MachinePolicyFires.AsNoTracking().ToListAsync().ConfigureAwait(false);
     }
 
     // Marks the instance with an effect in flight, as the effect runner does, or clears it.
     private async Task HoldEffect(Guid id, Guid? token)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
-            .ExecuteUpdateAsync(u => u.SetProperty(d => d.EffectToken, token));
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.EffectToken, token))
+            .ConfigureAwait(false);
     }
 
     private async Task<long> Queue(string policy)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var fire = new MachinePolicyFire
         {
@@ -605,29 +627,30 @@ public class PolicyRunnerTests(StoreProvider provider)
             SourceRowId = -1,
             SourceInstanceId = Guid.NewGuid(),
             SourceRevision = 1,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow(),
         };
         context.MachinePolicyFires.Add(fire);
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return fire.Id;
     }
 
     // Passes until nothing is owed, as the runner's loop does, within a bound.
     private async Task Drain(InstanceHost host)
     {
-        for (var i = 0; i < 20 && (await Owed(host)).Count > 0; i++)
-            await Runner(host).PassOnce(CancellationToken.None);
+        for (var i = 0; i < 20 && (await Owed(host).ConfigureAwait(false)).Count > 0; i++)
+            await Runner(host).PassOnce(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<int> PolicyFires(Guid id)
     {
-        var row = (await _host.Rows(id)).Single().RowId;
-        using var scope = _host.Scope();
+        var row = (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single().RowId;
+        using var scope = _host.NotNull().Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotTransitions.CountAsync(t =>
                 t.DraftRowId == row && t.Actor == SnapshotTransitionActor.Policy
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     // An order a customer may expire, place, and have baked by the shop; a receipt that names an order and is voided
@@ -658,6 +681,28 @@ public class PolicyRunnerTests(StoreProvider provider)
                 ("Placed", "Bake", "Baking"),
             ]
         );
+        var receipt = ReceiptIr();
+        var shop = Ir(
+            "p-shop",
+            "Closed",
+            ["Closed", "Opened"],
+            ["Open"],
+            [("Closed", "Open", "Opened")]
+        );
+
+        var host = PolicyHost(order, receipt, shop);
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
+        {
+            ["p-order"] = order,
+            ["p-receipt"] = receipt,
+            ["p-shop"] = shop,
+        };
+        return (irs, host);
+    }
+
+    // The receipt machine, whose Attach takes the order's id and records it as the link the policy follows.
+    private static JsonObject ReceiptIr()
+    {
         var receipt = Ir(
             "p-receipt",
             "Open",
@@ -670,9 +715,17 @@ public class PolicyRunnerTests(StoreProvider provider)
         {
             ["Attach"] = new JsonObject { ["fields"] = new JsonArray(Field.DeepClone()) },
         };
-        receipt["transitions"]!
+        receipt["transitions"]
+            .NotNull()
             .AsArray()
-            .Single(t => t!["trigger"]!.GetValue<string>() == "Attach")!["reduce"] = new JsonObject
+            .Single(t =>
+                string.Equals(
+                    t.NotNull()["trigger"].NotNull().GetValue<string>(),
+                    "Attach",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull()["reduce"] = new JsonObject
         {
             ["reduce"] = "set",
             ["steps"] = new JsonArray(
@@ -683,14 +736,11 @@ public class PolicyRunnerTests(StoreProvider provider)
                 }
             ),
         };
-        var shop = Ir(
-            "p-shop",
-            "Closed",
-            ["Closed", "Opened"],
-            ["Open"],
-            [("Closed", "Open", "Opened")]
-        );
+        return receipt;
+    }
 
+    private static JsonObject PolicyHost(JsonObject order, JsonObject receipt, JsonObject shop)
+    {
         var any = new JsonObject { ["anyAuthenticated"] = true };
         var server = new JsonObject { ["server"] = true };
         var host = new JsonObject
@@ -730,39 +780,37 @@ public class PolicyRunnerTests(StoreProvider provider)
                     ["triggers"] = new JsonObject { ["Open"] = server.DeepClone() },
                 },
             },
-            ["policies"] = new JsonArray(
-                new JsonObject
-                {
-                    ["shape"] = "linked",
-                    ["when"] = new JsonObject { ["machine"] = "p-order", ["enters"] = "Expired" },
-                    ["then"] = new JsonObject
-                    {
-                        ["machine"] = "p-receipt",
-                        ["link"] = "orderId",
-                        ["trigger"] = "Cancel",
-                    },
-                },
-                new JsonObject
-                {
-                    ["shape"] = "broadcast",
-                    ["when"] = new JsonObject { ["machine"] = "p-shop", ["enters"] = "Opened" },
-                    ["then"] = new JsonObject
-                    {
-                        ["machine"] = "p-order",
-                        ["inState"] = "Placed",
-                        ["trigger"] = "Bake",
-                    },
-                }
-            ),
+            ["policies"] = Policies(),
         };
-        var irs = new Dictionary<string, JsonObject>
-        {
-            ["p-order"] = order,
-            ["p-receipt"] = receipt,
-            ["p-shop"] = shop,
-        };
-        return (irs, host);
+        return host;
     }
+
+    // A linked policy from an order's expiry to its receipt, and a broadcast from the shop opening to the placed orders.
+    private static JsonArray Policies() =>
+        new JsonArray(
+            new JsonObject
+            {
+                ["shape"] = "linked",
+                ["when"] = new JsonObject { ["machine"] = "p-order", ["enters"] = "Expired" },
+                ["then"] = new JsonObject
+                {
+                    ["machine"] = "p-receipt",
+                    ["link"] = "orderId",
+                    ["trigger"] = "Cancel",
+                },
+            },
+            new JsonObject
+            {
+                ["shape"] = "broadcast",
+                ["when"] = new JsonObject { ["machine"] = "p-shop", ["enters"] = "Opened" },
+                ["then"] = new JsonObject
+                {
+                    ["machine"] = "p-order",
+                    ["inState"] = "Placed",
+                    ["trigger"] = "Bake",
+                },
+            }
+        );
 
     private static JsonObject Ir(
         string id,

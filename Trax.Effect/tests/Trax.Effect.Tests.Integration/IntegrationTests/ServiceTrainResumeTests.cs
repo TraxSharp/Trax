@@ -1,7 +1,9 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Exceptions;
 using Trax.Effect.Extensions;
@@ -38,7 +40,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     ];
 
     private readonly ScriptedResearchDecider _decider = new();
-    private CheckpointHost _host = null!;
+    private CheckpointHost? _host;
     private readonly List<long> _runs = [];
 
     [OneTimeSetUp]
@@ -54,7 +56,11 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         );
 
     [OneTimeTearDown]
-    public async Task DisposeHost() => await _host.DisposeAsync();
+    public async Task DisposeHost()
+    {
+        if (_host is not null)
+            await _host.DisposeAsync();
+    }
 
     [SetUp]
     public void Reset()
@@ -62,14 +68,14 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         CheckpointProbe.Reset();
         _decider.Reset();
         _runs.Clear();
-        _host.Logs.Clear();
+        _host.NotNull().Logs.Clear();
     }
 
     [TearDown]
     public async Task DeleteRuns()
     {
         CheckpointProbe.Reset();
-        await _host.Delete([.. _runs]);
+        await _host.NotNull().Delete([.. _runs]);
     }
 
     [Test]
@@ -88,7 +94,9 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
             );
         _decider.Asked.Should().Be(0, "a skipped routing step asks no decider");
         resumed.ResumeFrom.Should().Be(failed.Id);
-        (await _host.Checkpoints(resumed.Id)).Should().BeEmpty("a completed run keeps none");
+        (await _host.NotNull().Checkpoints(resumed.Id))
+            .Should()
+            .BeEmpty("a completed run keeps none");
     }
 
     [Test]
@@ -108,14 +116,14 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         // The first run reaches only the first checkpoint; the run resuming it writes the second
         // and fails after it; the run resuming that one starts after the second.
         var first = await Crash(nameof(ScoreFindings));
-        (await _host.Checkpoints(first.Id)).Should().ContainSingle();
+        (await _host.NotNull().Checkpoints(first.Id)).Should().ContainSingle();
 
         CheckpointProbe.Reset();
         CheckpointProbe.FailIn = nameof(Summarize);
         var second = await Run(resumeFrom: first.Id);
         second.TrainState.Should().Be(TrainState.Failed);
         CheckpointProbe.Ran.Should().Equal([nameof(ScoreFindings), nameof(Summarize)]);
-        (await _host.Checkpoints(second.Id))
+        (await _host.NotNull().Checkpoints(second.Id))
             .Select(c => c.NodeId)
             .Should()
             .Equal(
@@ -141,7 +149,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         CheckpointProbe.FailIn = nameof(ScoreFindings);
         var second = await Run(resumeFrom: first.Id);
         second.TrainState.Should().Be(TrainState.Failed);
-        (await _host.Checkpoints(second.Id)).Should().BeEmpty();
+        (await _host.NotNull().Checkpoints(second.Id)).Should().BeEmpty();
 
         CheckpointProbe.Reset();
         var third = await Run(resumeFrom: second.Id);
@@ -159,17 +167,24 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     public async Task A_retry_whose_checkpoint_no_longer_matches_runs_from_the_top_with_a_warning()
     {
         var failed = await Crash(nameof(Summarize));
-        await _host.Tamper(failed.Id, row => row.ChainHash = new string('0', 64));
+        await _host.NotNull().Tamper(failed.Id, row => row.ChainHash = new string('0', 64));
 
-        var resumed = await Run(resumeFrom: failed.Id, manifestId: await _host.Manifest());
+        var resumed = await Run(
+            resumeFrom: failed.Id,
+            manifestId: await _host.NotNull().Manifest()
+        );
 
         resumed.TrainState.Should().Be(TrainState.Completed, resumed.FailureReason);
         CheckpointProbe.Ran.Should().Equal(EveryStep, $"a full rerun stays possible ({Adr})");
+        var refusal = string.Create(
+            CultureInfo.InvariantCulture,
+            $"cannot resume run ({failed.Id}) and runs from the top"
+        );
         _host
+            .NotNull()
             .Logs.Should()
             .Contain(l =>
-                l.Level == LogLevel.Warning
-                && l.Message.Contains($"cannot resume run ({failed.Id}) and runs from the top")
+                l.Level == LogLevel.Warning && l.Message.Contains(refusal, StringComparison.Ordinal)
             );
     }
 
@@ -177,13 +192,17 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     public async Task A_retry_of_a_run_with_no_checkpoint_runs_from_the_top_with_a_warning()
     {
         var failed = await Crash(nameof(FetchFullTexts));
-        (await _host.Checkpoints(failed.Id)).Should().BeEmpty();
+        (await _host.NotNull().Checkpoints(failed.Id)).Should().BeEmpty();
 
-        var resumed = await Run(resumeFrom: failed.Id, manifestId: await _host.Manifest());
+        var resumed = await Run(
+            resumeFrom: failed.Id,
+            manifestId: await _host.NotNull().Manifest()
+        );
 
         resumed.TrainState.Should().Be(TrainState.Completed, resumed.FailureReason);
         CheckpointProbe.Ran.Should().Equal(EveryStep);
         _host
+            .NotNull()
             .Logs.Should()
             .Contain(l => l.Level == LogLevel.Warning && l.Message.Contains("runs from the top"));
     }
@@ -192,7 +211,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     public async Task An_operators_resume_refused_at_start_fails_with_the_refusal_instead_of_running_from_the_top()
     {
         var failed = await Crash(nameof(Summarize));
-        await _host.Tamper(failed.Id, row => row.ChainHash = new string('0', 64));
+        await _host.NotNull().Tamper(failed.Id, row => row.ChainHash = new string('0', 64));
 
         var resumed = await Run(resumeFrom: failed.Id);
 
@@ -213,7 +232,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         // The hashes still match, so the verdict allows the resume; only reading the state back finds
         // that the row holds nothing a step can start from.
         var failed = await Crash(nameof(Summarize));
-        await _host.Tamper(failed.Id, row => row.State = stored);
+        await _host.NotNull().Tamper(failed.Id, row => row.State = stored);
 
         var resumed = await Run(resumeFrom: failed.Id);
 
@@ -257,7 +276,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         var resumed = await Run(
             resumeFrom: failed.Id,
             input: "trees",
-            manifestId: await _host.Manifest()
+            manifestId: await _host.NotNull().Manifest()
         );
 
         resumed.TrainState.Should().Be(TrainState.Completed, resumed.FailureReason);
@@ -269,7 +288,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     {
         var failed = await Crash(nameof(Summarize));
 
-        var (resumed, _) = await _host.Run<ICountingResearchTrain>("graphs", failed.Id);
+        var (resumed, _) = await _host.NotNull().Run<ICountingResearchTrain>("graphs", failed.Id);
         _runs.Add(resumed.Id);
 
         resumed.TrainState.Should().Be(TrainState.Failed);
@@ -312,12 +331,12 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         // The checkpoint keeps no route of the sensitive vault, so a step after it that reads
         // that route has nothing to read on resume.
         CheckpointProbe.FailIn = nameof(ReadVaultRoute);
-        var (failed, _) = await _host.Run<IReadsVaultRouteTrain>("graphs");
+        var (failed, _) = await _host.NotNull().Run<IReadsVaultRouteTrain>("graphs");
         _runs.Add(failed.Id);
         failed.TrainState.Should().Be(TrainState.Failed);
         CheckpointProbe.Reset();
 
-        var (resumed, _) = await _host.Run<IReadsVaultRouteTrain>("graphs", failed.Id);
+        var (resumed, _) = await _host.NotNull().Run<IReadsVaultRouteTrain>("graphs", failed.Id);
         _runs.Add(resumed.Id);
 
         resumed.TrainState.Should().Be(TrainState.Failed);
@@ -329,7 +348,7 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
     private async Task<Models.Metadata.Metadata> Crash(string junction)
     {
         CheckpointProbe.FailIn = junction;
-        var failed = await Run();
+        var failed = await Run().ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
         CheckpointProbe.Reset();
         _decider.Asked = 0;
@@ -343,7 +362,10 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         long? manifestId = null
     )
     {
-        var (run, _) = await _host.Run<IResearchTrain>(input, resumeFrom, resumeAt, manifestId);
+        var (run, _) = await _host
+            .NotNull()
+            .Run<IResearchTrain>(input, resumeFrom, resumeAt, manifestId)
+            .ConfigureAwait(false);
         _runs.Add(run.Id);
         return run;
     }

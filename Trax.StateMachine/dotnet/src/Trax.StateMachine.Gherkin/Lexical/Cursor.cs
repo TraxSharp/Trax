@@ -1,8 +1,10 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
 /// Reads the tokens after one line's keyword. Every read that does not find what the form says throws a
-/// <see cref="FormError"/> naming the keyword's form, so a line is either read whole or is a problem.
+/// <see cref="FormErrorException"/> naming the keyword's form, so a line is either read whole or is a problem.
 /// </summary>
 internal sealed class Cursor(LexLine line)
 {
@@ -19,7 +21,7 @@ internal sealed class Cursor(LexLine line)
 
     internal Token PeekAt(int ahead) => _at + ahead < _tokens.Count ? _tokens[_at + ahead] : None;
 
-    internal FormError Form(string? detail = null) =>
+    internal FormErrorException Form(string? detail = null) =>
         new(
             $"'{line.Keyword.Text}' reads '{line.Keyword.Form}'"
                 + (detail is null ? "." : $": {detail}.")
@@ -98,7 +100,7 @@ internal sealed class Cursor(LexLine line)
     }
 
     /// <summary>
-    /// A value: a quoted text, a number, <c>true</c>, <c>false</c>, <c>nothing</c> (null), a list in brackets, or a
+    /// A value: a quoted text, a number, <see langword="true"/>, <see langword="false"/>, <c>nothing</c> (null), a list in brackets, or a
     /// bare name (a constant, or a field of what the line reads from).
     /// </summary>
     /// <summary>The deepest a list in a value nests.</summary>
@@ -115,7 +117,7 @@ internal sealed class Cursor(LexLine line)
                 return new LxText(token.Value, Line);
             case TokenKind.Open:
                 if (depth >= MaxDepth)
-                    throw new FormError($"a list nests deeper than {MaxDepth}.");
+                    throw new FormErrorException($"a list nests deeper than {MaxDepth}.");
                 var items = new List<LxValue>();
                 if (Peek.Kind == TokenKind.Close && !AtEnd)
                 {
@@ -200,7 +202,16 @@ internal sealed class Cursor(LexLine line)
         if (partial && Peek.Is("may"))
         {
             MayBeEmpty();
-            return new LxField(name, null, true, null, null, null, null, Line);
+            return new LxField(
+                name,
+                Type: null,
+                MayBeEmpty: true,
+                Minimum: null,
+                Maximum: null,
+                Enum: null,
+                Where: null,
+                Line
+            );
         }
         Expect("is");
         var type = Type();
@@ -231,16 +242,7 @@ internal sealed class Cursor(LexLine line)
                     minimum = bound;
             }
             else if (Peek.Is("one"))
-            {
-                Expect("one");
-                Expect("of");
-                values = [Text("a value")];
-                while (Peek.Kind == TokenKind.Comma && PeekAt(1).Kind == TokenKind.Text)
-                {
-                    _at++;
-                    values.Add(Text("a value"));
-                }
-            }
+                values = OneOfValues();
             else
             {
                 Expect("where");
@@ -252,6 +254,20 @@ internal sealed class Cursor(LexLine line)
                 $"'{Peek}' is not a clause of a field: may be empty, at least, at most, one of, where"
             );
         return new LxField(name, type, mayBeEmpty, minimum, maximum, values, where, Line);
+    }
+
+    // "one of" and its values, comma-separated texts.
+    private List<string> OneOfValues()
+    {
+        Expect("one");
+        Expect("of");
+        var values = new List<string> { Text("a value") };
+        while (Peek.Kind == TokenKind.Comma && PeekAt(1).Kind == TokenKind.Text)
+        {
+            _at++;
+            values.Add(Text("a value"));
+        }
+        return values;
     }
 
     private void MayBeEmpty()
@@ -279,14 +295,14 @@ internal sealed class Cursor(LexLine line)
         if (!article.Is("a") && !article.Is("an"))
             throw Form($"'{article}' is where 'a' or 'an' and a type go");
         var name = Word("a type");
-        if (name == "list")
+        if (string.Equals(name, "list", StringComparison.Ordinal))
         {
             if (!Peek.Is("of"))
                 return new LxTypeRef(LxTypeRef.Simple, "array");
             Expect("of");
             return new LxTypeRef(LxTypeRef.List, "array", Element(Word("the type of its items")));
         }
-        if (name == "map")
+        if (string.Equals(name, "map", StringComparison.Ordinal))
         {
             Expect("of");
             var key = Element(Word("the type of its keys"));
@@ -336,8 +352,11 @@ internal sealed class Cursor(LexLine line)
         while (Peek.Is("and") || Peek.Is("or"))
         {
             var word = Next("and").Value;
-            if (connective is not null && connective != word)
-                throw new FormError(
+            if (
+                connective is not null
+                && !string.Equals(connective, word, StringComparison.Ordinal)
+            )
+                throw new FormErrorException(
                     "a rule joins its parts with 'and' or with 'or', never both on one line. A rule that needs both "
                         + "is a custom rule, written in C# and named here."
                 );
@@ -353,7 +372,7 @@ internal sealed class Cursor(LexLine line)
         {
             var name = Word("a custom rule");
             Expect("holds");
-            return new LxAtom("custom", null, name, Line, Name: name);
+            return new LxAtom("custom", Source: null, name, Line, Name: name);
         }
         string? source = null;
         if (
@@ -388,46 +407,12 @@ internal sealed class Cursor(LexLine line)
             return new LxAtom("nonEmpty", source, field, Line);
         }
         if (next.Is("a") || next.Is("an"))
-        {
-            var type = Type();
-            if (type.Kind == LxTypeRef.List && type.Element!.Kind == LxTypeRef.Simple)
-                return new LxAtom(
-                    "arrayOf",
-                    source,
-                    field,
-                    Line,
-                    Type: JsonType(type.Element.Name)
-                );
-            if (
-                type.Kind == LxTypeRef.Simple
-                && type.Name
-                    is "string"
-                        or "number"
-                        or "integer"
-                        or "boolean"
-                        or "array"
-                        or "object"
-            )
-                return new LxAtom("ofType", source, field, Line, Type: type.Name);
-            throw Form(
-                $"'{type}' is not a type a rule checks: a string, a number, an integer, a boolean, a list, an object, or a list of one of them"
-            );
-        }
+            return TypeAtom(source, field);
         if (next.Is("one"))
-        {
-            Expect("one");
-            Expect("of");
-            var values = new List<string> { Text("a value") };
-            while (Peek.Kind == TokenKind.Comma && PeekAt(1).Kind == TokenKind.Text)
-            {
-                _at++;
-                values.Add(Text("a value"));
-            }
-            return new LxAtom("oneOf", source, field, Line, Values: values);
-        }
+            return new LxAtom("oneOf", source, field, Line, Values: OneOfValues());
         if (next.Is("true") || next.Is("false") || next.Kind == TokenKind.Text)
             return new LxAtom("equals", source, field, Line, Value: Value());
-        var (comparison, bound) = Compare(null);
+        var (comparison, bound) = Compare(fewer: null);
         if (Peek.Is("characters"))
         {
             Expect("characters");
@@ -435,6 +420,29 @@ internal sealed class Cursor(LexLine line)
             return new LxAtom("length", source, field, Line, comparison, new LxNumber(bound, Line));
         }
         return new LxAtom("compare", source, field, Line, comparison, new LxNumber(bound, Line));
+    }
+
+    // "is a <type>": a field of a JSON type, or a list of one.
+    private LxAtom TypeAtom(string? source, string field)
+    {
+        var type = Type();
+        if (
+            string.Equals(type.Kind, LxTypeRef.List, StringComparison.Ordinal)
+            && string.Equals(
+                type.Element.NotNull().Kind,
+                LxTypeRef.Simple,
+                StringComparison.Ordinal
+            )
+        )
+            return new LxAtom("arrayOf", source, field, Line, Type: JsonType(type.Element.Name));
+        if (
+            string.Equals(type.Kind, LxTypeRef.Simple, StringComparison.Ordinal)
+            && type.Name is "string" or "number" or "integer" or "boolean" or "array" or "object"
+        )
+            return new LxAtom("ofType", source, field, Line, Type: type.Name);
+        throw Form(
+            $"'{type}' is not a type a rule checks: a string, a number, an integer, a boolean, a list, an object, or a list of one of them"
+        );
     }
 
     // "at least 3", "at most 3", "more than 3", "less than 3", "fewer than 3", "3".
@@ -445,7 +453,7 @@ internal sealed class Cursor(LexLine line)
         {
             Expect("at");
             op = Peek.Is("most") ? "lte" : "gte";
-            Expect(op == "lte" ? "most" : "least");
+            Expect(string.Equals(op, "lte", StringComparison.Ordinal) ? "most" : "least");
         }
         else if (Peek.Is("more"))
         {

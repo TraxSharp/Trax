@@ -149,7 +149,11 @@ public class AttributeCoverageGapTests
     [Test]
     public void ValueTupleConverter_Serialize_WritesArray()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         options.Converters.Add(new ValueTupleConverter());
 
         var tuple = (1, "hello", 3);
@@ -176,7 +180,11 @@ public class AttributeCoverageGapTests
     [Test]
     public void ValueTupleConverter_WrongLengthArray_Throws()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         options.Converters.Add(new ValueTupleConverter());
 
         Action act = () => JsonSerializer.Deserialize<(int, string)>("[1]", options);

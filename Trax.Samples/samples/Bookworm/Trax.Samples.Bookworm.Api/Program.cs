@@ -113,29 +113,70 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 var app = builder.Build();
 
 // ── Create each domain's schema + tables, then seed demo data ────────────
-await app.Services.EnsureSchemaCreatedAsync<CatalogDbContext>();
-await app.Services.EnsureSchemaCreatedAsync<LendingDbContext>();
-await SeedAsync(app.Services);
+await app.Services.EnsureSchemaCreatedAsync<CatalogDbContext>().ConfigureAwait(false);
+await app.Services.EnsureSchemaCreatedAsync<LendingDbContext>().ConfigureAwait(false);
+await SeedAsync(app.Services).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 static async Task SeedAsync(IServiceProvider services)
 {
-    using var scope = services.CreateScope();
+    var scope = services.CreateAsyncScope();
+    await using var scopeDisposal = scope.ConfigureAwait(false);
     var catalog = scope.ServiceProvider.GetRequiredService<ICatalogDbContext>();
     var lending = scope.ServiceProvider.GetRequiredService<ILendingDbContext>();
+    var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
-    if (!await catalog.Books.AnyAsync())
+    await SeedCatalogAsync(catalog).ConfigureAwait(false);
+
+    // Startup has no caller, so the owner filter would hide every member: seeding reads past it.
+    if (!await lending.Members.IgnoreQueryFilters().AnyAsync().ConfigureAwait(false))
+    {
+        var member = new Member
+        {
+            Name = "Ada Reader",
+            Email = "ada@example.com",
+            PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "member"),
+        };
+        var otherMember = new Member
+        {
+            Name = "Grace Hopper",
+            Email = "grace@example.com",
+            PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "other-member"),
+        };
+        lending.Members.AddRange(member, otherMember);
+        await lending.SaveChangesAsync().ConfigureAwait(false);
+
+        var firstBookId = await catalog
+            .Books.OrderBy(b => b.Id)
+            .Select(b => b.Id)
+            .FirstAsync()
+            .ConfigureAwait(false);
+        lending.Loans.Add(
+            new Loan
+            {
+                MemberId = member.Id,
+                BookId = firstBookId,
+                BorrowedAt = clock.GetUtcNow().UtcDateTime,
+            }
+        );
+        await lending.SaveChangesAsync().ConfigureAwait(false);
+    }
+}
+
+static async Task SeedCatalogAsync(ICatalogDbContext catalog)
+{
+    if (!await catalog.Books.AnyAsync().ConfigureAwait(false))
     {
         var tolkien = new Author { Name = "J.R.R. Tolkien" };
         var leguin = new Author { Name = "Ursula K. Le Guin" };
         catalog.Authors.AddRange(tolkien, leguin);
-        await catalog.SaveChangesAsync();
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
 
         catalog.Books.AddRange(
             new Book
@@ -151,41 +192,18 @@ static async Task SeedAsync(IServiceProvider services)
                 AuthorId = leguin.Id,
             }
         );
-        await catalog.SaveChangesAsync();
-    }
-
-    // Startup has no caller, so the owner filter would hide every member: seeding reads past it.
-    if (!await lending.Members.IgnoreQueryFilters().AnyAsync())
-    {
-        var member = new Member
-        {
-            Name = "Ada Reader",
-            Email = "ada@example.com",
-            PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "member"),
-        };
-        var otherMember = new Member
-        {
-            Name = "Grace Hopper",
-            Email = "grace@example.com",
-            PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "other-member"),
-        };
-        lending.Members.AddRange(member, otherMember);
-        await lending.SaveChangesAsync();
-
-        var firstBookId = await catalog.Books.OrderBy(b => b.Id).Select(b => b.Id).FirstAsync();
-        lending.Loans.Add(
-            new Loan
-            {
-                MemberId = member.Id,
-                BookId = firstBookId,
-                BorrowedAt = DateTime.UtcNow,
-            }
-        );
-        await lending.SaveChangesAsync();
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
     }
 }
 
 namespace Trax.Samples.Bookworm.Api
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

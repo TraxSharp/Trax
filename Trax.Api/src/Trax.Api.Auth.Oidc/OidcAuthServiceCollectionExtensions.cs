@@ -203,58 +203,63 @@ public static class OidcAuthServiceCollectionExtensions
         options.Events.OnTokenValidated = async context =>
         {
             if (existingValidated is not null)
-                await existingValidated(context);
+                await existingValidated(context).ConfigureAwait(false);
 
-            if (context.Result is not null)
-                return;
-
-            if (context.Principal is null)
-            {
-                context.Fail("OIDC validation completed without a principal.");
-                return;
-            }
-
-            var resolver = context.HttpContext.RequestServices.GetService<
-                ITraxPrincipalResolver<OidcTokenInput>
-            >();
-            if (resolver is null)
-            {
-                context.Fail(
-                    "No ITraxPrincipalResolver<OidcTokenInput> registered. "
-                        + "Call AddTraxOidcAuth before UseAuthentication."
-                );
-                return;
-            }
-
-            TraxPrincipal? traxPrincipal;
-            try
-            {
-                var input = new OidcTokenInput(
-                    context.Principal,
-                    context.ProtocolMessage?.IdToken,
-                    context.ProtocolMessage?.AccessToken
-                );
-                traxPrincipal = await resolver.ResolveAsync(
-                    input,
-                    context.HttpContext.RequestAborted
-                );
-            }
-            catch (Exception ex)
-            {
-                context.Fail(ex);
-                return;
-            }
-
-            if (traxPrincipal is null)
-            {
-                context.Fail("OIDC id-token did not map to a known Trax principal.");
-                return;
-            }
-
-            context.Principal = traxPrincipal.ToClaimsPrincipal(OidcDefaults.SchemeName);
+            await ResolveTraxPrincipalAsync(context).ConfigureAwait(false);
         };
 
         oidc.OidcOptionsCustomizer?.Invoke(options);
+    }
+
+    // Replaces the validated principal with the Trax principal the resolver maps it to, or fails the sign-in.
+    private static async Task ResolveTraxPrincipalAsync(TokenValidatedContext context)
+    {
+        if (context.Result is not null)
+            return;
+
+        if (context.Principal is null)
+        {
+            context.Fail("OIDC validation completed without a principal.");
+            return;
+        }
+
+        var resolver = context.HttpContext.RequestServices.GetService<
+            ITraxPrincipalResolver<OidcTokenInput>
+        >();
+        if (resolver is null)
+        {
+            context.Fail(
+                "No ITraxPrincipalResolver<OidcTokenInput> registered. "
+                    + "Call AddTraxOidcAuth before UseAuthentication."
+            );
+            return;
+        }
+
+        TraxPrincipal? traxPrincipal;
+        try
+        {
+            var input = new OidcTokenInput(
+                context.Principal,
+                context.ProtocolMessage?.IdToken,
+                context.ProtocolMessage?.AccessToken
+            );
+            traxPrincipal = await resolver
+                .ResolveAsync(input, context.HttpContext.RequestAborted)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            context.Fail(ex);
+            return;
+        }
+
+        if (traxPrincipal is null)
+        {
+            context.Fail("OIDC id-token did not map to a known Trax principal.");
+            return;
+        }
+
+        context.Principal = traxPrincipal.ToClaimsPrincipal(OidcDefaults.SchemeName);
     }
 
     private static void EnsureDisclaimerLog(IServiceCollection services)

@@ -11,7 +11,7 @@ using System.Text.Json.Serialization;
 internal sealed class DisposableConverter : JsonConverter<object>
 {
     /// <summary>
-    /// <c>true</c> for any type assignable to <see cref="IDisposable"/>.
+    /// <see langword="true"/> for any type assignable to <see cref="IDisposable"/>.
     /// </summary>
     /// <param name="typeToConvert">The type being serialized.</param>
     public override bool CanConvert(Type typeToConvert) =>

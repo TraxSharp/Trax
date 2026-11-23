@@ -18,40 +18,48 @@ public static class CorpusSeeder
     )
     {
         // EnsureSchemaCreatedAsync is for demos and tests; a real application uses migrations.
-        await services.EnsureSchemaCreatedAsync<TopicMapDbContext>(cancellationToken);
+        await services
+            .EnsureSchemaCreatedAsync<TopicMapDbContext>(cancellationToken)
+            .ConfigureAwait(false);
 
-        await using var scope = services.CreateAsyncScope();
-        var factory = scope.ServiceProvider.GetRequiredService<
-            IDbContextFactory<TopicMapDbContext>
-        >();
-        await using var db = await factory.CreateDbContextAsync(cancellationToken);
-
-        var ids = CorpusFixture.Works.Select(w => w.Id).ToList();
-        var present = await db
-            .Works.Where(w => ids.Contains(w.Id))
-            .Select(w => w.Id)
-            .ToListAsync(cancellationToken);
-
-        var missing = CorpusFixture
-            .Works.Where(w => !present.Contains(w.Id))
-            .Select(w => new Work
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var factory = scope.ServiceProvider.GetRequiredService<
+                IDbContextFactory<TopicMapDbContext>
+            >();
+            var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
             {
-                Id = w.Id,
-                Title = w.Title,
-                Abstract = w.Abstract,
-                Year = w.Year,
-                Field = w.Field,
-                Authors = [.. w.Authors],
-                References = [.. w.References],
-                Concepts = [.. w.Concepts],
-            })
-            .ToList();
+                var ids = CorpusFixture.Works.Select(w => w.Id).ToList();
+                var present = await db
+                    .Works.Where(w => ids.Contains(w.Id))
+                    .Select(w => w.Id)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
-        if (missing.Count == 0)
-            return 0;
+                var missing = CorpusFixture
+                    .Works.Where(w => !present.Contains(w.Id))
+                    .Select(w => new Work
+                    {
+                        Id = w.Id,
+                        Title = w.Title,
+                        Abstract = w.Abstract,
+                        Year = w.Year,
+                        Field = w.Field,
+                        Authors = [.. w.Authors],
+                        References = [.. w.References],
+                        Concepts = [.. w.Concepts],
+                    })
+                    .ToList();
 
-        db.Works.AddRange(missing);
-        await db.SaveChangesAsync(cancellationToken);
-        return missing.Count;
+                if (missing.Count == 0)
+                    return 0;
+
+                db.Works.AddRange(missing);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return missing.Count;
+            }
+        }
     }
 }

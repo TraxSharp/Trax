@@ -68,7 +68,7 @@ internal sealed class BroadcastChangeSink : IChangeSignalSink
             };
 
             _logger?.LogDebug("Broadcasting data-change signal for domain {Domain}.", domain);
-            await _broadcaster.PublishAsync(message, ct);
+            await _broadcaster.PublishAsync(message, ct).ConfigureAwait(false);
         }
     }
 }

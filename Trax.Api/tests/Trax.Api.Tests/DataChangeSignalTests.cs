@@ -4,6 +4,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Sinks;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -29,7 +30,7 @@ public class DataChangeSignalTests
             CancellationToken cancellationToken = default
         )
         {
-            Events.Add(new RecordedEvent(topicName, message!));
+            Events.Add(new RecordedEvent(topicName, message.NotNull()));
             return ValueTask.CompletedTask;
         }
 
@@ -134,7 +135,7 @@ public class DataChangeSignalTests
         var sender = new RecordingTopicEventSender();
         var handler = new GraphQLDataChangeHandler(sender);
 
-        await handler.HandleAsync(DataChangedMessage(null), CancellationToken.None);
+        await handler.HandleAsync(DataChangedMessage(domain: null), CancellationToken.None);
 
         sender.Events.Should().BeEmpty();
     }

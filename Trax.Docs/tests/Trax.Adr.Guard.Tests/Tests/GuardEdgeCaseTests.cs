@@ -18,19 +18,18 @@ public class GuardEdgeCaseTests
     );
 
     [Test]
-    public void Run_TwoAdrsSharingANumber_ReportsTheDuplicate_InsteadOfThrowing()
+    public async Task Run_TwoAdrsSharingANumber_ReportsTheDuplicate_InsteadOfThrowing()
     {
         using var repo = new TempAdrRepo();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(spec: Sample.DefaultSpec));
         repo.Adr(Twin.FileName, Sample.Adr(spec: Twin));
         repo.Index(Sample.Index(central: false, Sample.DefaultSpec, Twin));
 
-        IReadOnlyList<GuardResult>? results = null;
-        var run = () => results = GuardRunner.Run(repo.Options());
+        var run = () => GuardRunner.RunAsync(repo.Options());
 
-        run.Should().NotThrow();
-        results!
-            .Single(r => r.Name == "frontmatter/file-names")
+        var results = (await run.Should().NotThrowAsync().ConfigureAwait(false)).Which;
+        results
+            .Single(r => string.Equals(r.Name, "frontmatter/file-names", StringComparison.Ordinal))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -56,7 +55,7 @@ public class GuardEdgeCaseTests
     }
 
     [Test]
-    public void TagTable_SameFileNameInASubfolder_ReportsIt_InsteadOfThrowing()
+    public async Task TagTable_SameFileNameInASubfolder_ReportsIt_InsteadOfThrowing()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Write(
@@ -64,11 +63,11 @@ public class GuardEdgeCaseTests
             Sample.Adr(spec: Sample.DefaultSpec)
         );
 
-        var adrs = AdrCorpus.Discover(repo.Options());
+        var adrs = await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false);
         var check = () =>
-            IndexGuards.TagTable(adrs, repo.Options(), IndexGuards.ByAreaHeading, "areas");
+            IndexGuards.TagTableAsync(adrs, repo.Options(), IndexGuards.ByAreaHeading, "areas");
 
-        check.Should().NotThrow();
+        await check.Should().NotThrowAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -77,7 +76,7 @@ public class GuardEdgeCaseTests
     /// whatever it says, is never checked.
     /// </summary>
     [Test]
-    public void FullList_AdrListedTwice_OnceWithAWrongTitle_Fails()
+    public async Task FullList_AdrListedTwice_OnceWithAWrongTitle_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         var spec = Sample.DefaultSpec;
@@ -87,11 +86,17 @@ public class GuardEdgeCaseTests
                 $"| {spec.Link} | {spec.Title} |",
                 $"| {spec.Link} | A title nobody wrote |"
                     + " testing |\n"
-                    + $"| {spec.Link} | {spec.Title} |"
+                    + $"| {spec.Link} | {spec.Title} |",
+                StringComparison.Ordinal
             );
         repo.Index(index);
 
-        var result = IndexGuards.FullList(AdrCorpus.Discover(repo.Options()), repo.Options());
+        var result = await IndexGuards
+            .FullListAsync(
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
+                repo.Options()
+            )
+            .ConfigureAwait(false);
 
         result.Passed.Should().BeFalse();
         result.Offenders.Should().Contain(o => o.Contains($"{spec.FileName} is listed 2 times"));
@@ -104,7 +109,7 @@ public class GuardEdgeCaseTests
     /// is counted as classified although no ADR names it and it opts out of nothing.
     /// </summary>
     [Test]
-    public void Census_SecondClassSharingAClaimedName_IsNotCreditedByTheOthersClaim()
+    public async Task Census_SecondClassSharingAClaimedName_IsNotCreditedByTheOthersClaim()
     {
         using var repo = TempAdrRepo.Valid();
         var file = Sample.DefaultSpec.FileName;
@@ -144,7 +149,7 @@ public class GuardEdgeCaseTests
         );
 
         var result = CensusGuards.EveryGuardIsClassified(
-            AdrCorpus.Discover(repo.Options()),
+            (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
             repo.Options(censusRoot: CensusRoot)
         );
 
@@ -162,7 +167,7 @@ public class GuardEdgeCaseTests
     /// lines cut the docstring off and a guard that cites its ADR is reported unclassified.
     /// </summary>
     [Test]
-    public void Census_DocstringAboveAWrappedAttribute_StillCreditsTheCitation()
+    public async Task Census_DocstringAboveAWrappedAttribute_StillCreditsTheCitation()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Write(
@@ -186,7 +191,7 @@ public class GuardEdgeCaseTests
 
         CensusGuards
             .EveryGuardIsClassified(
-                AdrCorpus.Discover(repo.Options()),
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
                 repo.Options(censusRoot: CensusRoot)
             )
             .Offenders.Should()
@@ -265,26 +270,40 @@ public class GuardEdgeCaseTests
         return repo;
     }
 
-    private static GuardResult Resolve(TempAdrRepo repo) =>
-        ExemplarGuards.NamedGuardsResolve(AdrCorpus.Discover(repo.Options()), repo.Options());
+    private static async Task<GuardResult> ResolveAsync(TempAdrRepo repo) =>
+        await ExemplarGuards
+            .NamedGuardsResolveAsync(
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
+                repo.Options()
+            )
+            .ConfigureAwait(false);
 
-    private static GuardResult CiteBack(TempAdrRepo repo) =>
-        ExemplarGuards.NamedGuardsCiteBack(AdrCorpus.Discover(repo.Options()), repo.Options());
+    private static async Task<GuardResult> CiteBackAsync(TempAdrRepo repo) =>
+        await ExemplarGuards
+            .NamedGuardsCiteBackAsync(
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
+                repo.Options()
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// The probe from the audit: an explicit fixture with no tests, whose only "citation" is a
     /// constant nothing reads. It satisfied both resolution and cite-back.
     /// </summary>
     [Test]
-    public void ExplicitClassWithOnlyAConstant_FailsResolutionAndCiteBack()
+    public async Task ExplicitClassWithOnlyAConstant_FailsResolutionAndCiteBack()
     {
         using var repo = WithClaimedProbe(
             $"    private const string Adr = \"docs/adr/{Sample.DefaultSpec.FileName}\";",
             ", Explicit"
         );
 
-        Resolve(repo).Offenders.Should().ContainSingle().Which.Should().Contain("[Explicit]");
-        CiteBack(repo)
+        (await ResolveAsync(repo).ConfigureAwait(false))
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("[Explicit]");
+        (await CiteBackAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -292,13 +311,13 @@ public class GuardEdgeCaseTests
     }
 
     [Test]
-    public void ClassWithNoTestMethod_FailsResolution()
+    public async Task ClassWithNoTestMethod_FailsResolution()
     {
         using var repo = WithClaimedProbe(
             $"    public void Check() => Assert.Fail(\"docs/adr/{Sample.DefaultSpec.FileName}\");"
         );
 
-        Resolve(repo)
+        (await ResolveAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -306,7 +325,7 @@ public class GuardEdgeCaseTests
     }
 
     [Test]
-    public void ClassWhoseEveryTestIsIgnored_FailsResolution()
+    public async Task ClassWhoseEveryTestIsIgnored_FailsResolution()
     {
         using var repo = WithClaimedProbe(
             $$"""
@@ -315,7 +334,7 @@ public class GuardEdgeCaseTests
             """
         );
 
-        Resolve(repo)
+        (await ResolveAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -323,7 +342,7 @@ public class GuardEdgeCaseTests
     }
 
     [Test]
-    public void TestWhoseFailureMessageNamesTheAdr_Passes()
+    public async Task TestWhoseFailureMessageNamesTheAdr_Passes()
     {
         using var repo = WithClaimedProbe(
             $$"""
@@ -332,8 +351,8 @@ public class GuardEdgeCaseTests
             """
         );
 
-        Resolve(repo).Offenders.Should().BeEmpty();
-        CiteBack(repo).Passed.Should().BeTrue();
+        (await ResolveAsync(repo).ConfigureAwait(false)).Offenders.Should().BeEmpty();
+        (await CiteBackAsync(repo).ConfigureAwait(false)).Passed.Should().BeTrue();
     }
 
     /// <summary>
@@ -342,7 +361,7 @@ public class GuardEdgeCaseTests
     /// </summary>
     [TestCase("result.Should().BeTrue(\"it holds, per \" + Adr);")]
     [TestCase("result.Should().BeTrue($\"it holds ({Adr})\");")]
-    public void ConstantAnAssertionReads_CountsAsTheCitation(string assertion)
+    public async Task ConstantAnAssertionReads_CountsAsTheCitation(string assertion)
     {
         using var repo = WithClaimedProbe(
             $$"""
@@ -357,11 +376,11 @@ public class GuardEdgeCaseTests
             """
         );
 
-        CiteBack(repo).Passed.Should().BeTrue();
+        (await CiteBackAsync(repo).ConfigureAwait(false)).Passed.Should().BeTrue();
     }
 
     [Test]
-    public void ConstantNoAssertionReads_DoesNotCount()
+    public async Task ConstantNoAssertionReads_DoesNotCount()
     {
         using var repo = WithClaimedProbe(
             $$"""
@@ -372,7 +391,7 @@ public class GuardEdgeCaseTests
             """
         );
 
-        CiteBack(repo).Passed.Should().BeFalse();
+        (await CiteBackAsync(repo).ConfigureAwait(false)).Passed.Should().BeFalse();
     }
 
     /// <summary>
@@ -380,7 +399,7 @@ public class GuardEdgeCaseTests
     /// on a line that read as code and stood in for the failure message.
     /// </summary>
     [Test]
-    public void WrappedAttributeArgument_IsNotAFailureMessage()
+    public async Task WrappedAttributeArgument_IsNotAFailureMessage()
     {
         using var repo = TempAdrRepo.Valid();
         var file = Sample.DefaultSpec.FileName;
@@ -404,8 +423,8 @@ public class GuardEdgeCaseTests
             """
         );
 
-        Resolve(repo).Offenders.Should().BeEmpty();
-        CiteBack(repo).Passed.Should().BeFalse();
+        (await ResolveAsync(repo).ConfigureAwait(false)).Offenders.Should().BeEmpty();
+        (await CiteBackAsync(repo).ConfigureAwait(false)).Passed.Should().BeFalse();
     }
 
     #endregion

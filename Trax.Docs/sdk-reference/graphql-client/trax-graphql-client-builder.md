@@ -9,9 +9,9 @@ nav_order: 3
 package: Trax.Api.GraphQL.Client
 namespace: Trax.Api.GraphQL.Client
 source:
-  - Trax.Api/src/Trax.Api.GraphQL.Client/Configuration/TraxGraphQLClientBuilder/Builder.cs
-  - Trax.Api/src/Trax.Api.GraphQL.Client/Configuration/TraxGraphQLClientBuilder/Builder.Schema.cs
-  - Trax.Api/src/Trax.Api.GraphQL.Client/Configuration/TraxGraphQLClientBuilder/Builder.Options.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client/Configuration/TraxGraphQLClientBuilder/TraxGraphQLClientBuilder.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client/Configuration/TraxGraphQLClientBuilder/TraxGraphQLClientBuilder.Schema.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client/Configuration/TraxGraphQLClientBuilder/TraxGraphQLClientBuilder.Options.cs
 redirect_from:
   - /docs/sdk-reference/graphql-client/builder
 ---

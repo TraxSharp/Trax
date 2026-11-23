@@ -5,7 +5,10 @@ namespace Trax.Effect.Data.Models.WorkQueue;
 /// <summary>
 /// Provides Entity Framework Core configuration for the WorkQueue model.
 /// </summary>
-internal class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
+internal sealed class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
 {
     // Holds the EF configuration and is never instantiated. Private so it is not a way around
     // WorkQueue.Create, which is the only way to build an entry that dispatches.
@@ -24,8 +27,10 @@ internal class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
             // Compared exactly and indexed in SQL only (ix_work_queue_external_id, the subject
             // indexes), so the Postgres NUL scrubber must leave them as written. The literal is
             // NulCharacterInterceptor.ComparedExactlyAnnotation.
-            entity.Property(e => e.ExternalId).HasAnnotation("Trax:ComparedExactly", true);
-            entity.Property(e => e.SubjectKey).HasAnnotation("Trax:ComparedExactly", true);
+            entity
+                .Property(e => e.ExternalId)
+                .HasAnnotation("Trax:ComparedExactly", value: true);
+            entity.Property(e => e.SubjectKey).HasAnnotation("Trax:ComparedExactly", value: true);
 
             entity.Property(e => e.Input).HasColumnType("jsonb");
 

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Effect.Services.ChangeSignal;
@@ -47,7 +48,7 @@ public class ChangeSignalEmissionTests
                     Every.Minutes(5)
                 )
         );
-        await fx.MaterializePendingManifestsAsync();
+        await fx.MaterializePendingManifestsAsync().ConfigureAwait(false);
         recording.Clear();
         return fx;
     }
@@ -59,22 +60,24 @@ public class ChangeSignalEmissionTests
     {
         var manifest = await fx
             .DataContext.Manifests.Include(m => m.ManifestGroup)
-            .FirstAsync(m => m.ExternalId == externalId);
+            .FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var dl = DeadLetter.Create(
             new CreateDeadLetter
             {
                 Manifest = manifest,
                 Reason = "seeded",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
-        await fx.DataContext.Track(dl);
-        await fx.DataContext.SaveChanges(default);
+        await fx.DataContext.Track(dl).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(default).ConfigureAwait(false);
         fx.DataContext.Reset();
         return dl;
     }
 
-    private static string TrainName => typeof(ISchedulerTestTrain).FullName!;
+    private static string TrainName => typeof(ISchedulerTestTrain).FullName.NotNull();
 
     #region OperationsService
 
@@ -111,7 +114,7 @@ public class ChangeSignalEmissionTests
         );
         recording.Clear();
 
-        await ops.CancelWorkQueueEntryAsync(queued.Id!.Value, CancellationToken.None);
+        await ops.CancelWorkQueueEntryAsync(queued.Id.NotNull().Value, CancellationToken.None);
 
         recording.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
     }

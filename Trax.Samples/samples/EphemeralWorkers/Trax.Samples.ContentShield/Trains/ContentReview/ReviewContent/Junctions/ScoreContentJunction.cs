@@ -14,9 +14,11 @@ public class ScoreContentJunction(ILogger<ScoreContentJunction> logger)
     {
         logger.LogInformation("Scoring threat level for content {ContentId}", input.ContentId);
 
-        await Task.Delay(200);
+        await Task.Delay(200, CancellationToken).ConfigureAwait(false);
 
-        var score = input.ContentType == "video" ? 0.85 : 0.25;
+        var score = string.Equals(input.ContentType, "video", StringComparison.Ordinal)
+            ? 0.85
+            : 0.25;
         logger.LogInformation(
             "Content {ContentId} threat score: {ThreatScore:F2}",
             input.ContentId,

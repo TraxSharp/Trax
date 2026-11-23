@@ -1,29 +1,8 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Trax.Core.Testing.Infrastructure;
 
 namespace Trax.Core.Testing.Guards;
-
-/// <summary>
-/// One third-party attribute a repo declines to use, and what Trax offers instead.
-/// </summary>
-/// <param name="Library">
-/// A token that must appear in the file before the attribute is considered a match, normally the
-/// library's root namespace (<c>HotChocolate</c>). Short attribute names collide across
-/// libraries, so a file that never mentions the library cannot be using its attribute.
-/// </param>
-/// <param name="Attributes">
-/// Attribute names as written in source, without the <c>Attribute</c> suffix
-/// (<c>Authorize</c>, <c>AllowAnonymous</c>).
-/// </param>
-/// <param name="Replacement">
-/// What to write instead, named precisely enough to act on: <c>[TraxAuthorize] or
-/// [TraxAllowAnonymous]</c>.
-/// </param>
-public sealed record ForeignVocabulary(
-    string Library,
-    IReadOnlyList<string> Attributes,
-    string Replacement
-);
 
 /// <summary>
 /// Keeps a third-party vocabulary out of the places where Trax has one of its own.
@@ -43,8 +22,10 @@ public sealed record ForeignVocabulary(
 /// <c>[Parent]</c>, belongs to the library and is not listed: renaming it would buy nothing.
 /// </para>
 /// </remarks>
-public static class VocabularyGuards
+public static partial class VocabularyGuards
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// Scans the given roots and reports every use of a listed third-party attribute.
     /// </summary>
@@ -59,6 +40,27 @@ public static class VocabularyGuards
         IReadOnlyList<ForeignVocabulary> banned,
         ArchitectureGuardOptions? options = null,
         IReadOnlyDictionary<string, string>? allowed = null
+    ) =>
+        // Every await below is ConfigureAwait(false), so this waits on no context of its own.
+        TraxVocabularyIsUsedAsync(banned, options, allowed).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Scans the given roots and reports every use of a listed third-party attribute, reading the
+    /// files asynchronously.
+    /// </summary>
+    /// <param name="banned">The vocabularies this repo declines, and their Trax replacements.</param>
+    /// <param name="options">Scan roots and the repo root. Source and test roots are both scanned.</param>
+    /// <param name="allowed">
+    /// Repo-relative paths exempt from the scan, each mapped to why. The translation layer belongs
+    /// here: code that constructs the library's type to speak to the library is the direction that
+    /// is allowed, and so are the tests that have to write the thing being refused.
+    /// </param>
+    /// <param name="cancellationToken">Stops the scan.</param>
+    public static async Task<GuardResult> TraxVocabularyIsUsedAsync(
+        IReadOnlyList<ForeignVocabulary> banned,
+        ArchitectureGuardOptions? options = null,
+        IReadOnlyDictionary<string, string>? allowed = null,
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(banned);
@@ -67,28 +69,20 @@ public static class VocabularyGuards
         allowed ??= new Dictionary<string, string>(StringComparer.Ordinal);
 
         var root = options.RepoRootOverride ?? RepoRoot.Path;
-        var roots = options.SourceScanRoots.Concat(options.TestScanRoots).Distinct().ToArray();
+        var roots = options
+            .SourceScanRoots.Concat(options.TestScanRoots)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
-        var patterns = banned.ToDictionary(
-            entry => entry,
-            entry => new Regex(
-                // Attribute position: opening the list (with an optional target such as
-                // property:) or following another attribute, then the name with or without its
-                // Attribute suffix, then arguments, the closing bracket, or another attribute. The
-                // lookahead leaves that comma for the next attribute in the list.
-                @"(?:\[\s*(?:\w+\s*:\s*)?|,)\s*(?:[\w.]+\.)?(?:"
-                    + string.Join("|", entry.Attributes.Select(Regex.Escape))
-                    + @")(?:Attribute)?(?=\s*(?:\(|\]|,))",
-                RegexOptions.Compiled
-            )
-        );
+        var patterns = banned.ToDictionary(entry => entry, AttributePattern);
 
         var offenders = new List<string>();
         var inspected = 0;
 
         // A global using makes a library's attributes visible in files that never name it, so a
         // library imported that way counts as present everywhere.
-        var globallyImported = GloballyImported(root, roots);
+        var globallyImported = await GloballyImported(root, roots, cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var file in SourceFiles.CSharpUnder(root, roots))
         {
@@ -100,7 +94,9 @@ public static class VocabularyGuards
 
             // Comments and string literals talk about the banned attributes constantly, not least
             // in the messages that tell a consumer to stop using them.
-            var text = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
+            var text = SourceText.StripCommentsAndStrings(
+                await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false)
+            );
 
             foreach (var (entry, pattern) in patterns)
             {
@@ -110,14 +106,7 @@ public static class VocabularyGuards
                 )
                     continue;
 
-                foreach (Match match in pattern.Matches(text))
-                {
-                    var line = text.Take(match.Index).Count(c => c == '\n') + 1;
-                    offenders.Add(
-                        $"{relative}:{line} ({match.Value.Trim()} from {entry.Library}; "
-                            + $"use {entry.Replacement})"
-                    );
-                }
+                AddAttributeUses(entry, pattern, text, relative, offenders);
             }
         }
 
@@ -133,32 +122,73 @@ public static class VocabularyGuards
         );
     }
 
-    private static readonly Regex GlobalUsing = new(
-        @"^\s*global\s+using\s+(?:static\s+)?(?:\w+\s*=\s*)?([\w.]+)",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+    private static Regex AttributePattern(ForeignVocabulary entry) =>
+        new(
+            // Attribute position: opening the list (with an optional target such as
+            // property:) or following another attribute, then the name with or without its
+            // Attribute suffix, then arguments, the closing bracket, or another attribute. The
+            // lookahead leaves that comma for the next attribute in the list.
+            @"(?:\[\s*(?:\w+\s*:\s*)?|,)\s*(?:[\w.]+\.)?(?:"
+                + string.Join('|', entry.Attributes.Select(Regex.Escape))
+                + @")(?:Attribute)?(?=\s*(?:\(|\]|,))",
+            RegexOptions.Compiled,
+            RegexTimeout
+        );
 
-    private static readonly Regex ProjectUsing = new(
-        @"<Using\s+Include\s*=\s*""([\w.]+)""",
-        RegexOptions.Compiled
-    );
+    private static void AddAttributeUses(
+        ForeignVocabulary entry,
+        Regex pattern,
+        string text,
+        string relative,
+        List<string> offenders
+    )
+    {
+        foreach (Match match in pattern.Matches(text))
+        {
+            var line = text.Take(match.Index).Count(c => c == '\n') + 1;
+            offenders.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{relative}:{line} ({match.Value.Trim()} from {entry.Library}; "
+                ) + $"use {entry.Replacement})"
+            );
+        }
+    }
+
+    [GeneratedRegex(
+        @"<Using\s+Include\s*=\s*""(?<name>[\w.]+)""",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex ProjectUsing { get; }
 
     /// <summary>
     /// Every namespace a global using brings in, from source files or a project's
     /// <c>&lt;Using Include&gt;</c>, with each of its parent namespaces: importing
     /// <c>HotChocolate.Authorization</c> is a use of <c>HotChocolate</c>.
     /// </summary>
-    private static HashSet<string> GloballyImported(string root, string[] roots)
+    private static async Task<HashSet<string>> GloballyImported(
+        string root,
+        string[] roots,
+        CancellationToken cancellationToken
+    )
     {
         var names = new List<string>();
 
         foreach (var file in SourceFiles.CSharpUnder(root, roots))
-        foreach (Match match in GlobalUsing.Matches(File.ReadAllText(file)))
-            names.Add(match.Groups[1].Value);
+        {
+            var text = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+            foreach (Match match in GlobalUsing.Matches(text))
+                names.Add(match.Groups["name"].Value);
+        }
 
         foreach (var project in SourceFiles.ProjectsUnder(root, roots))
-        foreach (Match match in ProjectUsing.Matches(File.ReadAllText(project)))
-            names.Add(match.Groups[1].Value);
+        {
+            var text = await File.ReadAllTextAsync(project, cancellationToken)
+                .ConfigureAwait(false);
+            foreach (Match match in ProjectUsing.Matches(text))
+                names.Add(match.Groups["name"].Value);
+        }
 
         var imported = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in names)
@@ -170,4 +200,11 @@ public static class VocabularyGuards
 
         return imported;
     }
+
+    [GeneratedRegex(
+        @"^\s*global\s+using\s+(?:static\s+)?(?:\w+\s*=\s*)?(?<name>[\w.]+)",
+        RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex GlobalUsing { get; }
 }

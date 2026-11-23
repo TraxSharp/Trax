@@ -14,21 +14,22 @@ public class FetchPartition(ITopicMapDbContext db, DemoPace pace)
 {
     public override async Task<FetchedPartition> Run(IngestPartitionInput input)
     {
-        if (!IndexFixture.Sources.Contains(input.Source))
+        if (!IndexFixture.Sources.Contains(input.Source, StringComparer.Ordinal))
             throw new ArgumentException(
                 $"There is no source {input.Source}; the sources are "
                     + $"{string.Join(", ", IndexFixture.Sources)}.",
                 nameof(input)
             );
 
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var records = await db
             .SourceRecords.AsNoTracking()
             .Where(r => r.Source == input.Source && r.Month == input.Month)
             .OrderBy(r => r.SourceId)
             .Select(r => new FetchedRecord(r.SourceId, r.Payload))
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         if (records.Count == 0)
             throw new ArgumentException(

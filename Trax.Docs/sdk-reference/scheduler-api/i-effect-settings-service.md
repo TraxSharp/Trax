@@ -10,6 +10,10 @@ package: Trax.Scheduler
 namespace: Trax.Scheduler.Services.Effects
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/Effects/IEffectSettingsService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Effects/EffectSettings.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Effects/EffectFieldKind.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Effects/EffectSettingField.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Effects/EffectConfigurationResult.cs
   - Trax.Scheduler/src/Trax.Scheduler/Services/Effects/EffectSettingsService.cs
 ---
 

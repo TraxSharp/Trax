@@ -9,7 +9,7 @@ public class PersistedOperationChangedMessageTests
     [Test]
     public void RecordEquality_SameValues_AreEqual()
     {
-        var ts = DateTime.UtcNow;
+        var ts = TimeProvider.System.GetUtcNow().UtcDateTime;
         var a = new PersistedOperationChangedMessage(
             "tenant",
             "id",
@@ -29,7 +29,7 @@ public class PersistedOperationChangedMessageTests
     [Test]
     public void RecordEquality_DifferentChangeType_AreNotEqual()
     {
-        var ts = DateTime.UtcNow;
+        var ts = TimeProvider.System.GetUtcNow().UtcDateTime;
         var a = new PersistedOperationChangedMessage(
             "tenant",
             "id",
@@ -48,7 +48,7 @@ public class PersistedOperationChangedMessageTests
     [Test]
     public void RecordEquality_DifferentTenantKey_AreNotEqual()
     {
-        var ts = DateTime.UtcNow;
+        var ts = TimeProvider.System.GetUtcNow().UtcDateTime;
         var a = new PersistedOperationChangedMessage(
             "tenant-a",
             "id",
@@ -67,7 +67,7 @@ public class PersistedOperationChangedMessageTests
     [Test]
     public void With_RecordCopy_OverridesFieldAndPreservesOthers()
     {
-        var ts = DateTime.UtcNow;
+        var ts = TimeProvider.System.GetUtcNow().UtcDateTime;
         var a = new PersistedOperationChangedMessage(
             "t",
             "id",
@@ -101,10 +101,10 @@ public class PersistedOperationChangedMessageTests
     public void NullableTenantKey_RoundTripsThroughRecord()
     {
         var msg = new PersistedOperationChangedMessage(
-            null,
+            TenantKey: null,
             "id",
             PersistedOperationChangeType.Upsert,
-            DateTime.UtcNow
+            TimeProvider.System.GetUtcNow().UtcDateTime
         );
         msg.TenantKey.Should().BeNull();
 

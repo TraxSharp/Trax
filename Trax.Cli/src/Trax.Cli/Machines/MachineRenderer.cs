@@ -4,14 +4,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
 
-/// <summary>How <c>trax machine show</c> draws a machine.</summary>
-internal enum MachineFormat
-{
-    Text,
-    Mermaid,
-    Dot,
-}
-
 /// <summary>
 /// Renders a machine's IR (<c>Machine.ExportIr()</c>) for <c>trax machine show</c>: a plain-text block per state
 /// for a terminal, or a Mermaid <c>stateDiagram-v2</c> or Graphviz source for docs and PRs. Pure, so it is tested
@@ -43,8 +35,6 @@ internal static partial class MachineRenderer
 
     private static string Text(MachineGraph ir, Glyphs g, bool color)
     {
-        string Paint(string text, string code) => color ? $"\u001b[{code}m{text}\u001b[0m" : text;
-
         // Every name and message comes from the machine's assembly and goes to a terminal, so control characters
         // (an escape sequence that recolours, clears or retitles the terminal, a carriage return that overwrites
         // the line) are shown as '?' rather than sent.
@@ -65,18 +55,20 @@ internal static partial class MachineRenderer
         {
             sb.Append('\n');
             var marks = new List<string>();
-            if (state == ir.Initial)
+            if (string.Equals(state, ir.Initial, StringComparison.Ordinal))
                 marks.Add($"{g.Initial} initial");
             if (ir.Committed.Contains(state))
                 marks.Add($"{g.Committed} committed");
             if (!reachable.Contains(state))
                 marks.Add("unreachable from the initial state");
-            sb.Append(Paint(Safe(state), "1"));
+            sb.Append(Paint(Safe(state), "1", color));
             if (marks.Count > 0)
-                sb.Append(' ').Append(string.Join("  ", marks));
+                sb.Append(' ').AppendJoin("  ", marks);
             sb.Append('\n');
 
-            var edges = ir.Transitions.Where(t => t.From == state).ToList();
+            var edges = ir
+                .Transitions.Where(t => string.Equals(t.From, state, StringComparison.Ordinal))
+                .ToList();
             if (edges.Count == 0)
             {
                 sb.Append("  (no transitions)\n");
@@ -84,34 +76,47 @@ internal static partial class MachineRenderer
             }
 
             foreach (var edge in edges)
-            {
-                var trigger = Safe(edge.Trigger);
-                var line = new StringBuilder("  ")
-                    .Append(g.Dash)
-                    .Append(' ')
-                    .Append(trigger)
-                    .Append(' ')
-                    .Append(new string(g.DashChar, triggerWidth - trigger.Length + 2))
-                    .Append(g.Arrow)
-                    .Append(' ')
-                    .Append(Safe(edge.To).PadRight(targetWidth));
-
-                var notes = new List<string>();
-                if (edge.Guard is not null)
-                    notes.Add($"guard: {Safe(edge.Guard)}");
-                if (edge.Reduce is not null)
-                    notes.Add($"reduce: {Safe(edge.Reduce)}");
-                if (edge.Effect is not null)
-                    notes.Add(Paint($"{g.Effect} effect {Safe(edge.Effect)} (send only)", "33"));
-                if (edge.Timer is not null)
-                    notes.Add(Paint($"{g.Timer} after {Safe(edge.Timer)} (server only)", "36"));
-                if (notes.Count > 0)
-                    line.Append("   ").Append(string.Join("   ", notes));
-                sb.Append(line.ToString().TrimEnd()).Append('\n');
-            }
+                sb.Append(EdgeLine(edge, g, color, triggerWidth, targetWidth)).Append('\n');
         }
 
         return sb.ToString();
+    }
+
+    private static string Paint(string text, string code, bool color) =>
+        color ? $"\u001b[{code}m{text}\u001b[0m" : text;
+
+    // One transition out of a state: its trigger, its target and what runs on it.
+    private static string EdgeLine(
+        MachineEdge edge,
+        Glyphs g,
+        bool color,
+        int triggerWidth,
+        int targetWidth
+    )
+    {
+        var trigger = Safe(edge.Trigger);
+        var line = new StringBuilder("  ")
+            .Append(g.Dash)
+            .Append(' ')
+            .Append(trigger)
+            .Append(' ')
+            .Append(new string(g.DashChar, triggerWidth - trigger.Length + 2))
+            .Append(g.Arrow)
+            .Append(' ')
+            .Append(Safe(edge.To).PadRight(targetWidth));
+
+        var notes = new List<string>();
+        if (edge.Guard is not null)
+            notes.Add($"guard: {Safe(edge.Guard)}");
+        if (edge.Reduce is not null)
+            notes.Add($"reduce: {Safe(edge.Reduce)}");
+        if (edge.Effect is not null)
+            notes.Add(Paint($"{g.Effect} effect {Safe(edge.Effect)} (send only)", "33", color));
+        if (edge.Timer is not null)
+            notes.Add(Paint($"{g.Timer} after {Safe(edge.Timer)} (server only)", "36", color));
+        if (notes.Count > 0)
+            line.Append("   ").AppendJoin("   ", notes);
+        return line.ToString().TrimEnd();
     }
 
     /// <summary>
@@ -132,7 +137,12 @@ internal static partial class MachineRenderer
         var sb = new StringBuilder("stateDiagram-v2\n");
         sb.Append($"    [*] --> {ir.Initial}\n");
         foreach (
-            var state in ir.States.Where(s => !ir.Transitions.Any(t => t.From == s || t.To == s))
+            var state in ir.States.Where(s =>
+                !ir.Transitions.Any(t =>
+                    string.Equals(t.From, s, StringComparison.Ordinal)
+                    || string.Equals(t.To, s, StringComparison.Ordinal)
+                )
+            )
         )
             sb.Append($"    {state}\n");
         foreach (var edge in ir.Transitions)
@@ -140,7 +150,7 @@ internal static partial class MachineRenderer
         if (ir.Committed.Count > 0)
         {
             sb.Append("    classDef committed font-weight:bold,stroke-width:3px\n");
-            sb.Append($"    class {string.Join(",", ir.Committed)} committed\n");
+            sb.Append($"    class {string.Join(',', ir.Committed)} committed\n");
         }
         return sb.ToString();
     }
@@ -189,7 +199,7 @@ internal static partial class MachineRenderer
     internal static string MermaidText(string text)
     {
         var sb = new StringBuilder(text.Length);
-        foreach (var c in Safe(LineBreaks().Replace(text, " ")))
+        foreach (var c in Safe(LineBreaks.Replace(text, " ")))
             sb.Append(
                 c switch
                 {
@@ -205,11 +215,17 @@ internal static partial class MachineRenderer
         return sb.ToString();
     }
 
-    [GeneratedRegex(@"\r\n|[\r\n\u0085\u2028\u2029]")]
-    private static partial Regex LineBreaks();
+    [GeneratedRegex(
+        @"\r\n|[\r\n\u0085\u2028\u2029]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LineBreaks { get; }
 
     private static string DotText(string text) =>
-        text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
+        text.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
 
     private sealed record Glyphs(
         string Initial,

@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -19,25 +20,6 @@ using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
-
-/// <summary>The providers a host can store drafts on.</summary>
-public enum StoreProvider
-{
-    Postgres,
-    Sqlite,
-    InMemory,
-}
-
-/// <summary>What a test host registers beyond the provider.</summary>
-public sealed record HostOptions
-{
-    public bool Mediator { get; init; } = true;
-
-    public bool JunctionProgress { get; init; } = true;
-
-    /// <summary>Registrations made after Trax's, so the last one wins.</summary>
-    public Action<IServiceCollection>? Configure { get; init; }
-}
 
 /// <summary>
 /// A host with <c>AddStateMachines</c> and <c>AddMediator</c> over this assembly's machines and trains, on Postgres
@@ -94,7 +76,10 @@ public sealed class InvokeHost : IDisposable
     public IServiceScope Scope() => _provider.CreateScope();
 
     public ISnapshotDraftService Service(IServiceScope scope, string machine) =>
-        scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>().Service(machine)!;
+        scope
+            .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+            .Service(machine)
+            .NotNull();
 
     public async Task<MachineInstance> Start<TMachine>(MachineKey key)
         where TMachine : IMachine
@@ -102,7 +87,8 @@ public sealed class InvokeHost : IDisposable
         using var scope = Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
-            .Start<TMachine>(key);
+            .Start<TMachine>(key)
+            .ConfigureAwait(false);
     }
 
     /// <summary>What the startup check reports for <typeparamref name="TMachine"/> on this host.</summary>
@@ -120,11 +106,12 @@ public sealed class InvokeHost : IDisposable
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == id && x.Machine == machine);
+            .SingleOrDefaultAsync(x => x.Id == id && x.Machine == machine)
+            .ConfigureAwait(false);
     }
 
     /// <summary>The work queue entries an instance's invoking states queued, oldest first.</summary>
-    public async Task<List<WorkQueue>> Runs(Guid instance)
+    public async Task<IReadOnlyList<WorkQueue>> Runs(Guid instance)
     {
         using var scope = Scope();
         return await scope
@@ -132,7 +119,8 @@ public sealed class InvokeHost : IDisposable
             .WorkQueues.AsNoTracking()
             .Where(x => x.InvokingInstanceId == instance)
             .OrderBy(x => x.Id)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -146,7 +134,8 @@ public sealed class InvokeHost : IDisposable
         var queued = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.InvokingInstanceId == instance && w.Status == WorkQueueStatus.Queued)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
         foreach (var entry in queued)
         {
             var run = Metadata.Create(
@@ -156,21 +145,23 @@ public sealed class InvokeHost : IDisposable
                     ExternalId = entry.ExternalId,
                     Input = null,
                     InvokedBy = new InvokedBy(
-                        entry.InvokingMachine!,
+                        entry.InvokingMachine.NotNull(),
                         instance,
-                        entry.InvokingOwnerKind!.Value
+                        entry.InvokingOwnerKind.NotNull().Value
                     ),
-                }
+                },
+                TimeProvider.System
             );
             run.TrainState = TrainState.InProgress;
-            await db.Track(run);
-            await db.SaveChanges(CancellationToken.None);
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             await db
                 .WorkQueues.Where(w => w.Id == entry.Id)
                 .ExecuteUpdateAsync(s =>
                     s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
                         .SetProperty(w => w.MetadataId, run.Id)
-                );
+                )
+                .ConfigureAwait(false);
         }
     }
 
@@ -181,16 +172,17 @@ public sealed class InvokeHost : IDisposable
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.Where(m => m.InvokingInstanceId == instance)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, state));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, state))
+            .ConfigureAwait(false);
     }
 
     /// <summary>Creates <paramref name="user"/>'s draft of <paramref name="machine"/> in <c>Idle</c> and advances it into <c>Running</c>.</summary>
     public async Task<AdvanceOutcome> EnterRunning(string user, Guid id, string machine)
     {
         TestPrincipal.Become(user);
-        await SeedIdle(user, id, machine);
+        await SeedIdle(user, id, machine).ConfigureAwait(false);
         using var scope = Scope();
-        return await Service(scope, machine).Advance(user, id, "Go");
+        return await Service(scope, machine).Advance(user, id, "Go").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -211,6 +203,7 @@ public sealed class InvokeHost : IDisposable
             !await scope
                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                 .Upsert(user, id, snapshot)
+                .ConfigureAwait(false)
         )
             throw new InvalidOperationException($"Could not seed draft {id} for {user}.");
     }

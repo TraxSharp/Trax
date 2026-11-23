@@ -10,7 +10,15 @@ package: Trax.StateMachine
 namespace: Trax.StateMachine
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifest.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifestMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifestTrain.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifestQueryModel.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifestArgument.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifestDocument.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifestRequirement.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/TraxClientExport.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ClientExportFlag.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ClientExportServeGate.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ITraxStartupCheck.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxClientManifestExtensions.cs
 ---

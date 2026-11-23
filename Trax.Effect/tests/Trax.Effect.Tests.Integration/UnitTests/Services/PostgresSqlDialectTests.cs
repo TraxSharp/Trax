@@ -1,6 +1,7 @@
 using System.Reflection;
 using AwesomeAssertions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
@@ -10,20 +11,24 @@ public class PostgresSqlDialectTests
     private static readonly Assembly PostgresAssembly = Assembly.Load("Trax.Effect.Data.Postgres");
 
     private static object Create() =>
-        Activator.CreateInstance(
-            PostgresAssembly.GetType(
-                "Trax.Effect.Data.Postgres.Services.SqlDialect.PostgresSqlDialect",
-                throwOnError: true
-            )!,
-            nonPublic: true
-        )!;
+        Activator
+            .CreateInstance(
+                PostgresAssembly
+                    .GetType(
+                        "Trax.Effect.Data.Postgres.Services.SqlDialect.PostgresSqlDialect",
+                        throwOnError: true
+                    )
+                    .NotNull(),
+                nonPublic: true
+            )
+            .NotNull();
 
     [Test]
     public void TryAcquireLeaderLock_BuildsAdvisoryLockSql()
     {
         var dialect = Create();
-        var method = dialect.GetType().GetMethod("TryAcquireLeaderLock")!;
-        var sql = (FormattableString)method.Invoke(dialect, ["my-lock"])!;
+        var method = dialect.GetType().GetMethod("TryAcquireLeaderLock").NotNull();
+        var sql = (FormattableString)method.Invoke(dialect, ["my-lock"]).NotNull();
 
         sql.Format.Should().Contain("pg_try_advisory_xact_lock");
         sql.GetArguments().Should().Equal("my-lock");
@@ -38,8 +43,8 @@ public class PostgresSqlDialectTests
     public void ClaimWorkQueueEntry_BuildsForUpdateSkipLockedSql()
     {
         var dialect = Create();
-        var method = dialect.GetType().GetMethod("ClaimWorkQueueEntry")!;
-        var sql = (string)method.Invoke(dialect, null)!;
+        var method = dialect.GetType().GetMethod("ClaimWorkQueueEntry").NotNull();
+        var sql = (string)method.Invoke(dialect, parameters: null).NotNull();
 
         sql.Should().Contain("FOR UPDATE SKIP LOCKED");
         sql.Should().Contain("trax.work_queue");
@@ -61,7 +66,12 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var sql = (string)
-            dialect.GetType().GetMethod("ClaimWorkQueueEntry")!.Invoke(dialect, null)!;
+            dialect
+                .GetType()
+                .GetMethod("ClaimWorkQueueEntry")
+                .NotNull()
+                .Invoke(dialect, parameters: null)
+                .NotNull();
 
         sql.Should()
             .Contain(
@@ -87,7 +97,12 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var sql = (string)
-            dialect.GetType().GetMethod("LoadGroupFairQueuedJobs")!.Invoke(dialect, null)!;
+            dialect
+                .GetType()
+                .GetMethod("LoadGroupFairQueuedJobs")
+                .NotNull()
+                .Invoke(dialect, parameters: null)
+                .NotNull();
 
         sql.Should().NotContain("b.subject_key = wq.subject_key");
         sql.Should().Contain("b.subject_key IS NOT NULL");
@@ -97,8 +112,8 @@ public class PostgresSqlDialectTests
     public void DequeueBackgroundJobs_BuildsLimitOrderedSql()
     {
         var dialect = Create();
-        var method = dialect.GetType().GetMethod("DequeueBackgroundJobs")!;
-        var sql = (string)method.Invoke(dialect, null)!;
+        var method = dialect.GetType().GetMethod("DequeueBackgroundJobs").NotNull();
+        var sql = (string)method.Invoke(dialect, parameters: null).NotNull();
 
         sql.Should().Contain("trax.background_job");
         sql.Should().Contain("ORDER BY priority DESC");
@@ -109,8 +124,8 @@ public class PostgresSqlDialectTests
     public void LoadGroupFairQueuedJobs_BuildsRowNumberPartitionSql()
     {
         var dialect = Create();
-        var method = dialect.GetType().GetMethod("LoadGroupFairQueuedJobs")!;
-        var sql = (string)method.Invoke(dialect, null)!;
+        var method = dialect.GetType().GetMethod("LoadGroupFairQueuedJobs").NotNull();
+        var sql = (string)method.Invoke(dialect, parameters: null).NotNull();
 
         sql.Should().Contain("ROW_NUMBER()");
         sql.Should().Contain("PARTITION BY m.manifest_group_id");

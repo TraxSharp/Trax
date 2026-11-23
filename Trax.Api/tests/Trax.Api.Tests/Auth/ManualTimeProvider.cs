@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Api.Tests.Auth;
 
 /// <summary>
@@ -43,7 +45,7 @@ internal sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
                 break;
 
             if (next.Due > _now)
-                _now = next.Due!.Value;
+                _now = next.Due.NotNull().Value;
             next.Fire();
         }
         _now = target;

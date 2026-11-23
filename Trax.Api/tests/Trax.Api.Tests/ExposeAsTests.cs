@@ -11,6 +11,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -92,7 +93,10 @@ public class ExposeAsTests
         // IDiamondLeaf inherits from two paths that both transitively reach IBookReference
         var names = QueryModelTypeModule.GetExposedPropertyNames(typeof(IDiamondLeaf));
 
-        names.Where(n => n == "Id").Should().HaveCount(1, "HashSet should deduplicate");
+        names
+            .Where(n => string.Equals(n, "Id", StringComparison.Ordinal))
+            .Should()
+            .HaveCount(1, "HashSet should deduplicate");
         names.Should().Contain("LeafProp");
         names.Should().Contain("Id");
     }
@@ -256,7 +260,10 @@ public class ExposeAsTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types
             .Should()
@@ -281,7 +288,7 @@ public class ExposeAsTests
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().BeEquivalentTo("id", "title", "author", "rating");
     }
@@ -309,7 +316,7 @@ public class ExposeAsTests
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         // Without ExposeAs, HC binds every public property — including
         // navs and internal columns. This is the "default lies" baseline
@@ -327,7 +334,7 @@ public class ExposeAsTests
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
 
         // Fields from both the leaf and the inherited IAuditReference must appear.
         fieldNames.Should().Contain("id");
@@ -348,10 +355,15 @@ public class ExposeAsTests
 
         var filterType = schema.Types.GetType<InputObjectType>("BookRefFilterInput");
 
-        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         // HC includes "and"/"or" automatically — strip those and check the rest.
-        var dataFields = fieldNames.Where(n => n != "and" && n != "or").ToHashSet();
+        var dataFields = fieldNames
+            .Where(n =>
+                !string.Equals(n, "and", StringComparison.Ordinal)
+                && !string.Equals(n, "or", StringComparison.Ordinal)
+            )
+            .ToHashSet(StringComparer.Ordinal);
 
         dataFields.Should().BeEquivalentTo("id", "title", "author", "rating");
         dataFields.Should().NotContain("internalNotes");
@@ -366,8 +378,13 @@ public class ExposeAsTests
 
         var filterType = schema.Types.GetType<InputObjectType>("BookRefIdOnlyFilter");
 
-        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
-        var dataFields = fieldNames.Where(n => n != "and" && n != "or").ToHashSet();
+        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
+        var dataFields = fieldNames
+            .Where(n =>
+                !string.Equals(n, "and", StringComparison.Ordinal)
+                && !string.Equals(n, "or", StringComparison.Ordinal)
+            )
+            .ToHashSet(StringComparer.Ordinal);
 
         // The override declares only `id`, so the schema should reflect that
         // even though ExposeAs would otherwise expose four fields.
@@ -381,7 +398,7 @@ public class ExposeAsTests
 
         var filterType = schema.Types.GetType<InputObjectType>("UnrestrictedBookRefFilterInput");
 
-        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         // Baseline: without ExposeAs, the hidden column is filterable.
         fieldNames.Should().Contain("internalNotes");
@@ -398,7 +415,7 @@ public class ExposeAsTests
 
         var sortType = schema.Types.GetType<InputObjectType>("BookRefSortInput");
 
-        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().BeEquivalentTo("id", "title", "author", "rating");
         fieldNames.Should().NotContain("internalNotes");
@@ -412,7 +429,7 @@ public class ExposeAsTests
         );
 
         var sortType = schema.Types.GetType<InputObjectType>("BookRefTitleOnlySort");
-        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().BeEquivalentTo("title");
     }
@@ -433,7 +450,8 @@ public class ExposeAsTests
         var operationResult = result.ExpectOperationResult();
         operationResult.Errors.Should().NotBeNullOrEmpty();
         operationResult
-            .Errors!.Should()
+            .Errors.NotNull()
+            .Should()
             .Contain(e => e.Message.Contains("internalNotes") || e.Message.Contains("field"));
     }
 
@@ -512,7 +530,8 @@ public class ExposeAsTests
     )
         where TContext : DbContext
     {
-        var executor = await BuildExecutorAsync<TContext>(customize, seedData: false);
+        var executor = await BuildExecutorAsync<TContext>(customize, seedData: false)
+            .ConfigureAwait(false);
         return executor.Schema;
     }
 
@@ -571,10 +590,13 @@ public class ExposeAsTests
                     InternalNotes = "n2",
                 }
             );
-            await ctx.SaveChangesAsync();
+            await ctx.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
+        return await provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -600,250 +622,3 @@ public class ExposeAsTests
 
     #endregion
 }
-
-#region Test interfaces
-
-public interface IBookReference
-{
-    int Id { get; }
-    string Title { get; }
-    string Author { get; }
-    int Rating { get; }
-}
-
-public interface IAuditReference
-{
-    DateTime CreatedAt { get; }
-    DateTime UpdatedAt { get; }
-}
-
-public interface IBookReferenceWithAudit : IBookReference, IAuditReference;
-
-public interface IEmpty;
-
-public interface IDiamondLeftBranch : IBookReference
-{
-    string LeftProp { get; }
-}
-
-public interface IDiamondRightBranch : IBookReference
-{
-    string RightProp { get; }
-}
-
-public interface IDiamondLeaf : IDiamondLeftBranch, IDiamondRightBranch
-{
-    string LeafProp { get; }
-}
-
-public interface IBookExplicit
-{
-    int Id { get; }
-    string SecretField { get; }
-}
-
-#endregion
-
-#region Test entities
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "bookRefs", ExposeAs = typeof(IBookReference))]
-public class BookRef : IBookReference
-{
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-    public string Author { get; set; } = "";
-    public int Rating { get; set; }
-
-    /// This represents the "hidden" nav-like property that ExposeAs must keep out of the schema.
-    public string InternalNotes { get; set; } = "";
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "auditedBookRefs", ExposeAs = typeof(IBookReferenceWithAudit))]
-public class AuditedBookRef : IBookReferenceWithAudit
-{
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-    public string Author { get; set; } = "";
-    public int Rating { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public string InternalNotes { get; set; } = "";
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "unrestrictedBookRefs")]
-public class UnrestrictedBookRef
-{
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-    public string InternalNotes { get; set; } = "";
-}
-
-[TraxQueryModel(ExposeAs = typeof(IBookReference), BindFields = FieldBindingBehavior.Explicit)]
-public class ConflictBook : IBookReference
-{
-    [Column("id")]
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-    public string Author { get; set; } = "";
-    public int Rating { get; set; }
-}
-
-// Targeting a non-interface type for ExposeAs is illegal.
-[TraxQueryModel(ExposeAs = typeof(SomeBaseClass))]
-public class WrongExposeAsKind : SomeBaseClass
-{
-    public int Id { get; set; }
-}
-
-public class SomeBaseClass
-{
-    public int BaseProp { get; set; }
-}
-
-[TraxQueryModel(ExposeAs = typeof(IBookReference))]
-public class MisconfiguredBook
-{
-    // Intentionally does NOT implement IBookReference.
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-}
-
-[TraxQueryModel(ExposeAs = typeof(IEmpty))]
-public class EmptyExposed : IEmpty
-{
-    public int Id { get; set; }
-}
-
-[TraxQueryModel(ExposeAs = typeof(IBookExplicit))]
-public class ExplicitImplBook : IBookExplicit
-{
-    public int Id { get; set; }
-
-    // Explicit interface impl — no public `SecretField` property exists on
-    // ExplicitImplBook, so the GraphQL field can't be named.
-    string IBookExplicit.SecretField => "secret";
-}
-
-#endregion
-
-#region Test DbContexts
-
-public class BookDbContext : DbContext
-{
-    public DbSet<BookRef> Books { get; set; } = null!;
-
-    public BookDbContext(DbContextOptions<BookDbContext> options)
-        : base(options) { }
-
-    public BookDbContext()
-    {
-        // Required for the manual instantiation paths some tests use.
-    }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-            optionsBuilder.UseInMemoryDatabase("BookDb_" + Guid.NewGuid());
-    }
-}
-
-public class AuditedBookDbContext : DbContext
-{
-    public DbSet<AuditedBookRef> Books { get; set; } = null!;
-
-    public AuditedBookDbContext(DbContextOptions<AuditedBookDbContext> options)
-        : base(options) { }
-
-    public AuditedBookDbContext() { }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-            optionsBuilder.UseInMemoryDatabase("AuditedBookDb_" + Guid.NewGuid());
-    }
-}
-
-public class UnrestrictedBookDbContext : DbContext
-{
-    public DbSet<UnrestrictedBookRef> Books { get; set; } = null!;
-
-    public UnrestrictedBookDbContext(DbContextOptions<UnrestrictedBookDbContext> options)
-        : base(options) { }
-
-    public UnrestrictedBookDbContext() { }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-            optionsBuilder.UseInMemoryDatabase("UnrestrictedBookDb_" + Guid.NewGuid());
-    }
-}
-
-public class ExposeAsPlusExplicitDbContext : DbContext
-{
-    public DbSet<ConflictBook> Books { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("ConflictDb_" + Guid.NewGuid());
-}
-
-public class ExposeAsClassDbContext : DbContext
-{
-    public DbSet<WrongExposeAsKind> Items { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("WrongKindDb_" + Guid.NewGuid());
-}
-
-public class UnimplementedInterfaceDbContext : DbContext
-{
-    public DbSet<MisconfiguredBook> Books { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("MisconfDb_" + Guid.NewGuid());
-}
-
-public class EmptyInterfaceDbContext : DbContext
-{
-    public DbSet<EmptyExposed> Items { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("EmptyDb_" + Guid.NewGuid());
-}
-
-public class ExplicitImplDbContext : DbContext
-{
-    public DbSet<ExplicitImplBook> Books { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("ExplicitImplDb_" + Guid.NewGuid());
-}
-
-#endregion
-
-#region Test filter / sort overrides
-
-public class BookRefIdOnlyFilter : FilterInputType<BookRef>
-{
-    protected override void Configure(IFilterInputTypeDescriptor<BookRef> descriptor)
-    {
-        descriptor.Name("BookRefIdOnlyFilter");
-        descriptor.BindFieldsExplicitly();
-        descriptor.Field(x => x.Id);
-    }
-}
-
-public class BookRefTitleOnlySort : SortInputType<BookRef>
-{
-    protected override void Configure(ISortInputTypeDescriptor<BookRef> descriptor)
-    {
-        descriptor.Name("BookRefTitleOnlySort");
-        descriptor.BindFieldsExplicitly();
-        descriptor.Field(x => x.Title);
-    }
-}
-
-#endregion

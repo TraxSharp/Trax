@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -15,7 +16,7 @@ internal sealed class StaleReadStore(IMachineInstanceStore inner) : IMachineInst
     {
         var registered = services.Last(d => d.ServiceType == typeof(IMachineInstanceStore));
         services.Remove(registered);
-        var create = registered.ImplementationFactory!;
+        var create = registered.ImplementationFactory.NotNull();
         services.AddScoped<IMachineInstanceStore>(sp => new StaleReadStore(
             (IMachineInstanceStore)create(sp)
         ));
@@ -25,7 +26,8 @@ internal sealed class StaleReadStore(IMachineInstanceStore inner) : IMachineInst
         string invokeToken,
         CancellationToken cancellationToken = default
     ) =>
-        await inner.GetByInvokeToken(invokeToken, cancellationToken) is { } row
+        await inner.GetByInvokeToken(invokeToken, cancellationToken).ConfigureAwait(false)
+            is { } row
             ? row with
             {
                 Snapshot = row.Snapshot with { Token = Guid.NewGuid() },

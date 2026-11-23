@@ -6,15 +6,14 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class AssessRiskJunction(IShopfrontDbContext db)
+internal sealed class AssessRiskJunction(IShopfrontDbContext db)
     : EffectJunction<(Customer Customer, PricedCart Cart), OrderRisk>
 {
     public override async Task<OrderRisk> Run((Customer Customer, PricedCart Cart) input)
     {
-        var ordered = await db.Orders.AnyAsync(
-            o => o.CustomerId == input.Customer.Id,
-            CancellationToken
-        );
+        var ordered = await db
+            .Orders.AnyAsync(o => o.CustomerId == input.Customer.Id, CancellationToken)
+            .ConfigureAwait(false);
         return new OrderRisk(input.Customer.Id, input.Cart.Total, FirstOrder: !ordered);
     }
 }

@@ -79,26 +79,31 @@ others in the same container. The `trax-hub` template's train test does both:
     }
 
     [TearDown]
-    public ValueTask DisposeTheContainer() => _provider.DisposeAsync();
+    public async ValueTask DisposeTheContainer()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
+    }
 
     [Test]
     public async Task RunAsync_WithAName_CompletesAndIsRecorded()
     {
         // A name no other run uses, to find this run's record among any others.
         var name = Guid.NewGuid().ToString();
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
         await bus.RunAsync<Unit>(new HelloWorldInput { Name = name });
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var run = data
             .Metadatas.Where(m => m.Name == typeof(IHelloWorldTrain).FullName)
             .AsEnumerable()
-            .SingleOrDefault(m => m.Input?.Contains(name) == true);
+            .SingleOrDefault(m => m.Input?.Contains(name, StringComparison.Ordinal) == true);
 
         Assert.That(run, Is.Not.Null, "every run of a train is recorded, with its input");
-        Assert.That(run!.TrainState, Is.EqualTo(TrainState.Completed));
+        Assert.That(run.NotNull().TrainState, Is.EqualTo(TrainState.Completed));
     }
 ```
 

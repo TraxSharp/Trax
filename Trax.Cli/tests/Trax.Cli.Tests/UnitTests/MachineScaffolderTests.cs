@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -13,7 +14,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineScaffolderTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -41,9 +42,11 @@ public class MachineScaffolderTests
     public string Kebab_lowercases_and_dashes(string name) => MachineScaffolder.Kebab(name);
 
     [Test]
-    public void Render_without_effect_emits_the_declarative_skeleton_and_no_effect()
+    public async Task Render_without_effect_emits_the_declarative_skeleton_and_no_effect()
     {
-        var source = MachineScaffolder.Render("checkout", "MyApp.Machines", withEffect: false);
+        var source = await MachineScaffolder
+            .RenderAsync("checkout", "MyApp.Machines", withEffect: false)
+            .ConfigureAwait(false);
 
         source.Should().Contain("namespace MyApp.Machines;");
         source.Should().Contain("public enum CheckoutState");
@@ -65,9 +68,11 @@ public class MachineScaffolderTests
     }
 
     [Test]
-    public void Render_with_effect_emits_the_effect_stub_and_a_committed_terminal_state()
+    public async Task Render_with_effect_emits_the_effect_stub_and_a_committed_terminal_state()
     {
-        var source = MachineScaffolder.Render("checkout", "MyApp.Machines", withEffect: true);
+        var source = await MachineScaffolder
+            .RenderAsync("checkout", "MyApp.Machines", withEffect: true)
+            .ConfigureAwait(false);
 
         source.Should().Contain("public interface ICheckoutEffect : ISnapshotEffect;");
         source.Should().Contain("public sealed class CheckoutEffect : ICheckoutEffect");
@@ -76,80 +81,111 @@ public class MachineScaffolderTests
     }
 
     [Test]
-    public void Write_creates_the_named_file_and_returns_its_path()
+    public async Task Write_creates_the_named_file_and_returns_its_path()
     {
-        var path = MachineScaffolder.Write(
-            "checkout",
-            _dir,
-            "MyApp",
-            withEffect: false,
-            force: false
-        );
+        var path = await MachineScaffolder
+            .WriteAsync("checkout", _dir, "MyApp", withEffect: false, force: false)
+            .ConfigureAwait(false);
 
         path.Should().Be(Path.Combine(_dir, "CheckoutMachine.cs"));
         File.Exists(path).Should().BeTrue();
     }
 
     [Test]
-    public void Write_refuses_to_overwrite_without_force()
+    public async Task Write_refuses_to_overwrite_without_force()
     {
-        MachineScaffolder.Write("checkout", _dir, "MyApp", withEffect: false, force: false);
+        await MachineScaffolder
+            .WriteAsync("checkout", _dir, "MyApp", withEffect: false, force: false)
+            .ConfigureAwait(false);
 
-        var write = () => MachineScaffolder.Write("checkout", _dir, "MyApp", false, force: false);
+        var write = async () =>
+            await MachineScaffolder
+                .WriteAsync("checkout", _dir, "MyApp", withEffect: false, force: false)
+                .ConfigureAwait(false);
 
-        write.Should().Throw<InvalidOperationException>().WithMessage("*already exists*--force*");
+        (
+            await write.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*already exists*--force*");
     }
 
     [Test]
-    public void Write_overwrites_with_force()
+    public async Task Write_overwrites_with_force()
     {
-        var path = MachineScaffolder.Write("checkout", _dir, "MyApp", false, force: false);
-        File.WriteAllText(path, "// clobbered");
+        var path = await MachineScaffolder
+            .WriteAsync("checkout", _dir, "MyApp", withEffect: false, force: false)
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(path, "// clobbered").ConfigureAwait(false);
 
-        MachineScaffolder.Write("checkout", _dir, "MyApp", false, force: true);
-
-        File.ReadAllText(path).Should().Contain("public sealed class CheckoutMachine");
+        await MachineScaffolder
+            .WriteAsync("checkout", _dir, "MyApp", withEffect: false, force: true)
+            .ConfigureAwait(false);
+        (await File.ReadAllTextAsync(path).ConfigureAwait(false))
+            .Should()
+            .Contain("public sealed class CheckoutMachine");
     }
 
     [Test]
-    public void Write_rejects_an_empty_name()
+    public async Task Write_rejects_an_empty_name()
     {
-        var write = () => MachineScaffolder.Write("   ", _dir, "MyApp", false, false);
+        var write = async () =>
+            await MachineScaffolder
+                .WriteAsync("   ", _dir, "MyApp", withEffect: false, force: false)
+                .ConfigureAwait(false);
 
-        write.Should().Throw<InvalidOperationException>().WithMessage("*name is required*");
+        (
+            await write.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*name is required*");
     }
 
     [TestCase("check\"out")]
     [TestCase("check.out")]
     [TestCase("1checkout")]
-    public void Write_rejects_a_name_that_does_not_make_an_identifier(string name)
+    public async Task Write_rejects_a_name_that_does_not_make_an_identifier(string name)
     {
-        var write = () => MachineScaffolder.Write(name, _dir, "MyApp", false, false);
+        var write = async () =>
+            await MachineScaffolder
+                .WriteAsync(name, _dir, "MyApp", withEffect: false, force: false)
+                .ConfigureAwait(false);
 
-        write.Should().Throw<InvalidOperationException>().WithMessage("*machine name*");
+        (
+            await write.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*machine name*");
         Directory.EnumerateFiles(_dir).Should().BeEmpty();
     }
 
     [TestCase("My App")]
     [TestCase("MyApp;")]
     [TestCase("MyApp.")]
-    public void Write_rejects_a_namespace_that_is_not_a_dotted_identifier(string @namespace)
+    public async Task Write_rejects_a_namespace_that_is_not_a_dotted_identifier(string @namespace)
     {
-        var write = () => MachineScaffolder.Write("checkout", _dir, @namespace, false, false);
+        var write = async () =>
+            await MachineScaffolder
+                .WriteAsync("checkout", _dir, @namespace, withEffect: false, force: false)
+                .ConfigureAwait(false);
 
-        write.Should().Throw<InvalidOperationException>().WithMessage("*namespace*");
+        (
+            await write.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*namespace*");
     }
 
     [Test]
-    public void The_scaffold_compiles_against_the_real_engine_without_an_effect()
+    public async Task The_scaffold_compiles_against_the_real_engine_without_an_effect()
     {
-        AssertCompiles(MachineScaffolder.Render("checkout", "Scaffolded", withEffect: false));
+        AssertCompiles(
+            await MachineScaffolder
+                .RenderAsync("checkout", "Scaffolded", withEffect: false)
+                .ConfigureAwait(false)
+        );
     }
 
     [Test]
-    public void The_scaffold_compiles_against_the_real_engine_with_an_effect()
+    public async Task The_scaffold_compiles_against_the_real_engine_with_an_effect()
     {
-        AssertCompiles(MachineScaffolder.Render("checkout", "Scaffolded", withEffect: true));
+        AssertCompiles(
+            await MachineScaffolder
+                .RenderAsync("checkout", "Scaffolded", withEffect: true)
+                .ConfigureAwait(false)
+        );
     }
 
     // Compile the generated source against the real Trax.StateMachine assemblies. This is the honest
@@ -158,7 +194,7 @@ public class MachineScaffolderTests
     {
         var tree = CSharpSyntaxTree.ParseText(source);
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Where(p => p.EndsWith(".dll", StringComparison.Ordinal))
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
@@ -183,7 +219,7 @@ public class MachineScaffolderTests
             .ToList();
         errors
             .Should()
-            .BeEmpty(because: "the scaffold must compile:\n" + string.Join("\n", errors));
+            .BeEmpty(because: "the scaffold must compile:\n" + string.Join('\n', errors));
     }
 
     // Referenced so the Trax.StateMachine.Persistence assembly is copied to the test output for the

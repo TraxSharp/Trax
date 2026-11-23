@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -52,34 +54,36 @@ public class DispatcherWakeTests
     private const string ListenerApplicationName = "trax_queued_work_listener";
     private const string Channel = "trax_queued_work";
 
-    private ServiceProvider _dispatcherHost = null!;
+    private ServiceProvider? _dispatcherHost;
     private List<IHostedService> _running = [];
-    private ServiceProvider _apiHost = null!;
+    private ServiceProvider? _apiHost;
     private readonly SignalCounter _cycles = new();
     private readonly SignalCounter _subscriptions = new();
     private readonly SignalCounter _notices = new();
 
     /// <summary>The dispatcher host's listener, which the host owns and disposes.</summary>
     private QueuedWorkListenerService Listener =>
-        _dispatcherHost.GetRequiredService<QueuedWorkListenerService>();
+        _dispatcherHost.NotNull().GetRequiredService<QueuedWorkListenerService>();
 
     [SetUp]
     public async Task SetUp()
     {
         _apiHost = BuildApiHost();
-        using (var scope = _apiHost.CreateScope())
+        var scope = _apiHost.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await TestSetup.CleanupDatabase(
                 scope.ServiceProvider.GetRequiredService<IDataContext>()
             );
 
         _dispatcherHost = BuildDispatcherHost(_cycles);
-        Listener.Subscribed += _subscriptions.Increment;
-        Listener.NoticeReceived += _notices.Increment;
+        Listener.Subscribed += (_, _) => _subscriptions.Increment();
+        Listener.NoticeReceived += (_, _) => _notices.Increment();
 
         // The two services under test, started as the host would start them. The rest of a
         // scheduler host (startup validation over every train in this assembly, the manifest
         // manager) has nothing to do with the wake.
         _running = _dispatcherHost
+            .NotNull()
             .GetServices<IHostedService>()
             .Where(s => s is JobDispatcherPollingService or QueuedWorkListenerService)
             .ToList();
@@ -89,8 +93,8 @@ public class DispatcherWakeTests
 
         // The startup cycle has run and the listener is listening, so whatever happens next is
         // something the test did.
-        await _cycles.WhenReached(1).WaitAsync(SetupTimeout);
-        await _subscriptions.WhenReached(1).WaitAsync(SetupTimeout);
+        await _cycles.WhenReached(1).WaitAsync(SetupTimeout, TimeProvider.System);
+        await _subscriptions.WhenReached(1).WaitAsync(SetupTimeout, TimeProvider.System);
     }
 
     [TearDown]
@@ -98,8 +102,10 @@ public class DispatcherWakeTests
     {
         foreach (var service in _running)
             await service.StopAsync(CancellationToken.None);
-        await _dispatcherHost.DisposeAsync();
-        await _apiHost.DisposeAsync();
+        if (_dispatcherHost is not null)
+            await _dispatcherHost.DisposeAsync();
+        if (_apiHost is not null)
+            await _apiHost.DisposeAsync();
         NpgsqlConnection.ClearAllPools();
     }
 
@@ -111,14 +117,14 @@ public class DispatcherWakeTests
 
         var queued = await QueueFromApiHostAsync();
 
-        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         await WaitUntilDispatchedAsync(queued, SetupTimeout);
 
         // The next poll is an hour after the startup cycle, far past any timeout here, so the
         // cycle that ran the entry is one the notice began. The run can finish before that
         // cycle reports itself, so wait for the report rather than read the count.
         SetupTimeout.Should().BeLessThan(Poll);
-        await _cycles.WhenReached(cyclesBefore + 1).WaitAsync(SetupTimeout);
+        await _cycles.WhenReached(cyclesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         _cycles
             .Count.Should()
             .BeGreaterThan(cyclesBefore, "the notice woke the dispatcher; no poll was due");
@@ -129,7 +135,8 @@ public class DispatcherWakeTests
     {
         // The test's own session on the channel: once a query on it returns, every notification
         // committed before that query began has reached it, so its count is exact.
-        await using var oracle = new NpgsqlConnection(TestPostgres.ConnectionString);
+        var oracle = new NpgsqlConnection(TestPostgres.ConnectionString);
+        await using var oracleDisposal = oracle.ConfigureAwait(false);
         await oracle.OpenAsync();
         var oracleNotices = 0;
         oracle.Notification += (_, _) => Interlocked.Increment(ref oracleNotices);
@@ -137,7 +144,8 @@ public class DispatcherWakeTests
 
         var noticesBefore = Listener.Notices;
 
-        using (var scope = _apiHost.CreateScope())
+        var scope = _apiHost.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
             using var transaction = await dataContext.BeginTransaction();
@@ -145,10 +153,11 @@ public class DispatcherWakeTests
                 WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(ISchedulerTestTrain).FullName!,
+                        TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName,
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await dataContext.SaveChanges(CancellationToken.None);
@@ -163,7 +172,7 @@ public class DispatcherWakeTests
             .Should()
             .Be(1, "only the committed enqueue notifies; the rolled back one never does");
 
-        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         Listener.Notices.Should().Be(noticesBefore + 1);
         await WaitUntilDispatchedAsync(sentinel, SetupTimeout);
     }
@@ -171,38 +180,43 @@ public class DispatcherWakeTests
     [Test]
     public async Task The_listener_reconnects_after_its_connection_is_terminated_and_wakes_again()
     {
-        await using (var admin = new NpgsqlConnection(TestPostgres.ConnectionString))
+        var admin = new NpgsqlConnection(TestPostgres.ConnectionString);
+        await using (admin.ConfigureAwait(false))
         {
             await admin.OpenAsync();
-            await using var terminate = new NpgsqlCommand(
+            var terminate = new NpgsqlCommand(
                 "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
                     + "WHERE application_name = @name AND datname = current_database()",
                 admin
             );
+            await using var terminateDisposal = terminate.ConfigureAwait(false);
             terminate.Parameters.AddWithValue("name", ListenerApplicationName);
-            var terminated = (long)(await terminate.ExecuteScalarAsync())!;
+            var terminated = (long)(await terminate.ExecuteScalarAsync()).NotNull();
             terminated.Should().Be(1, "the dispatcher host holds one listening session");
         }
 
         // The first retry comes after a one-second backoff.
-        await _subscriptions.WhenReached(2).WaitAsync(SetupTimeout);
+        await _subscriptions.WhenReached(2).WaitAsync(SetupTimeout, TimeProvider.System);
 
         var noticesBefore = Listener.Notices;
         var queued = await QueueFromApiHostAsync();
 
-        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout, TimeProvider.System);
         await WaitUntilDispatchedAsync(queued, SetupTimeout);
     }
 
     private async Task<long> QueueFromApiHostAsync()
     {
-        using var scope = _apiHost.CreateScope();
+        var scope = _apiHost.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
-        var result = await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
-            "{}",
-            ct: CancellationToken.None
-        );
+        var result = await execution
+            .QueueAsync(
+                typeof(ISchedulerTestTrain).FullName.NotNull(),
+                "{}",
+                ct: CancellationToken.None
+            )
+            .ConfigureAwait(false);
         return result.WorkQueueId;
     }
 
@@ -214,16 +228,19 @@ public class DispatcherWakeTests
     /// </summary>
     private async Task WaitUntilDispatchedAsync(long workQueueId, TimeSpan timeout)
     {
-        var elapsed = Stopwatch.StartNew();
+        var elapsedStarted = TimeProvider.System.GetTimestamp();
         var next = _cycles.Count + 1;
-        while (!await IsDispatchedAsync(workQueueId))
+        while (!await IsDispatchedAsync(workQueueId).ConfigureAwait(false))
         {
-            var remaining = timeout - elapsed.Elapsed;
+            var remaining = timeout - TimeProvider.System.GetElapsedTime(elapsedStarted);
             if (remaining <= TimeSpan.Zero)
                 break;
             try
             {
-                await _cycles.WhenReached(next).WaitAsync(remaining);
+                await _cycles
+                    .WhenReached(next)
+                    .WaitAsync(remaining, TimeProvider.System)
+                    .ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -232,30 +249,42 @@ public class DispatcherWakeTests
             next = _cycles.Count + 1;
         }
 
-        (await IsDispatchedAsync(workQueueId))
+        (await IsDispatchedAsync(workQueueId).ConfigureAwait(false))
             .Should()
             .BeTrue(
-                $"work queue entry {workQueueId} should be dispatched and run within {timeout}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"work queue entry {workQueueId} should be dispatched and run within {timeout}"
+                )
             );
     }
 
     private async Task<bool> IsDispatchedAsync(long workQueueId)
     {
-        using var scope = _apiHost.CreateScope();
+        var scope = _apiHost.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var entry = await dataContext
             .WorkQueues.AsNoTracking()
             .Where(w => w.Id == workQueueId)
-            .Select(w => new { w.Status, RunState = (TrainState?)w.Metadata!.TrainState })
-            .SingleAsync();
+            .Select(w => new
+            {
+                w.Status,
+                RunState = w.Metadata != null ? (TrainState?)w.Metadata.TrainState : null,
+            })
+            .SingleAsync()
+            .ConfigureAwait(false);
         return entry.Status == WorkQueueStatus.Dispatched
             && entry.RunState is not (null or TrainState.Pending or TrainState.InProgress);
     }
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
     {
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var command = new NpgsqlCommand(sql, connection);
+        await using (command.ConfigureAwait(false))
+        {
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>A host that queues work and dispatches none, with a data source of its own.</summary>
@@ -303,7 +332,7 @@ public class DispatcherWakeTests
             );
 
         var dispatcher = services.Last(d => d.ServiceType == typeof(IJobDispatcherTrain));
-        var create = dispatcher.ImplementationFactory!;
+        var create = dispatcher.ImplementationFactory.NotNull();
         services.Remove(dispatcher);
         services.AddScoped<IJobDispatcherTrain>(sp => new CountedDispatcher(
             (IJobDispatcherTrain)create(sp),
@@ -322,7 +351,7 @@ public class DispatcherWakeTests
         {
             try
             {
-                return await inner.Run(input, cancellationToken);
+                return await inner.Run(input, cancellationToken).ConfigureAwait(false);
             }
             finally
             {

@@ -79,7 +79,7 @@ public class FromGherkinCommandTests
             Then the shop is open
         """;
 
-    private string _dir = null!;
+    private string _dir = "";
     private string Features => Path.Combine(_dir, "features");
     private string Out => Path.Combine(_dir, "machines");
 
@@ -97,9 +97,9 @@ public class FromGherkinCommandTests
     public void TearDown() => Directory.Delete(_dir, recursive: true);
 
     [Test]
-    public void A_glossary_json_with_no_lexicon_is_refused_naming_the_way_to_read_it()
+    public async Task A_glossary_json_with_no_lexicon_is_refused_naming_the_way_to_read_it()
     {
-        var (exit, _, err) = FromLexicon();
+        var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("holds glossary.json and no lexicon").And.Contain("--glossary");
@@ -107,80 +107,94 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void A_glossary_inside_out_is_refused_and_left_where_it_is()
+    public async Task A_glossary_inside_out_is_refused_and_left_where_it_is()
     {
         Directory.CreateDirectory(Out);
         var inside = Path.Combine(Out, "glossary.json");
         File.Move(Path.Combine(Features, "glossary.json"), inside);
 
-        var (exit, _, err) = Run(glossary: inside);
+        var (exit, _, err) = await RunAsync(glossary: inside).ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("is inside --out");
-        File.ReadAllText(inside).Should().Be(Glossary);
+        (await File.ReadAllTextAsync(inside).ConfigureAwait(false)).Should().Be(Glossary);
     }
 
     [Test]
-    public void Trains_with_a_json_glossary_is_refused()
+    public async Task Trains_with_a_json_glossary_is_refused()
     {
-        var (exit, _, err) = Run(
-            trains: [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
-        );
+        var (exit, _, err) = await RunAsync(
+                trains: [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("--trains is read with a lexicon");
     }
 
     [Test]
-    public void Trains_that_are_not_there_is_a_message()
+    public async Task Trains_that_are_not_there_is_a_message()
     {
-        UseLexicon();
+        await UseLexiconAsync().ConfigureAwait(false);
 
         var stderr = new StringWriter();
-        var exit = MachineCommand.RunFromGherkin(
-            Features,
-            null,
-            Out,
-            false,
-            new StringWriter(),
-            stderr,
-            [Path.Combine(_dir, "Missing.dll")]
-        );
+        var exit = await MachineCommand
+            .RunFromGherkinAsync(
+                Features,
+                glossaryPath: null,
+                Out,
+                check: false,
+                new StringWriter(),
+                stderr,
+                [Path.Combine(_dir, "Missing.dll")]
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(1);
         stderr.ToString().Should().Contain("--trains: Assembly not found");
     }
 
     [Test]
-    public void Trains_give_a_lexicon_the_fields_its_Runs_lines_leave_out()
+    public async Task Trains_give_a_lexicon_the_fields_its_Runs_lines_leave_out()
     {
-        UseLexicon(
-            Lexicon
-                + $"""
+        await UseLexiconAsync(
+                Lexicon
+                    + $"""
 
-                Machine: refund
-                  Owned by: customer
-                  Context: reason is a string
-                  State: Asked "is asked for"
-                  State: Checking "is being checked"
-                  Runs: {typeof(LexiconTrains.ICheckRefundTrain).FullName} in Checking
-                    Stores: approved
-                    Outcome: "the refund is approved" when approved is true
-                    Outcome: "the refund cannot be checked" when it fails
-                """
-        );
+                    Machine: refund
+                      Owned by: customer
+                      Context: reason is a string
+                      State: Asked "is asked for"
+                      State: Checking "is being checked"
+                      Runs: {typeof(LexiconTrains.ICheckRefundTrain).FullName} in Checking
+                        Stores: approved
+                        Outcome: "the refund is approved" when approved is true
+                        Outcome: "the refund cannot be checked" when it fails
+                    """
+            )
+            .ConfigureAwait(false);
         var without = new StringWriter();
         var withTrains = new StringWriter();
 
-        var refused = MachineCommand.RunUsage(Features, null, false, new StringWriter(), without);
-        var read = MachineCommand.RunUsage(
-            Features,
-            null,
-            false,
-            new StringWriter(),
-            withTrains,
-            [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
-        );
+        var refused = await MachineCommand
+            .RunUsageAsync(
+                Features,
+                glossaryPath: null,
+                unusedOnly: false,
+                new StringWriter(),
+                without
+            )
+            .ConfigureAwait(false);
+        var read = await MachineCommand
+            .RunUsageAsync(
+                Features,
+                glossaryPath: null,
+                unusedOnly: false,
+                new StringWriter(),
+                withTrains,
+                [typeof(LexiconTrains.ICheckRefundTrain).Assembly.Location]
+            )
+            .ConfigureAwait(false);
 
         refused.Should().Be(1);
         without.ToString().Should().Contain("returns no 'approved'");
@@ -188,11 +202,11 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void A_lexicon_is_elaborated_and_its_glossary_written_with_the_machines()
+    public async Task A_lexicon_is_elaborated_and_its_glossary_written_with_the_machines()
     {
-        UseLexicon();
+        await UseLexiconAsync().ConfigureAwait(false);
 
-        var (exit, _, err) = FromLexicon();
+        var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         Directory
@@ -206,37 +220,42 @@ public class FromGherkinCommandTests
                 "access.txt",
                 "glossary.json",
             ]);
-        File.ReadAllText(Path.Combine(Out, "glossary.json"))
+        (await File.ReadAllTextAsync(Path.Combine(Out, "glossary.json")).ConfigureAwait(false))
             .Should()
             .Be(
                 Trax.StateMachine.Gherkin.Lexicon.Read("shop.lexicon", Lexicon).Json,
                 "the glossary written is the lexicon's, in its canonical form"
             );
-        FromLexicon(check: true).Exit.Should().Be(0, "nothing changed since it was written");
-        FromLexicon()
+        (await FromLexiconAsync(check: true).ConfigureAwait(false))
+            .Exit.Should()
+            .Be(0, "nothing changed since it was written");
+        (await FromLexiconAsync().ConfigureAwait(false))
             .Out.Should()
             .Contain("is up to date", "a glossary it wrote is not a foreign file");
     }
 
     [Test]
-    public void A_changed_lexicon_makes_the_glossary_stale()
+    public async Task A_changed_lexicon_makes_the_glossary_stale()
     {
-        UseLexicon();
-        FromLexicon();
-        UseLexicon(Lexicon.Replace("\"is a draft\"", "\"is still a draft\""));
+        await UseLexiconAsync().ConfigureAwait(false);
+        await FromLexiconAsync().ConfigureAwait(false);
+        await UseLexiconAsync(
+                Lexicon.Replace("\"is a draft\"", "\"is still a draft\"", StringComparison.Ordinal)
+            )
+            .ConfigureAwait(false);
 
-        var check = FromLexicon(check: true);
+        var check = await FromLexiconAsync(check: true).ConfigureAwait(false);
 
         check.Exit.Should().Be(1);
         check.Err.Should().Contain("glossary.json is stale");
     }
 
     [Test]
-    public void A_lexicon_beside_a_glossary_json_is_refused()
+    public async Task A_lexicon_beside_a_glossary_json_is_refused()
     {
-        File.WriteAllText(Path.Combine(Features, "shop.lexicon"), Lexicon);
+        await File.WriteAllTextAsync(Path.Combine(Features, "shop.lexicon"), Lexicon);
 
-        var (exit, _, err) = FromLexicon();
+        var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("holds a lexicon and glossary.json");
@@ -244,23 +263,31 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Two_lexicons_in_one_directory_are_refused()
+    public async Task Two_lexicons_in_one_directory_are_refused()
     {
-        UseLexicon();
-        File.WriteAllText(Path.Combine(Features, "more.lexicon"), Lexicon);
+        await UseLexiconAsync().ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(Features, "more.lexicon"), Lexicon)
+            .ConfigureAwait(false);
 
-        var (exit, _, err) = FromLexicon();
+        var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("this directory's lexicon already");
     }
 
     [Test]
-    public void A_lexicon_problem_names_its_line_and_writes_nothing()
+    public async Task A_lexicon_problem_names_its_line_and_writes_nothing()
     {
-        UseLexicon(Lexicon.Replace("Trigger: Place", "Trigger: Place\n    Stores: x"));
+        await UseLexiconAsync(
+                Lexicon.Replace(
+                    "Trigger: Place",
+                    "Trigger: Place\n    Stores: x",
+                    StringComparison.Ordinal
+                )
+            )
+            .ConfigureAwait(false);
 
-        var (exit, _, err) = FromLexicon();
+        var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("shop.lexicon:14: 'Stores:' belongs under a 'Runs:' block");
@@ -269,36 +296,65 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void A_directory_with_neither_a_lexicon_nor_a_glossary_is_a_message()
+    public async Task A_directory_with_neither_a_lexicon_nor_a_glossary_is_a_message()
     {
         File.Delete(Path.Combine(Features, "glossary.json"));
 
-        var (exit, _, err) = FromLexicon();
+        var (exit, _, err) = await FromLexiconAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("holds no lexicon");
     }
 
     [Test]
-    public void Run_missing_and_usage_read_the_lexicon_each_time()
+    public async Task Run_missing_and_usage_read_the_lexicon_each_time()
     {
-        UseLexicon();
-        FromLexicon();
+        await UseLexiconAsync().ConfigureAwait(false);
+        await FromLexiconAsync().ConfigureAwait(false);
         var usage = new StringWriter();
 
-        RunFeatures(new MachineCommand.RunArguments(Features, null, Out, [])).Exit.Should().Be(0);
-        MachineCommand.RunUsage(Features, null, false, usage, new StringWriter()).Should().Be(0);
+        (
+            await RunFeaturesAsync(
+                    new MachineCommand.RunArguments(Features, GlossaryPath: null, Out, [])
+                )
+                .ConfigureAwait(false)
+        )
+            .Exit.Should()
+            .Be(0);
+        (
+            await MachineCommand
+                .RunUsageAsync(
+                    Features,
+                    glossaryPath: null,
+                    unusedOnly: false,
+                    usage,
+                    new StringWriter()
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(0);
         usage.ToString().Should().Contain("order trigger Place \"places {subject}\": 1");
-        MachineCommand
-            .RunMissing(Features, null, [], null, new StringWriter(), new StringWriter())
+        (
+            await MachineCommand
+                .RunMissingAsync(
+                    Features,
+                    glossaryPath: null,
+                    [],
+                    outPath: null,
+                    new StringWriter(),
+                    new StringWriter()
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(0);
     }
 
     [Test]
-    public void It_writes_one_ir_per_machine_the_host_file_and_the_access_report()
+    public async Task It_writes_one_ir_per_machine_the_host_file_and_the_access_report()
     {
-        var (exit, _, err) = Run();
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         Directory
@@ -306,63 +362,71 @@ public class FromGherkinCommandTests
             .Select(Path.GetFileName)
             .Should()
             .BeEquivalentTo(["order.ir.json", "shop.ir.json", "host.json", "access.txt"]);
-        File.ReadAllText(Path.Combine(Out, "access.txt")).Should().Contain("Place");
-        Run(check: true).Exit.Should().Be(0, "nothing changed since it was written");
+        (await File.ReadAllTextAsync(Path.Combine(Out, "access.txt")).ConfigureAwait(false))
+            .Should()
+            .Contain("Place");
+        (await RunAsync(check: true).ConfigureAwait(false))
+            .Exit.Should()
+            .Be(0, "nothing changed since it was written");
     }
 
     [Test]
-    public void A_machine_that_stops_deriving_fails_the_check_then_is_removed()
+    public async Task A_machine_that_stops_deriving_fails_the_check_then_is_removed()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         File.Delete(Path.Combine(Features, "opening.feature"));
 
-        var check = Run(check: true);
+        var check = await RunAsync(check: true).ConfigureAwait(false);
         check.Exit.Should().Be(1);
         check.Err.Should().Contain("shop.ir.json no longer derives");
 
-        Run().Exit.Should().Be(0);
+        (await RunAsync().ConfigureAwait(false)).Exit.Should().Be(0);
         File.Exists(Path.Combine(Out, "shop.ir.json")).Should().BeFalse();
-        Run(check: true).Exit.Should().Be(0);
+        (await RunAsync(check: true).ConfigureAwait(false)).Exit.Should().Be(0);
     }
 
     [Test]
-    public void A_changed_grant_makes_the_access_report_stale()
+    public async Task A_changed_grant_makes_the_access_report_stale()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var glossary = Path.Combine(Features, "glossary.json");
-        File.WriteAllText(
-            glossary,
-            File.ReadAllText(glossary)
-                .Replace("\"roles\": [\"customer\"]", "\"roles\": [\"shopper\"]")
-        );
+        await File.WriteAllTextAsync(
+                glossary,
+                (await File.ReadAllTextAsync(glossary).ConfigureAwait(false)).Replace(
+                    "\"roles\": [\"customer\"]",
+                    "\"roles\": [\"shopper\"]",
+                    StringComparison.Ordinal
+                )
+            )
+            .ConfigureAwait(false);
 
-        var check = Run(check: true);
+        var check = await RunAsync(check: true).ConfigureAwait(false);
 
         check.Exit.Should().Be(1);
         check.Err.Should().Contain("access.txt is stale");
     }
 
     [Test]
-    public void An_out_that_is_a_file_is_refused()
+    public async Task An_out_that_is_a_file_is_refused()
     {
         Directory.CreateDirectory(_dir);
         var file = Path.Combine(_dir, "order.ir.json");
-        File.WriteAllText(file, "{}");
+        await File.WriteAllTextAsync(file, "{}");
 
-        var (exit, _, err) = Run(outDir: file);
+        var (exit, _, err) = await RunAsync(outDir: file).ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("--out is a file");
-        File.ReadAllText(file).Should().Be("{}");
+        (await File.ReadAllTextAsync(file).ConfigureAwait(false)).Should().Be("{}");
     }
 
     [Test]
-    public void An_out_holding_files_it_did_not_write_is_refused_untouched()
+    public async Task An_out_holding_files_it_did_not_write_is_refused_untouched()
     {
         Directory.CreateDirectory(Out);
-        File.WriteAllText(Path.Combine(Out, "notes.md"), "mine");
+        await File.WriteAllTextAsync(Path.Combine(Out, "notes.md"), "mine");
 
-        var (exit, _, err) = Run();
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("notes.md");
@@ -370,31 +434,34 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void A_missing_glossary_is_a_message()
+    public async Task A_missing_glossary_is_a_message()
     {
         File.Delete(Path.Combine(Features, "glossary.json"));
 
-        var (exit, _, err) = Run();
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("There is no glossary at");
     }
 
     [Test]
-    public void A_bad_glossary_names_its_key()
+    public async Task A_bad_glossary_names_its_key()
     {
-        File.WriteAllText(Path.Combine(Features, "glossary.json"), """{ "version": 2 }""");
+        await File.WriteAllTextAsync(
+            Path.Combine(Features, "glossary.json"),
+            """{ "version": 2 }"""
+        );
 
-        var (exit, _, err) = Run();
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("glossary.json").And.Contain("version");
     }
 
     [Test]
-    public void A_problem_writes_nothing()
+    public async Task A_problem_writes_nothing()
     {
-        File.AppendAllText(
+        await File.AppendAllTextAsync(
             Path.Combine(Features, "ordering.feature"),
             """
 
@@ -405,7 +472,7 @@ public class FromGherkinCommandTests
             """
         );
 
-        var (exit, _, err) = Run();
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("ordering.feature:");
@@ -413,22 +480,21 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Feature_paths_are_relative_so_the_output_does_not_depend_on_where_it_runs()
+    public async Task Feature_paths_are_relative_so_the_output_does_not_depend_on_where_it_runs()
     {
-        Run();
-
-        File.ReadAllText(Path.Combine(Out, "host.json"))
+        await RunAsync().ConfigureAwait(false);
+        (await File.ReadAllTextAsync(Path.Combine(Out, "host.json")).ConfigureAwait(false))
             .Should()
             .Contain("\"file\":\"ordering.feature\"")
             .And.NotContain(_dir);
     }
 
     [Test]
-    public void Run_passes_the_features_on_the_committed_machines()
+    public async Task Run_passes_the_features_on_the_committed_machines()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
 
-        var (exit, stdout, err) = RunFeatures();
+        var (exit, stdout, err) = await RunFeaturesAsync().ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         stdout.Should().Contain("ordering.feature:2 Ada places her order  passed");
@@ -436,79 +502,83 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Run_fails_a_scenario_the_committed_machines_answer_differently()
+    public async Task Run_fails_a_scenario_the_committed_machines_answer_differently()
     {
-        Run();
-        File.AppendAllText(
-            Path.Combine(Features, "ordering.feature"),
-            """
+        await RunAsync().ConfigureAwait(false);
+        await File.AppendAllTextAsync(
+                Path.Combine(Features, "ordering.feature"),
+                """
 
-              Scenario: Placing twice
-                Given Ada is a customer
-                And Ada's order is placed
-                When Ada places her order
-                Then Ada's order is placed
-            """
-        );
+                  Scenario: Placing twice
+                    Given Ada is a customer
+                    And Ada's order is placed
+                    When Ada places her order
+                    Then Ada's order is placed
+                """
+            )
+            .ConfigureAwait(false);
 
-        var (exit, stdout, _) = RunFeatures();
+        var (exit, stdout, _) = await RunFeaturesAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         stdout.Should().Contain("Placing twice  failed").And.Contain("NO_TRANSITION");
     }
 
     [Test]
-    public void Run_selects_by_location_and_writes_junit()
+    public async Task Run_selects_by_location_and_writes_junit()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var report = Path.Combine(_dir, "report.xml");
 
-        var (exit, _, err) = RunFeatures(
-            new MachineCommand.RunArguments(
-                Features,
-                Path.Combine(Features, "glossary.json"),
-                Out,
-                ["opening.feature:2"],
-                Format: "junit",
-                ReportPath: report
+        var (exit, _, err) = await RunFeaturesAsync(
+                new MachineCommand.RunArguments(
+                    Features,
+                    Path.Combine(Features, "glossary.json"),
+                    Out,
+                    ["opening.feature:2"],
+                    Format: "junit",
+                    ReportPath: report
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         exit.Should().Be(0, err);
-        var xml = File.ReadAllText(report);
+        var xml = await File.ReadAllTextAsync(report).ConfigureAwait(false);
         xml.Should().Contain("The shop opens (line 2)").And.NotContain("Ada places her order");
     }
 
     [Test]
-    public void Run_writes_junit_for_names_and_steps_xml_cannot_hold()
+    public async Task Run_writes_junit_for_names_and_steps_xml_cannot_hold()
     {
-        Run();
-        File.WriteAllText(
-            Path.Combine(Features, "odd.feature"),
-            "Feature: Odd\n"
-                + "  Scenario: The shop\u000Bopens\n"
-                + "    Given Kit is a baker\n"
-                + "    And the shop is closed\n"
-                + "    When the shop opens\n"
-                + "    Then the shop\u000Bis closed\n"
-        );
+        await RunAsync().ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(Features, "odd.feature"),
+                "Feature: Odd\n"
+                    + "  Scenario: The shop\u000Bopens\n"
+                    + "    Given Kit is a baker\n"
+                    + "    And the shop is closed\n"
+                    + "    When the shop opens\n"
+                    + "    Then the shop\u000Bis closed\n"
+            )
+            .ConfigureAwait(false);
         var report = Path.Combine(_dir, "report.xml");
 
-        var (exit, _, err) = RunFeatures(
-            new MachineCommand.RunArguments(
-                Features,
-                Path.Combine(Features, "glossary.json"),
-                Out,
-                ["odd.feature:2"],
-                Format: "junit",
-                ReportPath: report
+        var (exit, _, err) = await RunFeaturesAsync(
+                new MachineCommand.RunArguments(
+                    Features,
+                    Path.Combine(Features, "glossary.json"),
+                    Out,
+                    ["odd.feature:2"],
+                    Format: "junit",
+                    ReportPath: report
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         err.Should().NotContain("Exception");
         File.Exists(report).Should().BeTrue(err);
         exit.Should().Be(1, "the shop is open, not closed");
-        var xml = File.ReadAllText(report);
+        var xml = await File.ReadAllTextAsync(report).ConfigureAwait(false);
         System.Xml.Linq.XDocument.Parse(xml);
         xml.Should().Contain("The shop?opens (line 2)").And.Contain("the shop?is closed");
     }
@@ -521,58 +591,74 @@ public class FromGherkinCommandTests
             .Be("a\uD83D\uDE00b?c??");
 
     [Test]
-    public void Run_refuses_a_machines_directory_whose_host_file_was_derived_from_other_irs()
+    public async Task Run_refuses_a_machines_directory_whose_host_file_was_derived_from_other_irs()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var ir = Path.Combine(Out, "order.ir.json");
-        File.WriteAllText(ir, File.ReadAllText(ir).Replace("\"Placed\"", "\"Sent\""));
+        await File.WriteAllTextAsync(
+                ir,
+                (await File.ReadAllTextAsync(ir).ConfigureAwait(false)).Replace(
+                    "\"Placed\"",
+                    "\"Sent\"",
+                    StringComparison.Ordinal
+                )
+            )
+            .ConfigureAwait(false);
 
-        var (exit, _, err) = RunFeatures();
+        var (exit, _, err) = await RunFeaturesAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("order");
     }
 
     [Test]
-    public void Run_refuses_a_bad_tag_expression_and_a_bad_location()
+    public async Task Run_refuses_a_bad_tag_expression_and_a_bad_location()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
 
-        RunFeatures(
-            new MachineCommand.RunArguments(
-                Features,
-                Path.Combine(Features, "glossary.json"),
-                Out,
-                [],
-                Tags: "@a and"
-            )
+        (
+            await RunFeaturesAsync(
+                    new MachineCommand.RunArguments(
+                        Features,
+                        Path.Combine(Features, "glossary.json"),
+                        Out,
+                        [],
+                        Tags: "@a and"
+                    )
+                )
+                .ConfigureAwait(false)
         )
             .Err.Should()
             .Contain("--tags");
-        RunFeatures(
-            new MachineCommand.RunArguments(
-                Features,
-                Path.Combine(Features, "glossary.json"),
-                Out,
-                ["ordering"]
-            )
+        (
+            await RunFeaturesAsync(
+                    new MachineCommand.RunArguments(
+                        Features,
+                        Path.Combine(Features, "glossary.json"),
+                        Out,
+                        ["ordering"]
+                    )
+                )
+                .ConfigureAwait(false)
         )
             .Err.Should()
             .Contain("is not file:line");
     }
 
     [Test]
-    public void Run_fails_when_no_scenario_matches()
+    public async Task Run_fails_when_no_scenario_matches()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var glossary = Path.Combine(Features, "glossary.json");
 
-        var tag = RunFeatures(
-            new MachineCommand.RunArguments(Features, glossary, Out, [], Tags: "@smok")
-        );
-        var location = RunFeatures(
-            new MachineCommand.RunArguments(Features, glossary, Out, ["ordering.feature:99"])
-        );
+        var tag = await RunFeaturesAsync(
+                new MachineCommand.RunArguments(Features, glossary, Out, [], Tags: "@smok")
+            )
+            .ConfigureAwait(false);
+        var location = await RunFeaturesAsync(
+                new MachineCommand.RunArguments(Features, glossary, Out, ["ordering.feature:99"])
+            )
+            .ConfigureAwait(false);
 
         tag.Exit.Should().Be(1, "a selection that runs nothing is not a pass");
         tag.Err.Should().Contain("No scenario matched");
@@ -581,9 +667,9 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Run_fails_a_selection_whose_every_scenario_is_host_only()
+    public async Task Run_fails_a_selection_whose_every_scenario_is_host_only()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "hosted.feature"),
             """
             Feature: Hosted
@@ -595,13 +681,14 @@ public class FromGherkinCommandTests
                 Then Ada's order is placed
             """
         );
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var glossary = Path.Combine(Features, "glossary.json");
 
-        var hostOnly = RunFeatures(
-            new MachineCommand.RunArguments(Features, glossary, Out, [], Tags: "@host")
-        );
-        var all = RunFeatures();
+        var hostOnly = await RunFeaturesAsync(
+                new MachineCommand.RunArguments(Features, glossary, Out, [], Tags: "@host")
+            )
+            .ConfigureAwait(false);
+        var all = await RunFeaturesAsync().ConfigureAwait(false);
 
         hostOnly.Exit.Should().Be(1, "a selection that runs nothing is not a pass");
         hostOnly.Err.Should().Contain("tagged @host").And.Contain("nothing ran");
@@ -609,37 +696,50 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Run_refuses_a_name_that_takes_too_long_to_match()
+    public async Task Run_refuses_a_name_that_takes_too_long_to_match()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "opening.feature"),
-            Opening.Replace("Scenario: The shop opens", "Scenario: " + new string('a', 40) + "!")
-        );
-        Run();
-
-        var (exit, _, err) = RunFeatures(
-            new MachineCommand.RunArguments(
-                Features,
-                Path.Combine(Features, "glossary.json"),
-                Out,
-                [],
-                Names: ["(a+)+$"]
+            Opening.Replace(
+                "Scenario: The shop opens",
+                "Scenario: " + new string('a', 40) + "!",
+                StringComparison.Ordinal
             )
         );
+        await RunAsync().ConfigureAwait(false);
+
+        var (exit, _, err) = await RunFeaturesAsync(
+                new MachineCommand.RunArguments(
+                    Features,
+                    Path.Combine(Features, "glossary.json"),
+                    Out,
+                    [],
+                    Names: ["(a+)+$"]
+                )
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(1);
         err.Should().Contain("--name '(a+)+$'");
     }
 
     [Test]
-    public void Check_and_write_read_a_crlf_checkout_as_unchanged()
+    public async Task Check_and_write_read_a_crlf_checkout_as_unchanged()
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         foreach (var path in Directory.EnumerateFiles(Out))
-            File.WriteAllText(path, File.ReadAllText(path).Replace("\n", "\r\n"));
+            await File.WriteAllTextAsync(
+                    path,
+                    (await File.ReadAllTextAsync(path).ConfigureAwait(false)).Replace(
+                        "\n",
+                        "\r\n",
+                        StringComparison.Ordinal
+                    )
+                )
+                .ConfigureAwait(false);
 
-        var check = Run(check: true);
-        var write = Run();
+        var check = await RunAsync(check: true).ConfigureAwait(false);
+        var write = await RunAsync().ConfigureAwait(false);
 
         check.Exit.Should().Be(0, check.Err);
         write.Exit.Should().Be(0, write.Err);
@@ -647,27 +747,30 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Missing_lists_each_gap_with_a_stub_and_writes_them_to_paste()
+    public async Task Missing_lists_each_gap_with_a_stub_and_writes_them_to_paste()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "glossary.json"),
             Glossary.Replace(
                 "\"Place\": { \"phrase\": \"places {subject}\" }",
-                "\"Place\": { \"phrase\": \"places {subject}\" }, \"Cancel\": { \"phrase\": \"cancels {subject}\" }"
+                "\"Place\": { \"phrase\": \"places {subject}\" }, \"Cancel\": { \"phrase\": \"cancels {subject}\" }",
+                StringComparison.Ordinal
             )
         );
         var stubs = Path.Combine(_dir, "missing.feature");
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        var exit = MachineCommand.RunMissing(
-            Features,
-            Path.Combine(Features, "glossary.json"),
-            ["trigger"],
-            stubs,
-            stdout,
-            stderr
-        );
+        var exit = await MachineCommand
+            .RunMissingAsync(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                ["trigger"],
+                stubs,
+                stdout,
+                stderr
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0, stderr.ToString());
         stdout
@@ -675,24 +778,26 @@ public class FromGherkinCommandTests
             .Should()
             .Contain("# order Cancel: no scenario fires it")
             .And.Contain("1 gap(s).");
-        File.ReadAllText(stubs)
+        (await File.ReadAllTextAsync(stubs).ConfigureAwait(false))
             .Should()
             .StartWith("Feature: Missing scenarios")
             .And.Contain("When Ada cancels their order");
     }
 
     [Test]
-    public void Usage_lists_each_phrase_with_the_steps_that_say_it()
+    public async Task Usage_lists_each_phrase_with_the_steps_that_say_it()
     {
         var stdout = new StringWriter();
 
-        var exit = MachineCommand.RunUsage(
-            Features,
-            Path.Combine(Features, "glossary.json"),
-            false,
-            stdout,
-            new StringWriter()
-        );
+        var exit = await MachineCommand
+            .RunUsageAsync(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                unusedOnly: false,
+                stdout,
+                new StringWriter()
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         stdout
@@ -702,7 +807,7 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Usage_reports_a_feature_it_cannot_read()
+    public async Task Usage_reports_a_feature_it_cannot_read()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -714,13 +819,15 @@ public class FromGherkinCommandTests
         var stderr = new StringWriter();
         try
         {
-            var exit = MachineCommand.RunUsage(
-                Features,
-                Path.Combine(Features, "glossary.json"),
-                false,
-                new StringWriter(),
-                stderr
-            );
+            var exit = await MachineCommand
+                .RunUsageAsync(
+                    Features,
+                    Path.Combine(Features, "glossary.json"),
+                    unusedOnly: false,
+                    new StringWriter(),
+                    stderr
+                )
+                .ConfigureAwait(false);
 
             exit.Should().Be(1);
             stderr.ToString().Should().Contain("ordering.feature");
@@ -734,35 +841,44 @@ public class FromGherkinCommandTests
     [TestCase("json")]
     [TestCase("mermaid")]
     [TestCase("html")]
-    public void Diagram_draws_the_board_with_the_scenarios_behind_each_sticky(string format)
+    public async Task Diagram_draws_the_board_with_the_scenarios_behind_each_sticky(string format)
     {
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var stdout = new StringWriter();
 
-        var exit = MachineCommand.RunDiagram(Out, format, null, stdout, new StringWriter());
+        var exit = await MachineCommand
+            .RunDiagramAsync(Out, format, outPath: null, stdout, new StringWriter())
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         stdout.ToString().Should().Contain("Place");
-        if (format != "html")
+        if (!string.Equals(format, "html", StringComparison.Ordinal))
             stdout.ToString().Should().Contain("Draft → Placed");
-        if (format != "mermaid")
+        if (!string.Equals(format, "mermaid", StringComparison.Ordinal))
             stdout.ToString().Should().Contain("Ada places her order");
     }
 
     [Test]
-    public void The_html_board_never_parses_a_label_as_markup()
+    public async Task The_html_board_never_parses_a_label_as_markup()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "ordering.feature"),
             Ordering.Replace(
                 "Scenario: Ada places her order",
-                "Scenario: Ada places </script><b>x</b>"
+                "Scenario: Ada places </script><b>x</b>",
+                StringComparison.Ordinal
             )
         );
-        Run();
+        await RunAsync().ConfigureAwait(false);
         var stdout = new StringWriter();
 
-        MachineCommand.RunDiagram(Out, "html", null, stdout, new StringWriter()).Should().Be(0);
+        (
+            await MachineCommand
+                .RunDiagramAsync(Out, "html", outPath: null, stdout, new StringWriter())
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(0);
 
         var html = stdout.ToString();
         html.Should().NotContain("</script><b>").And.NotContain("innerHTML");
@@ -770,21 +886,31 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void The_mermaid_board_quotes_each_machine_and_keeps_each_label_on_its_line()
+    public async Task The_mermaid_board_quotes_each_machine_and_keeps_each_label_on_its_line()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "glossary.json"),
             Glossary
-                .Replace("\"shop\": {", "\"end\": {")
-                .Replace("shop/main", "end/main")
-                .Replace("\"order\": {", "\"n0\": {")
-                .Replace("\"roles\": [\"customer\"]", "\"roles\": [\"cus\\ntomer#1\"]")
+                .Replace("\"shop\": {", "\"end\": {", StringComparison.Ordinal)
+                .Replace("shop/main", "end/main", StringComparison.Ordinal)
+                .Replace("\"order\": {", "\"n0\": {", StringComparison.Ordinal)
+                .Replace(
+                    "\"roles\": [\"customer\"]",
+                    "\"roles\": [\"cus\\ntomer#1\"]",
+                    StringComparison.Ordinal
+                )
         );
-        var derived = Run();
+        var derived = await RunAsync().ConfigureAwait(false);
         derived.Exit.Should().Be(0, derived.Err);
         var stdout = new StringWriter();
 
-        MachineCommand.RunDiagram(Out, "mermaid", null, stdout, new StringWriter()).Should().Be(0);
+        (
+            await MachineCommand
+                .RunDiagramAsync(Out, "mermaid", outPath: null, stdout, new StringWriter())
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(0);
 
         var lines = stdout.ToString().Split('\n');
         lines
@@ -802,12 +928,15 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Diagram_refuses_a_directory_with_no_host_file()
+    public async Task Diagram_refuses_a_directory_with_no_host_file()
     {
         var stderr = new StringWriter();
 
-        MachineCommand
-            .RunDiagram(Features, "json", null, new StringWriter(), stderr)
+        (
+            await MachineCommand
+                .RunDiagramAsync(Features, "json", outPath: null, new StringWriter(), stderr)
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(1);
         stderr.ToString().Should().Contain("has no host.json");
@@ -916,15 +1045,15 @@ public class FromGherkinCommandTests
         """;
 
     [Test]
-    public void A_warning_is_printed_to_stderr_and_fails_neither_the_write_nor_the_check()
+    public async Task A_warning_is_printed_to_stderr_and_fails_neither_the_write_nor_the_check()
     {
-        File.WriteAllText(Path.Combine(Features, "glossary.json"), Quiz);
+        await File.WriteAllTextAsync(Path.Combine(Features, "glossary.json"), Quiz);
         File.Delete(Path.Combine(Features, "ordering.feature"));
         File.Delete(Path.Combine(Features, "opening.feature"));
-        File.WriteAllText(Path.Combine(Features, "quiz.feature"), Sheets);
+        await File.WriteAllTextAsync(Path.Combine(Features, "quiz.feature"), Sheets);
 
-        var (exit, _, err) = Run();
-        var (checkExit, checkOut, checkErr) = Run(check: true);
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
+        var (checkExit, checkOut, checkErr) = await RunAsync(check: true).ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         err.Should()
@@ -938,22 +1067,24 @@ public class FromGherkinCommandTests
     }
 
     [Test]
-    public void Explain_prints_a_warning_to_stderr_and_still_explains()
+    public async Task Explain_prints_a_warning_to_stderr_and_still_explains()
     {
-        File.WriteAllText(Path.Combine(Features, "glossary.json"), Quiz);
+        await File.WriteAllTextAsync(Path.Combine(Features, "glossary.json"), Quiz);
         File.Delete(Path.Combine(Features, "ordering.feature"));
         File.Delete(Path.Combine(Features, "opening.feature"));
-        File.WriteAllText(Path.Combine(Features, "quiz.feature"), Sheets);
+        await File.WriteAllTextAsync(Path.Combine(Features, "quiz.feature"), Sheets);
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        var exit = MachineCommand.RunExplain(
-            Features,
-            Path.Combine(Features, "glossary.json"),
-            null,
-            stdout,
-            stderr
-        );
+        var exit = await MachineCommand
+            .RunExplainAsync(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                scenario: null,
+                stdout,
+                stderr
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0, stderr.ToString());
         stderr
@@ -969,15 +1100,16 @@ public class FromGherkinCommandTests
     // removing that one as no longer derived would remove what was just written. On one that keeps case, it is
     // another file and is removed. Either way the directory ends holding the derived names, spelled as derived.
     [Test]
-    public void An_ir_already_there_in_another_case_ends_spelled_as_derived()
+    public async Task An_ir_already_there_in_another_case_ends_spelled_as_derived()
     {
-        Run().Exit.Should().Be(0);
+        (await RunAsync().ConfigureAwait(false)).Exit.Should().Be(0);
         var derived = Path.Combine(Out, "order.ir.json");
-        var text = File.ReadAllText(derived);
+        var text = await File.ReadAllTextAsync(derived).ConfigureAwait(false);
         File.Delete(derived);
-        File.WriteAllText(Path.Combine(Out, "Order.ir.json"), text);
+        await File.WriteAllTextAsync(Path.Combine(Out, "Order.ir.json"), text)
+            .ConfigureAwait(false);
 
-        var (exit, _, err) = Run();
+        var (exit, _, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         Directory
@@ -985,43 +1117,50 @@ public class FromGherkinCommandTests
             .Select(Path.GetFileName)
             .Should()
             .BeEquivalentTo(["order.ir.json", "shop.ir.json", "host.json", "access.txt"]);
-        Run(check: true).Exit.Should().Be(0);
+        (await RunAsync(check: true).ConfigureAwait(false)).Exit.Should().Be(0);
     }
 
-    private (int Exit, string Out, string Err) RunFeatures(MachineCommand.RunArguments? args = null)
+    private async Task<(int Exit, string Out, string Err)> RunFeaturesAsync(
+        MachineCommand.RunArguments? args = null
+    )
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = MachineCommand.RunRun(
-            args
-                ?? new MachineCommand.RunArguments(
-                    Features,
-                    Path.Combine(Features, "glossary.json"),
-                    Out,
-                    []
-                ),
-            stdout,
-            stderr
-        );
+        var exit = await MachineCommand
+            .RunRunAsync(
+                args
+                    ?? new MachineCommand.RunArguments(
+                        Features,
+                        Path.Combine(Features, "glossary.json"),
+                        Out,
+                        []
+                    ),
+                stdout,
+                stderr
+            )
+            .ConfigureAwait(false);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
     // The features directory written with a lexicon in place of glossary.json.
-    private void UseLexicon(string text = Lexicon)
+    private async Task UseLexiconAsync(string text = Lexicon)
     {
         File.Delete(Path.Combine(Features, "glossary.json"));
-        File.WriteAllText(Path.Combine(Features, "shop.lexicon"), text);
+        await File.WriteAllTextAsync(Path.Combine(Features, "shop.lexicon"), text)
+            .ConfigureAwait(false);
     }
 
-    private (int Exit, string Out, string Err) FromLexicon(bool check = false)
+    private async Task<(int Exit, string Out, string Err)> FromLexiconAsync(bool check = false)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = MachineCommand.RunFromGherkin(Features, null, Out, check, stdout, stderr);
+        var exit = await MachineCommand
+            .RunFromGherkinAsync(Features, glossaryPath: null, Out, check, stdout, stderr)
+            .ConfigureAwait(false);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
-    private (int Exit, string Out, string Err) Run(
+    private async Task<(int Exit, string Out, string Err)> RunAsync(
         bool check = false,
         string? outDir = null,
         string? glossary = null,
@@ -1030,15 +1169,17 @@ public class FromGherkinCommandTests
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = MachineCommand.RunFromGherkin(
-            Features,
-            glossary ?? Path.Combine(Features, "glossary.json"),
-            outDir ?? Out,
-            check,
-            stdout,
-            stderr,
-            trains
-        );
+        var exit = await MachineCommand
+            .RunFromGherkinAsync(
+                Features,
+                glossary ?? Path.Combine(Features, "glossary.json"),
+                outDir ?? Out,
+                check,
+                stdout,
+                stderr,
+                trains
+            )
+            .ConfigureAwait(false);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 }

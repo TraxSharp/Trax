@@ -22,7 +22,7 @@ namespace Trax.StateMachine;
 /// validates against its own serialized form, with one exception: an integer within one double step of a 64-bit
 /// (or wider) type's end, which an engine reading JSON numbers as doubles cannot tell from one past the end, is
 /// refused with it. An integral field carries its CLR range, and a dictionary's values and a list's elements
-/// carry their own schema. A property whose type has no fixed JSON type (<c>object</c>,
+/// carry their own schema. A property whose type has no fixed JSON type (<see langword="object"/>,
 /// a raw <c>JsonNode</c>, a <c>[Flags]</c> enum) throws <see cref="InvalidOperationException"/> here, when the machine is
 /// configured, rather than being given a type its values would not match.</para>
 ///
@@ -132,7 +132,7 @@ internal static class SchemaReflection
 
     /// <summary>
     /// Whether System.Text.Json sets <paramref name="property"/> when it reads a <paramref name="type"/>: through a
-    /// public setter (an <c>init</c> one too), a setter marked <c>[JsonInclude]</c>, or a parameter of the
+    /// public setter (an <see langword="init"/> one too), a setter marked <c>[JsonInclude]</c>, or a parameter of the
     /// constructor it reads the type with. A computed property (<c>int Total =&gt; Qty * Price</c>) is none of
     /// these: it is skipped on read, so an input carrying it carries a value the record never holds.
     /// </summary>
@@ -240,38 +240,7 @@ internal static class SchemaReflection
     )
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
-        Type? value;
-        NullabilityInfo? valueNullability;
-        if (IsDictionary(type))
-        {
-            if (type == typeof(JsonObject))
-                return null;
-            value = DictionaryValueType(type);
-            valueNullability =
-                type.IsGenericType && nullability?.GenericTypeArguments.Length == 2
-                    ? nullability.GenericTypeArguments[1]
-                    : null;
-        }
-        else if (
-            type != typeof(string)
-            && ScalarTypeOf(type) is null
-            && !Unmappable(type)
-            && type != typeof(JsonObject)
-            && typeof(IEnumerable).IsAssignableFrom(type)
-            && ElementType(type) is { } element
-            && !IsRecord(Nullable.GetUnderlyingType(element) ?? element)
-        )
-        {
-            value = element;
-            valueNullability =
-                nullability?.ElementType
-                ?? (
-                    nullability?.GenericTypeArguments.Length == 1
-                        ? nullability.GenericTypeArguments[0]
-                        : null
-                );
-        }
-        else
+        if (!TryValueType(type, nullability, out var value, out var valueNullability))
             return null;
 
         // Values with no fixed JSON type (a Hashtable's, an object[]'s, a JsonNode list's) are any JSON, as a
@@ -299,6 +268,50 @@ internal static class SchemaReflection
             EnumExact = ExactEnumOf(value),
             Format = FormatOf(value),
         };
+    }
+
+    // The type a dictionary's values or a list's elements have, and its nullability; false when the type is neither.
+    private static bool TryValueType(
+        Type type,
+        NullabilityInfo? nullability,
+        out Type? value,
+        out NullabilityInfo? valueNullability
+    )
+    {
+        value = null;
+        valueNullability = null;
+        if (IsDictionary(type))
+        {
+            if (type == typeof(JsonObject))
+                return false;
+            value = DictionaryValueType(type);
+            valueNullability =
+                type.IsGenericType && nullability?.GenericTypeArguments.Length == 2
+                    ? nullability.GenericTypeArguments[1]
+                    : null;
+        }
+        else if (
+            type != typeof(string)
+            && ScalarTypeOf(type) is null
+            && !Unmappable(type)
+            && type != typeof(JsonObject)
+            && typeof(IEnumerable).IsAssignableFrom(type)
+            && ElementType(type) is { } element
+            && !IsRecord(Nullable.GetUnderlyingType(element) ?? element)
+        )
+        {
+            value = element;
+            valueNullability =
+                nullability?.ElementType
+                ?? (
+                    nullability?.GenericTypeArguments.Length == 1
+                        ? nullability.GenericTypeArguments[0]
+                        : null
+                );
+        }
+        else
+            return false;
+        return true;
     }
 
     // The schema a dictionary's keys are checked against, from its key type, as System.Text.Json reads a key of that

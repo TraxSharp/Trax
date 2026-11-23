@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -32,9 +33,9 @@ public class SqliteJunctionRunTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -47,7 +48,7 @@ public class SqliteJunctionRunTests
         services.AddSingleton<IFailureClassifier, LiteStepClassifier>();
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
-                effects.UseSqlite($"Data Source={_dbPath}").AddJunctionEvents()
+                effects.UseSqlite($"Data Source={_dbPath.NotNull()}").AddJunctionEvents()
             )
         );
         services.AddScopedTraxRoute<ILiteStepsTrain, LiteStepsTrain>();
@@ -57,9 +58,17 @@ public class SqliteJunctionRunTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
 
-        foreach (var path in new[] { _dbPath, _dbPath + "-wal", _dbPath + "-shm" })
+        foreach (
+            var path in new[]
+            {
+                _dbPath.NotNull(),
+                _dbPath.NotNull() + "-wal",
+                _dbPath.NotNull() + "-shm",
+            }
+        )
             if (File.Exists(path))
                 File.Delete(path);
     }
@@ -102,7 +111,8 @@ public class SqliteJunctionRunTests
     public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
     {
         ChainGraph graph;
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var fresh = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
             graph = ChainGraph.From(
@@ -124,7 +134,9 @@ public class SqliteJunctionRunTests
                 graph.Nodes.Single(n => n.Kind == ChainStepKind.Switch).Id,
                 graph
                     .Nodes.Single(n => n.Kind == ChainStepKind.Switch)
-                    .Tracks.Single(t => t.Name == nameof(LiteBin.Small))
+                    .Tracks.Single(t =>
+                        string.Equals(t.Name, nameof(LiteBin.Small), StringComparison.Ordinal)
+                    )
                     .Nodes[0]
                     .Id
             );
@@ -135,66 +147,45 @@ public class SqliteJunctionRunTests
 
     private async Task<long> Run()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
-        var run = async () => await train.Run(new LiteItem(3));
-        await run.Should().ThrowAsync<InvalidOperationException>();
+        var run = async () =>
+            await train.Run(new LiteItem(3), CancellationToken.None).ConfigureAwait(false);
+        await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
-        return train.Metadata!.Id;
+        await _provider
+            .NotNull()
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task Delete(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Metadatas.Where(m => m.Id == metadataId).ExecuteDeleteAsync();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        await context
+            .Metadatas.Where(m => m.Id == metadataId)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
     }
-}
-
-public sealed record LiteItem(int Size);
-
-[Asks("Which bin does this item go in?")]
-public enum LiteBin
-{
-    Small,
-    Large,
-}
-
-public class LiteMeasure : EffectJunction<LiteItem, LiteItem>
-{
-    public override Task<LiteItem> Run(LiteItem input) => Task.FromResult(input);
-}
-
-public class LiteBreak : EffectJunction<LiteItem, string>
-{
-    public override Task<string> Run(LiteItem input) =>
-        throw new InvalidOperationException("the bin is jammed");
-}
-
-public sealed class LiteStepClassifier : IFailureClassifier
-{
-    public FailureClass? Classify(Exception exception) =>
-        exception is InvalidOperationException ? FailureClass.Conflict : null;
-}
-
-public interface ILiteStepsTrain : IServiceTrain<LiteItem, string>;
-
-public class LiteStepsTrain : ServiceTrain<LiteItem, string>, ILiteStepsTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<LiteMeasure>()
-            .Switch<LiteItem, LiteBin>(tracks =>
-                tracks
-                    .When(LiteBin.Small, t => t.Chain<LiteBreak>())
-                    .When(LiteBin.Large, t => t.Chain<LiteBreak>())
-            )
-            .Resolve();
 }

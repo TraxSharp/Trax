@@ -1,0 +1,54 @@
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.EventArgsNameShouldEndWithEventArgsAnalyzer,
+    Trax.Analyzers.Rules.TypeNameShouldEndWithSuffixFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class EventArgsNameShouldEndWithEventArgsAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task NameEndsWithEventArgs()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class CustomEventArgs : System.EventArgs
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NameDoesNotEndWithEventArgs()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class {|TRX0059:CustomArgs|} : System.EventArgs
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NameDoesNotEndWithEventArgs_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class {|TRX0059:CustomArgs|} : System.EventArgs
+            {
+            }
+            """;
+        test.FixedCode = """
+            class CustomArgsEventArgs : System.EventArgs
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

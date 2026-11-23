@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -62,9 +63,9 @@ public class MultiActorOwnershipTests
         """;
 
     [Test]
-    public void Each_trigger_is_granted_the_actors_shown_firing_it()
+    public async Task Each_trigger_is_granted_the_actors_shown_firing_it()
     {
-        var derived = Derive(Lanes);
+        var derived = await Derive(Lanes).ConfigureAwait(false);
 
         // Derivation replays every scenario on what it derived, the fixer's denial among them.
         derived.Problems.Should().BeEmpty();
@@ -74,18 +75,21 @@ public class MultiActorOwnershipTests
             .And.Contain("assignment SubmitFix: fixer\n")
             .And.Contain("assignment start: fixer, triage\n")
             .And.Contain("assignment read: fixer, triage\n");
-        var host = HostFile.Read(derived.Host!).Machines["assignment"];
+        var host = HostFile.Read(derived.Host.NotNull()).Machines["assignment"];
         host.Triggers["Triage"]
-            .Client!.RoleSets.Should()
+            .Client.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .Equal("triage");
         host.Triggers["SubmitFix"]
-            .Client!.RoleSets.Should()
+            .Client.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .Equal("fixer");
-        host.Start!.RoleSets.Should()
+        host.Start.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .BeEquivalentTo(["triage", "fixer"]);
@@ -94,11 +98,11 @@ public class MultiActorOwnershipTests
     [Test]
     public async Task A_fixer_firing_triage_is_refused_on_the_host()
     {
-        var derived = Derive(Lanes);
+        var derived = await Derive(Lanes).ConfigureAwait(false);
         var machine = IrMachines.Create(
             new IrMachines.Source(
-                JsonNode.Parse(derived.Irs["assignment"])!.AsObject(),
-                HostFile.Read(derived.Host!).Machines["assignment"]
+                JsonNode.Parse(derived.Irs["assignment"]).NotNull().AsObject(),
+                HostFile.Read(derived.Host.NotNull()).Machines["assignment"]
             ),
             []
         );
@@ -106,25 +110,47 @@ public class MultiActorOwnershipTests
         var fay = new Actor.Client("jwt:fay", "fixer");
         var tess = new Actor.Client("jwt:tess", "triage");
 
-        (await CallerRules.Admits(fay, rules.Events["Triage"], default)).Should().BeFalse();
-        (await CallerRules.Admits(tess, rules.Events["Triage"], default)).Should().BeTrue();
-        (await CallerRules.Admits(fay, rules.Events["SubmitFix"], default)).Should().BeTrue();
-        (await CallerRules.Admits(tess, rules.Events["SubmitFix"], default)).Should().BeFalse();
-        (await CallerRules.Admits(new("jwt:vic", "visitor"), rules.Start!, default))
+        (await CallerRules.Admits(fay, rules.Events["Triage"], default).ConfigureAwait(false))
+            .Should()
+            .BeFalse();
+        (await CallerRules.Admits(tess, rules.Events["Triage"], default).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
+        (await CallerRules.Admits(fay, rules.Events["SubmitFix"], default).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
+        (await CallerRules.Admits(tess, rules.Events["SubmitFix"], default).ConfigureAwait(false))
+            .Should()
+            .BeFalse();
+        (
+            await CallerRules
+                .Admits(new("jwt:vic", "visitor"), rules.Start.NotNull(), default)
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeFalse("a visitor owns no assignment");
-        MachineRulesStartupValidator
-            .Problems([machine], new StateMachineOptions(), null)
-            .Result.Should()
+        (
+            await MachineRulesStartupValidator
+                .Problems([machine], new StateMachineOptions(), caller: null)
+                .ConfigureAwait(false)
+        )
+            .Should()
             .BeEmpty();
     }
 
     [Test]
-    public void A_rule_that_would_admit_a_denied_actor_is_a_problem()
+    public async Task A_rule_that_would_admit_a_denied_actor_is_a_problem()
     {
-        var derived = Derive(
-            Lanes,
-            Glossary.Replace("\"roles\": [\"fixer\"]", "\"roles\": [\"fixer\", \"triage\"]")
+        var derived = (
+            await Derive(
+                    Lanes,
+                    Glossary.Replace(
+                        "\"roles\": [\"fixer\"]",
+                        "\"roles\": [\"fixer\", \"triage\"]",
+                        StringComparison.Ordinal
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -136,17 +162,20 @@ public class MultiActorOwnershipTests
     }
 
     [Test]
-    public void A_person_of_an_actor_that_owns_none_is_refused()
+    public async Task A_person_of_an_actor_that_owns_none_is_refused()
     {
-        var derived = Derive(
-            """
-            Feature: Visiting
-              Scenario: A visitor has an assignment
-                Given Vic is a visitor
-                And Vic has an assignment
-                When Vic triages her assignment
-                Then Vic's assignment is triaged
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Visiting
+                      Scenario: A visitor has an assignment
+                        Given Vic is a visitor
+                        And Vic has an assignment
+                        When Vic triages her assignment
+                        Then Vic's assignment is triaged
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().NotBeEmpty();
@@ -155,8 +184,8 @@ public class MultiActorOwnershipTests
             .Contain(p => p.Message.Contains("belongs to a triage bot or a fixer"));
     }
 
-    private static Derived Derive(string feature, string glossary = Glossary) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature, string glossary = Glossary) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("lanes.feature", feature)]
         );

@@ -89,12 +89,12 @@ public class ManifestStarterTests : TestSetup
             );
 
         var manifest = await Seed(o => o.StartedBy("apikey:alice"));
-        await Seed(null);
+        await Seed(options: null);
         (await StarterOfManifest(manifest.Id))
             .Should()
             .Be(HashOf("apikey:alice"), "a re-seed that does not call StartedBy keeps the starter");
 
-        await Seed(o => o.StartedBy(null));
+        await Seed(o => o.StartedBy(principalId: null));
 
         (await StarterOfManifest(manifest.Id))
             .Should()
@@ -110,7 +110,8 @@ public class ManifestStarterTests : TestSetup
             .Database.SqlQuery<string?>(
                 $"SELECT starter_hash AS \"Value\" FROM trax.manifest WHERE id = {manifestId}"
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<string?> StarterOfEntryFor(long manifestId)
@@ -120,6 +121,7 @@ public class ManifestStarterTests : TestSetup
             .Database.SqlQuery<string?>(
                 $"SELECT starter_hash AS \"Value\" FROM trax.work_queue WHERE manifest_id = {manifestId}"
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 }

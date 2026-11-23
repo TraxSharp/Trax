@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Models.EffectClaim;
 /// package's table, keyed by a string, mapped on the core data context like
 /// <see cref="Trax.Effect.Data.Models.RunnerNonce.PersistentRunnerNonce"/>.
 /// </summary>
-internal class PersistentEffectClaim : BaseModel
+internal sealed class PersistentEffectClaim : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

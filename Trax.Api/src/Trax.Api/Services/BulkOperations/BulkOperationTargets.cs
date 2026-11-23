@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.Services.Lists;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
@@ -28,7 +29,7 @@ internal static class BulkOperationTargets
     /// <summary>The reason for an id whose row is gone by the time its batch runs.</summary>
     public const string GoneReason = "It no longer exists.";
 
-    /// <summary>The list a kind applies to, or <c>null</c> when the filter names the wrong one.</summary>
+    /// <summary>The list a kind applies to, or <see langword="null"/> when the filter names the wrong one.</summary>
     public static string? Refusal(BulkOperationKind kind, BulkOperationFilter? filter)
     {
         var given =
@@ -40,10 +41,10 @@ internal static class BulkOperationTargets
 
         var fits = kind switch
         {
-            BulkOperationKind.Cancel => filter!.Executions is not null,
-            BulkOperationKind.Requeue or BulkOperationKind.Acknowledge => filter!.DeadLetters
+            BulkOperationKind.Cancel => filter?.Executions is not null,
+            BulkOperationKind.Requeue or BulkOperationKind.Acknowledge => filter?.DeadLetters
                 is not null,
-            _ => filter!.Manifests is not null,
+            _ => filter?.Manifests is not null,
         };
         return fits
             ? null
@@ -70,13 +71,15 @@ internal static class BulkOperationTargets
     )
     {
         if (kind == BulkOperationKind.Requeue)
-            return await RequeueSnapshotAsync(factory, filter.DeadLetters!, ct);
+            return await RequeueSnapshotAsync(factory, filter.DeadLetters.NotNull(), ct)
+                .ConfigureAwait(false);
 
         var ids = new List<long>();
         var after = long.MinValue;
         while (true)
         {
-            using var db = await factory.CreateDbContextAsync(ct);
+            var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             IQueryable<long> matching = filter switch
             {
                 { Executions: { } runs } => ListFilters
@@ -95,7 +98,8 @@ internal static class BulkOperationTargets
                 .Where(id => id > cursor)
                 .OrderBy(id => id)
                 .Take(SnapshotPageSize)
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
             ids.AddRange(page);
             if (page.Count < SnapshotPageSize)
                 break;
@@ -133,7 +137,8 @@ internal static class BulkOperationTargets
         (long ManifestId, long Id) after = (long.MinValue, long.MinValue);
         while (true)
         {
-            using var db = await factory.CreateDbContextAsync(ct);
+            var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             var (manifest, id) = after;
             var page = await ListFilters
                 .DeadLetters(db.DeadLetters.AsNoTracking(), filter)
@@ -142,7 +147,8 @@ internal static class BulkOperationTargets
                 .ThenBy(d => d.Id)
                 .Take(SnapshotPageSize)
                 .Select(d => new { d.ManifestId, d.Id })
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
             rows.AddRange(page.Select(r => (r.ManifestId, r.Id)));
             if (page.Count < SnapshotPageSize)
                 break;
@@ -214,36 +220,23 @@ internal static class BulkOperationTargets
                 // as a whole; a run a user's draft started is skipped and reported per id below.
                 await services
                     .GetRequiredService<IOperationsService>()
-                    .CancelExecutionsAsync(batch, ct);
-                return (await CancelFailuresAsync(factory, batch, ct), null);
+                    .CancelExecutionsAsync(batch, ct)
+                    .ConfigureAwait(false);
+                return (await CancelFailuresAsync(factory, batch, ct).ConfigureAwait(false), null);
             }
             case BulkOperationKind.Requeue:
             {
-                var scheduler = services.GetRequiredService<ITraxScheduler>();
-                // The overload is called only when asked, so a host whose scheduler predates it
-                // keeps the default path.
-                var result = run.AskAfresh
-                    ? await scheduler.RequeueDeadLettersAsync(batch, askAfresh: true, ct)
-                    : await scheduler.RequeueDeadLettersAsync(batch, ct);
-                if (result.Count == 0 && result.Message == OperationsService.NoDispatcherMessage)
-                    return ([], result.Message);
-                return (
-                    await DeadLetterFailuresAsync(factory, batch, DeadLetterStatus.Retried, ct),
-                    null
-                );
+                return await RequeueAsync(run, batch, services, factory, ct).ConfigureAwait(false);
             }
             case BulkOperationKind.Acknowledge:
             {
                 await services
                     .GetRequiredService<ITraxScheduler>()
-                    .AcknowledgeDeadLettersAsync(batch, run.Note!, ct);
+                    .AcknowledgeDeadLettersAsync(batch, run.Note.NotNull(), ct)
+                    .ConfigureAwait(false);
                 return (
-                    await DeadLetterFailuresAsync(
-                        factory,
-                        batch,
-                        DeadLetterStatus.Acknowledged,
-                        ct
-                    ),
+                    await DeadLetterFailuresAsync(factory, batch, DeadLetterStatus.Acknowledged, ct)
+                        .ConfigureAwait(false),
                     null
                 );
             }
@@ -251,25 +244,84 @@ internal static class BulkOperationTargets
             {
                 var result = await services
                     .GetRequiredService<IOperationsService>()
-                    .TriggerManifestsAsync(batch, run.AskAfresh, ct);
+                    .TriggerManifestsAsync(batch, run.AskAfresh, ct)
+                    .ConfigureAwait(false);
                 if (!result.Success)
                     return ([], result.Message);
-                return (await ManifestFailuresAsync(factory, batch, enabled: null, ct), null);
+                return (
+                    await ManifestFailuresAsync(factory, batch, enabled: null, ct)
+                        .ConfigureAwait(false),
+                    null
+                );
             }
             case BulkOperationKind.Enable:
             case BulkOperationKind.Disable:
             {
-                var enabled = run.Kind == BulkOperationKind.Enable;
-                var result = await services
-                    .GetRequiredService<IOperationsService>()
-                    .SetManifestsEnabledAsync(batch, enabled, ct);
-                if (!result.Success)
-                    return ([], result.Message ?? "The batch was refused.");
-                return (await ManifestFailuresAsync(factory, batch, enabled, ct), null);
+                return await SetEnabledAsync(run, batch, services, factory, ct)
+                    .ConfigureAwait(false);
             }
             default:
-                throw new ArgumentOutOfRangeException(nameof(run), run.Kind, null);
+                throw new ArgumentOutOfRangeException(nameof(run), run.Kind, message: null);
         }
+    }
+
+    private static async Task<(
+        IReadOnlyList<BulkOperationFailure> Failures,
+        string? Refusal
+    )> RequeueAsync(
+        BulkOperationRun run,
+        long[] batch,
+        IServiceProvider services,
+        IDataContextProviderFactory factory,
+        CancellationToken ct
+    )
+    {
+        var scheduler = services.GetRequiredService<ITraxScheduler>();
+        // The overload is called only when asked, so a host whose scheduler predates it
+        // keeps the default path.
+        var result = run.AskAfresh
+            ? await scheduler
+                .RequeueDeadLettersAsync(batch, askAfresh: true, ct)
+                .ConfigureAwait(false)
+            : await scheduler.RequeueDeadLettersAsync(batch, ct).ConfigureAwait(false);
+        if (
+            result.Count == 0
+            && string.Equals(
+                result.Message,
+                OperationsService.NoDispatcherMessage,
+                StringComparison.Ordinal
+            )
+        )
+            return ([], result.Message);
+        return (
+            await DeadLetterFailuresAsync(factory, batch, DeadLetterStatus.Retried, ct)
+                .ConfigureAwait(false),
+            null
+        );
+    }
+
+    private static async Task<(
+        IReadOnlyList<BulkOperationFailure> Failures,
+        string? Refusal
+    )> SetEnabledAsync(
+        BulkOperationRun run,
+        long[] batch,
+        IServiceProvider services,
+        IDataContextProviderFactory factory,
+        CancellationToken ct
+    )
+    {
+        var enabled = run.Kind == BulkOperationKind.Enable;
+        var result = await services
+            .GetRequiredService<IOperationsService>()
+            .SetManifestsEnabledAsync(batch, enabled, ct)
+            .ConfigureAwait(false);
+        if (!result.Success)
+            return ([], result.Message ?? "The batch was refused.");
+        return (
+            await ManifestFailuresAsync(factory, batch, enabled, ct).ConfigureAwait(false),
+            null
+        );
     }
 
     private static async Task<IReadOnlyList<BulkOperationFailure>> CancelFailuresAsync(
@@ -278,7 +330,8 @@ internal static class BulkOperationTargets
         CancellationToken ct
     )
     {
-        using var db = await factory.CreateDbContextAsync(ct);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = await db
             .Metadatas.AsNoTracking()
             .Where(m => batch.Contains(m.Id))
@@ -289,7 +342,8 @@ internal static class BulkOperationTargets
                 m.CancellationRequested,
                 m.InvokingOwnerKind,
             })
-            .ToDictionaryAsync(m => m.Id, ct);
+            .ToDictionaryAsync(m => m.Id, ct)
+            .ConfigureAwait(false);
 
         var failures = new List<BulkOperationFailure>();
         foreach (var id in batch)
@@ -323,12 +377,14 @@ internal static class BulkOperationTargets
         CancellationToken ct
     )
     {
-        using var db = await factory.CreateDbContextAsync(ct);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = await db
             .DeadLetters.AsNoTracking()
             .Where(d => batch.Contains(d.Id))
             .Select(d => new { d.Id, d.Status })
-            .ToDictionaryAsync(d => d.Id, d => d.Status, ct);
+            .ToDictionaryAsync(d => d.Id, d => d.Status, ct)
+            .ConfigureAwait(false);
 
         var failures = new List<BulkOperationFailure>();
         foreach (var id in batch)
@@ -362,12 +418,14 @@ internal static class BulkOperationTargets
         CancellationToken ct
     )
     {
-        using var db = await factory.CreateDbContextAsync(ct);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = await db
             .Manifests.AsNoTracking()
             .Where(m => batch.Contains(m.Id))
             .Select(m => new { m.Id, m.IsEnabled })
-            .ToDictionaryAsync(m => m.Id, m => m.IsEnabled, ct);
+            .ToDictionaryAsync(m => m.Id, m => m.IsEnabled, ct)
+            .ConfigureAwait(false);
 
         var failures = new List<BulkOperationFailure>();
         foreach (var id in batch)
@@ -394,9 +452,3 @@ internal static class BulkOperationTargets
             _ => state.ToString().ToLowerInvariant(),
         };
 }
-
-/// <summary>
-/// The ids a bulk operation will attempt, in the order it attempts them, and the exclusive end
-/// index of each batch.
-/// </summary>
-internal sealed record BulkOperationSnapshot(long[] Ids, int[] BatchEnds);

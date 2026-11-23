@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using HotChocolate.AspNetCore;
 using HotChocolate.AspNetCore.Subscriptions;
@@ -200,7 +201,10 @@ public sealed class TraxCompositeSocketInterceptor : DefaultSocketSessionInterce
             throw new ArgumentOutOfRangeException(
                 paramName,
                 value,
-                $"{paramName} must be positive and at most {LongestConnectionDuration.TotalHours:0} hours."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{paramName} must be positive and at most {LongestConnectionDuration.TotalHours:0} hours."
+                )
             );
     }
 
@@ -258,7 +262,10 @@ public sealed class TraxCompositeSocketInterceptor : DefaultSocketSessionInterce
     )
     {
         if (!TryAdmit(session, operationSessionId))
-            requestBuilder.SetGlobalState(SocketOperationLimitRequestMiddleware.ExceededKey, true);
+            requestBuilder.SetGlobalState(
+                SocketOperationLimitRequestMiddleware.ExceededKey,
+                value: true
+            );
 
         return base.OnRequestAsync(session, operationSessionId, requestBuilder, cancellationToken);
     }

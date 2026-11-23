@@ -9,5 +9,5 @@ namespace Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 public interface IArrayLoggingProvider : ILoggerProvider
 {
     /// <summary>Every logger the provider has created, in creation order.</summary>
-    public List<ArrayLoggerEffect> Loggers { get; }
+    public IList<ArrayLoggerEffect> Loggers { get; }
 }

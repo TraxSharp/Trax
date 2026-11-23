@@ -34,7 +34,7 @@ public partial class Monad<TInput, TReturn>
         // We skip the Left for Short Circuiting - only process Right results
         if (result.IsRight)
         {
-            var outValue = result.Unwrap()!;
+            var outValue = result.Unwrap().NotNull();
 
             if (typeof(TOut).IsTuple())
                 this.AddTupleToMemory(outValue);
@@ -120,7 +120,7 @@ public partial class Monad<TInput, TReturn>
             return this;
 
         // Invoke the generic ShortCircuitJunction — returns Task<(Monad, Either<Exception, TOut>)>
-        var taskObj = chainMethod.Invoke(this, [junctionInstance, input])!;
+        var taskObj = chainMethod.Invoke(this, [junctionInstance, input]).NotNull();
 
         // Await the dynamic Task<...>
         var task = (Task)taskObj;
@@ -128,10 +128,10 @@ public partial class Monad<TInput, TReturn>
 
         // Extract the Result property (the tuple) from Task<TResult>.
         // Named ValueTuple elements (Monad, Result) are stored as Item1, Item2 at runtime.
-        var resultProperty = taskObj.GetType().GetProperty("Result")!;
-        var tuple = resultProperty.GetValue(taskObj)!;
-        var tupleItem2Field = tuple.GetType().GetField("Item2")!;
-        var eitherResult = tupleItem2Field.GetValue(tuple)!;
+        var resultProperty = taskObj.GetType().GetProperty("Result").NotNull();
+        var tuple = resultProperty.GetValue(taskObj).NotNull();
+        var tupleItem2Field = tuple.GetType().GetField("Item2").NotNull();
+        var eitherResult = tupleItem2Field.GetValue(tuple).NotNull();
 
         if (ReflectionHelpers.TryGetRightFromEither(eitherResult, out var rightValue))
         {

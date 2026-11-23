@@ -1,6 +1,8 @@
+using System.Globalization;
 using Trax.Api.GraphQL.Client;
 using Trax.Samples.GraphQLClient.BillingServer;
 using Trax.Samples.GraphQLClient.BillingServer.Trains;
+using Trax.Samples.GraphQLClient.Gateway;
 using Trax.Samples.GraphQLClient.Gateway.Requests;
 using Trax.Samples.GraphQLClient.InventoryServer;
 using Trax.Samples.GraphQLClient.InventoryServer.Trains;
@@ -18,18 +20,21 @@ using Trax.Samples.GraphQLClient.InventoryServer.Trains;
 const string inventoryUrl = "http://localhost:5310";
 const string billingUrl = "http://localhost:5311";
 
+// The composition root names the real clock; the health wait below reads it.
+var clock = TimeProvider.System;
+
 var inventory = InventoryServerHost.Build([]);
 inventory.Urls.Add(inventoryUrl);
-await inventory.StartAsync();
+await inventory.StartAsync().ConfigureAwait(false);
 
 var billing = BillingServerHost.Build([]);
 billing.Urls.Add(billingUrl);
-await billing.StartAsync();
+await billing.StartAsync().ConfigureAwait(false);
 
 using (var probe = new HttpClient())
 {
-    await WaitForHealthyAsync(probe, $"{inventoryUrl}/trax/health");
-    await WaitForHealthyAsync(probe, $"{billingUrl}/trax/health");
+    await WaitForHealthyAsync(probe, $"{inventoryUrl}/trax/health", clock).ConfigureAwait(false);
+    await WaitForHealthyAsync(probe, $"{billingUrl}/trax/health", clock).ConfigureAwait(false);
 }
 
 // The consumer is a host of its own, as "server A" would be in a real app, and resolves the
@@ -45,42 +50,55 @@ var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClient
     "serverC"
 );
 
-var product = await inventoryClient.Run(
-    new GetProductRequest { Input = new GetProductInput("SKU-1") }
-);
-Console.WriteLine($"serverB (inventory) -> {product.Name}, {product.QuantityOnHand} on hand");
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
 
-var invoice = await billingClient.Run(
-    new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") }
+var product = await inventoryClient
+    .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
+    .ConfigureAwait(false);
+output.Say(
+    string.Create(
+        CultureInfo.InvariantCulture,
+        $"serverB (inventory) -> {product.Name}, {product.QuantityOnHand} on hand"
+    )
 );
-Console.WriteLine(
-    $"serverC (billing)   -> invoice {invoice.InvoiceId}: {invoice.AmountCents}c ({invoice.Status})"
+
+var invoice = await billingClient
+    .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+    .ConfigureAwait(false);
+output.Say(
+    string.Create(
+        CultureInfo.InvariantCulture,
+        $"serverC (billing)   -> invoice {invoice.InvoiceId}: {invoice.AmountCents}c ({invoice.Status})"
+    )
 );
 
 // The "serverB" client validates against the inventory schema, which has no getInvoice, so a
 // billing query is rejected before any HTTP call. That is the isolation keyed clients buy.
 try
 {
-    await inventoryClient.Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") });
-    Console.WriteLine("UNEXPECTED: the inventory client accepted a billing query");
+    await inventoryClient
+        .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+        .ConfigureAwait(false);
+    output.Say("UNEXPECTED: the inventory client accepted a billing query");
 }
 catch (GraphQLValidationException)
 {
-    Console.WriteLine("serverB rejected a billing query (schema isolation holds)");
+    output.Say("serverB rejected a billing query (schema isolation holds)");
 }
 
-await inventory.StopAsync();
-await billing.StopAsync();
+await inventory.StopAsync().ConfigureAwait(false);
+await billing.StopAsync().ConfigureAwait(false);
 return 0;
 
-static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
+static async Task WaitForHealthyAsync(HttpClient client, string healthUrl, TimeProvider clock)
 {
-    var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-    while (DateTime.UtcNow < deadline)
+    var deadline = clock.GetUtcNow() + TimeSpan.FromSeconds(30);
+    while (clock.GetUtcNow() < deadline)
     {
         try
         {
-            var response = await client.GetAsync(healthUrl);
+            var response = await client.GetAsync(healthUrl).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
                 return;
         }
@@ -89,7 +107,7 @@ static async Task WaitForHealthyAsync(HttpClient client, string healthUrl)
             // server not up yet
         }
 
-        await Task.Delay(100);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), clock).ConfigureAwait(false);
     }
 
     throw new TimeoutException($"Server at {healthUrl} did not become healthy within 30s.");

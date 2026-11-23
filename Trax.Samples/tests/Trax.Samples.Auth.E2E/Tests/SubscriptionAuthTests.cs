@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Core.Extensions;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.E2E.Fixtures;
 using Trax.Samples.Auth.E2E.Utilities;
@@ -99,9 +100,9 @@ public class SubscriptionAuthTests : AuthTestFixture
         await socket.SubscribeAsync("oscar", Completed);
 
         // graphql-transport-ws does not acknowledge a subscribe, so trigger until one arrives.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(30);
         JsonElement? received = null;
-        while (received is null && DateTime.UtcNow < deadline)
+        while (received is null && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var echo = await GraphQL.SendAsync(
                 """{ discover { echo(input: { message: "ping" }) { echoed } } }""",
@@ -127,6 +128,6 @@ public class SubscriptionAuthTests : AuthTestFixture
         received
             .Should()
             .NotBeNull("an operator subscribed to every train should see one complete");
-        received!.Value.GetProperty("trainState").GetString().Should().Be("COMPLETED");
+        received.NotNull().Value.GetProperty("trainState").GetString().Should().Be("COMPLETED");
     }
 }

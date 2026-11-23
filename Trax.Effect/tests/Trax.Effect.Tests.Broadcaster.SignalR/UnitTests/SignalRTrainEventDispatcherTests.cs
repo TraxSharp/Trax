@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 using Trax.Effect.Broadcaster.SignalR.Models;
@@ -16,10 +18,10 @@ namespace Trax.Effect.Tests.Broadcaster.SignalR.UnitTests;
 [TestFixture]
 public class SignalRTrainEventDispatcherTests
 {
-    private IHubContext<TraxTrainEventHub, ITraxTrainEventClient> _hub = null!;
-    private ITraxTrainEventClient _client = null!;
-    private IHubClients<ITraxTrainEventClient> _clients = null!;
-    private TestLogger<SignalRTrainEventDispatcher> _logger = null!;
+    private IHubContext<TraxTrainEventHub, ITraxTrainEventClient>? _hub;
+    private ITraxTrainEventClient? _client;
+    private IHubClients<ITraxTrainEventClient>? _clients;
+    private TestLogger<SignalRTrainEventDispatcher>? _logger;
 
     [SetUp]
     public void SetUp()
@@ -27,13 +29,14 @@ public class SignalRTrainEventDispatcherTests
         _hub = Substitute.For<IHubContext<TraxTrainEventHub, ITraxTrainEventClient>>();
         _client = Substitute.For<ITraxTrainEventClient>();
         _clients = Substitute.For<IHubClients<ITraxTrainEventClient>>();
-        _clients.All.Returns(_client);
-        _hub.Clients.Returns(_clients);
+        _clients.NotNull().All.Returns(_client.NotNull());
+        _hub.NotNull().Clients.Returns(_clients.NotNull());
         _logger = new TestLogger<SignalRTrainEventDispatcher>();
     }
 
     private static SignalRSinkOptions NewOptions() =>
-        (SignalRSinkOptions)Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true)!;
+        (SignalRSinkOptions)
+            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true).NotNull();
 
     private readonly List<SignalRTrainEventDispatcher> _created = new();
 
@@ -47,7 +50,12 @@ public class SignalRTrainEventDispatcherTests
 
     private SignalRTrainEventDispatcher Create(SignalRSinkConfiguration config)
     {
-        var dispatcher = new SignalRTrainEventDispatcher(_hub, config, _logger);
+        var dispatcher = new SignalRTrainEventDispatcher(
+            _hub.NotNull(),
+            config,
+            _logger.NotNull(),
+            TestTime.Clock
+        );
         _created.Add(dispatcher);
         return dispatcher;
     }
@@ -93,8 +101,9 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(1).TrainEvent(Arg.Any<object>());
         await _client
+            .NotNull()
             .Received(1)
             .TrainEvent(Arg.Is<object>(p => ((TraxClientEvent)p).ExternalId == "a-real-event"));
     }
@@ -108,7 +117,7 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(0).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(0).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -120,7 +129,7 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(1).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -132,7 +141,7 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(0).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(0).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -141,13 +150,13 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().OnlyForTrains<ICheckGeocodeDriftTrain>().Build());
 
         await d.HandleAsync(
-            Message(trainName: typeof(ICheckGeocodeDriftTrain).FullName!),
+            Message(trainName: typeof(ICheckGeocodeDriftTrain).FullName.NotNull()),
             CancellationToken.None
         );
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(1).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -162,7 +171,7 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(0).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(0).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -177,7 +186,7 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(4).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(4).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -188,7 +197,10 @@ public class SignalRTrainEventDispatcherTests
         );
 
         await d.HandleAsync(
-            Message(trainName: typeof(ICheckGeocodeDriftTrain).FullName!, eventType: "Completed"),
+            Message(
+                trainName: typeof(ICheckGeocodeDriftTrain).FullName.NotNull(),
+                eventType: "Completed"
+            ),
             CancellationToken.None
         );
         await d.HandleAsync(
@@ -196,7 +208,10 @@ public class SignalRTrainEventDispatcherTests
             CancellationToken.None
         );
         await d.HandleAsync(
-            Message(trainName: typeof(ICheckGeocodeDriftTrain).FullName!, eventType: "Failed"),
+            Message(
+                trainName: typeof(ICheckGeocodeDriftTrain).FullName.NotNull(),
+                eventType: "Failed"
+            ),
             CancellationToken.None
         );
         await d.HandleAsync(
@@ -206,7 +221,7 @@ public class SignalRTrainEventDispatcherTests
 
         await d.StopAsync(CancellationToken.None);
 
-        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(1).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -222,6 +237,7 @@ public class SignalRTrainEventDispatcherTests
         await d.StopAsync(CancellationToken.None);
 
         await _client
+            .NotNull()
             .Received(1)
             .TrainEvent(
                 Arg.Is<object>(o =>
@@ -245,6 +261,7 @@ public class SignalRTrainEventDispatcherTests
         await d.StopAsync(CancellationToken.None);
 
         await _client
+            .NotNull()
             .Received(1)
             .TrainEvent(
                 Arg.Is<object>(o =>
@@ -256,7 +273,10 @@ public class SignalRTrainEventDispatcherTests
     [Test]
     public async Task Handle_HubSendThrows_ExceptionSwallowedAndLogged()
     {
-        _client.TrainEvent(Arg.Any<object>()).Throws(new InvalidOperationException("boom"));
+        _client
+            .NotNull()
+            .TrainEvent(Arg.Any<object>())
+            .Throws(new InvalidOperationException("boom"));
         var d = Create(NewOptions().Build());
 
         Func<Task> act = () => d.HandleAsync(Message(), CancellationToken.None);
@@ -264,6 +284,7 @@ public class SignalRTrainEventDispatcherTests
         await act.Should().NotThrowAsync();
         await d.StopAsync(CancellationToken.None);
         _logger
+            .NotNull()
             .Entries.Should()
             .Contain(e =>
                 e.Level == LogLevel.Error && e.Exception != null && e.Exception.Message == "boom"
@@ -318,6 +339,7 @@ public class SignalRTrainEventDispatcherTests
         await d.StopAsync(CancellationToken.None);
 
         await _client
+            .NotNull()
             .Received(1)
             .TrainEvent(
                 Arg.Is<object>(o =>
@@ -342,8 +364,9 @@ public class SignalRTrainEventDispatcherTests
         await d.StopAsync(CancellationToken.None);
 
         // Only the Completed call should reach the hub.
-        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(1).TrainEvent(Arg.Any<object>());
         await _client
+            .NotNull()
             .Received(1)
             .TrainEvent(
                 Arg.Is<object>(o =>
@@ -358,48 +381,57 @@ public class SignalRTrainEventDispatcherTests
         var endTime = new DateTime(2026, 5, 15, 12, 34, 56, DateTimeKind.Utc);
         var d = Create(NewOptions().Build());
         TraxClientEvent? captured = null;
-        await _client.TrainEvent(
-            Arg.Do<object>(o =>
-            {
-                if (o is TraxClientEvent e)
-                    captured = e;
-            })
-        );
+        await _client
+            .NotNull()
+            .TrainEvent(
+                Arg.Do<object>(o =>
+                {
+                    if (o is TraxClientEvent e)
+                        captured = e;
+                })
+            );
 
         await d.OnCompleted(Metadata(endTime: endTime), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
 
         captured.Should().NotBeNull();
-        captured!.Timestamp.Should().Be(endTime);
+        captured.NotNull().Timestamp.Should().Be(endTime);
     }
 
     [Test]
     public async Task BuildMessage_EndTimeNull_PayloadTimestampUsesNowFallback()
     {
-        var before = DateTime.UtcNow.AddSeconds(-1);
         var d = Create(NewOptions().Build());
         TraxClientEvent? captured = null;
-        await _client.TrainEvent(
-            Arg.Do<object>(o =>
-            {
-                if (o is TraxClientEvent e)
-                    captured = e;
-            })
-        );
+        await _client
+            .NotNull()
+            .TrainEvent(
+                Arg.Do<object>(o =>
+                {
+                    if (o is TraxClientEvent e)
+                        captured = e;
+                })
+            );
 
         await d.OnCompleted(Metadata(endTime: null), CancellationToken.None);
         await d.StopAsync(CancellationToken.None);
 
         captured.Should().NotBeNull();
-        captured!.Timestamp.Should().BeOnOrAfter(before);
-        captured.Timestamp.Should().BeOnOrBefore(DateTime.UtcNow.AddSeconds(1));
+        captured.NotNull().Timestamp.Should().Be(TestTime.UtcDateTime);
     }
 
     [Test]
     public async Task DispatchAsync_NullLogger_HubSendThrows_StillDoesNotThrow()
     {
-        _client.TrainEvent(Arg.Any<object>()).Throws(new InvalidOperationException("boom"));
-        var dispatcher = new SignalRTrainEventDispatcher(_hub, NewOptions().Build(), logger: null);
+        _client
+            .NotNull()
+            .TrainEvent(Arg.Any<object>())
+            .Throws(new InvalidOperationException("boom"));
+        var dispatcher = new SignalRTrainEventDispatcher(
+            _hub.NotNull(),
+            NewOptions().Build(),
+            logger: null
+        );
 
         Func<Task> act = () => dispatcher.HandleAsync(Message(), CancellationToken.None);
 
@@ -407,13 +439,16 @@ public class SignalRTrainEventDispatcherTests
         // no log can be observed, but the contract is "never throw out of the pipeline".
         await act.Should().NotThrowAsync();
         await dispatcher.StopAsync(CancellationToken.None);
-        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(1).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
     public async Task OnCompleted_HubSendThrows_DoesNotThrow()
     {
-        _client.TrainEvent(Arg.Any<object>()).Throws(new InvalidOperationException("boom"));
+        _client
+            .NotNull()
+            .TrainEvent(Arg.Any<object>())
+            .Throws(new InvalidOperationException("boom"));
         var d = Create(NewOptions().Build());
 
         var metadata = new Effect.Models.Metadata.Metadata
@@ -421,15 +456,15 @@ public class SignalRTrainEventDispatcherTests
             ExternalId = "x",
             Name = "T.IT",
             TrainState = Effect.Enums.TrainState.Completed,
-            StartTime = DateTime.UtcNow,
-            EndTime = DateTime.UtcNow,
+            StartTime = TestTime.UtcDateTime,
+            EndTime = TestTime.UtcDateTime,
         };
 
         Func<Task> act = () => d.OnCompleted(metadata, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
         await d.StopAsync(CancellationToken.None);
-        _logger.Entries.Should().Contain(e => e.Level == LogLevel.Error);
+        _logger.NotNull().Entries.Should().Contain(e => e.Level == LogLevel.Error);
     }
 
     /// <summary>
@@ -439,6 +474,7 @@ public class SignalRTrainEventDispatcherTests
     private void HoldSends(TaskCompletionSource entered, TaskCompletionSource release)
     {
         _client
+            .NotNull()
             .TrainEvent(Arg.Any<object>())
             .Returns(_ =>
             {
@@ -456,7 +492,7 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().Build());
 
         await d.OnStarted(Metadata(), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         // The sender is stuck inside Clients.All. Every later hook still completes synchronously.
         for (var i = 0; i < 10; i++)
@@ -475,14 +511,18 @@ public class SignalRTrainEventDispatcherTests
 
         // The first event is taken by the sender, which then waits on the held send.
         await d.HandleAsync(Message(externalId: "held"), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         // Four fill the queue; three more have nowhere to go.
         for (var i = 0; i < 7; i++)
-            await d.HandleAsync(Message(externalId: $"e{i}"), CancellationToken.None);
+            await d.HandleAsync(
+                Message(externalId: string.Create(CultureInfo.InvariantCulture, $"e{i}")),
+                CancellationToken.None
+            );
 
         d.DroppedEvents.Should().Be(3);
         _logger
+            .NotNull()
             .Entries.Where(e => e.Level == LogLevel.Warning)
             .Should()
             .ContainSingle()
@@ -493,11 +533,13 @@ public class SignalRTrainEventDispatcherTests
         await d.StopAsync(CancellationToken.None);
 
         var sent = _client
+            .NotNull()
             .ReceivedCalls()
-            .Select(c => ((TraxClientEvent)c.GetArguments()[0]!).ExternalId)
+            .Select(c => ((TraxClientEvent)c.GetArguments()[0].NotNull()).ExternalId)
             .ToList();
         sent.Should().Equal("held", "e0", "e1", "e2", "e3");
         _logger
+            .NotNull()
             .Entries.Should()
             .Contain(e =>
                 e.Level == LogLevel.Warning && e.Message.Contains("after dropping 3 events")
@@ -509,10 +551,14 @@ public class SignalRTrainEventDispatcherTests
     {
         var sent = new ConcurrentQueue<string>();
         _client
+            .NotNull()
             .TrainEvent(Arg.Do<object>(o => sent.Enqueue(((TraxClientEvent)o).ExternalId)))
             .Returns(Task.CompletedTask);
         var d = Create(NewOptions().Build());
-        var ids = Enumerable.Range(0, 500).Select(i => $"id-{i}").ToArray();
+        var ids = Enumerable
+            .Range(0, 500)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"id-{i}"))
+            .ToArray();
 
         foreach (var id in ids)
             await d.HandleAsync(Message(externalId: id), CancellationToken.None);
@@ -531,15 +577,18 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().Build());
 
         for (var i = 0; i < 20; i++)
-            await d.HandleAsync(Message(externalId: $"q{i}"), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await d.HandleAsync(
+                Message(externalId: string.Create(CultureInfo.InvariantCulture, $"q{i}")),
+                CancellationToken.None
+            );
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         var stop = d.StopAsync(CancellationToken.None);
         stop.IsCompleted.Should().BeFalse("the queue is still waiting on the held send");
         release.SetResult();
-        await stop.WaitAsync(TimeSpan.FromSeconds(10));
+        await stop.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
-        await _client.Received(20).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(20).TrainEvent(Arg.Any<object>());
     }
 
     [Test]
@@ -551,15 +600,19 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().Build());
 
         for (var i = 0; i < 5; i++)
-            await d.HandleAsync(Message(externalId: $"q{i}"), CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await d.HandleAsync(
+                Message(externalId: string.Create(CultureInfo.InvariantCulture, $"q{i}")),
+                CancellationToken.None
+            );
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         using var cts = new CancellationTokenSource();
         var stop = d.StopAsync(cts.Token);
         await cts.CancelAsync();
-        await stop.WaitAsync(TimeSpan.FromSeconds(10));
+        await stop.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
 
         _logger
+            .NotNull()
             .Entries.Should()
             .Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("were not sent"));
         release.SetResult();
@@ -575,10 +628,10 @@ public class SignalRTrainEventDispatcherTests
         await d.OnCompleted(Metadata(), CancellationToken.None);
 
         d.DroppedEvents.Should().Be(0);
-        await _client.Received(0).TrainEvent(Arg.Any<object>());
+        await _client.NotNull().Received(0).TrainEvent(Arg.Any<object>());
     }
 
-    private record MyShape(string Id, string TrainName);
+    private sealed record MyShape(string Id, string TrainName);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

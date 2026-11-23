@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -17,8 +18,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceConfigTests : TestSetup
 {
-    private IOperationsService _operations = null!;
-    private SchedulerConfiguration _cfg = null!;
+    private IOperationsService? _operations;
+    private SchedulerConfiguration? _cfg;
 
     [SetUp]
     public async Task GetService()
@@ -28,20 +29,20 @@ public class OperationsServiceConfigTests : TestSetup
 
         // Reset the in-memory singleton to a known baseline before every test, since
         // it's a process-wide singleton and prior tests may have mutated it.
-        _cfg.ManifestManagerEnabled = true;
-        _cfg.JobDispatcherEnabled = true;
-        _cfg.ManifestManagerPollingInterval = TimeSpan.FromSeconds(5);
-        _cfg.JobDispatcherPollingInterval = TimeSpan.FromSeconds(2);
-        _cfg.MaxActiveJobs = 10;
-        _cfg.DefaultMaxRetries = 3;
-        _cfg.DefaultRetryDelay = TimeSpan.FromMinutes(5);
-        _cfg.RetryBackoffMultiplier = 2.0;
-        _cfg.MaxRetryDelay = TimeSpan.FromHours(1);
-        _cfg.DefaultJobTimeout = TimeSpan.FromMinutes(20);
-        _cfg.StalePendingTimeout = TimeSpan.FromMinutes(20);
-        _cfg.RecoverStuckJobsOnStartup = true;
-        _cfg.DeadLetterRetentionPeriod = TimeSpan.FromDays(30);
-        _cfg.AutoPurgeDeadLetters = true;
+        _cfg.NotNull().ManifestManagerEnabled = true;
+        _cfg.NotNull().JobDispatcherEnabled = true;
+        _cfg.NotNull().ManifestManagerPollingInterval = TimeSpan.FromSeconds(5);
+        _cfg.NotNull().JobDispatcherPollingInterval = TimeSpan.FromSeconds(2);
+        _cfg.NotNull().MaxActiveJobs = 10;
+        _cfg.NotNull().DefaultMaxRetries = 3;
+        _cfg.NotNull().DefaultRetryDelay = TimeSpan.FromMinutes(5);
+        _cfg.NotNull().RetryBackoffMultiplier = 2.0;
+        _cfg.NotNull().MaxRetryDelay = TimeSpan.FromHours(1);
+        _cfg.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(20);
+        _cfg.NotNull().StalePendingTimeout = TimeSpan.FromMinutes(20);
+        _cfg.NotNull().RecoverStuckJobsOnStartup = true;
+        _cfg.NotNull().DeadLetterRetentionPeriod = TimeSpan.FromDays(30);
+        _cfg.NotNull().AutoPurgeDeadLetters = true;
 
         // Wipe any persisted row so each test starts from a clean slate.
         var ctx = (Microsoft.EntityFrameworkCore.DbContext)DataContext;
@@ -52,10 +53,10 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public void GetSchedulerConfig_ReflectsInMemorySingleton()
     {
-        _cfg.MaxActiveJobs = 42;
-        _cfg.DefaultMaxRetries = 7;
+        _cfg.NotNull().MaxActiveJobs = 42;
+        _cfg.NotNull().DefaultMaxRetries = 7;
 
-        var snap = _operations.GetSchedulerConfig();
+        var snap = _operations.NotNull().GetSchedulerConfig();
 
         snap.MaxActiveJobs.Should().Be(42);
         snap.DefaultMaxRetries.Should().Be(7);
@@ -65,22 +66,24 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task UpdateSchedulerConfig_MutatesSingletonAndPersistsRow()
     {
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(
-                MaxActiveJobs: 99,
-                DefaultMaxRetries: 5,
-                DefaultJobTimeout: TimeSpan.FromMinutes(45)
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(
+                    MaxActiveJobs: 99,
+                    DefaultMaxRetries: 5,
+                    DefaultJobTimeout: TimeSpan.FromMinutes(45)
+                ),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(3);
 
         // In-memory mutation
-        _cfg.MaxActiveJobs.Should().Be(99);
-        _cfg.DefaultMaxRetries.Should().Be(5);
-        _cfg.DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(45));
+        _cfg.NotNull().MaxActiveJobs.Should().Be(99);
+        _cfg.NotNull().DefaultMaxRetries.Should().Be(5);
+        _cfg.NotNull().DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(45));
 
         // Persisted row
         DataContext.Reset();
@@ -94,13 +97,15 @@ public class OperationsServiceConfigTests : TestSetup
     public async Task UpdateSchedulerConfig_NoChanges_NoDbWrite()
     {
         // Match current singleton exactly: no fields differ.
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(
-                MaxActiveJobs: _cfg.MaxActiveJobs,
-                DefaultMaxRetries: _cfg.DefaultMaxRetries
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(
+                    MaxActiveJobs: _cfg.NotNull().MaxActiveJobs,
+                    DefaultMaxRetries: _cfg.NotNull().DefaultMaxRetries
+                ),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(0);
@@ -112,16 +117,20 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task UpdateSchedulerConfig_PartialPatch_OnlyTouchedFieldsChange()
     {
-        await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(MaxActiveJobs: 99, DefaultMaxRetries: 5),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(MaxActiveJobs: 99, DefaultMaxRetries: 5),
+                CancellationToken.None
+            );
 
         // Now update only one field and verify the others stay the same.
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(DefaultMaxRetries: 8),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(DefaultMaxRetries: 8),
+                CancellationToken.None
+            );
 
         result.Count.Should().Be(1);
 
@@ -134,15 +143,17 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task UpdateSchedulerConfig_ClearMaxActiveJobs_SetsNull()
     {
-        _cfg.MaxActiveJobs = 50;
+        _cfg.NotNull().MaxActiveJobs = 50;
 
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(ClearMaxActiveJobs: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(ClearMaxActiveJobs: true),
+                CancellationToken.None
+            );
 
         result.Count.Should().Be(1);
-        _cfg.MaxActiveJobs.Should().BeNull();
+        _cfg.NotNull().MaxActiveJobs.Should().BeNull();
 
         DataContext.Reset();
         DataContext.SchedulerConfigs.Single().MaxActiveJobs.Should().BeNull();
@@ -151,12 +162,14 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task UpdateSchedulerConfig_ClearMaxActiveJobs_AlreadyNull_NoOp()
     {
-        _cfg.MaxActiveJobs = null;
+        _cfg.NotNull().MaxActiveJobs = null;
 
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(ClearMaxActiveJobs: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(ClearMaxActiveJobs: true),
+                CancellationToken.None
+            );
 
         result.Count.Should().Be(0);
 
@@ -168,19 +181,23 @@ public class OperationsServiceConfigTests : TestSetup
     public async Task UpdateSchedulerConfig_BumpsUpdatedAtOnlyOnRealChange()
     {
         // First write creates a row.
-        await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(DefaultMaxRetries: 9),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(DefaultMaxRetries: 9),
+                CancellationToken.None
+            );
 
         DataContext.Reset();
         var firstUpdatedAt = DataContext.SchedulerConfigs.Single().UpdatedAt;
 
         // Second call with no changes leaves UpdatedAt untouched.
-        await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(DefaultMaxRetries: 9),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(DefaultMaxRetries: 9),
+                CancellationToken.None
+            );
 
         DataContext.Reset();
         DataContext
@@ -193,15 +210,19 @@ public class OperationsServiceConfigTests : TestSetup
     public async Task UpdateSchedulerConfig_SecondUpdate_UpdatesExistingRow()
     {
         // First update creates the row.
-        await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(DefaultMaxRetries: 4),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(DefaultMaxRetries: 4),
+                CancellationToken.None
+            );
         // Second update on the existing row.
-        await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(DefaultMaxRetries: 11),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(DefaultMaxRetries: 11),
+                CancellationToken.None
+            );
 
         DataContext.Reset();
         var rows = DataContext.SchedulerConfigs.ToList();
@@ -229,7 +250,9 @@ public class OperationsServiceConfigTests : TestSetup
             AutoPurgeDeadLetters: false
         );
 
-        var result = await _operations.UpdateSchedulerConfigAsync(input, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(input, CancellationToken.None);
 
         result.Count.Should().Be(14);
 
@@ -256,27 +279,36 @@ public class OperationsServiceConfigTests : TestSetup
     {
         // A stored row exists, but it does not name FailureCountWindow.
         (
-            await _operations.UpdateSchedulerConfigAsync(
-                new UpdateSchedulerConfigInput(MaxActiveJobs: 20),
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .UpdateSchedulerConfigAsync(
+                    new UpdateSchedulerConfigInput(MaxActiveJobs: 20),
+                    CancellationToken.None
+                )
         )
             .Success.Should()
             .BeTrue();
-        var window = _cfg.FailureCountWindow;
+        var window = _cfg.NotNull().FailureCountWindow;
 
-        var unchanged = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput { FailureCountWindow = window },
-            CancellationToken.None
-        );
-        var changed = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput { FailureCountWindow = window + TimeSpan.FromHours(1) },
-            CancellationToken.None
-        );
+        var unchanged = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput { FailureCountWindow = window },
+                CancellationToken.None
+            );
+        var changed = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput
+                {
+                    FailureCountWindow = window + TimeSpan.FromHours(1),
+                },
+                CancellationToken.None
+            );
 
         unchanged.Count.Should().Be(0, "the value is the one this host already runs with");
         changed.Count.Should().Be(1);
-        _cfg.FailureCountWindow.Should().Be(window + TimeSpan.FromHours(1));
+        _cfg.NotNull().FailureCountWindow.Should().Be(window + TimeSpan.FromHours(1));
         DataContext.Reset();
         (await DataContext.SchedulerConfigs.SingleAsync())
             .MaxActiveJobs.Should()
@@ -287,15 +319,17 @@ public class OperationsServiceConfigTests : TestSetup
     public async Task BootstrapHostedService_LoadsPersistedRowAtStartup()
     {
         // Persist a row directly so we can verify the hosted service applies it.
-        await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(MaxActiveJobs: 77, DefaultMaxRetries: 13),
-            CancellationToken.None
-        );
+        await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(MaxActiveJobs: 77, DefaultMaxRetries: 13),
+                CancellationToken.None
+            );
 
         // Mutate the singleton to something else, then run the bootstrap directly to
         // simulate startup re-applying the persisted row.
-        _cfg.MaxActiveJobs = 1;
-        _cfg.DefaultMaxRetries = 1;
+        _cfg.NotNull().MaxActiveJobs = 1;
+        _cfg.NotNull().DefaultMaxRetries = 1;
 
         var hosted = new SchedulerConfigBootstrapHostedService(
             Scope.ServiceProvider,
@@ -310,8 +344,8 @@ public class OperationsServiceConfigTests : TestSetup
         await hosted.StartAsync(CancellationToken.None);
         try
         {
-            _cfg.MaxActiveJobs.Should().Be(77);
-            _cfg.DefaultMaxRetries.Should().Be(13);
+            _cfg.NotNull().MaxActiveJobs.Should().Be(77);
+            _cfg.NotNull().DefaultMaxRetries.Should().Be(13);
         }
         finally
         {
@@ -322,7 +356,7 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task BootstrapHostedService_NoPersistedRow_LeavesSingletonUntouched()
     {
-        _cfg.DefaultMaxRetries = 99;
+        _cfg.NotNull().DefaultMaxRetries = 99;
 
         var hosted = new SchedulerConfigBootstrapHostedService(
             Scope.ServiceProvider,
@@ -336,7 +370,7 @@ public class OperationsServiceConfigTests : TestSetup
         await hosted.StartAsync(CancellationToken.None);
         try
         {
-            _cfg.DefaultMaxRetries.Should().Be(99);
+            _cfg.NotNull().DefaultMaxRetries.Should().Be(99);
         }
         finally
         {
@@ -349,7 +383,7 @@ public class OperationsServiceConfigTests : TestSetup
     {
         // Exercise every accessor on the snapshot record so the synthesised property
         // getters all show as covered.
-        var snap = _operations.GetSchedulerConfig();
+        var snap = _operations.NotNull().GetSchedulerConfig();
         _ = snap.ManifestManagerEnabled;
         _ = snap.JobDispatcherEnabled;
         _ = snap.ManifestManagerPollingInterval;
@@ -377,17 +411,19 @@ public class OperationsServiceConfigTests : TestSetup
         var newInterval = TimeSpan.FromMinutes(7);
         var newRetention = TimeSpan.FromHours(3);
 
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(
-                MetadataCleanupInterval: newInterval,
-                MetadataCleanupRetention: newRetention
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(
+                    MetadataCleanupInterval: newInterval,
+                    MetadataCleanupRetention: newRetention
+                ),
+                CancellationToken.None
+            );
 
         result.Count.Should().Be(2);
-        _cfg.MetadataCleanup!.CleanupInterval.Should().Be(newInterval);
-        _cfg.MetadataCleanup.RetentionPeriod.Should().Be(newRetention);
+        _cfg.NotNull().MetadataCleanup.NotNull().CleanupInterval.Should().Be(newInterval);
+        _cfg.NotNull().MetadataCleanup.NotNull().RetentionPeriod.Should().Be(newRetention);
 
         DataContext.Reset();
         var row = DataContext.SchedulerConfigs.Single();
@@ -401,10 +437,12 @@ public class OperationsServiceConfigTests : TestSetup
         // The fixture uses UseInMemoryWorkers, so LocalWorkerOptions is NOT registered;
         // both LocalWorkerCount and ClearLocalWorkerCount must silently not count as
         // changes.
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(LocalWorkerCount: 12, ClearLocalWorkerCount: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(LocalWorkerCount: 12, ClearLocalWorkerCount: true),
+                CancellationToken.None
+            );
 
         result.Count.Should().Be(0);
 
@@ -477,18 +515,20 @@ public class OperationsServiceConfigTests : TestSetup
     )
     {
         // A valid field alongside the invalid one: a refused patch applies neither.
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            input with
-            {
-                DefaultMaxRetries = input.DefaultMaxRetries ?? 9,
-            },
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                input with
+                {
+                    DefaultMaxRetries = input.DefaultMaxRetries ?? 9,
+                },
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse("the service validates, not only the dashboard's form");
         result.Message.Should().Contain(field);
-        _cfg.DefaultMaxRetries.Should().Be(3, "nothing in a refused patch is applied");
-        _cfg.MaxActiveJobs.Should().Be(10);
+        _cfg.NotNull().DefaultMaxRetries.Should().Be(3, "nothing in a refused patch is applied");
+        _cfg.NotNull().MaxActiveJobs.Should().Be(10);
         DataContext.Reset();
         DataContext.SchedulerConfigs.Should().BeEmpty("a refused patch is not persisted");
     }
@@ -496,10 +536,12 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task UpdateSchedulerConfig_NotANumberMultiplier_Refused()
     {
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(RetryBackoffMultiplier: double.NaN),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(RetryBackoffMultiplier: double.NaN),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("RetryBackoffMultiplier");
@@ -508,16 +550,18 @@ public class OperationsServiceConfigTests : TestSetup
     [Test]
     public async Task UpdateSchedulerConfig_BoundaryValues_Accepted()
     {
-        var result = await _operations.UpdateSchedulerConfigAsync(
-            new UpdateSchedulerConfigInput(
-                MaxActiveJobs: 1,
-                DefaultMaxRetries: 0,
-                DefaultRetryDelay: TimeSpan.Zero,
-                RetryBackoffMultiplier: 1.0,
-                DeadLetterRetentionPeriod: TimeSpan.Zero
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(
+                    MaxActiveJobs: 1,
+                    DefaultMaxRetries: 0,
+                    DefaultRetryDelay: TimeSpan.Zero,
+                    RetryBackoffMultiplier: 1.0,
+                    DeadLetterRetentionPeriod: TimeSpan.Zero
+                ),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
     }
@@ -568,7 +612,9 @@ public class OperationsServiceConfigTests : TestSetup
         string field
     )
     {
-        var result = await _operations.UpdateSchedulerConfigAsync(input, CancellationToken.None);
+        var result = await _operations
+            .NotNull()
+            .UpdateSchedulerConfigAsync(input, CancellationToken.None);
 
         result.Success.Should().BeFalse("a value the pollers cannot run with is never stored");
         result.Message.Should().Contain(field);
@@ -589,7 +635,7 @@ public class OperationsServiceConfigTests : TestSetup
             DefaultMaxRetries = 6,
             StalePendingTimeout = TimeSpan.FromDays(100_000),
             LocalWorkerCount = 1_000_000,
-            UpdatedAt = DateTime.UtcNow,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         DataContext.SchedulerConfigs.Add(row);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -601,17 +647,19 @@ public class OperationsServiceConfigTests : TestSetup
         await hosted.StartAsync(CancellationToken.None);
         try
         {
-            _cfg.ManifestManagerPollingInterval.Should()
+            _cfg.NotNull()
+                .ManifestManagerPollingInterval.Should()
                 .Be(TimeSpan.FromSeconds(5), "an unusable persisted interval is not applied");
-            _cfg.MaxActiveJobs.Should().Be(10);
-            _cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
-            _cfg.JobDispatcherPollingInterval.Should()
+            _cfg.NotNull().MaxActiveJobs.Should().Be(10);
+            _cfg.NotNull().StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
+            _cfg.NotNull()
+                .JobDispatcherPollingInterval.Should()
                 .Be(TimeSpan.FromSeconds(3), "the usable values in the same row still apply");
-            _cfg.DefaultMaxRetries.Should().Be(6);
+            _cfg.NotNull().DefaultMaxRetries.Should().Be(6);
 
             var startPoller = () =>
             {
-                using var timer = new PeriodicTimer(_cfg.ManifestManagerPollingInterval);
+                using var timer = new PeriodicTimer(_cfg.NotNull().ManifestManagerPollingInterval);
             };
             startPoller
                 .Should()

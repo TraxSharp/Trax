@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -32,12 +33,12 @@ public class RefusalCodeParityTests
                     BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly
                 )
             )
-            .Where(p => p.Name is "Code" or "Reason")
             .Where(p =>
-                (Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType)
-                != typeof(RefusalCode)
+                p.Name is "Code" or "Reason"
+                && (Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType)
+                    != typeof(RefusalCode)
             )
-            .Select(p => $"{p.DeclaringType!.FullName}.{p.Name}: {p.PropertyType.Name}")
+            .Select(p => $"{p.DeclaringType.NotNull().FullName}.{p.Name}: {p.PropertyType.Name}")
             .ToList();
 
         free.Should()
@@ -75,12 +76,18 @@ public class RefusalCodeParityTests
     [Test]
     public void The_shared_registry_lists_the_same_codes_in_the_same_order()
     {
-        var registry = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "refusal-codes.json"))
-        )!["codes"]!
+        var registry = JsonNode
+            .Parse(
+                File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "refusal-codes.json"))
+            )
+            .NotNull()["codes"]
+            .NotNull()
             .AsArray()
             .Select(c =>
-                (Name: c!["name"]!.GetValue<string>(), Wire: c["code"]!.GetValue<string>())
+                (
+                    Name: c.NotNull()["name"].NotNull().GetValue<string>(),
+                    Wire: c["code"].NotNull().GetValue<string>()
+                )
             )
             .ToList();
 
@@ -94,46 +101,55 @@ public class RefusalCodeParityTests
 
     // ts/src/refusalCodes.conformance.test.ts checks the same.
     [Test]
-    public void Every_engine_or_client_code_is_held_by_a_kit_case_or_says_why_not()
+    public async Task Every_engine_or_client_code_is_held_by_a_kit_case_or_says_why_not()
     {
         var root = FixturePaths.ConformanceRoot;
-        var engine = CodesIn(
-            new[] { "machines", "strict-input", "plan" }.SelectMany(d =>
+        var engine = await CodesIn(
+                new[] { "machines", "strict-input", "plan" }.SelectMany(d =>
+                    Directory.EnumerateFiles(
+                        Path.Combine(root, d),
+                        "*.json",
+                        SearchOption.AllDirectories
+                    )
+                )
+            )
+            .ConfigureAwait(false);
+        var client = await CodesIn(
                 Directory.EnumerateFiles(
-                    Path.Combine(root, d),
+                    Path.Combine(root, "client", "transcripts"),
                     "*.json",
                     SearchOption.AllDirectories
                 )
             )
-        );
-        var client = CodesIn(
-            Directory.EnumerateFiles(
-                Path.Combine(root, "client", "transcripts"),
-                "*.json",
-                SearchOption.AllDirectories
-            )
-        );
+            .ConfigureAwait(false);
 
         var wrong = new List<string>();
         foreach (
-            var entry in JsonNode.Parse(
-                File.ReadAllText(Path.Combine(root, "refusal-codes.json"))
-            )!["codes"]!.AsArray()
+            var entry in JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(Path.Combine(root, "refusal-codes.json"))
+                        .ConfigureAwait(false)
+                )
+                .NotNull()["codes"]
+                .NotNull()
+                .AsArray()
         )
         {
-            var code = entry!["code"]!.GetValue<string>();
+            var code = entry.NotNull()["code"].NotNull().GetValue<string>();
             var scope = entry["scope"]?.GetValue<string>();
             var uncovered = entry["uncovered"] is not null;
             if (scope is not ("engine" or "client" or "host"))
                 wrong.Add($"{code}: scope '{scope}'");
-            else if (scope == "host")
+            else if (string.Equals(scope, "host", StringComparison.Ordinal))
             {
                 if (uncovered)
                     wrong.Add($"{code}: a host code needs no 'uncovered'");
             }
             else
             {
-                var held = (scope == "engine" ? engine : client).Contains(code);
+                var held = (
+                    string.Equals(scope, "engine", StringComparison.Ordinal) ? engine : client
+                ).Contains(code);
                 if (held && uncovered)
                     wrong.Add($"{code}: a case holds it, so 'uncovered' is stale");
                 if (!held && !uncovered)
@@ -148,7 +164,7 @@ public class RefusalCodeParityTests
 
     // Every string a `reason`, `code` or `error` member holds, at any depth: where a case writes the refusal it
     // expects.
-    private static HashSet<string> CodesIn(IEnumerable<string> files)
+    private static async Task<HashSet<string>> CodesIn(IEnumerable<string> files)
     {
         var found = new HashSet<string>(StringComparer.Ordinal);
         void Walk(JsonNode? node)
@@ -174,7 +190,12 @@ public class RefusalCodeParityTests
             }
         }
         foreach (var file in files)
-            Walk(JsonNode.Parse(File.ReadAllText(file), documentOptions: KitFile));
+            Walk(
+                JsonNode.Parse(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false),
+                    documentOptions: KitFile
+                )
+            );
         return found;
     }
 

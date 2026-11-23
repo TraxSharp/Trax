@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Shopfront.Trains.PlaceOrder.Junctions;
 using Shopfront.Trains.PlaceOrder.Models;
 
@@ -21,7 +22,8 @@ public class ConfirmOrderJunctionTests
         {
             var output = await new ConfirmOrderJunction(
                 db,
-                NullLogger<ConfirmOrderJunction>.Instance
+                NullLogger<ConfirmOrderJunction>.Instance,
+                new FakeTimeProvider()
             ).Run((new Customer("TraxJwt:ada"), cart, payment));
 
             output.TransactionId.Should().Be("tx_test");

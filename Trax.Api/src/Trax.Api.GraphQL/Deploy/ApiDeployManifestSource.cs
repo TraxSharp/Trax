@@ -39,7 +39,9 @@ internal sealed class ApiDeployManifestSource : IDeployManifestSource
             : services.GetService<EndpointDataSource>()?.Endpoints ?? [];
         manifest.Endpoints.Health = endpoints
             .OfType<RouteEndpoint>()
-            .FirstOrDefault(e => e.DisplayName == HealthChecksDisplayName)
+            .FirstOrDefault(e =>
+                string.Equals(e.DisplayName, HealthChecksDisplayName, StringComparison.Ordinal)
+            )
             ?.RoutePattern.RawText;
 
         if (services.GetService<IAuthenticationSchemeProvider>() is { } schemes)

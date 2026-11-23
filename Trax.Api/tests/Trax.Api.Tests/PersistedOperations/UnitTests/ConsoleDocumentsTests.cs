@@ -5,6 +5,7 @@ using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -21,7 +22,7 @@ public class ConsoleDocumentsTests
     private const string Adr =
         "docs/adr/0042-the-operations-console-is-registered-as-persisted-documents.md";
 
-    private static ISchemaDefinition _schema = null!;
+    private static ISchemaDefinition? _schema;
 
     [OneTimeSetUp]
     public async Task BuildTheSchema()
@@ -65,9 +66,9 @@ public class ConsoleDocumentsTests
     }
 
     [Test]
-    public void The_host_and_trax_client_name_a_console_document_alike()
+    public async Task The_host_and_trax_client_name_a_console_document_alike()
     {
-        var cases = FixtureCases();
+        var cases = await FixtureCasesAsync();
         cases.Should().NotBeEmpty();
         foreach (var (name, text, id) in cases)
             ConsoleDocuments
@@ -113,7 +114,7 @@ public class ConsoleDocumentsTests
     public void A_document_of_the_operations_surface_is_served(string text)
     {
         var (served, skipped) = ConsoleDocuments.Select(
-            _schema,
+            _schema.NotNull(),
             [new ConsoleDocumentText("Hosts", text)]
         );
 
@@ -136,7 +137,7 @@ public class ConsoleDocumentsTests
     public void A_document_the_host_cannot_serve_is_left_out_naming_why(string text, string reason)
     {
         var (served, skipped) = ConsoleDocuments.Select(
-            _schema,
+            _schema.NotNull(),
             [new ConsoleDocumentText("Hosts", text)]
         );
 
@@ -150,7 +151,7 @@ public class ConsoleDocumentsTests
     public void Leaving_one_out_keeps_the_rest()
     {
         var (served, skipped) = ConsoleDocuments.Select(
-            _schema,
+            _schema.NotNull(),
             [
                 new ConsoleDocumentText("Hosts", "query Hosts { operations { hosts } }"),
                 new ConsoleDocumentText("Gone", "query Gone { operations { missing } }"),
@@ -162,7 +163,7 @@ public class ConsoleDocumentsTests
     }
 
     // The cases both this suite and trax client's read, from the source tree above the test's directory.
-    private static List<(string Name, string Text, string Id)> FixtureCases()
+    private static async Task<List<(string Name, string Text, string Id)>> FixtureCasesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -181,15 +182,17 @@ public class ConsoleDocumentsTests
             );
             if (!File.Exists(candidate))
                 continue;
-            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(candidate));
+            using var json = System.Text.Json.JsonDocument.Parse(
+                await File.ReadAllTextAsync(candidate).ConfigureAwait(false)
+            );
             return json
                 .RootElement.GetProperty("cases")
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();

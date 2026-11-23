@@ -41,7 +41,11 @@ internal sealed class NavigationInputAuthorizationInterceptor : TypeInterceptor
         {
             if (
                 field.MiddlewareConfigurations.Any(m =>
-                    m.Key == NavigationInputAuthorization.MiddlewareKey
+                    string.Equals(
+                        m.Key,
+                        NavigationInputAuthorization.MiddlewareKey,
+                        StringComparison.Ordinal
+                    )
                 )
             )
                 continue;

@@ -56,6 +56,8 @@ internal static class MachineSurface
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             TypeInfoResolver = new DefaultJsonTypeInfoResolver
             {
@@ -129,7 +131,7 @@ internal static class MachineSurface
         foreach (
             var clash in machines
                 .GroupBy(m => FieldName(m.Name), StringComparer.Ordinal)
-                .Where(g => g.Count() > 1)
+                .Where(g => g.Skip(1).Any())
         )
             problems.Add(
                 "The machines "
@@ -150,7 +152,7 @@ internal static class MachineSurface
         foreach (
             var clash in ClientTriggers(machine)
                 .GroupBy(t => EventField(t.Name), StringComparer.Ordinal)
-                .Where(g => g.Count() > 1)
+                .Where(g => g.Skip(1).Any())
         )
             problems.Add(
                 $"The machine '{machine.Name}' declares the events "

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -32,11 +33,11 @@ public class TrainInstanceReuseTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IToggleTrain>();
 
-        var failing = async () => await train.Run(true);
+        var failing = async () => await train.Run(input: true).ConfigureAwait(false);
         await failing.Should().ThrowAsync<InvalidOperationException>();
-        await train.Run(false);
+        await train.Run(input: false);
 
-        var rows = await Rows(typeof(IToggleTrain).FullName!);
+        var rows = await Rows(typeof(IToggleTrain).FullName.NotNull());
 
         rows.Should()
             .BeEquivalentTo(
@@ -51,19 +52,20 @@ public class TrainInstanceReuseTests : TestSetup
     {
         var train = (ExternalIdTrain)Scope.ServiceProvider.GetRequiredService<IExternalIdTrain>();
 
-        await train.Run(false);
-        var first = train.Metadata!.ExternalId;
+        await train.Run(input: false, CancellationToken.None);
+        var first = train.Metadata.NotNull().ExternalId;
         train.ExternalId = "chosen-for-the-second-run".PadRight(32, '0');
-        await train.Run(false);
+        await train.Run(input: false, CancellationToken.None);
 
         train
-            .Metadata!.ExternalId.Should()
+            .Metadata.NotNull()
+            .ExternalId.Should()
             .Be(
                 train.ExternalId,
                 "0011-a-service-train-instance-is-one-run.md: an ExternalId set for a run is that run's"
             );
         first.Should().NotBe(train.ExternalId);
-        (await Rows(typeof(IExternalIdTrain).FullName!)).Should().HaveCount(2);
+        (await Rows(typeof(IExternalIdTrain).FullName.NotNull())).Should().HaveCount(2);
     }
 
     [Test]
@@ -91,14 +93,16 @@ public class TrainInstanceReuseTests : TestSetup
     private async Task<List<TrainState>> Rows(string name)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == name)
             .OrderBy(m => m.Id)
             .Select(m => m.TrainState)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private class ToggleTrain : ServiceTrain<bool, Unit>, IToggleTrain
@@ -109,13 +113,13 @@ public class TrainInstanceReuseTests : TestSetup
             );
     }
 
-    private class SingletonToggleTrain : ToggleTrain, ISingletonToggleTrain { }
+    private sealed class SingletonToggleTrain : ToggleTrain, ISingletonToggleTrain;
 
-    private class ExternalIdTrain : ToggleTrain, IExternalIdTrain { }
+    private sealed class ExternalIdTrain : ToggleTrain, IExternalIdTrain;
 
-    public interface IToggleTrain : IServiceTrain<bool, Unit> { }
+    public interface IToggleTrain : IServiceTrain<bool, Unit>;
 
-    public interface ISingletonToggleTrain : IServiceTrain<bool, Unit> { }
+    public interface ISingletonToggleTrain : IServiceTrain<bool, Unit>;
 
-    public interface IExternalIdTrain : IServiceTrain<bool, Unit> { }
+    public interface IExternalIdTrain : IServiceTrain<bool, Unit>;
 }

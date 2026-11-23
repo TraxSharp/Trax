@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using CsCheck;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -32,6 +34,9 @@ public class ParallelTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Running
 
     [Test]
@@ -52,7 +57,7 @@ public class ParallelTests : TestSetup
         // Each branch waits for the other to start. Run one after the other, neither could finish.
         var meeting = new Meeting();
 
-        var result = await new MeetingTrain(meeting).RunEither("x").WaitAsync(Hang);
+        var result = await new MeetingTrain(meeting).RunEither("x").WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue($"branches start at once on the thread pool ({Adr})");
     }
@@ -62,7 +67,7 @@ public class ParallelTests : TestSetup
     {
         // "reads" runs only after "produces" has put an Embedding in its Memory, and still finds
         // none: each branch has its own copy, taken at the fork.
-        var result = await new IsolationTrain().RunEither("abc").WaitAsync(Hang);
+        var result = await new IsolationTrain().RunEither("abc").WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -92,7 +97,7 @@ public class ParallelTests : TestSetup
     {
         var capture = new Capture();
 
-        var result = await new NestedTrain(capture).RunEither("abc").WaitAsync(Hang);
+        var result = await new NestedTrain(capture).RunEither("abc").WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         capture
@@ -114,7 +119,7 @@ public class ParallelTests : TestSetup
     [Test]
     public async Task AChain_MayStartWithAParallel()
     {
-        var result = await new StartsWithParallelTrain().RunEither("abc").WaitAsync(Hang);
+        var result = await new StartsWithParallelTrain().RunEither("abc").WaitAsync(Hang, RealTime);
 
         result.ValueUnsafe().Should().Be("embedding=3, cocitation=6");
         Faults(new StartsWithParallelTrain()).Should().BeEmpty();
@@ -134,7 +139,7 @@ public class ParallelTests : TestSetup
             typeof(string)
         );
 
-        var result = await train.RunEither("abc").WaitAsync(Hang);
+        var result = await train.RunEither("abc").WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         var parallel = graph.Nodes.Single(n => n.Kind == ChainStepKind.Parallel);
@@ -163,7 +168,7 @@ public class ParallelTests : TestSetup
 
         var result = await new FailingTrain(BranchFailurePolicy.WaitForAll, joined)
             .RunEither("abc")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsLeft.Should().BeTrue();
         var failure = result
@@ -180,7 +185,7 @@ public class ParallelTests : TestSetup
         failure.CancelledBySibling.Should().BeEmpty();
         joined.Joined.Should().BeFalse("a failed step stops the chain");
 
-        var data = (TrainExceptionData)failure.Data["TrainExceptionData"]!;
+        var data = (TrainExceptionData)failure.Data["TrainExceptionData"].NotNull();
         data.Type.Should().Be(nameof(BranchesFailedException));
         data.FailureClass.Should()
             .Be(FailureClass.Permanent, $"one permanent failure makes the step permanent ({Adr})");
@@ -192,9 +197,11 @@ public class ParallelTests : TestSetup
     {
         var waiter = new Waiter();
 
-        var result = await new CancelSiblingsTrain(waiter).RunEither("abc").WaitAsync(Hang);
+        var result = await new CancelSiblingsTrain(waiter)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
-        await waiter.Cancelled.Task.WaitAsync(Hang);
+        await waiter.Cancelled.Task.WaitAsync(Hang, RealTime);
         var failure = result
             .Swap()
             .ValueUnsafe()
@@ -217,9 +224,11 @@ public class ParallelTests : TestSetup
         // library wrapping a cancelled request does. It still stopped because its sibling failed.
         var waiter = new Waiter();
 
-        var result = await new WrappingSiblingTrain(waiter).RunEither("abc").WaitAsync(Hang);
+        var result = await new WrappingSiblingTrain(waiter)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
-        await waiter.Cancelled.Task.WaitAsync(Hang);
+        await waiter.Cancelled.Task.WaitAsync(Hang, RealTime);
         var failure = result
             .Swap()
             .ValueUnsafe()
@@ -228,7 +237,7 @@ public class ParallelTests : TestSetup
             .Subject;
         failure.Failures.Select(f => f.Branch).Should().Equal("Parallel#0/fails");
         failure.CancelledBySibling.Should().Equal(["Parallel#0/waits"], $"({Adr})");
-        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+        ((TrainExceptionData)failure.Data["TrainExceptionData"].NotNull())
             .FailureClass.Should()
             .Be(FailureClass.Transient, "a branch stopped by its sibling adds no class");
     }
@@ -240,9 +249,10 @@ public class ParallelTests : TestSetup
         var waiter = new Waiter();
 
         var run = new BothWaitTrain(waiter).Run("abc", cts.Token);
-        await waiter.Entered.Task.WaitAsync(Hang);
+        await waiter.Entered.Task.WaitAsync(Hang, RealTime, CancellationToken.None);
         await cts.CancelAsync();
-        var act = async () => await run.WaitAsync(Hang);
+        var act = async () =>
+            await run.WaitAsync(Hang, RealTime, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<OperationCanceledException>(
@@ -255,7 +265,7 @@ public class ParallelTests : TestSetup
     {
         // A cancellation nothing outside the step asked for (an HttpClient timeout, a junction's
         // own token source) fails its branch like any exception, beside the other failures.
-        var result = await new TimeoutTrain().RunEither("abc").WaitAsync(Hang);
+        var result = await new TimeoutTrain().RunEither("abc").WaitAsync(Hang, RealTime);
 
         var failure = result
             .Swap()
@@ -277,7 +287,7 @@ public class ParallelTests : TestSetup
     {
         // What the persisted cancel flag (the dashboard, the API) raises at a junction boundary.
         var run = new RequestedCancellationTrain().Run("abc");
-        var act = async () => await run.WaitAsync(Hang);
+        var act = async () => await run.WaitAsync(Hang, RealTime).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<CancellationRequestedException>(
@@ -339,7 +349,9 @@ public class ParallelTests : TestSetup
         // the join down with it.
         var waiter = new Waiter();
 
-        var result = await new ThrowingCallbackTrain(waiter).RunEither("abc").WaitAsync(Hang);
+        var result = await new ThrowingCallbackTrain(waiter)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
         var failure = result
             .Swap()
@@ -360,7 +372,7 @@ public class ParallelTests : TestSetup
     {
         var result = await new SignalsWithServicesTrain(new NoScopes())
             .RunEither("abc")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -386,7 +398,7 @@ public class ParallelTests : TestSetup
         runScope.ServiceProvider.GetRequiredService<Tenant>().Name = "acme";
 
         var train = new ScopedTrain(runScope.ServiceProvider);
-        var result = await train.RunEither("abc").WaitAsync(Hang);
+        var result = await train.RunEither("abc").WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         var report = result.ValueUnsafe();
@@ -407,7 +419,7 @@ public class ParallelTests : TestSetup
         services.AddSingleton<IBranchScopeInitializer, ThrowingInitializer>();
         await using var root = services.BuildServiceProvider();
 
-        var result = await new ScopedTrain(root).RunEither("abc").WaitAsync(Hang);
+        var result = await new ScopedTrain(root).RunEither("abc").WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -425,18 +437,25 @@ public class ParallelTests : TestSetup
         var factory = LoggerFactory.Create(b => b.AddProvider(lines));
         using var listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == BranchDiagnostics.SourceName,
+            ShouldListenTo = source =>
+                string.Equals(source.Name, BranchDiagnostics.SourceName, StringComparison.Ordinal),
             Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllData,
         };
         ActivitySource.AddActivityListener(listener);
 
-        var result = await new LoggingBranchesTrain(factory).RunEither("abc").WaitAsync(Hang);
+        var result = await new LoggingBranchesTrain(factory)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
 
-        var embedding = lines.Lines.Single(l => l.Message == "embedding");
-        var cocitation = lines.Lines.Single(l => l.Message == "cocitation");
+        var embedding = lines.Lines.Single(l =>
+            string.Equals(l.Message, "embedding", StringComparison.Ordinal)
+        );
+        var cocitation = lines.Lines.Single(l =>
+            string.Equals(l.Message, "cocitation", StringComparison.Ordinal)
+        );
 
         NamesBranch(embedding.Scopes, "Parallel#0/embedding")
             .Should()
@@ -461,18 +480,22 @@ public class ParallelTests : TestSetup
         Carries(cocitation.Activity, "Parallel#0/cocitation")
             .Should()
             .BeTrue($"each Activity carries its branch's path ({Adr})");
-
-        static bool NamesBranch(IReadOnlyList<object?> scopes, string path) =>
-            scopes.Any(s => s?.ToString()?.Contains(path) == true);
-
-        static bool Carries(Activity? activity, string path) =>
-            activity is not null
-            && (
-                activity.DisplayName.Contains(path)
-                || activity.Tags.Any(t => (t.Value ?? string.Empty).Contains(path))
-                || activity.Baggage.Any(b => (b.Value ?? string.Empty).Contains(path))
-            );
     }
+
+    private static bool NamesBranch(IReadOnlyList<object?> scopes, string path) =>
+        scopes.Any(s => s?.ToString()?.Contains(path, StringComparison.Ordinal) == true);
+
+    private static bool Carries(Activity? activity, string path) =>
+        activity is not null
+        && (
+            activity.DisplayName.Contains(path, StringComparison.Ordinal)
+            || activity.Tags.Any(t =>
+                (t.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
+            )
+            || activity.Baggage.Any(b =>
+                (b.Value ?? string.Empty).Contains(path, StringComparison.Ordinal)
+            )
+        );
 
     #endregion
 
@@ -508,7 +531,12 @@ public class ParallelTests : TestSetup
         // Each branch's tuple carries a string, which was in Memory before the Parallel. At run
         // time the two strings collide and neither is merged, so the join would read the old one.
         Faults(new TupleOverwritingTrain())
-            .Where(f => f.Reason.Contains("produces 'System.String', which was in Memory before"))
+            .Where(f =>
+                f.Reason.Contains(
+                    "produces 'System.String', which was in Memory before",
+                    StringComparison.Ordinal
+                )
+            )
             .Should()
             .HaveCount(2, $"a tuple's elements enter Memory like any output ({Adr})");
     }
@@ -568,7 +596,9 @@ public class ParallelTests : TestSetup
     {
         // IChain finds the junction in Memory, which every branch copies with the same
         // references, so both branches would run the one instance at the same time.
-        var result = await new SharedIChainTrain(new SharedNote()).RunEither("abc").WaitAsync(Hang);
+        var result = await new SharedIChainTrain(new SharedNote())
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -590,7 +620,9 @@ public class ParallelTests : TestSetup
         // The outer branch waits at its nested join, so the instance never runs twice at once.
         var note = new SharedNote();
 
-        var result = await new NestedSharedIChainTrain(note).RunEither("abc").WaitAsync(Hang);
+        var result = await new NestedSharedIChainTrain(note)
+            .RunEither("abc")
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         note.Runs.Should().Be(2);
@@ -601,7 +633,7 @@ public class ParallelTests : TestSetup
     {
         var capture = new Capture();
 
-        var result = await new TwoSwitchesTrain(capture).RunEither("abc").WaitAsync(Hang);
+        var result = await new TwoSwitchesTrain(capture).RunEither("abc").WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         capture
@@ -620,7 +652,7 @@ public class ParallelTests : TestSetup
     [Test]
     public async Task ATupleTheJoinNeeds_IsAssembledFromWhatTheBranchesProduced()
     {
-        var result = await new SignalsTrain().RunEither("ab").WaitAsync(Hang);
+        var result = await new SignalsTrain().RunEither("ab").WaitAsync(Hang, RealTime);
 
         result.ValueUnsafe().Should().Be("embedding=2, cocitation=4");
     }
@@ -630,7 +662,7 @@ public class ParallelTests : TestSetup
     {
         var shared = new Shared("before");
 
-        var result = await new SharedServiceTrain(shared).RunEither("x").WaitAsync(Hang);
+        var result = await new SharedServiceTrain(shared).RunEither("x").WaitAsync(Hang, RealTime);
 
         result.ValueUnsafe().Should().Be("before|before");
     }
@@ -671,7 +703,9 @@ public class ParallelTests : TestSetup
         ChainVerification.Verify(train.DeclaredChain(), typeof(TIn), typeof(TOut));
 
     private static HashSet<string> Ids(IEnumerable<ChainGraphNode> nodes) =>
-        nodes.SelectMany(n => Ids(n.Tracks.SelectMany(t => t.Nodes)).Prepend(n.Id)).ToHashSet();
+        nodes
+            .SelectMany(n => Ids(n.Tracks.SelectMany(t => t.Nodes)).Prepend(n.Id))
+            .ToHashSet(StringComparer.Ordinal);
 
     [Asks("Which lane?")]
     public enum Lane
@@ -691,7 +725,7 @@ public class ParallelTests : TestSetup
         public void Note()
         {
             lock (Steps)
-                Steps.Add((ChainGraph.CurrentNodeId!, ChainGraph.CurrentBranchPath));
+                Steps.Add((ChainGraph.CurrentNodeId.NotNull(), ChainGraph.CurrentBranchPath));
         }
     }
 
@@ -719,7 +753,12 @@ public class ParallelTests : TestSetup
     private sealed class Combine : Junction<(Embedding, CoCitation), string>
     {
         public override Task<string> Run((Embedding, CoCitation) input) =>
-            Task.FromResult($"embedding={input.Item1.Score}, cocitation={input.Item2.Score}");
+            Task.FromResult(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"embedding={input.Item1.Score}, cocitation={input.Item2.Score}"
+                )
+            );
     }
 
     private sealed class SignalsTrain : Train<string, string>
@@ -752,7 +791,7 @@ public class ParallelTests : TestSetup
         public override async Task<Embedding> Run(string input)
         {
             meeting.A.SetResult();
-            await meeting.B.Task;
+            await meeting.B.Task.ConfigureAwait(false);
             return new Embedding(1);
         }
     }
@@ -762,7 +801,7 @@ public class ParallelTests : TestSetup
         public override async Task<CoCitation> Run(string input)
         {
             meeting.B.SetResult();
-            await meeting.A.Task;
+            await meeting.A.Task.ConfigureAwait(false);
             return new CoCitation(1);
         }
     }
@@ -797,7 +836,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Functional.Unit> Run(string input)
         {
-            await meeting.A.Task;
+            await meeting.A.Task.ConfigureAwait(false);
             return Functional.Unit.Default;
         }
     }
@@ -965,8 +1004,8 @@ public class ParallelTests : TestSetup
         var cancelled = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await using (token.Register(() => cancelled.TrySetCanceled(token)))
-            await cancelled.Task;
+        await using (token.Register(() => cancelled.TrySetCanceled(token)).ConfigureAwait(false))
+            await cancelled.Task.ConfigureAwait(false);
     }
 
     private sealed class Waiter
@@ -985,7 +1024,7 @@ public class ParallelTests : TestSetup
 
             try
             {
-                await UntilCancelled(CancellationToken);
+                await UntilCancelled(CancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -1001,7 +1040,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Functional.Unit> Run(string input)
         {
-            await waiter.Entered.Task;
+            await waiter.Entered.Task.ConfigureAwait(false);
             throw new InvalidOperationException("the sibling fails");
         }
     }
@@ -1022,8 +1061,8 @@ public class ParallelTests : TestSetup
         public override async Task<Embedding> Run(string input)
         {
             using var own = new CancellationTokenSource();
-            await own.CancelAsync();
-            await UntilCancelled(own.Token);
+            await own.CancelAsync().ConfigureAwait(false);
+            await UntilCancelled(own.Token).ConfigureAwait(false);
             return new Embedding(0);
         }
     }
@@ -1074,7 +1113,7 @@ public class ParallelTests : TestSetup
 
             try
             {
-                await UntilCancelled(CancellationToken);
+                await UntilCancelled(CancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException e)
             {
@@ -1091,7 +1130,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Functional.Unit> Run(string input)
         {
-            await waiter.Entered.Task;
+            await waiter.Entered.Task.ConfigureAwait(false);
             throw new TrainException(
                 System.Text.Json.JsonSerializer.Serialize(
                     new TrainExceptionData
@@ -1123,12 +1162,15 @@ public class ParallelTests : TestSetup
     {
         public override async Task<Embedding> Run(string input)
         {
-            await using var callback = CancellationToken.Register(() =>
+            var callback = CancellationToken.Register(() =>
                 throw new InvalidOperationException("the callback throws")
             );
-            waiter.Entered.TrySetResult();
-            await UntilCancelled(CancellationToken);
-            return new Embedding(0);
+            await using (callback.ConfigureAwait(false))
+            {
+                waiter.Entered.TrySetResult();
+                await UntilCancelled(CancellationToken).ConfigureAwait(false);
+                return new Embedding(0);
+            }
         }
     }
 
@@ -1171,7 +1213,7 @@ public class ParallelTests : TestSetup
     {
         public override async Task<CoCitation> Run(string input)
         {
-            await UntilCancelled(CancellationToken);
+            await UntilCancelled(CancellationToken).ConfigureAwait(false);
             return new CoCitation(0);
         }
     }
@@ -1358,7 +1400,7 @@ public class ParallelTests : TestSetup
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<Echo>()
                 .Parallel(p =>
-                    name == "twice"
+                    string.Equals(name, "twice", StringComparison.Ordinal)
                         ? p.Branch(name, b => b.Chain<ScoreEmbedding>())
                             .Branch(name, b => b.Chain<ScoreCoCitation>())
                         : p.Branch(name, b => b.Chain<ScoreEmbedding>())

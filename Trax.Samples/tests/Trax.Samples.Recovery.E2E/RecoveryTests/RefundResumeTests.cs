@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -47,7 +49,7 @@ public class RefundResumeTests : RecoveryTestFixture
         (await Run.WaitForEndAsync(failed)).Should().Be("FAILED");
         var crashed = await Run.TimelineAsync(failed);
         Names(crashed).Should().Contain("IssuePayment", "the order's refund is approved");
-        crashed.Last().GetProperty("name").GetString().Should().Be("NotifyCustomer");
+        crashed[^1].GetProperty("name").GetString().Should().Be("NotifyCustomer");
 
         // The manifest's retries resume the failed run by themselves: each runs only NotifyCustomer.
         var retry = await Run.FollowAttemptAsync(2);
@@ -58,21 +60,11 @@ public class RefundResumeTests : RecoveryTestFixture
 
         faults.Disarm(Run.RunId);
 
-        // What the operator sees on the failed run: a checkpoint after the Gate step, and
-        // NotifyCustomer offered as a point to resume at; nothing before the checkpoint is.
-        var (canResume, nodes) = await Run.RunGraphAsync(failed);
-        canResume.Should().BeTrue($"the failed run has a checkpoint to resume after ({Adr})");
-        nodes[Checkpoint].GetProperty("checkpointed").GetBoolean().Should().BeTrue();
-        nodes[Notify].GetProperty("canResume").GetBoolean().Should().BeTrue();
-        nodes[IssuePayment]
-            .GetProperty("canResume")
-            .GetBoolean()
-            .Should()
-            .BeFalse("no checkpoint before it holds what it needs");
+        await ExpectResumableAtNotifyAsync(failed);
 
         // On GraphQL, at the step the page's button names.
         var overGraphQL = await ResumeOverGraphQLAsync(failed, Notify);
-        await ShouldHaveRunOnlyNotify(overGraphQL, null, "resumeExecution on GraphQL");
+        await ShouldHaveRunOnlyNotify(overGraphQL, result: null, "resumeExecution on GraphQL");
         var result = await OutputAsync(overGraphQL);
 
         // From the dashboard, after the latest checkpoint, as its Resume button asks, on the
@@ -94,6 +86,32 @@ public class RefundResumeTests : RecoveryTestFixture
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
         Stream.Errors.Should().BeEmpty();
 
+        await ExpectNoViolationsLeftAsync(
+            before,
+            [failed, retry, lastRetry, overGraphQL, fromDashboard]
+        );
+    }
+
+    private async Task ExpectResumableAtNotifyAsync(long failed)
+    {
+        // What the operator sees on the failed run: a checkpoint after the Gate step, and
+        // NotifyCustomer offered as a point to resume at; nothing before the checkpoint is.
+        var (canResume, nodes) = await Run.RunGraphAsync(failed).ConfigureAwait(false);
+        canResume.Should().BeTrue($"the failed run has a checkpoint to resume after ({Adr})");
+        nodes[Checkpoint].GetProperty("checkpointed").GetBoolean().Should().BeTrue();
+        nodes[Notify].GetProperty("canResume").GetBoolean().Should().BeTrue();
+        nodes[IssuePayment]
+            .GetProperty("canResume")
+            .GetBoolean()
+            .Should()
+            .BeFalse("no checkpoint before it holds what it needs");
+    }
+
+    private static async Task ExpectNoViolationsLeftAsync(
+        IReadOnlyList<TraxInvariantViolation> before,
+        long[] started
+    )
+    {
         // Every invariant that holds while the host runs; the first three hold once it stops.
         var transient = new[]
         {
@@ -101,18 +119,22 @@ public class RefundResumeTests : RecoveryTestFixture
             TraxInvariants.EffectClaimInFlight,
             TraxInvariants.DispatchedWithoutRun,
         };
-        var added = (await TraxInvariants.FindViolationsAsync(ConnectionString))
+        var added = (
+            await TraxInvariants.FindViolationsAsync(ConnectionString).ConfigureAwait(false)
+        )
             .Except(before)
             .ToList();
         added
             .Where(v => !transient.Contains(v.Invariant))
             .Should()
             .BeEmpty(TraxInvariants.Describe(added));
-        var runs = new[] { failed, retry, lastRetry, overGraphQL, fromDashboard }.Select(id =>
-            id.ToString()
+        var runs = started.Select(id =>
+            id.ToString(System.Globalization.CultureInfo.InvariantCulture)
         );
         added
-            .Where(v => v.Invariant == TraxInvariants.RunInProgress)
+            .Where(v =>
+                string.Equals(v.Invariant, TraxInvariants.RunInProgress, StringComparison.Ordinal)
+            )
             .Select(v => v.Id)
             .Should()
             .NotIntersectWith(runs, "every run this test started has ended");
@@ -120,25 +142,32 @@ public class RefundResumeTests : RecoveryTestFixture
 
     private async Task<string> RefusedOverGraphQLAsync(long run)
     {
-        var response = await GraphQL.SendAsync(
-            $$"""
-            mutation { operations { resumeExecution(id: {{run}}) { success message id } } }
-            """,
-            OperatorKey
-        );
+        var response = await GraphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    mutation { operations { resumeExecution(id: {{run}}) { success message id } } }
+                    """
+                ),
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var result = response.GetData("operations", "resumeExecution");
         result.GetProperty("success").GetBoolean().Should().BeFalse();
-        return result.GetProperty("message").GetString()!;
+        return result.GetProperty("message").GetString().NotNull();
     }
 
     private async Task ShouldHaveRunOnlyNotify(long resumed, string? result, string surface)
     {
-        await Stream.SubscribeAsync(resumed);
-        (await Run.WaitForEndAsync(resumed)).Should().Be("COMPLETED", surface);
+        await Stream.SubscribeAsync(resumed).ConfigureAwait(false);
+        (await Run.WaitForEndAsync(resumed).ConfigureAwait(false))
+            .Should()
+            .Be("COMPLETED", surface);
 
         // Its junction events: NotifyCustomer, as the node it was in the failed run, and nothing else.
-        var steps = await Run.TimelineAsync(resumed);
+        var steps = await Run.TimelineAsync(resumed).ConfigureAwait(false);
         Names(steps)
             .Should()
             .Equal(
@@ -151,10 +180,10 @@ public class RefundResumeTests : RecoveryTestFixture
         // The result it returned is the one the other resume returned: the stored outcome came back
         // whole.
         if (result is not null)
-            (await OutputAsync(resumed)).Should().Be(result, surface);
+            (await OutputAsync(resumed).ConfigureAwait(false)).Should().Be(result, surface);
 
         // Its run graph marks what it skipped as restored.
-        var (_, nodes) = await Run.RunGraphAsync(resumed);
+        var (_, nodes) = await Run.RunGraphAsync(resumed).ConfigureAwait(false);
         foreach (var id in new[] { "LoadRefundCase#0", "Gate<ApproveRefund>#0", Checkpoint })
             nodes[id].GetProperty("state").GetString().Should().Be("RESTORED", $"{surface}: {id}");
         nodes[Notify].GetProperty("state").GetString().Should().Be("COMPLETED");
@@ -175,16 +204,21 @@ public class RefundResumeTests : RecoveryTestFixture
 
     private async Task<long> ResumeOverGraphQLAsync(long failed, string from)
     {
-        var response = await GraphQL.SendAsync(
-            $$"""
+        var response = await GraphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
             mutation { operations {
               resumeExecution(id: {{failed}}, from: {{JsonSerializer.Serialize(
                 from
             )}}) { success message id }
             } }
-            """,
-            OperatorKey
-        );
+            """
+                ),
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var result = response.GetData("operations", "resumeExecution");
         result
@@ -192,31 +226,38 @@ public class RefundResumeTests : RecoveryTestFixture
             .GetBoolean()
             .Should()
             .BeTrue(result.GetProperty("message").GetString());
-        return await Run.RunOfEntryAsync(result.GetProperty("id").GetInt64());
+        return await Run.RunOfEntryAsync(result.GetProperty("id").GetInt64()).ConfigureAwait(false);
     }
 
     private async Task<long> ResumeAsTheDashboardAsync(long failed)
     {
         OperationResult result;
-        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var trusted = scope.ServiceProvider.GetRequiredService<ITrustedExecutionScope>();
             using (trusted.BeginTrusted("dashboard"))
                 result = await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
-                    .ResumeExecutionAsync(failed, null, CancellationToken.None);
+                    .ResumeExecutionAsync(failed, from: null, CancellationToken.None)
+                    .ConfigureAwait(false);
         }
         result.Success.Should().BeTrue(result.Message);
-        return await Run.RunOfEntryAsync(result.Id!.Value);
+        return await Run.RunOfEntryAsync(result.Id.NotNull().Value).ConfigureAwait(false);
     }
 
     private async Task<string> OutputAsync(long metadataId)
     {
-        var detail = await GraphQL.SendAsync(
-            $$"""{ operations { executionDetail(id: {{metadataId}}) { output } } }""",
-            OperatorKey
-        );
+        var detail = await GraphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{metadataId}}) { output } } }"""
+                ),
+                OperatorKey
+            )
+            .ConfigureAwait(false);
         detail.HasErrors.Should().BeFalse(detail.FirstErrorMessage);
-        return detail.GetData("operations", "executionDetail", "output").GetString()!;
+        return detail.GetData("operations", "executionDetail", "output").GetString().NotNull();
     }
 }

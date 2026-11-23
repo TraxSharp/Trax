@@ -15,7 +15,7 @@ public class SnippetCompilerTests
             .In("page.md", markdown)
             .Where(f => f.IsCompiled)
             .SelectMany(f => f.Groups.Select(g => (Fence: f, Group: g)))
-            .GroupBy(x => x.Group)
+            .GroupBy(x => x.Group, StringComparer.Ordinal)
             .Select(g => new SnippetUnit("page.md", g.Key, g.Select(x => x.Fence).ToList()))
             .ToList();
 
@@ -26,14 +26,13 @@ public class SnippetCompilerTests
     }
 
     [Test]
-    public void Error_NamesThePageAndTheLineOnIt()
+    public async Task Error_NamesThePageAndTheLineOnIt()
     {
         var unit = Only(
             "# Title\n\nText.\n\n```csharp compile\nvar x = 1;\nx.NoSuchMethod();\n```\n"
         );
 
-        SnippetCompiler
-            .Diagnose(unit)
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false))
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -42,15 +41,17 @@ public class SnippetCompilerTests
     }
 
     [Test]
-    public void Warning_FailsTheSnippet()
+    public async Task Warning_FailsTheSnippet()
     {
         var unit = Only("```csharp compile\nstring s = null;\nConsole.WriteLine(s);\n```\n");
 
-        SnippetCompiler.Diagnose(unit).Should().Contain(d => d.Contains("warning CS8600"));
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false))
+            .Should()
+            .Contain(d => d.Contains("warning CS8600"));
     }
 
     [Test]
-    public void AssemblyVersionUnificationWarnings_AreSuppressedAsMSBuildDoes()
+    public async Task AssemblyVersionUnificationWarnings_AreSuppressedAsMSBuildDoes()
     {
         // Npgsql.EntityFrameworkCore.PostgreSQL references an older
         // Microsoft.EntityFrameworkCore.Relational than the one referenced here, which raises
@@ -62,11 +63,11 @@ public class SnippetCompilerTests
                 + "    .Options;\nConsole.WriteLine(options.Extensions.Count());\n```\n"
         );
 
-        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void FencesInOneGroup_CompileTogether()
+    public async Task FencesInOneGroup_CompileTogether()
     {
         var unit = Only(
             "```csharp compile=app\npublic record Greeting(string Text);\n```\n\n"
@@ -74,11 +75,11 @@ public class SnippetCompilerTests
         );
 
         unit.Fences.Should().HaveCount(2);
-        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void FenceInSeveralGroups_JoinsEach()
+    public async Task FenceInSeveralGroups_JoinsEach()
     {
         var units = Units(
             "```csharp compile=one,two\npublic record Greeting(string Text);\n```\n\n"
@@ -87,22 +88,23 @@ public class SnippetCompilerTests
         );
 
         units.Should().HaveCount(2);
-        units.Should().AllSatisfy(u => SnippetCompiler.Diagnose(u).Should().BeEmpty());
+        foreach (var u in units)
+            (await SnippetCompiler.DiagnoseAsync(u).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void IndentedFence_LosesItsIndentation()
+    public async Task IndentedFence_LosesItsIndentation()
     {
         var unit = Only(
             "1. Step:\n\n   ```csharp compile\n   var x = 1;\n   Console.WriteLine(x);\n   ```\n"
         );
 
         unit.Fences.Single().Code.Should().Be("var x = 1;\nConsole.WriteLine(x);");
-        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void TraxPackages_AreReferenced()
+    public async Task TraxPackages_AreReferenced()
     {
         var unit = Only(
             "```csharp compile\nusing Trax.Core.Junction;\n\n"
@@ -110,22 +112,24 @@ public class SnippetCompilerTests
                 + "    public override Task<string> Run(string input) => Task.FromResult(input);\n}\n```\n"
         );
 
-        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void TraxNamespaces_AreNotImplied()
+    public async Task TraxNamespaces_AreNotImplied()
     {
         var unit = Only(
             "```csharp compile\npublic class Hello : Junction<string, string>\n{\n"
                 + "    public override Task<string> Run(string input) => Task.FromResult(input);\n}\n```\n"
         );
 
-        SnippetCompiler.Diagnose(unit).Should().Contain(d => d.Contains("CS0246"));
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false))
+            .Should()
+            .Contain(d => d.Contains("CS0246"));
     }
 
     [Test]
-    public void SharedContext_GivesEverySnippetTheHost()
+    public async Task SharedContext_GivesEverySnippetTheHost()
     {
         var unit = Only(
             "```csharp compile\nservices.AddLogging();\n"
@@ -135,11 +139,11 @@ public class SnippetCompilerTests
                 + "app.Run();\n```\n"
         );
 
-        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void ProgramCs_DeclaringItsOwnHost_HidesTheShared()
+    public async Task ProgramCs_DeclaringItsOwnHost_HidesTheShared()
     {
         // The shape of every Program.cs a page shows: a top-level `var builder` and `var app`
         // hide the shared members without a warning, as a local hides a member.
@@ -149,7 +153,7 @@ public class SnippetCompilerTests
                 + "var app = builder.Build();\napp.Run();\n```\n"
         );
 
-        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
@@ -180,7 +184,7 @@ public class SnippetCompilerTests
     public void SnippetContextNone_IsReadFromTheFrontMatterOnly(string markdown, bool optsOut) =>
         SnippetCompiler.OptsOutOfSharedContextIn(markdown).Should().Be(optsOut);
 
-    private static readonly Dictionary<string, string> Chapters = new()
+    private static readonly Dictionary<string, string> Chapters = new(StringComparer.Ordinal)
     {
         ["two.md"] = "one.md",
         ["three.md"] = "two.md",
@@ -195,7 +199,7 @@ public class SnippetCompilerTests
             .ToList();
 
     [Test]
-    public void FollowingPage_CompilesWithTheFencesOfThePagesBeforeIt()
+    public async Task FollowingPage_CompilesWithTheFencesOfThePagesBeforeIt()
     {
         var units = Book(
             (
@@ -208,13 +212,13 @@ public class SnippetCompilerTests
             )
         );
 
-        var two = units.Single(u => u.Page == "two.md");
+        var two = units.Single(u => string.Equals(u.Page, "two.md", StringComparison.Ordinal));
         two.Fences.Select(f => f.Page).Should().Equal("one.md", "two.md");
-        SnippetCompiler.Diagnose(two).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(two).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void FenceNamingAFile_ReplacesTheEarlierFenceForThatFile()
+    public async Task FenceNamingAFile_ReplacesTheEarlierFenceForThatFile()
     {
         var units = Book(
             (
@@ -231,9 +235,9 @@ public class SnippetCompilerTests
             )
         );
 
-        var three = units.Single(u => u.Page == "three.md");
+        var three = units.Single(u => string.Equals(u.Page, "three.md", StringComparison.Ordinal));
         three.Fences.Select(f => f.Page).Should().Equal("two.md", "three.md");
-        SnippetCompiler.Diagnose(three).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(three).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
@@ -244,13 +248,20 @@ public class SnippetCompilerTests
             ("two.md", "```csharp compile=app file=B.cs\npublic record B;\n```\n")
         );
 
-        units.Single(u => u.Page == "one.md").Fences.Should().ContainSingle();
+        units
+            .Single(u => string.Equals(u.Page, "one.md", StringComparison.Ordinal))
+            .Fences.Should()
+            .ContainSingle();
     }
 
     [Test]
     public void ChainThatComesBack_Throws()
     {
-        var act = () => SnippetUnit.ChainOf("a.md", page => page == "a.md" ? "b.md" : "a.md");
+        var act = () =>
+            SnippetUnit.ChainOf(
+                "a.md",
+                page => string.Equals(page, "a.md", StringComparison.Ordinal) ? "b.md" : "a.md"
+            );
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*comes back to a.md*");
     }
@@ -275,7 +286,7 @@ public class SnippetCompilerTests
         SnippetCompiler.FollowedPageIn(markdown).Should().Be(page);
 
     [Test]
-    public void TestsGroup_CompilesWithTheAppAndTheTestFrameworks()
+    public async Task TestsGroup_CompilesWithTheAppAndTheTestFrameworks()
     {
         var units = SnippetUnit
             .WithTheAppInTheTests(
@@ -296,11 +307,11 @@ public class SnippetCompilerTests
 
         var tests = units.Single(u => u.IsTests);
         tests.App.Should().ContainSingle();
-        SnippetCompiler.Diagnose(tests).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(tests).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void TestsGroup_HasThePlainSdksImplicitUsings_NotTheWebSdks()
+    public async Task TestsGroup_HasThePlainSdksImplicitUsings_NotTheWebSdks()
     {
         // A test project is a Microsoft.NET.Sdk project: ServiceCollection needs its using.
         var units = SnippetUnit
@@ -318,14 +329,13 @@ public class SnippetCompilerTests
             )
             .ToList();
 
-        SnippetCompiler
-            .Diagnose(units.Single(u => u.IsTests))
+        (await SnippetCompiler.DiagnoseAsync(units.Single(u => u.IsTests)).ConfigureAwait(false))
             .Should()
             .Contain(d => d.Contains("CS0246") && d.Contains("ServiceCollection"));
     }
 
     [Test]
-    public void TestsGroup_SeesTheAppsInternals()
+    public async Task TestsGroup_SeesTheAppsInternals()
     {
         var units = SnippetUnit
             .WithTheAppInTheTests(
@@ -342,19 +352,23 @@ public class SnippetCompilerTests
             )
             .ToList();
 
-        SnippetCompiler.Diagnose(units.Single(u => u.IsTests)).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(units.Single(u => u.IsTests)).ConfigureAwait(false))
+            .Should()
+            .BeEmpty();
     }
 
     [Test]
-    public void AppGroup_DoesNotSeeTheTestFrameworks()
+    public async Task AppGroup_DoesNotSeeTheTestFrameworks()
     {
         var unit = Only("```csharp compile=app\nusing NUnit.Framework;\n\npublic class X;\n```\n");
 
-        SnippetCompiler.Diagnose(unit).Should().Contain(d => d.Contains("CS0246"));
+        (await SnippetCompiler.DiagnoseAsync(unit).ConfigureAwait(false))
+            .Should()
+            .Contain(d => d.Contains("CS0246"));
     }
 
     [Test]
-    public void TestsGroup_OnAPageWithNoApp_TestsTheAppOfThePageItFollows()
+    public async Task TestsGroup_OnAPageWithNoApp_TestsTheAppOfThePageItFollows()
     {
         var units = SnippetUnit
             .WithTheAppInTheTests(
@@ -379,11 +393,11 @@ public class SnippetCompilerTests
 
         var tests = units.Single(u => u.IsTests);
         tests.App.Should().ContainSingle();
-        SnippetCompiler.Diagnose(tests).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(tests).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [Test]
-    public void MovedFiles_AreReplacedAtTheirNewPath()
+    public async Task MovedFiles_AreReplacedAtTheirNewPath()
     {
         var units = SnippetUnit
             .Following(
@@ -403,13 +417,16 @@ public class SnippetCompilerTests
                     )
                     .ToList(),
                 page => Chapters.GetValueOrDefault(page),
-                page => page == "two.md" ? [("Trains/", "Core/Trains/")] : []
+                page =>
+                    string.Equals(page, "two.md", StringComparison.Ordinal)
+                        ? [("Trains/", "Core/Trains/")]
+                        : []
             )
             .ToList();
 
-        var two = units.Single(u => u.Page == "two.md");
+        var two = units.Single(u => string.Equals(u.Page, "two.md", StringComparison.Ordinal));
         two.Fences.Should().ContainSingle().Which.Page.Should().Be("two.md");
-        SnippetCompiler.Diagnose(two).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(two).ConfigureAwait(false)).Should().BeEmpty();
     }
 
     [TestCase(
@@ -422,7 +439,7 @@ public class SnippetCompilerTests
             .Equal(("Trains/", "Core/Trains/"), ("Program.cs", "Hub/Program.cs"));
 
     [Test]
-    public void AnotherGroupOnAChainedPage_CompilesAgainstTheApp()
+    public async Task AnotherGroupOnAChainedPage_CompilesAgainstTheApp()
     {
         var units = SnippetUnit
             .WithTheAppInTheTests(
@@ -445,8 +462,8 @@ public class SnippetCompilerTests
             )
             .ToList();
 
-        var worker = units.Single(u => u.Group == "worker");
+        var worker = units.Single(u => string.Equals(u.Group, "worker", StringComparison.Ordinal));
         worker.App.Should().ContainSingle();
-        SnippetCompiler.Diagnose(worker).Should().BeEmpty();
+        (await SnippetCompiler.DiagnoseAsync(worker).ConfigureAwait(false)).Should().BeEmpty();
     }
 }

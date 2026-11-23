@@ -6,6 +6,7 @@ using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -37,10 +38,11 @@ public class JunctionEventPublishBoundTests
             PublishBound = TimeSpan.FromMilliseconds(100),
         };
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         await handler.HandleAsync(Message(position: 0), default);
-        clock
-            .Elapsed.Should()
+        TimeProvider
+            .System.GetElapsedTime(clock)
+            .Should()
             .BeLessThan(TimeSpan.FromSeconds(2), "the run waits at most the bound");
 
         await handler.HandleAsync(Message(position: 1), default);
@@ -60,14 +62,21 @@ public class JunctionEventPublishBoundTests
 
         // The first holds the topic for up to a second; the second gives up after 50ms.
         var holding = publisher
-            .PublishAsync(Topic, Event(0), TimeSpan.FromSeconds(1), default)
+            .PublishAsync(Topic, Event(0), TimeSpan.FromSeconds(1), TimeProvider.System, default)
             .AsTask();
         await sender.FirstSendStarted;
 
-        var clock = Stopwatch.StartNew();
-        await publisher.PublishAsync(Topic, Event(1), TimeSpan.FromMilliseconds(50), default);
-        clock
-            .Elapsed.Should()
+        var clock = TimeProvider.System.GetTimestamp();
+        await publisher.PublishAsync(
+            Topic,
+            Event(1),
+            TimeSpan.FromMilliseconds(50),
+            TimeProvider.System,
+            default
+        );
+        TimeProvider
+            .System.GetElapsedTime(clock)
+            .Should()
             .BeLessThan(TimeSpan.FromMilliseconds(900), "it did not wait its turn");
 
         await holding;
@@ -75,7 +84,13 @@ public class JunctionEventPublishBoundTests
             .Should()
             .Be(2, "a subscription made now is not owed the dropped step");
 
-        await publisher.PublishAsync(Topic, Event(2), TimeSpan.FromSeconds(1), default);
+        await publisher.PublishAsync(
+            Topic,
+            Event(2),
+            TimeSpan.FromSeconds(1),
+            TimeProvider.System,
+            default
+        );
 
         var delivered = sender.Delivered.Single();
         delivered.Junction.Position.Should().Be(2, "the dropped step was never sent");
@@ -91,21 +106,30 @@ public class JunctionEventPublishBoundTests
 
         using var cancel = new CancellationTokenSource();
         var cancelled = publisher
-            .PublishAsync(Topic, Event(0), TimeSpan.FromSeconds(30), cancel.Token)
+            .PublishAsync(
+                Topic,
+                Event(0),
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                cancel.Token
+            )
             .AsTask();
         await sender.FirstSendStarted;
-        cancel.Cancel();
+        await cancel.CancelAsync().ConfigureAwait(false);
 
         await FluentActions
             .Awaiting(() => cancelled)
             .Should()
-            .ThrowAsync<OperationCanceledException>();
+            .ThrowAsync<OperationCanceledException>()
+            .ConfigureAwait(false);
 
-        (await publisher.LastPublishedAsync(Topic, default))
+        (await publisher.LastPublishedAsync(Topic, default).ConfigureAwait(false))
             .Should()
             .Be(1, "the send may still arrive numbered 1");
 
-        await publisher.PublishAsync(Topic, Event(1), TimeSpan.FromSeconds(1), default);
+        await publisher
+            .PublishAsync(Topic, Event(1), TimeSpan.FromSeconds(1), TimeProvider.System, default)
+            .ConfigureAwait(false);
 
         sender
             .Delivered.Single()
@@ -120,12 +144,14 @@ public class JunctionEventPublishBoundTests
     {
         var delivered = new List<long>();
         await foreach (
-            var e in LifecycleSubscriptions.ReadJunctionEvents(
-                new ListStream(events),
-                metadataId: 7,
-                LifecycleVisibility.Operations,
-                baseline: 0
-            )
+            var e in LifecycleSubscriptions
+                .ReadJunctionEvents(
+                    new ListStream(events),
+                    metadataId: 7,
+                    LifecycleVisibility.Operations,
+                    baseline: 0
+                )
+                .ConfigureAwait(false)
         )
             delivered.Add(e.Sequence);
         return delivered;
@@ -141,7 +167,8 @@ public class JunctionEventPublishBoundTests
         );
     }
 
-    private static JunctionEvent Event(int position) => JunctionEvent.From(Message(position))!;
+    private static JunctionEvent Event(int position) =>
+        JunctionEvent.From(Message(position)).NotNull();
 
     private static TrainLifecycleEventMessage Message(int position) =>
         new(
@@ -149,7 +176,7 @@ public class JunctionEventPublishBoundTests
             ExternalId: "ext",
             TrainName: Train,
             TrainState: nameof(TrainState.InProgress),
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: TrainLifecycleEventMessage.JunctionStartedEventType,
@@ -162,7 +189,7 @@ public class JunctionEventPublishBoundTests
                 JunctionRunKind.Junction,
                 "Step",
                 JunctionRunState.InProgress,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             ),
         };
 
@@ -189,7 +216,7 @@ public class JunctionEventPublishBoundTests
                 return new ValueTask(new TaskCompletionSource().Task);
 
             lock (Delivered)
-                Delivered.Add((JunctionEvent)(object)message!);
+                Delivered.Add((JunctionEvent)(object)message.NotNull());
             return ValueTask.CompletedTask;
         }
 
@@ -210,7 +237,7 @@ public class JunctionEventPublishBoundTests
 
         async IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync()
         {
-            await foreach (var e in ReadEventsAsync())
+            await foreach (var e in ReadEventsAsync().ConfigureAwait(false))
                 yield return e;
         }
 

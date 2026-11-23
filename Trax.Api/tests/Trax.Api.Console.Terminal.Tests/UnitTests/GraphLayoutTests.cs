@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Api.Console.Terminal.Machines;
 
@@ -19,25 +20,44 @@ public class GraphLayoutTests
     {
         var states = Enumerable
             .Range(0, 100)
-            .Select(i => new GraphState($"S{i}", Initial: i == 0, Final: i == 99))
+            .Select(i => new GraphState(
+                string.Create(CultureInfo.InvariantCulture, $"S{i}"),
+                Initial: i == 0,
+                Final: i == 99
+            ))
             .ToList();
         var edges = Enumerable
             .Range(0, 100)
             .SelectMany(i =>
                 new[]
                 {
-                    new GraphEdge($"S{i}", $"S{(i + 1) % 100}", $"next{i}"),
-                    new GraphEdge($"S{i}", $"S{(i + 7) % 100}", $"skip{i}"),
-                    new GraphEdge($"S{i}", $"S{(i * 13 + 5) % 100}", $"jump{i}"),
+                    new GraphEdge(
+                        string.Create(CultureInfo.InvariantCulture, $"S{i}"),
+                        string.Create(CultureInfo.InvariantCulture, $"S{(i + 1) % 100}"),
+                        string.Create(CultureInfo.InvariantCulture, $"next{i}")
+                    ),
+                    new GraphEdge(
+                        string.Create(CultureInfo.InvariantCulture, $"S{i}"),
+                        string.Create(CultureInfo.InvariantCulture, $"S{(i + 7) % 100}"),
+                        string.Create(CultureInfo.InvariantCulture, $"skip{i}")
+                    ),
+                    new GraphEdge(
+                        string.Create(CultureInfo.InvariantCulture, $"S{i}"),
+                        string.Create(CultureInfo.InvariantCulture, $"S{(i * 13 + 5) % 100}"),
+                        string.Create(CultureInfo.InvariantCulture, $"jump{i}")
+                    ),
                 }
             )
             .ToList();
 
-        var clock = Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
         var lines = GraphLayout.Render(states, edges, "S50", vertical, out var work);
-        clock.Stop();
+        var clockTook = TimeProvider.System.GetElapsedTime(clock);
         TestContext.Out.WriteLine(
-            $"{clock.ElapsedMilliseconds} ms, {lines.Count} lines, {work.Steps} of {work.Budget} steps, {work.CellsSearched} cells searched"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{((long)clockTook.TotalMilliseconds)} ms, {lines.Count} lines, {work.Steps} of {work.Budget} steps, {work.CellsSearched} cells searched"
+            )
         );
 
         // The bound is the work, not the clock: a runner is several times slower than a laptop, and a test of
@@ -48,8 +68,8 @@ public class GraphLayoutTests
         work.Steps.Should().BeLessThanOrEqualTo(work.Budget + edges.Count);
         work.CellsSearched.Should().BeLessThan(4 * work.Budget);
         // A ceiling for what neither count sees (layering, ordering, placing), far above what any runner takes.
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
-        var text = string.Join("\n", lines);
+        clockTook.Should().BeLessThan(TimeSpan.FromSeconds(30));
+        var text = string.Join('\n', lines);
         text.Should().Contain("S0").And.Contain("S99");
     }
 
@@ -59,11 +79,19 @@ public class GraphLayoutTests
         const int count = 20_000;
         var states = Enumerable
             .Range(0, count)
-            .Select(i => new GraphState($"C{i}", Initial: i == 0, Final: i == count - 1))
+            .Select(i => new GraphState(
+                string.Create(CultureInfo.InvariantCulture, $"C{i}"),
+                Initial: i == 0,
+                Final: i == count - 1
+            ))
             .ToList();
         var edges = Enumerable
             .Range(0, count - 1)
-            .Select(i => new GraphEdge($"C{i}", $"C{i + 1}", "next"))
+            .Select(i => new GraphEdge(
+                string.Create(CultureInfo.InvariantCulture, $"C{i}"),
+                string.Create(CultureInfo.InvariantCulture, $"C{i + 1}"),
+                "next"
+            ))
             .ToList();
 
         var lines = GraphLayout.Render(states, edges, current: "C7");
@@ -85,10 +113,10 @@ public class GraphLayoutTests
             ],
             [new GraphEdge("Open", "Closed", "Close")]
         );
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.Should().Contain("Open: declared more than once, drawn once");
-        lines.Count(l => l.Contains("│ Open")).Should().Be(1);
+        lines.Count(l => l.Contains("│ Open", StringComparison.Ordinal)).Should().Be(1);
     }
 
     [Test]
@@ -101,7 +129,7 @@ public class GraphLayoutTests
             ],
             [new GraphEdge("Open", "Closed", "Close"), new GraphEdge("Open", "Ghost", "Haunt")]
         );
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.Should().Contain("Open ──▶ Ghost: Haunt  (not a state of this machine)");
     }

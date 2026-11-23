@@ -1,96 +1,10 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Trax.Client;
-
-/// <summary>A document and the variables it is sent with.</summary>
-/// <param name="Document">The document.</param>
-/// <param name="Variables">Its variables as JSON; a document with none sends an empty object.</param>
-public sealed record TraxRequest(TraxDocument Document, JsonObject Variables);
-
-/// <summary>
-/// How a request reaches a host. <see cref="TraxClient"/> never talks to the network itself: it is given a
-/// <see cref="TraxHttpTransport"/>, or a transport of the app's own (a recording, a fake, a wrapper that counts what is
-/// in flight).
-/// </summary>
-public interface ITraxTransport
-{
-    /// <summary>
-    /// Sends a query or mutation. Never throws for the host's sake: a refusal is an answer with errors, and a host that
-    /// could not be reached is an answer with a <see cref="TraxAnswer.Failure"/>. Throws only when
-    /// <paramref name="cancellationToken"/> is cancelled.
-    /// </summary>
-    Task<TraxAnswer> ExecuteAsync(
-        TraxRequest request,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>Follows a subscription, each frame a GraphQL result, until the returned handle is disposed.</summary>
-    IDisposable Subscribe(TraxRequest request, ISubscriptionSink sink);
-}
-
-/// <summary>How a <see cref="TraxHttpTransport"/> reaches its host.</summary>
-public sealed record TraxHttpTransportOptions
-{
-    /// <summary>
-    /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
-    /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
-    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. It must not follow redirects: build it
-    /// on a <see cref="SocketsHttpHandler"/> or <see cref="HttpClientHandler"/> with
-    /// <see cref="SocketsHttpHandler.AllowAutoRedirect"/> off, behind any delegating handlers
-    /// (<c>new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })</c>). A client whose handler follows
-    /// redirects, <c>new HttpClient()</c> among them, is refused when the transport is built, and so is one on a handler
-    /// of another kind unless <see cref="HandlerFollowsNoRedirects"/> is set. The check reads the handler at the end of
-    /// the chain, so each delegating handler before it must pass every request on once, to the handler after it, and
-    /// send none of its own: one that sends a request again, to the host a redirect names or anywhere else, does what
-    /// the check cannot see. An answer from another host than <see cref="Endpoint"/>'s is a
-    /// <see cref="TraxAnswer.Failure"/>.
-    /// </summary>
-    public required HttpClient Http { get; init; }
-
-    /// <summary>
-    /// The host's GraphQL endpoint (<c>https://host/trax/graphql</c>), or one relative to <see cref="Http"/>'s base
-    /// address. It must be <c>https</c> unless its host is loopback or <see cref="AllowInsecureTransport"/> is set.
-    /// </summary>
-    public required Uri Endpoint { get; init; }
-
-    /// <summary>
-    /// Accepts an <c>http</c> endpoint on a host that is not loopback. Off by default: whatever authenticates the
-    /// requests would travel in cleartext.
-    /// </summary>
-    public bool AllowInsecureTransport { get; init; }
-
-    /// <summary>
-    /// Says that <see cref="Http"/>'s handler follows no redirects, for a handler the transport cannot check: one at the
-    /// end of its chain that is neither a <see cref="SocketsHttpHandler"/> nor an <see cref="HttpClientHandler"/> (a
-    /// test server's, a platform's own). Off by default, and such a client is refused. It changes nothing for a handler
-    /// the transport can check: one that follows redirects is refused either way.
-    /// </summary>
-    public bool HandlerFollowsNoRedirects { get; init; }
-
-    /// <summary>
-    /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one is a
-    /// <see cref="TraxAnswer.Failure"/>, never read into memory. It must be positive.
-    /// </summary>
-    public long MaxResponseSize { get; init; } = DefaultMaxResponseSize;
-
-    /// <summary>The response body limit when none is set: 16 MiB.</summary>
-    public const long DefaultMaxResponseSize = 16 * 1024 * 1024;
-
-    /// <summary>
-    /// The socket subscriptions go over, usually a <see cref="GraphQLSubscriptionSocket"/>. Null fails every
-    /// subscription at once, with a <see cref="SocketUnavailableException"/>.
-    /// </summary>
-    public ISubscriptionSocket? Socket { get; init; }
-
-    /// <summary>
-    /// Whether a document goes by its id rather than its text. By default every document that has an id does; a host
-    /// that registered only some of them (or none, when it runs no persisted operations) names which.
-    /// </summary>
-    public Func<TraxDocument, bool>? ById { get; init; }
-}
 
 /// <summary>
 /// A transport over HTTP POST and a socket. A document goes by its id when <see cref="TraxHttpTransportOptions.ById"/>
@@ -122,9 +36,9 @@ public sealed class TraxHttpTransport : ITraxTransport
             nameof(options)
         );
         TransportSecurity.RequireSecure(
-            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
+            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is not { } baseAddress
                 ? options.Endpoint
-                : new Uri(options.Http!.BaseAddress, options.Endpoint),
+                : new Uri(baseAddress, options.Endpoint),
             options.AllowInsecureTransport,
             Uri.UriSchemeHttps,
             nameof(options)
@@ -199,14 +113,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(body);
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Accept.Add(
-            new MediaTypeWithQualityHeaderValue("application/graphql-response+json")
-        );
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        using var request = CreateRequest(endpoint, body);
         var asked =
             endpoint.IsAbsoluteUri ? endpoint
             : http.BaseAddress is { } baseAddress ? new Uri(baseAddress, endpoint)
@@ -228,23 +135,8 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
-            // A handler the caller vouched for followed a redirect anyway: its answer is not the endpoint's.
-            if (
-                asked is not null
-                && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
-                && Uri.Compare(
-                    asked,
-                    answeredBy,
-                    UriComponents.SchemeAndServer,
-                    UriFormat.Unescaped,
-                    StringComparison.OrdinalIgnoreCase
-                ) != 0
-            )
-                return TraxAnswer.Failed(
-                    $"The request was redirected to {answeredBy.GetLeftPart(UriPartial.Authority)}, which is not "
-                        + "the endpoint's host. Build the HttpClient on a handler with automatic redirects off.",
-                    (int)response.StatusCode
-                );
+            if (RedirectedAway(asked, response) is { } redirected)
+                return redirected;
             var text = await ReadBoundedAsync(response.Content, maxResponseSize, timeout.Token)
                 .ConfigureAwait(false);
             return AnswerOf(response, text, maxResponseSize);
@@ -257,7 +149,10 @@ public sealed class TraxHttpTransport : ITraxTransport
         {
             // A timeout surfaces as a cancellation the caller did not ask for.
             return TraxAnswer.Failed(
-                $"The host did not answer within {limit.TotalSeconds:0.###} seconds."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The host did not answer within {limit.TotalSeconds:0.###} seconds."
+                )
             );
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException)
@@ -265,6 +160,41 @@ public sealed class TraxHttpTransport : ITraxTransport
             // IOException (HttpIOException among them) is a body that broke off while it was read.
             return TraxAnswer.Failed($"The host could not be reached: {ex.Message}");
         }
+    }
+
+    private static HttpRequestMessage CreateRequest(Uri endpoint, JsonObject body)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/graphql-response+json")
+        );
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return request;
+    }
+
+    private static TraxAnswer? RedirectedAway(Uri? asked, HttpResponseMessage response)
+    {
+        // A handler the caller vouched for followed a redirect anyway: its answer is not the endpoint's.
+        if (
+            asked is not null
+            && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
+            && Uri.Compare(
+                asked,
+                answeredBy,
+                UriComponents.SchemeAndServer,
+                UriFormat.Unescaped,
+                StringComparison.OrdinalIgnoreCase
+            ) != 0
+        )
+            return TraxAnswer.Failed(
+                $"The request was redirected to {answeredBy.GetLeftPart(UriPartial.Authority)}, which is not "
+                    + "the endpoint's host. Build the HttpClient on a handler with automatic redirects off.",
+                (int)response.StatusCode
+            );
+        return null;
     }
 
     /// <summary>
@@ -291,8 +221,10 @@ public sealed class TraxHttpTransport : ITraxTransport
         throw new ArgumentOutOfRangeException(
             paramName,
             timeout,
-            $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
-                + "or Timeout.InfiniteTimeSpan."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"The {what} must be positive and at most {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days), "
+            ) + "or Timeout.InfiniteTimeSpan."
         );
     }
 
@@ -320,7 +252,10 @@ public sealed class TraxHttpTransport : ITraxTransport
                 throw new ArgumentOutOfRangeException(
                     paramName,
                     delay,
-                    $"Each {what} must be from zero to {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days)."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Each {what} must be from zero to {MaxTimeout.TotalMilliseconds} milliseconds (about 24.8 days)."
+                    )
                 );
     }
 
@@ -336,7 +271,10 @@ public sealed class TraxHttpTransport : ITraxTransport
         var status = (int)response.StatusCode;
         if (text is null)
             return TraxAnswer.Failed(
-                $"The server answered with a body larger than {max} bytes.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The server answered with a body larger than {max} bytes."
+                ),
                 status
             );
         TraxAnswer? answer;
@@ -354,7 +292,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         if (answer is not null && (response.IsSuccessStatusCode || answer.Errors.Count > 0))
             return answer;
         return TraxAnswer.Failed(
-            $"The host answered {$"{status} {response.ReasonPhrase}".TrimEnd()} with no GraphQL answer.",
+            $"The host answered {string.Create(CultureInfo.InvariantCulture, $"{status} {response.ReasonPhrase}").TrimEnd()} with no GraphQL answer.",
             status
         );
     }
@@ -368,7 +306,8 @@ public sealed class TraxHttpTransport : ITraxTransport
     {
         if (content.Headers.ContentLength > max)
             return null;
-        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var streamDisposal = stream.ConfigureAwait(false);
         using var body = new MemoryStream();
         var buffer = new byte[8192];
         int read;
@@ -376,7 +315,8 @@ public sealed class TraxHttpTransport : ITraxTransport
         {
             if (body.Length + read > max)
                 return null;
-            body.Write(buffer, 0, read);
+            await body.WriteAsync(buffer.AsMemory(0, read), CancellationToken.None)
+                .ConfigureAwait(false);
         }
         return Encoding.UTF8.GetString(body.GetBuffer(), 0, (int)body.Length);
     }

@@ -4,6 +4,7 @@ using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fakes;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes.TraxServer;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -20,9 +21,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class TraxServerE2ETests
 {
-    private TraxServerFixture _fixture = null!;
-    private ServiceProvider _services = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private TraxServerFixture? _fixture;
+    private ServiceProvider? _services;
+    private IGraphQLClientExecutor? _executor;
 
     [SetUp]
     public void SetUp()
@@ -30,17 +31,17 @@ public class TraxServerE2ETests
         _fixture = new TraxServerFixture();
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient());
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient());
         _services = services.BuildServiceProvider();
-        _executor = _services.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _services.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _fixture.Dispose();
+        _services?.Dispose();
+        _fixture?.Dispose();
     }
 
     [Test]
@@ -50,12 +51,14 @@ public class TraxServerE2ETests
         // discover.netsuiteClient.lookupCustomer (from [TraxQuery(Namespace = "netsuiteClient")]),
         // the client sends Path = "discover.netsuiteClient", RootField = "lookupCustomer".
         // The train runs, returns its output, and the response unwraps through the same path.
-        var result = await _executor.Run(
-            new LookupCustomerThroughTraxRequest
-            {
-                Input = new LookupCustomerInput { Email = "acme@example.com" },
-            }
-        );
+        var result = await _executor
+            .NotNull()
+            .Run(
+                new LookupCustomerThroughTraxRequest
+                {
+                    Input = new LookupCustomerInput { Email = "acme@example.com" },
+                }
+            );
 
         result.Should().NotBeNull();
         result.Email.Should().Be("acme@example.com");
@@ -70,17 +73,23 @@ public class TraxServerE2ETests
         // {trainName}Response object (externalId + metadataId + output). The typed client
         // declares that wrapper as its TResponse so the extractor walks
         // dispatch.netsuiteClient.updateCreditLimit and deserializes the wrapper.
-        var result = await _executor.Run(
-            new UpdateCreditLimitThroughTraxRequest
-            {
-                Input = new UpdateCreditLimitInput { CustomerId = "cust-123", NewLimit = 75_000 },
-            }
-        );
+        var result = await _executor
+            .NotNull()
+            .Run(
+                new UpdateCreditLimitThroughTraxRequest
+                {
+                    Input = new UpdateCreditLimitInput
+                    {
+                        CustomerId = "cust-123",
+                        NewLimit = 75_000,
+                    },
+                }
+            );
 
         result.Should().NotBeNull();
         result.ExternalId.Should().NotBeNullOrEmpty();
         result.Output.Should().NotBeNull();
-        result.Output!.CustomerId.Should().Be("cust-123");
+        result.Output.NotNull().CustomerId.Should().Be("cust-123");
         result.Output.NewLimit.Should().Be(75_000);
         result.Output.OldLimit.Should().Be(50_000);
     }

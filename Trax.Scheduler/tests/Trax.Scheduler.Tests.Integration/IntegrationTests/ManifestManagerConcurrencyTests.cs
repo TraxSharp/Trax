@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,7 +49,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         // Set LastSuccessfulRun far in the past so it's due
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddHours(-1);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -94,11 +95,14 @@ public class ManifestManagerConcurrencyTests : TestSetup
                     ScheduleType = ScheduleType.Interval,
                     IntervalSeconds = 300,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"ConcurrencyTest_{i}" },
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"ConcurrencyTest_{i}"),
+                    },
                 }
             );
             manifest.ManifestGroupId = group.Id;
-            manifest.LastSuccessfulRun = DateTime.UtcNow.AddHours(-1);
+            manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
             await DataContext.Track(manifest);
             await DataContext.SaveChanges(CancellationToken.None);
@@ -124,7 +128,10 @@ public class ManifestManagerConcurrencyTests : TestSetup
                 .Should()
                 .Be(
                     1,
-                    $"manifest {manifest.Id} should have exactly one WorkQueue entry despite concurrent cycles"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"manifest {manifest.Id} should have exactly one WorkQueue entry despite concurrent cycles"
+                    )
                 );
         }
     }
@@ -150,7 +157,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddHours(-1);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
 
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -158,7 +165,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
 
         // Act - Run concurrent cycles; losing cycles should complete without error
         var tasks = Enumerable.Range(0, 4).Select(_ => RunManifestManagerInScope()).ToArray();
-        var act = async () => await Task.WhenAll(tasks);
+        var act = async () => await Task.WhenAll(tasks).ConfigureAwait(false);
 
         // Assert - No exceptions thrown
         await act.Should()
@@ -173,36 +180,38 @@ public class ManifestManagerConcurrencyTests : TestSetup
     /// </summary>
     private async Task RunManifestManagerInScope()
     {
-        using var scope = Scope
-            .ServiceProvider.GetRequiredService<IServiceProvider>()
-            .CreateScope();
-        var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-        if (dataContext is DbContext dbContext)
+        var scope = Scope.ServiceProvider.GetRequiredService<IServiceProvider>().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            using var transaction = await dataContext.BeginTransaction();
+            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-            var acquired = await dbContext
-                .Database.SqlQuery<bool>(
-                    $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
-                )
-                .FirstAsync();
-
-            if (!acquired)
+            if (dataContext is DbContext dbContext)
             {
-                await dataContext.RollbackTransaction();
-                return;
+                using var transaction = await dataContext.BeginTransaction().ConfigureAwait(false);
+
+                var acquired = await dbContext
+                    .Database.SqlQuery<bool>(
+                        $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
+                    )
+                    .FirstAsync()
+                    .ConfigureAwait(false);
+
+                if (!acquired)
+                {
+                    await dataContext.RollbackTransaction().ConfigureAwait(false);
+                    return;
+                }
+
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+                await train.Run(Unit.Default).ConfigureAwait(false);
+
+                await dataContext.CommitTransaction().ConfigureAwait(false);
             }
-
-            var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-            await train.Run(Unit.Default);
-
-            await dataContext.CommitTransaction();
-        }
-        else
-        {
-            var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-            await train.Run(Unit.Default);
+            else
+            {
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+                await train.Run(Unit.Default).ConfigureAwait(false);
+            }
         }
     }
 

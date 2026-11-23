@@ -73,8 +73,8 @@ app.UseTraxGraphQL();
 if (app.Environment.IsDevelopment())
     app.MapGet(
             "/dev/token/{user}",
-            (string user, bool staff = false) =>
-                DevJwt.Mint(user, staff ? Roles.Staff : Roles.Customer)
+            (string user, TimeProvider clock, bool staff = false) =>
+                DevJwt.Mint(user, staff ? Roles.Staff : Roles.Customer, clock)
         )
         .AllowAnonymous();
 

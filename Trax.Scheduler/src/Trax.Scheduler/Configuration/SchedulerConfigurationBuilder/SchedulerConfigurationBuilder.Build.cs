@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.HostHeartbeats;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -64,6 +65,54 @@ public partial class SchedulerConfigurationBuilder
         // for a runner-only host, and a host that called it first must still get this one.
         _parentBuilder.ServiceCollection.Replace(ServiceDescriptor.Singleton(_configuration));
 
+        RegisterSchedulerServices();
+
+        RegisterRetryAndOperationsServices();
+
+        RegisterSchedulerTrains();
+
+        RegisterJobSubmitter();
+
+        RegisterRoutingAndRunExecutor();
+
+        // Registration order matters: .NET starts IHostedService instances sequentially in registration order.
+        // SchedulerStartupService must complete before the polling services begin.
+        _parentBuilder.ServiceCollection.AddHostedService<SchedulerStartupService>();
+
+        // ManifestManagerPollingService runs for both providers. With Postgres, the resolved
+        // IManifestManagerTrain uses advisory locks and creates WorkQueue entries. With InMemory,
+        // the resolved InMemoryManifestManagerTrain dispatches jobs inline — no JobDispatcher needed.
+        _parentBuilder.ServiceCollection.AddHostedService<ManifestManagerPollingService>();
+
+        // This host's heartbeat row says whether it runs the manifest manager and the dispatcher,
+        // read from the configuration at every beat so a runtime switch shows on the next one.
+        var runsDispatcher = _parentBuilder.HasDatabaseProvider;
+        _parentBuilder.ServiceCollection.AddSingleton<IHostHeartbeatRole>(
+            new SchedulerHostRole(_configuration, runsDispatcher)
+        );
+
+        RegisterDatabaseHostedServices();
+    }
+
+    private void RegisterRoutingAndRunExecutor()
+    {
+        // This host runs trains, so it refuses to start when the ones that ask a decider cannot
+        // replay a requeue's recorded decisions. Registered once however many paths ask.
+        DecisionRecordingStartupCheck.Register(_parentBuilder.ServiceCollection);
+
+        // Register routed submitters (UseRemoteWorkers, UseSqsWorkers with ForTrain routing)
+        RegisterRoutedSubmitters();
+
+        // Always register routing configuration (DispatchJobsJunction requires it via constructor injection).
+        // An empty configuration with no routes is a no-op — GetSubmitterType returns null for all trains.
+        _parentBuilder.ServiceCollection.AddSingleton(_routingConfiguration);
+
+        // Register remote run executor if configured (overrides default LocalRunExecutor)
+        _remoteRunRegistration?.Invoke(_parentBuilder.ServiceCollection);
+    }
+
+    private void RegisterSchedulerServices()
+    {
         // Liveness tracking: the JobDispatcher stamps this after each successful cycle so a
         // wedged scheduler (up but dispatching nothing) can be detected via
         // AddHealthChecks().AddTraxSchedulerLiveness(). TryAdd so a consumer-provided
@@ -85,6 +134,10 @@ public partial class SchedulerConfigurationBuilder
             ServiceDescriptor.Singleton<ICancellationRegistry, CancellationRegistry>()
         );
 
+        // The clock everything the scheduler stamps and compares is read from. AddTrax registers
+        // the system's; a host that registered its own keeps it.
+        _parentBuilder.ServiceCollection.TryAddSingleton(TimeProvider.System);
+
         // Register ITraxScheduler. Built by the container, then handed what its dead-letter
         // requeue resumes runs with, so its public constructors stay as they are.
         _parentBuilder.ServiceCollection.TryAddScoped<TraxScheduler>();
@@ -101,7 +154,10 @@ public partial class SchedulerConfigurationBuilder
             IEffectSettingsService,
             EffectSettingsService
         >();
+    }
 
+    private void RegisterRetryAndOperationsServices()
+    {
         // Chooses the run a manifest's retry replays the decisions of (docs/adr/0017).
         _parentBuilder.ServiceCollection.TryAddScoped(sp => new RetryDecisionReplay(
             sp.GetRequiredService<IDataContextProviderFactory>(),
@@ -148,7 +204,10 @@ public partial class SchedulerConfigurationBuilder
         _parentBuilder.ServiceCollection.AddScoped<IDormantDependentContext>(sp =>
             sp.GetRequiredService<DormantDependentContext>()
         );
+    }
 
+    private void RegisterSchedulerTrains()
+    {
         // Register internal scheduler trains (AddScopedTraxRoute for property injection).
         // InMemory uses a simplified train that skips PostgreSQL-specific steps
         // (CancelTimedOutJobs, ReapStalePending) and dispatches jobs inline.
@@ -183,7 +242,10 @@ public partial class SchedulerConfigurationBuilder
             Trains.DeadLetterCleanup.IDeadLetterCleanupTrain,
             Trains.DeadLetterCleanup.DeadLetterCleanupTrain
         >();
+    }
 
+    private void RegisterJobSubmitter()
+    {
         // Register the job submitter and local workers.
         // Priority: UseInMemoryWorkers/OverrideSubmitter > default (local workers on a database, or InMemory).
         if (_taskServerRegistration is not null)
@@ -209,37 +271,10 @@ public partial class SchedulerConfigurationBuilder
             _parentBuilder.ServiceCollection.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
             _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, InMemoryJobSubmitter>();
         }
+    }
 
-        // This host runs trains, so it refuses to start when the ones that ask a decider cannot
-        // replay a requeue's recorded decisions. Registered once however many paths ask.
-        DecisionRecordingStartupCheck.Register(_parentBuilder.ServiceCollection);
-
-        // Register routed submitters (UseRemoteWorkers, UseSqsWorkers with ForTrain routing)
-        RegisterRoutedSubmitters();
-
-        // Always register routing configuration (DispatchJobsJunction requires it via constructor injection).
-        // An empty configuration with no routes is a no-op — GetSubmitterType returns null for all trains.
-        _parentBuilder.ServiceCollection.AddSingleton(_routingConfiguration);
-
-        // Register remote run executor if configured (overrides default LocalRunExecutor)
-        _remoteRunRegistration?.Invoke(_parentBuilder.ServiceCollection);
-
-        // Registration order matters: .NET starts IHostedService instances sequentially in registration order.
-        // SchedulerStartupService must complete before the polling services begin.
-        _parentBuilder.ServiceCollection.AddHostedService<SchedulerStartupService>();
-
-        // ManifestManagerPollingService runs for both providers. With Postgres, the resolved
-        // IManifestManagerTrain uses advisory locks and creates WorkQueue entries. With InMemory,
-        // the resolved InMemoryManifestManagerTrain dispatches jobs inline — no JobDispatcher needed.
-        _parentBuilder.ServiceCollection.AddHostedService<ManifestManagerPollingService>();
-
-        // This host's heartbeat row says whether it runs the manifest manager and the dispatcher,
-        // read from the configuration at every beat so a runtime switch shows on the next one.
-        var runsDispatcher = _parentBuilder.HasDatabaseProvider;
-        _parentBuilder.ServiceCollection.AddSingleton<IHostHeartbeatRole>(
-            new SchedulerHostRole(_configuration, runsDispatcher)
-        );
-
+    private void RegisterDatabaseHostedServices()
+    {
         // JobDispatcher and MetadataCleanup use PostgreSQL-specific operations
         // (FOR UPDATE SKIP LOCKED, ExecuteUpdateAsync, ExecuteDeleteAsync) that are not
         // supported by the InMemory EF Core provider.
@@ -281,14 +316,14 @@ public partial class SchedulerConfigurationBuilder
         var remoteTrains = new TrainDiscoveryService(_parentBuilder.ServiceCollection)
             .DiscoverTrains()
             .Where(r => r.IsRemote)
-            .Select(r => r.ServiceType.FullName!)
+            .Select(r => r.ServiceType.FullName.NotNull())
             .ToList();
 
         if (_routedSubmitterRegistrations.Count == 0)
         {
             if (remoteTrains.Count > 0)
                 throw new InvalidOperationException(
-                    $"{string.Join(", ", remoteTrains.Order().Select(n => $"'{n}'"))} "
+                    $"{string.Join(", ", remoteTrains.Order(StringComparer.Ordinal).Select(n => $"'{n}'"))} "
                         + $"{(remoteTrains.Count == 1 ? "is" : "are")} marked [TraxRemote], but "
                         + "this scheduler has no remote submitter to send "
                         + $"{(remoteTrains.Count == 1 ? "it" : "them")} to, so "
@@ -330,7 +365,7 @@ public partial class SchedulerConfigurationBuilder
             return;
 
         // Derive group-level edges from manifest-level edges
-        var groupNodes = new HashSet<string>(_externalIdToGroupId.Values);
+        var groupNodes = new HashSet<string>(_externalIdToGroupId.Values, StringComparer.Ordinal);
         var groupEdges = _dependencyEdges
             .Select(e =>
             {
@@ -338,8 +373,12 @@ public partial class SchedulerConfigurationBuilder
                 _externalIdToGroupId.TryGetValue(e.ChildExternalId, out var toGroup);
                 return (From: fromGroup, To: toGroup);
             })
-            .Where(e => e.From is not null && e.To is not null && e.From != e.To)
-            .Select(e => (e.From!, e.To!))
+            .Where(e =>
+                e.From is not null
+                && e.To is not null
+                && !string.Equals(e.From, e.To, StringComparison.Ordinal)
+            )
+            .Select(e => (e.From.NotNull(), e.To.NotNull()))
             .Distinct()
             .ToList();
 
@@ -350,7 +389,7 @@ public partial class SchedulerConfigurationBuilder
 
         if (!result.IsAcyclic)
         {
-            var cycleGroups = string.Join(", ", result.CycleMembers.Order());
+            var cycleGroups = string.Join(", ", result.CycleMembers.Order(StringComparer.Ordinal));
             throw new InvalidOperationException(
                 $"Circular dependency detected among manifest groups: [{cycleGroups}]. "
                     + "Manifest groups must form a directed acyclic graph (DAG)."
@@ -390,7 +429,7 @@ public partial class SchedulerConfigurationBuilder
         if (_routedSubmitterRegistrations.Count <= 1)
             return;
 
-        var seen = new Dictionary<string, string>();
+        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var registration in _routedSubmitterRegistrations)
         {
             var submitterName = registration.Description ?? registration.SubmitterType.Name;

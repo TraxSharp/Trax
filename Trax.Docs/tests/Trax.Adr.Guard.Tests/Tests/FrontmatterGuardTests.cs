@@ -3,27 +3,32 @@ namespace Trax.Adr.Guard.Tests.Tests;
 [TestFixture]
 public class FrontmatterGuardTests
 {
-    private static IReadOnlyList<Adr> Load(TempAdrRepo repo, GuardOptions? options = null) =>
-        AdrCorpus.Discover(options ?? repo.Options());
+    private static async Task<IReadOnlyList<Adr>> LoadAsync(
+        TempAdrRepo repo,
+        GuardOptions? options = null
+    ) => await AdrCorpus.DiscoverAsync(options ?? repo.Options()).ConfigureAwait(false);
 
     #region authors
 
     [Test]
-    public void Authors_WellFormed_Passes()
+    public async Task Authors_WellFormed_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        FrontmatterGuards.Authors(Load(repo)).Passed.Should().BeTrue();
+        FrontmatterGuards
+            .Authors((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void Authors_Missing_Fails()
+    public async Task Authors_Missing_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(authors: null));
 
         FrontmatterGuards
-            .Authors(Load(repo))
+            .Authors((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -31,13 +36,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void Authors_Empty_Fails()
+    public async Task Authors_Empty_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(authors: "[]"));
 
         FrontmatterGuards
-            .Authors(Load(repo))
+            .Authors((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -45,13 +50,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void Authors_Scalar_Fails_BecauseTheShapeIsPartOfTheContract()
+    public async Task Authors_Scalar_Fails_BecauseTheShapeIsPartOfTheContract()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(authors: "Theauxm"));
 
         FrontmatterGuards
-            .Authors(Load(repo))
+            .Authors((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -59,13 +64,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void Authors_WithAtSign_Fails()
+    public async Task Authors_WithAtSign_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(authors: "[@Theauxm]"));
 
         FrontmatterGuards
-            .Authors(Load(repo))
+            .Authors((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -77,21 +82,24 @@ public class FrontmatterGuardTests
     #region areas
 
     [Test]
-    public void Areas_WithinTheVocabulary_Passes()
+    public async Task Areas_WithinTheVocabulary_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        FrontmatterGuards.Areas(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        FrontmatterGuards
+            .Areas((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void Areas_OutsideTheVocabulary_Fails_AndNamesTheKnownSet()
+    public async Task Areas_OutsideTheVocabulary_Fails_AndNamesTheKnownSet()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(areas: "[invented]"));
 
         var offender = FrontmatterGuards
-            .Areas(Load(repo), repo.Options())
+            .Areas((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
             .Offenders.Should()
             .ContainSingle()
             .Subject;
@@ -101,13 +109,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void Areas_Empty_Fails()
+    public async Task Areas_Empty_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(areas: "[]"));
 
         FrontmatterGuards
-            .Areas(Load(repo), repo.Options())
+            .Areas((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -119,23 +127,26 @@ public class FrontmatterGuardTests
     #region repos
 
     [Test]
-    public void Repos_DeclaredInACentralAdr_Passes()
+    public async Task Repos_DeclaredInACentralAdr_Passes()
     {
         using var repo = TempAdrRepo.Valid(central: true);
         var options = repo.Options(requireReposKey: true);
 
-        FrontmatterGuards.Repos(Load(repo, options), options).Passed.Should().BeTrue();
+        FrontmatterGuards
+            .Repos((await LoadAsync(repo, options).ConfigureAwait(false)), options)
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void Repos_MissingFromACentralAdr_Fails()
+    public async Task Repos_MissingFromACentralAdr_Fails()
     {
         using var repo = TempAdrRepo.Valid(central: true);
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(central: false));
         var options = repo.Options(requireReposKey: true);
 
         FrontmatterGuards
-            .Repos(Load(repo, options), options)
+            .Repos((await LoadAsync(repo, options).ConfigureAwait(false)), options)
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -143,13 +154,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void Repos_PresentInARepoLocalAdr_Fails_BecauseThePathAlreadySaysIt()
+    public async Task Repos_PresentInARepoLocalAdr_Fails_BecauseThePathAlreadySaysIt()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(central: true));
 
         FrontmatterGuards
-            .Repos(Load(repo), repo.Options())
+            .Repos((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -157,14 +168,14 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void Repos_OutsideTheVocabulary_Fails()
+    public async Task Repos_OutsideTheVocabulary_Fails()
     {
         using var repo = TempAdrRepo.Valid(central: true);
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(central: true, repos: "[nonsuch]"));
         var options = repo.Options(requireReposKey: true);
 
         FrontmatterGuards
-            .Repos(Load(repo, options), options)
+            .Repos((await LoadAsync(repo, options).ConfigureAwait(false)), options)
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -179,25 +190,28 @@ public class FrontmatterGuardTests
     [TestCase("accepted")]
     [TestCase("deprecated")]
     [TestCase("superseded-by-0002")]
-    public void Status_EachRecognisedShape_Passes(string status)
+    public async Task Status_EachRecognisedShape_Passes(string status)
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(status: status));
 
-        FrontmatterGuards.Status(Load(repo)).Passed.Should().BeTrue();
+        FrontmatterGuards
+            .Status((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [TestCase("Accepted")]
     [TestCase("active")]
     [TestCase("superseded-by-2")]
     [TestCase("superseded")]
-    public void Status_UnrecognisedShape_Fails(string status)
+    public async Task Status_UnrecognisedShape_Fails(string status)
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(status: status));
 
         FrontmatterGuards
-            .Status(Load(repo))
+            .Status((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -205,13 +219,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void NoDateKey_WhenDeclared_Fails_BecauseGitAlreadyRecordsIt()
+    public async Task NoDateKey_WhenDeclared_Fails_BecauseGitAlreadyRecordsIt()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(extraFrontmatter: "date: 2026-09-11"));
 
         FrontmatterGuards
-            .NoDateKey(Load(repo))
+            .NoDateKey((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -219,24 +233,27 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void FileNames_WellFormed_Passes()
+    public async Task FileNames_WellFormed_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        FrontmatterGuards.FileNames(Load(repo)).Passed.Should().BeTrue();
+        FrontmatterGuards
+            .FileNames((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [TestCase("1-too-few-digits.md")]
     [TestCase("0001_underscores.md")]
     [TestCase("0001-NotKebab.md")]
     [TestCase("no-number.md")]
-    public void FileNames_Malformed_Fails(string fileName)
+    public async Task FileNames_Malformed_Fails(string fileName)
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(fileName, Sample.Adr());
 
         FrontmatterGuards
-            .FileNames(Load(repo))
+            .FileNames((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -244,13 +261,13 @@ public class FrontmatterGuardTests
     }
 
     [Test]
-    public void FileNames_DuplicateNumberInOneDirectory_Fails()
+    public async Task FileNames_DuplicateNumberInOneDirectory_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr("0001-a-second-decision.md", Sample.Adr());
 
         FrontmatterGuards
-            .FileNames(Load(repo))
+            .FileNames((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()

@@ -1,0 +1,58 @@
+using Microsoft.CodeAnalysis.Simplification;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class UseStringCreateInsteadOfFormattableStringFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.UseStringCreateInsteadOfFormattableString);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        // In case the ArrayCreationExpressionSyntax is wrapped in an ArgumentSyntax or some other node with the same span,
+        // get the innermost node for ties.
+        if (root?.FindNode(context.Span, getInnermostNodeForTie: true) is not InvocationExpressionSyntax nodeToFix)
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null)
+            return;
+
+        var cultureInfoSymbol = semanticModel.Compilation.GetTypeByMetadataName("System.Globalization.CultureInfo");
+        if (cultureInfoSymbol is null)
+            return;
+
+        if (semanticModel.GetOperation(nodeToFix, context.CancellationToken) is not IInvocationOperation)
+            return;
+
+        var title = "Use string.Create";
+        var codeAction = CodeAction.Create(
+            title,
+            ct => Fix(context.Document, nodeToFix, cultureInfoSymbol, ct),
+            equivalenceKey: title);
+
+        context.RegisterCodeFix(codeAction, context.Diagnostics);
+
+    }
+
+    private static async Task<Document> Fix(Document document, InvocationExpressionSyntax nodeToFix, INamedTypeSymbol cultureInfo, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+
+        var op = (IInvocationOperation)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken)!;
+
+        var methodName = op.TargetMethod.Name;
+
+        var newInvocation = generator.InvocationExpression(
+            generator.TypeMemberAccessExpression(editor.SemanticModel.Compilation.GetSpecialType(SpecialType.System_String), "Create"),
+            generator.MemberAccessExpression(((TypeSyntax)generator.TypeExpression(cultureInfo)).WithAdditionalAnnotations(Simplifier.AddImportsAnnotation).AsExpressionSyntax(), methodName == "Invariant" ? "InvariantCulture" : "CurrentCulture"),
+            nodeToFix.ArgumentList.Arguments[0].Expression);
+
+        editor.ReplaceNode(nodeToFix, newInvocation);
+        return editor.GetChangedDocument();
+    }
+}

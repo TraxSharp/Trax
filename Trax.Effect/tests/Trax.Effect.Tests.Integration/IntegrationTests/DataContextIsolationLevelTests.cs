@@ -21,7 +21,8 @@ public class DataContextIsolationLevelTests : TestSetup
         string expected
     )
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         using var transaction = await context.BeginTransaction(level);
 
         (await CurrentIsolation(context)).Should().Be(expected);
@@ -30,7 +31,8 @@ public class DataContextIsolationLevelTests : TestSetup
     [Test]
     public async Task The_cancellable_overload_runs_at_the_requested_level()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         using var transaction = await context.BeginTransaction(
             IsolationLevel.Serializable,
             CancellationToken.None

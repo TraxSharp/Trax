@@ -13,4 +13,4 @@ namespace Trax.Effect.Attributes;
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/inject">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Property)]
-public class InjectAttribute : Attribute { }
+public class InjectAttribute : Attribute;

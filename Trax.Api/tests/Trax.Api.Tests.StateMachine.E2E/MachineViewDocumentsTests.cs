@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.FromIr;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -21,7 +22,7 @@ public class MachineViewDocumentsTests
 {
     private const string Database = "trax_sm_machine_view_documents";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -37,7 +38,9 @@ public class MachineViewDocumentsTests
                 Views = new MachineViewCatalog(host.Views),
                 ApplicationName = "view_docs",
                 GraphQL = graphql =>
-                    graphql.UsePersistedOperations(po => po.SingleNode().RequirePersisted(true)),
+                    graphql.UsePersistedOperations(po =>
+                        po.SingleNode().RequirePersisted(require: true)
+                    ),
                 Services = s =>
                 {
                     s.AddSingleton(host);
@@ -50,17 +53,16 @@ public class MachineViewDocumentsTests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     [Test]
     public async Task A_views_text_sent_raw_is_refused()
     {
-        using var answer = await _host.PostAsync(
-            "{ views { shopSign { vShop { open } } } }",
-            apiKey: E2EHost.BobKey
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostAsync("{ views { shopSign { vShop { open } } } }", apiKey: E2EHost.BobKey);
 
         answer.RootElement.TryGetProperty("errors", out _).Should().BeTrue();
         answer.RootElement.TryGetProperty("data", out var data).Should().BeFalse(data.ToString());
@@ -69,10 +71,9 @@ public class MachineViewDocumentsTests
     [Test]
     public async Task A_views_generated_document_runs_by_its_id()
     {
-        using var answer = await _host.PostPersistedAsync(
-            await IdAsync("shopSign"),
-            apiKey: E2EHost.BobKey
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostPersistedAsync(await IdAsync("shopSign"), apiKey: E2EHost.BobKey);
 
         answer
             .RootElement.TryGetProperty("errors", out _)
@@ -92,10 +93,9 @@ public class MachineViewDocumentsTests
     [Test]
     public async Task Its_document_still_refuses_a_caller_who_is_not_a_reader()
     {
-        using var answer = await _host.PostPersistedAsync(
-            await IdAsync("orders"),
-            apiKey: E2EHost.BobKey
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostPersistedAsync(await IdAsync("orders"), apiKey: E2EHost.BobKey);
 
         answer
             .RootElement.GetProperty("errors")[0]
@@ -109,8 +109,13 @@ public class MachineViewDocumentsTests
     private async Task<string> IdAsync(string field)
     {
         var executor = await _host
+            .NotNull()
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
-        return ViewDocuments.Generate(executor.Schema).Single(d => d.Field == field).Id;
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
+        return ViewDocuments
+            .Generate(executor.Schema)
+            .Single(d => string.Equals(d.Field, field, StringComparison.Ordinal))
+            .Id;
     }
 }

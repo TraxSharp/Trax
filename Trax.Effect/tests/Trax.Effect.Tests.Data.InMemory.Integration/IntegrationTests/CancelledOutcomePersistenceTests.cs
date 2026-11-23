@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -47,7 +48,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
             await BodyStarted(runTask);
             await cts.CancelAsync();
 
-            var awaiting = async () => await runTask;
+            var awaiting = async () => await runTask.ConfigureAwait(false);
             await awaiting.Should().ThrowAsync<OperationCanceledException>();
         }
         finally
@@ -56,7 +57,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
             await cts.CancelAsync();
         }
 
-        var row = await PersistedRow(typeof(IParkedTrain).FullName!);
+        var row = await PersistedRow(typeof(IParkedTrain).FullName.NotNull());
 
         row.TrainState.Should()
             .Be(
@@ -91,7 +92,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
             Probe.Downstream.TrySetResult();
         }
 
-        var row = await PersistedRow(typeof(IUninterruptibleTrain).FullName!);
+        var row = await PersistedRow(typeof(IUninterruptibleTrain).FullName.NotNull());
 
         row.TrainState.Should()
             .Be(
@@ -113,10 +114,10 @@ public class CancelledOutcomePersistenceTests : TestSetup
 
         // The token is already cancelled, so the parked body's registration fires at once rather
         // than waiting for anything.
-        var awaiting = async () => await train.Run(Unit.Default, cts.Token);
+        var awaiting = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await awaiting.Should().ThrowAsync<OperationCanceledException>();
 
-        var row = await PersistedRow(typeof(IPreStartCancelledTrain).FullName!);
+        var row = await PersistedRow(typeof(IPreStartCancelledTrain).FullName.NotNull());
 
         row.TrainState.Should()
             .Be(
@@ -140,11 +141,12 @@ public class CancelledOutcomePersistenceTests : TestSetup
     private static async Task BodyStarted(Task runTask)
     {
         var first = await Task.WhenAny(Probe.Started.Task, runTask)
-            .WaitAsync(TimeSpan.FromSeconds(15));
+            .WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System)
+            .ConfigureAwait(false);
 
         if (first == runTask)
             // Surfaces the run's own exception, if it has one.
-            await runTask;
+            await runTask.ConfigureAwait(false);
 
         first
             .Should()
@@ -157,9 +159,13 @@ public class CancelledOutcomePersistenceTests : TestSetup
     private async Task<Models.Metadata.Metadata> PersistedRow(string trainName)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Name == trainName);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Name == trainName)
+            .ConfigureAwait(false);
     }
 
     private static class Probe
@@ -179,19 +185,20 @@ public class CancelledOutcomePersistenceTests : TestSetup
     }
 
     /// <summary>Parks until the caller's token releases it, as a cancellable downstream call would.</summary>
-    private class ParkedTrain : ServiceTrain<Unit, Unit>, IParkedTrain
+    private sealed class ParkedTrain : ServiceTrain<Unit, Unit>, IParkedTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            await using var registration = CancellationToken.Register(() =>
-                parked.TrySetCanceled()
+            var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled(CancellationToken.None)
             );
+            await using var registrationDisposal = registration.ConfigureAwait(false);
 
             Probe.Started.TrySetResult();
-            await parked.Task;
+            await parked.Task.ConfigureAwait(false);
 
             return Resolve();
         }
@@ -202,38 +209,39 @@ public class CancelledOutcomePersistenceTests : TestSetup
     /// pre-start case gets a metadata row of its own. <c>PersistedRow</c> reads one row per train
     /// name, so sharing a train between two cases makes both read ambiguous.
     /// </summary>
-    private class PreStartCancelledTrain : ServiceTrain<Unit, Unit>, IPreStartCancelledTrain
+    private sealed class PreStartCancelledTrain : ServiceTrain<Unit, Unit>, IPreStartCancelledTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            await using var registration = CancellationToken.Register(() =>
-                parked.TrySetCanceled()
+            var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled(CancellationToken.None)
             );
+            await using var registrationDisposal = registration.ConfigureAwait(false);
 
-            await parked.Task;
+            await parked.Task.ConfigureAwait(false);
 
             return Resolve();
         }
     }
 
     /// <summary>Takes no token, as a downstream SDK without cancellation support would.</summary>
-    private class UninterruptibleTrain : ServiceTrain<Unit, Unit>, IUninterruptibleTrain
+    private sealed class UninterruptibleTrain : ServiceTrain<Unit, Unit>, IUninterruptibleTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             Probe.Started.TrySetResult();
-            await Probe.Downstream.Task;
+            await Probe.Downstream.Task.ConfigureAwait(false);
 
             return Resolve();
         }
     }
 
-    private interface IParkedTrain : IServiceTrain<Unit, Unit> { }
+    private interface IParkedTrain : IServiceTrain<Unit, Unit>;
 
-    private interface IPreStartCancelledTrain : IServiceTrain<Unit, Unit> { }
+    private interface IPreStartCancelledTrain : IServiceTrain<Unit, Unit>;
 
-    private interface IUninterruptibleTrain : IServiceTrain<Unit, Unit> { }
+    private interface IUninterruptibleTrain : IServiceTrain<Unit, Unit>;
 }

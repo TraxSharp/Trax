@@ -74,7 +74,7 @@ public partial class TraxGraphQLBuilder
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The predicate returns <c>true</c> to allow, <c>false</c> to deny, and once set it decides in
+    /// The predicate returns <see langword="true"/> to allow, <see langword="false"/> to deny, and once set it decides in
     /// every environment, Development included. It is called with the request's
     /// <see cref="HttpContext"/> for every operation on every transport (HTTP POST, GET,
     /// multipart and WebSocket), so it can read the authenticated user. On a socket that is the

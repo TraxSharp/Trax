@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Utils;
@@ -12,7 +13,11 @@ public class ValueTupleConverterTests
     [SetUp]
     public void SetUp()
     {
-        _options = new JsonSerializerOptions();
+        _options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         _options.Converters.Add(new ValueTupleConverter());
     }
 
@@ -168,6 +173,8 @@ public class ValueTupleConverterTests
     {
         var options = new JsonSerializerOptions
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve,
         };
         options.Converters.Add(new ValueTupleConverter());
@@ -185,15 +192,17 @@ public class ValueTupleConverterTests
     {
         var options = new JsonSerializerOptions
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve,
         };
         options.Converters.Add(new ValueTupleConverter());
         var box = new Box { Name = "shared" };
 
         var json = JsonSerializer.Serialize(new Holder { Box = box, Pair = (box, 1) }, options);
-        var holder = JsonSerializer.Deserialize<Holder>(json, options)!;
+        var holder = JsonSerializer.Deserialize<Holder>(json, options).NotNull();
 
-        holder.Box!.Name.Should().Be("shared");
+        holder.Box.NotNull().Name.Should().Be("shared");
         holder.Pair.Item1.Name.Should().Be("shared");
     }
 

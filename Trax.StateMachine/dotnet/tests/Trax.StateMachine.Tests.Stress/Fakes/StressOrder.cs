@@ -1,23 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.StateMachine.Tests.Stress.Fakes;
-
-public enum OrderState
-{
-    Draft,
-    Review,
-    Placed,
-}
-
-public enum OrderTrigger
-{
-    Next,
-    Place,
-    Reset,
-}
 
 /// <summary>
 /// An effectful order machine (<c>Draft → Review → Placed</c>), the same shape the correctness suite uses:
@@ -31,15 +18,15 @@ public static class StressOrder
     private static bool ItemsIsArray(JsonObject ctx) => ctx["items"] is JsonArray;
 
     private static bool ReceiptEmpty(JsonObject ctx) =>
-        ctx["receipt"] is null || ctx["receipt"]!.GetValueKind() == JsonValueKind.Null;
+        ctx["receipt"] is null || ctx["receipt"].NotNull().GetValueKind() == JsonValueKind.Null;
 
     private static bool ReceiptPresent(JsonObject ctx) =>
         ctx["receipt"]?.GetValueKind() == JsonValueKind.String
-        && ctx["receipt"]!.GetValue<string>().Length > 0;
+        && ctx["receipt"].NotNull().GetValue<string>().Length > 0;
 
     private static string? OrderId(JsonNode? input) =>
         input is JsonObject o && o["orderId"]?.GetValueKind() == JsonValueKind.String
-            ? o["orderId"]!.GetValue<string>()
+            ? o["orderId"].NotNull().GetValue<string>()
             : null;
 
     public static readonly MachineDefinition<OrderState, OrderTrigger> Definition = new()

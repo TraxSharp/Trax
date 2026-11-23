@@ -40,13 +40,14 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Every_migrated_table_is_mapped_by_the_data_context()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
         migrated
             .Keys.Where(table => !mapped.ContainsKey(table) && !Unmodelled.ContainsKey(table))
-            .Order()
+            .Order(StringComparer.Ordinal)
             .Should()
             .BeEmpty(
                 "a table in the core migration set ships with its model, persistent mapping and "
@@ -58,7 +59,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Every_mapped_column_exists_in_its_migrated_table()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -71,7 +73,7 @@ public class SqliteEveryTableIsModelledTests : TestSetup
                     )
                     .Select(column => $"{table.Key}.{column}")
             )
-            .Order()
+            .Order(StringComparer.Ordinal)
             .Should()
             .BeEmpty(
                 "every column a model maps must be created by the shipped migrations, or the "
@@ -82,7 +84,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Runner_nonce_is_mapped_column_for_column()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -103,7 +106,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Decision_is_mapped_column_for_column()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -124,7 +128,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Junction_run_is_mapped_column_for_column()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -145,7 +150,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task Checkpoint_is_mapped_column_for_column()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -166,7 +172,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [Test]
     public async Task HostHeartbeat_is_mapped_column_for_column()
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -188,7 +195,8 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     [TestCase("effect_claim")]
     public async Task State_machine_tables_are_mapped_column_for_column(string table)
     {
-        using var context = NewContext();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var migrated = await MigratedColumns(context);
         var mapped = MappedColumns(context);
 
@@ -210,8 +218,9 @@ public class SqliteEveryTableIsModelledTests : TestSetup
         DbContext context
     )
     {
-        await context.Database.OpenConnectionAsync();
-        await using var command = context.Database.GetDbConnection().CreateCommand();
+        await context.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var command = context.Database.GetDbConnection().CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             SELECT m.name, c.name
             FROM sqlite_master m, pragma_table_info(m.name) c
@@ -219,8 +228,9 @@ public class SqliteEveryTableIsModelledTests : TestSetup
             """;
 
         var tables = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var table = reader.GetString(0);
             if (!tables.TryGetValue(table, out var columns))

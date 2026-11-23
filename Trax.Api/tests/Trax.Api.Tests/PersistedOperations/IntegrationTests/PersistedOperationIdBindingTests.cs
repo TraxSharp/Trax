@@ -16,6 +16,7 @@ using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
@@ -41,9 +42,9 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class PersistedOperationIdBindingTests
 {
-    private IHost _host = null!;
-    private HttpClient _client = null!;
-    private IPersistedOperationStore _store = null!;
+    private IHost? _host;
+    private HttpClient? _client;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -102,7 +103,8 @@ public class PersistedOperationIdBindingTests
                         app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
                     })
             )
-            .StartAsync();
+            .StartAsync()
+            .ConfigureAwait(false);
 
         return (
             host,
@@ -117,8 +119,8 @@ public class PersistedOperationIdBindingTests
         _client?.Dispose();
         if (_host is not null)
         {
-            await _host.StopAsync();
-            _host.Dispose();
+            await _host.NotNull().StopAsync();
+            _host?.Dispose();
         }
     }
 
@@ -147,13 +149,17 @@ public class PersistedOperationIdBindingTests
     [Test]
     public async Task ADeactivatedId_StaysRefusedAfterARequestCarryingADocument()
     {
-        await _store.UpsertAsync(
-            "RetiredGreeting",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
-        await _store.DeactivateAsync("RetiredGreeting", null, "retired", CancellationToken.None);
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "RetiredGreeting",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
+        await _store
+            .NotNull()
+            .DeactivateAsync("RetiredGreeting", tenantKey: null, "retired", CancellationToken.None);
 
         await PostAsync(new { id = "RetiredGreeting", query = "query Retired { version }" });
         var reply = await PostAsync(new { id = "RetiredGreeting" });
@@ -222,12 +228,14 @@ public class PersistedOperationIdBindingTests
     [Test]
     public async Task AnIdTheStoreHolds_SentWithAnotherDocument_IsRefusedRatherThanRunEither()
     {
-        await _store.UpsertAsync(
-            "HeldGreeting",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "HeldGreeting",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var reply = await PostAsync(new { id = "HeldGreeting", query = "query Other { version }" });
 
@@ -248,19 +256,21 @@ public class PersistedOperationIdBindingTests
         var ownHash = new MD5DocumentHashProvider(HashFormat.Hex)
             .ComputeHash(System.Text.Encoding.UTF8.GetBytes(document))
             .Value;
-        var executor = await GraphQLFixture.GetExecutorAsync(_host.Services);
+        var executor = await GraphQLFixture.GetExecutorAsync(_host.NotNull().Services);
 
         async Task<string> RunAsync(string id) =>
             (
                 (HotChocolate.Execution.OperationResult)
-                    await executor.ExecuteAsync(
-                        OperationRequestBuilder
-                            .New()
-                            .SetDocumentId(new OperationDocumentId(id))
-                            .SetDocument(document)
-                            .AllowNonPersistedOperation()
-                            .Build()
-                    )
+                    await executor
+                        .ExecuteAsync(
+                            OperationRequestBuilder
+                                .New()
+                                .SetDocumentId(new OperationDocumentId(id))
+                                .SetDocument(document)
+                                .AllowNonPersistedOperation()
+                                .Build()
+                        )
+                        .ConfigureAwait(false)
             ).ToJson();
 
         (await RunAsync(ownHash)).Should().Contain("\"hello\"");
@@ -286,12 +296,12 @@ public class PersistedOperationIdBindingTests
         again.GetProperty("data").GetProperty("version").GetString().Should().Be("v1");
     }
 
-    private Task<JsonElement> PostAsync(object body) => PostAsync(_client, body);
+    private Task<JsonElement> PostAsync(object body) => PostAsync(_client.NotNull(), body);
 
     private static async Task<JsonElement> PostAsync(HttpClient client, object body)
     {
-        var response = await client.PostAsJsonAsync("/trax/graphql", body);
-        var text = await response.Content.ReadAsStringAsync();
+        var response = await client.PostAsJsonAsync("/trax/graphql", body).ConfigureAwait(false);
+        var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         return JsonDocument.Parse(text).RootElement.Clone();
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
@@ -5,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Services.Runs;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -29,7 +31,7 @@ namespace Trax.Api.Tests;
 [TestFixture]
 [NonParallelizable]
 [Property("adr", Adr)]
-public class ResumeExecutionOperationsTests
+public partial class ResumeExecutionOperationsTests
 {
     private const string Adr =
         "Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md";
@@ -39,13 +41,17 @@ public class ResumeExecutionOperationsTests
     private const string Summarize = "SummarizeSources#0";
     private const string Fetch = "FetchSources#0";
 
-    private ResumeHost _host = null!;
+    private ResumeHost? _host;
 
     [OneTimeSetUp]
     public async Task StartHost() => _host = await ResumeHost.StartAsync(Database);
 
     [OneTimeTearDown]
-    public async Task StopHost() => await _host.DisposeAsync();
+    public async Task StopHost()
+    {
+        if (_host is not null)
+            await _host.DisposeAsync();
+    }
 
     [SetUp]
     public void ResetProbe() => ResumeProbe.Reset();
@@ -58,8 +64,8 @@ public class ResumeExecutionOperationsTests
             var viaGraphQl = await FailedRunAsync();
             var viaDashboard = await FailedRunAsync();
 
-            var graphQl = Result(await _host.ResumeOverGraphQLAsync(viaGraphQl, from));
-            var dashboard = await _host.ResumeAsTheDashboardAsync(viaDashboard, from);
+            var graphQl = Result(await _host.NotNull().ResumeOverGraphQLAsync(viaGraphQl, from));
+            var dashboard = await _host.NotNull().ResumeAsTheDashboardAsync(viaDashboard, from);
 
             graphQl.Success.Should().BeTrue(graphQl.Message);
             dashboard.Success.Should().BeTrue(dashboard.Message);
@@ -68,16 +74,16 @@ public class ResumeExecutionOperationsTests
                 .Should()
                 .Be(Normalized(dashboard.Message, dashboard.Id, viaDashboard));
 
-            var byGraphQl = (await _host.QueuedResumesOf(viaGraphQl))
+            var byGraphQl = (await _host.NotNull().QueuedResumesOf(viaGraphQl))
                 .Should()
                 .ContainSingle()
                 .Subject;
-            var byDashboard = (await _host.QueuedResumesOf(viaDashboard))
+            var byDashboard = (await _host.NotNull().QueuedResumesOf(viaDashboard))
                 .Should()
                 .ContainSingle()
                 .Subject;
-            byGraphQl.Id.Should().Be(graphQl.Id!.Value);
-            byDashboard.Id.Should().Be(dashboard.Id!.Value);
+            byGraphQl.Id.Should().Be(graphQl.Id.NotNull().Value);
+            byDashboard.Id.Should().Be(dashboard.Id.NotNull().Value);
             byGraphQl.ResumeAt.Should().Be(from, $"it resumes where it was asked ({Adr})");
             new
             {
@@ -114,7 +120,7 @@ public class ResumeExecutionOperationsTests
 
         // After the latest checkpoint, of a run that failed before writing any.
         var early = await FailedRunAsync(failIn: nameof(FetchSources));
-        (await BothRefuse(early, null)).Should().Contain("wrote no checkpoint");
+        (await BothRefuse(early, from: null)).Should().Contain("wrote no checkpoint");
 
         // A step whose input only a skipped step produces.
         (await BothRefuse(checkpointed, "PublishSummary#0"))
@@ -125,7 +131,7 @@ public class ResumeExecutionOperationsTests
     [Test]
     public async Task A_running_pending_or_completed_run_is_refused()
     {
-        var completed = await _host.RunAsync<IResumableTrain>(failIn: null);
+        var completed = await _host.NotNull().RunAsync<IResumableTrain>(failIn: null);
         var pending = await SeedRunAsync(TrainState.Pending);
         var running = await SeedRunAsync(TrainState.InProgress);
 
@@ -137,10 +143,13 @@ public class ResumeExecutionOperationsTests
                 (running, TrainState.InProgress),
             }
         )
-            (await BothRefuse(run, null))
+            (await BothRefuse(run, from: null))
                 .Should()
                 .Be(
-                    $"Execution {run} is {state}; only a failed or cancelled run can be resumed.",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Execution {run} is {state}; only a failed or cancelled run can be resumed."
+                    ),
                     $"only a run that ended without finishing has work left to resume ({Adr})"
                 );
     }
@@ -150,15 +159,20 @@ public class ResumeExecutionOperationsTests
     {
         var run = await FailedRunAsync();
 
-        var first = Result(await _host.ResumeOverGraphQLAsync(run, null));
+        var first = Result(await _host.NotNull().ResumeOverGraphQLAsync(run, from: null));
         first.Success.Should().BeTrue(first.Message);
 
         var reason = await BothRefuse(run, Summarize);
         reason
             .Should()
-            .Contain($"A resume of execution {run} is already queued")
-            .And.Contain($"WorkQueue {first.Id}");
-        (await _host.QueuedResumesOf(run))
+            .Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A resume of execution {run} is already queued"
+                )
+            )
+            .And.Contain(string.Create(CultureInfo.InvariantCulture, $"WorkQueue {first.Id}"));
+        (await _host.NotNull().QueuedResumesOf(run))
             .Should()
             .ContainSingle($"one queued resume per run ({Adr})");
     }
@@ -167,27 +181,40 @@ public class ResumeExecutionOperationsTests
     public async Task A_run_whose_resume_already_completed_is_refused_on_both_surfaces()
     {
         var run = await FailedRunAsync();
-        var queued = Result(await _host.ResumeOverGraphQLAsync(run, null));
+        var queued = Result(await _host.NotNull().ResumeOverGraphQLAsync(run, from: null));
         queued.Success.Should().BeTrue(queued.Message);
-        await _host.With(d =>
-            d.WorkQueues.Where(q => q.Id == queued.Id!.Value)
-                .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Dispatched))
-        );
-        var resumed = await _host.RunResumeAsync<IResumableTrain>(queued.Id!.Value);
+        var queuedId = queued.Id.NotNull().Value;
+        await _host
+            .NotNull()
+            .With(d =>
+                d.WorkQueues.Where(q => q.Id == queuedId)
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(q => q.Status, WorkQueueStatus.Dispatched)
+                    )
+            );
+        var resumed = await _host.NotNull().RunResumeAsync<IResumableTrain>(queuedId);
         (
-            await _host.With(d =>
-                d.Metadatas.AsNoTracking()
-                    .Where(m => m.Id == resumed)
-                    .Select(m => m.TrainState)
-                    .SingleAsync()
-            )
+            await _host
+                .NotNull()
+                .With(d =>
+                    d.Metadatas.AsNoTracking()
+                        .Where(m => m.Id == resumed)
+                        .Select(m => m.TrainState)
+                        .SingleAsync()
+                )
         )
             .Should()
             .Be(TrainState.Completed);
 
-        (await BothRefuse(run, null))
+        (await BothRefuse(run, from: null))
             .Should()
-            .Contain($"a resume of run {run} already completed", $"its work is done ({Adr})");
+            .Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"a resume of run {run} already completed"
+                ),
+                $"its work is done ({Adr})"
+            );
 
         var graph = await DashboardGraphAsync(run);
         graph
@@ -200,12 +227,16 @@ public class ResumeExecutionOperationsTests
     public async Task A_resume_of_an_invoked_run_is_refused_with_its_reason()
     {
         var run = await FailedRunAsync();
-        await _host.With(d =>
-            d.Metadatas.Where(m => m.Id == run)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.InvokingMachine, "Research.Machine"))
-        );
+        await _host
+            .NotNull()
+            .With(d =>
+                d.Metadatas.Where(m => m.Id == run)
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(m => m.InvokingMachine, "Research.Machine")
+                    )
+            );
 
-        (await BothRefuse(run, null))
+        (await BothRefuse(run, from: null))
             .Should()
             .Contain("state machine 'Research.Machine'")
             .And.Contain(
@@ -220,12 +251,14 @@ public class ResumeExecutionOperationsTests
     public async Task A_placeholder_or_masked_input_is_refused(string saved, string reason)
     {
         var run = await FailedRunAsync();
-        await _host.With(d =>
-            d.Metadatas.Where(m => m.Id == run)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.Input, saved))
-        );
+        await _host
+            .NotNull()
+            .With(d =>
+                d.Metadatas.Where(m => m.Id == run)
+                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.Input, saved))
+            );
 
-        (await BothRefuse(run, null))
+        (await BothRefuse(run, from: null))
             .Should()
             .Contain(reason, "a resume runs with the saved input, checked as a requeue checks it");
     }
@@ -235,11 +268,9 @@ public class ResumeExecutionOperationsTests
     {
         var refused = await FailedRunAsync<IGuardedResumableTrain>();
 
-        var operatorOnly = await _host.ResumeOverGraphQLAsync(
-            refused,
-            null,
-            ResumeHost.OperatorKey
-        );
+        var operatorOnly = await _host
+            .NotNull()
+            .ResumeOverGraphQLAsync(refused, from: null, ResumeHost.OperatorKey);
 
         ErrorCodes(operatorOnly)
             .Should()
@@ -252,23 +283,22 @@ public class ResumeExecutionOperationsTests
             .RootElement.GetRawText()
             .Should()
             .NotContain("Resumer", "which requirement was missing is the server's to know");
-        (await _host.QueuedResumesOf(refused)).Should().BeEmpty("nothing was queued");
+        (await _host.NotNull().QueuedResumesOf(refused)).Should().BeEmpty("nothing was queued");
 
         // Nor does a caller who is not past the gate get as far as the train.
-        ErrorCodes(await _host.ResumeOverGraphQLAsync(refused, null, apiKey: null))
+        ErrorCodes(await _host.NotNull().ResumeOverGraphQLAsync(refused, from: null, apiKey: null))
             .Should()
             .Contain("TRAX_AUTHORIZATION");
 
         // A caller in the train's role may, and the dashboard, gated as a whole by its host, may.
         var resumer = Result(
-            await _host.ResumeOverGraphQLAsync(refused, null, ResumeHost.ResumerKey)
+            await _host.NotNull().ResumeOverGraphQLAsync(refused, from: null, ResumeHost.ResumerKey)
         );
         resumer.Success.Should().BeTrue(resumer.Message);
 
-        var dashboard = await _host.ResumeAsTheDashboardAsync(
-            await FailedRunAsync<IGuardedResumableTrain>(),
-            null
-        );
+        var dashboard = await _host
+            .NotNull()
+            .ResumeAsTheDashboardAsync(await FailedRunAsync<IGuardedResumableTrain>(), from: null);
         dashboard
             .Success.Should()
             .BeTrue(
@@ -282,42 +312,10 @@ public class ResumeExecutionOperationsTests
     {
         var run = await FailedRunAsync();
 
-        // The row holds the state, so a surface that showed it would show the secret.
-        var rows = await _host.With(d =>
-            d.Checkpoints.AsNoTracking().Where(c => c.MetadataId == run).ToListAsync()
-        );
-        rows.Should().ContainSingle().Which.State.Should().Contain(ResumeProbe.StateSecret);
-        rows[0]
-            .Tracks.Should()
-            .NotContain(nameof(ResumeVault), "a sensitive route's track is never stored");
+        await AssertTheCheckpointRowHoldsTheSecret(run);
 
-        var graphQlGraph = await _host.GraphQLAsync(
-            $$"""
-            {
-              operations {
-                runGraph(metadataId: {{run}}) {
-                  metadataId train hasGraph hash moreSteps canResume
-                  nodes { ...node tracks { name taken nodes { ...node tracks { name taken nodes { ...node } } } } }
-                  unmatchedSteps { position name nameWithheld answer answerWithheld }
-                }
-              }
-            }
-            fragment node on RunGraphNode {
-              id kind junction in out opaque state replayed trackTaken canResume checkpointed
-              steps { position kind name state answer answerWithheld nameWithheld failureException }
-            }
-            """
-        );
-        var graphQlRun = await _host.GraphQLAsync(
-            $$"""
-            {
-              operations {
-                executionDetail(id: {{run}}) { id name input output failureJunction failureException failureReason stackTrace }
-                junctionRuns(metadataId: {{run}}) { position name answer answerWithheld nameWithheld }
-              }
-            }
-            """
-        );
+        var graphQlGraph = await RunGraphOverGraphQLAsync(run);
+        var graphQlRun = await ExecutionAndJunctionRunsOverGraphQLAsync(run);
         graphQlGraph
             .RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -326,26 +324,13 @@ public class ResumeExecutionOperationsTests
 
         // The dashboard's reads: the run graph's, and the resume check behind it.
         var dashboardGraph = await DashboardGraphAsync(run);
-        var declared = _host
-            .Services.GetRequiredService<ITrainChainGraphs>()
-            .FindDeclared(typeof(IResumableTrain).FullName!)!;
-        var checks = await _host
-            .Services.GetRequiredService<IRunResumes>()
-            .CheckMany(
-                declared.Train,
-                declared.Chain,
-                declared.Input,
-                declared.Output,
-                run,
-                [Summarize, Fetch],
-                CancellationToken.None
-            );
+        var checks = await CheckResumesAsync(run);
 
         // And a resume's answer on each surface.
-        var resumedOverGraphQl = await _host.ResumeOverGraphQLAsync(run, Summarize);
-        var refusedOnDashboard = await _host.ResumeAsTheDashboardAsync(run, null);
+        var resumedOverGraphQl = await _host.NotNull().ResumeOverGraphQLAsync(run, Summarize);
+        var refusedOnDashboard = await _host.NotNull().ResumeAsTheDashboardAsync(run, from: null);
 
-        var surfaces = new Dictionary<string, string>
+        var surfaces = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["runGraph"] = Raw(graphQlGraph),
             ["execution and junctionRuns"] = Raw(graphQlRun),
@@ -361,31 +346,7 @@ public class ResumeExecutionOperationsTests
                     $"{surface} says a checkpoint exists, never what it holds ({Adr})"
                 );
 
-        // The vault's route: which track was taken is told by neither run graph.
-        var vault = Flatten(
-                graphQlGraph
-                    .RootElement.GetProperty("data")
-                    .GetProperty("operations")
-                    .GetProperty("runGraph")
-                    .GetProperty("nodes")
-            )
-            .Single(n => n.GetProperty("kind").GetString() == "SWITCH");
-        vault.GetProperty("trackTaken").ValueKind.Should().Be(JsonValueKind.Null);
-        vault
-            .GetProperty("tracks")
-            .EnumerateArray()
-            .Should()
-            .OnlyContain(t => !t.GetProperty("taken").GetBoolean());
-        var dashboardVault = dashboardGraph.Nodes.Single(n =>
-            n.Kind == Core.Monad.ChainStepKind.Switch
-        );
-        dashboardVault.TrackTaken.Should().BeNull();
-        dashboardVault.Tracks.Should().OnlyContain(t => !t.Taken);
-        dashboardVault
-            .Tracks.Select(t => t.Nodes.Single().State)
-            .Distinct()
-            .Should()
-            .ContainSingle("both tracks stand alike, so neither gives the answer away");
+        AssertNoRunGraphTellsTheVaultsTrack(graphQlGraph, dashboardGraph);
 
         // What each surface does say: that the checkpoint exists, and at which node.
         dashboardGraph
@@ -403,16 +364,137 @@ public class ResumeExecutionOperationsTests
             .BeTrue(Raw(resumedOverGraphQl));
     }
 
+    private async Task AssertTheCheckpointRowHoldsTheSecret(long run)
+    {
+        // The row holds the state, so a surface that showed it would show the secret.
+        var rows = await _host
+            .NotNull()
+            .With(d => d.Checkpoints.AsNoTracking().Where(c => c.MetadataId == run).ToListAsync())
+            .ConfigureAwait(false);
+        rows.Should().ContainSingle().Which.State.Should().Contain(ResumeProbe.StateSecret);
+        rows[0]
+            .Tracks.Should()
+            .NotContain(nameof(ResumeVault), "a sensitive route's track is never stored");
+    }
+
+    private async Task<JsonDocument> RunGraphOverGraphQLAsync(long run)
+    {
+        return await _host
+            .NotNull()
+            .GraphQLAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    {
+                      operations {
+                        runGraph(metadataId: {{run}}) {
+                          metadataId train hasGraph hash moreSteps canResume
+                          nodes { ...node tracks { name taken nodes { ...node tracks { name taken nodes { ...node } } } } }
+                          unmatchedSteps { position name nameWithheld answer answerWithheld }
+                        }
+                      }
+                    }
+                    fragment node on RunGraphNode {
+                      id kind junction in out opaque state replayed trackTaken canResume checkpointed
+                      steps { position kind name state answer answerWithheld nameWithheld failureException }
+                    }
+                    """
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<JsonDocument> ExecutionAndJunctionRunsOverGraphQLAsync(long run)
+    {
+        return await _host
+            .NotNull()
+            .GraphQLAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    {
+                      operations {
+                        executionDetail(id: {{run}}) { id name input output failureJunction failureException failureReason stackTrace }
+                        junctionRuns(metadataId: {{run}}) { position name answer answerWithheld nameWithheld }
+                      }
+                    }
+                    """
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<ResumeChecks> CheckResumesAsync(long run)
+    {
+        var declared = _host
+            .NotNull()
+            .Services.GetRequiredService<ITrainChainGraphs>()
+            .FindDeclared(typeof(IResumableTrain).FullName.NotNull())
+            .NotNull();
+        return await _host
+            .NotNull()
+            .Services.GetRequiredService<IRunResumes>()
+            .CheckMany(
+                declared.Train,
+                declared.Chain,
+                declared.Input,
+                declared.Output,
+                run,
+                [Summarize, Fetch],
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static void AssertNoRunGraphTellsTheVaultsTrack(
+        JsonDocument graphQlGraph,
+        Api.DTOs.RunGraph dashboardGraph
+    )
+    {
+        // The vault's route: which track was taken is told by neither run graph.
+        var vault = Flatten(
+                graphQlGraph
+                    .RootElement.GetProperty("data")
+                    .GetProperty("operations")
+                    .GetProperty("runGraph")
+                    .GetProperty("nodes")
+            )
+            .Single(n =>
+                string.Equals(n.GetProperty("kind").GetString(), "SWITCH", StringComparison.Ordinal)
+            );
+        vault.GetProperty("trackTaken").ValueKind.Should().Be(JsonValueKind.Null);
+        vault
+            .GetProperty("tracks")
+            .EnumerateArray()
+            .Should()
+            .OnlyContain(t => !t.GetProperty("taken").GetBoolean());
+        var dashboardVault = dashboardGraph.Nodes.Single(n =>
+            n.Kind == Core.Monad.ChainStepKind.Switch
+        );
+        dashboardVault.TrackTaken.Should().BeNull();
+        dashboardVault.Tracks.Should().OnlyContain(t => !t.Taken);
+        dashboardVault
+            .Tracks.Select(t => t.Nodes.Single().State)
+            .Distinct()
+            .Should()
+            .ContainSingle("both tracks stand alike, so neither gives the answer away");
+    }
+
     /// <summary>
     /// Asks both surfaces to resume <paramref name="run"/> at <paramref name="from"/>, checks
     /// both refuse it with the same reason and queue nothing, and returns the reason.
     /// </summary>
     private async Task<string> BothRefuse(long run, string? from)
     {
-        var queuedBefore = (await _host.QueuedResumesOf(run)).Count;
+        var queuedBefore = (await _host.NotNull().QueuedResumesOf(run).ConfigureAwait(false)).Count;
 
-        var graphQl = Result(await _host.ResumeOverGraphQLAsync(run, from));
-        var dashboard = await _host.ResumeAsTheDashboardAsync(run, from);
+        var graphQl = Result(
+            await _host.NotNull().ResumeOverGraphQLAsync(run, from).ConfigureAwait(false)
+        );
+        var dashboard = await _host
+            .NotNull()
+            .ResumeAsTheDashboardAsync(run, from)
+            .ConfigureAwait(false);
 
         graphQl.Success.Should().BeFalse("GraphQL refuses it");
         dashboard.Success.Should().BeFalse("the dashboard refuses it");
@@ -421,8 +503,10 @@ public class ResumeExecutionOperationsTests
             .Message.Should()
             .NotBeNullOrWhiteSpace()
             .And.Be(dashboard.Message, "one reason on both surfaces (central ADR 0022)");
-        (await _host.QueuedResumesOf(run)).Should().HaveCount(queuedBefore, "nothing was queued");
-        return graphQl.Message!;
+        (await _host.NotNull().QueuedResumesOf(run).ConfigureAwait(false))
+            .Should()
+            .HaveCount(queuedBefore, "nothing was queued");
+        return graphQl.Message.NotNull();
     }
 
     private Task<long> FailedRunAsync(string failIn = nameof(SummarizeSources)) =>
@@ -431,13 +515,16 @@ public class ResumeExecutionOperationsTests
     private async Task<long> FailedRunAsync<TTrain>(string failIn = nameof(SummarizeSources))
         where TTrain : Effect.Services.ServiceTrain.IServiceTrain<ResumableInput, string>
     {
-        var run = await _host.RunAsync<TTrain>(failIn);
-        var state = await _host.With(d =>
-            d.Metadatas.AsNoTracking()
-                .Where(m => m.Id == run)
-                .Select(m => m.TrainState)
-                .SingleAsync()
-        );
+        var run = await _host.NotNull().RunAsync<TTrain>(failIn).ConfigureAwait(false);
+        var state = await _host
+            .NotNull()
+            .With(d =>
+                d.Metadatas.AsNoTracking()
+                    .Where(m => m.Id == run)
+                    .Select(m => m.TrainState)
+                    .SingleAsync()
+            )
+            .ConfigureAwait(false);
         state.Should().Be(TrainState.Failed);
         return run;
     }
@@ -447,36 +534,49 @@ public class ResumeExecutionOperationsTests
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IResumableTrain).FullName!,
+                Name = typeof(IResumableTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         run.Input = """{"Topic":"graphs"}""";
         run.TrainState = state;
 
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        await db.Track(run);
-        await db.SaveChanges(CancellationToken.None);
-        return run.Id;
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            return run.Id;
+        }
     }
 
     private async Task<Api.DTOs.RunGraph> DashboardGraphAsync(long run)
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return (
-            await RunGraphs.ReadAsync(
-                db,
-                _host.Services.GetRequiredService<ITrainChainGraphs>(),
-                _host.Services.GetRequiredService<IRunResumes>(),
-                run,
-                CancellationToken.None
-            )
-        )!;
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return (
+                await RunGraphs
+                    .ReadAsync(
+                        db,
+                        _host.NotNull().Services.GetRequiredService<ITrainChainGraphs>(),
+                        _host.NotNull().Services.GetRequiredService<IRunResumes>(),
+                        run,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false)
+            ).NotNull();
+        }
     }
 
     private static OperationResult Result(JsonDocument response)
@@ -502,11 +602,18 @@ public class ResumeExecutionOperationsTests
     private static string? Normalized(string? message, long? entry, long run) =>
         message is null
             ? null
-            : Regex.Replace(
+            : NormalizedRunIds.Replace(
                 message
-                    .Replace(entry?.ToString() ?? "\0", "{entry}", StringComparison.Ordinal)
-                    .Replace(run.ToString(), "{run}", StringComparison.Ordinal),
-                @"\s+",
+                    .Replace(
+                        entry?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "\0",
+                        "{entry}",
+                        StringComparison.Ordinal
+                    )
+                    .Replace(
+                        run.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        "{run}",
+                        StringComparison.Ordinal
+                    ),
                 " "
             );
 
@@ -538,4 +645,7 @@ public class ResumeExecutionOperationsTests
             );
 
     private static string Raw(JsonDocument document) => document.RootElement.GetRawText();
+
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NormalizedRunIds { get; }
 }

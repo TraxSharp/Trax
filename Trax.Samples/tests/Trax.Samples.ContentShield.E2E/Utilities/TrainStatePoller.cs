@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -18,9 +19,9 @@ public static class TrainStatePoller
         long? afterMetadataId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + (timeout ?? DefaultTimeout);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             dataContext.Reset();
 
@@ -33,18 +34,22 @@ public static class TrainStatePoller
 
             var metadata = await query
                 .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.TrainState == expectedState);
+                .FirstOrDefaultAsync(m => m.TrainState == expectedState)
+                .ConfigureAwait(false);
 
             if (metadata != null)
                 return metadata;
 
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(PollInterval);
+            await Task.Delay(PollInterval, TimeProvider.System).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
             $"No metadata containing '{trainNameContains}' reached state {expectedState} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                )
         );
     }
 
@@ -56,9 +61,9 @@ public static class TrainStatePoller
         long? afterMetadataId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + (timeout ?? DefaultTimeout);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             dataContext.Reset();
 
@@ -69,18 +74,25 @@ public static class TrainStatePoller
 
             var metadata = await query
                 .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.TrainState == expectedState);
+                .FirstOrDefaultAsync(m => m.TrainState == expectedState)
+                .ConfigureAwait(false);
 
             if (metadata != null)
                 return metadata;
 
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(PollInterval);
+            await Task.Delay(PollInterval, TimeProvider.System).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
-            $"No metadata for manifest {manifestId} reached state {expectedState} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"No metadata for manifest {manifestId} reached state {expectedState} "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                )
         );
     }
 }

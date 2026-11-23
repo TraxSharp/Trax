@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Adr.Guard.Guards;
 
 /// <summary>
@@ -5,23 +7,28 @@ namespace Trax.Adr.Guard.Guards;
 /// tooling reads; the <c>## Status</c> section is what a human reads first, and it is the
 /// only place a supersession has room to be explained.
 /// </summary>
-public static class LifecycleGuards
+public static partial class LifecycleGuards
 {
     public const string StatusHeading = "Status";
     public const string ChangelogHeading = "Changelog";
 
-    private static readonly Regex MarkdownLink = new(
+    [GeneratedRegex(
         @"\[[^\]]*\]\(\.\/(?<file>\d{4}-[a-z0-9-]+\.md)\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex MarkdownLink { get; }
 
-    private static readonly Regex ChangelogEntry = new(
+    [GeneratedRegex(
         @"^[-*+]\s+\*\*(?<date>\d{4}-\d{2}-\d{2})\*\*:\s*\S",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ChangelogEntry { get; }
 
     /// <summary>Any list marker, so a '*' bullet is checked rather than silently skipped.</summary>
-    private static readonly Regex ListItem = new(@"^[-*+]\s", RegexOptions.Compiled);
+    [GeneratedRegex(@"^[-*+]\s", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ListItem { get; }
 
     public static GuardResult StatusSection(IReadOnlyList<Adr> adrs)
     {
@@ -114,36 +121,7 @@ public static class LifecycleGuards
                 continue;
             }
 
-            var forwardLinks = MarkdownLink
-                .Matches(section)
-                .Select(m => m.Groups["file"].Value)
-                .ToList();
-
-            if (!forwardLinks.Contains(target.FileName, StringComparer.Ordinal))
-            {
-                offenders.Add(
-                    $"{adr.RelativePath}: '## {StatusHeading}' must link forward to "
-                        + $"[{targetNumber}](./{target.FileName})"
-                );
-            }
-
-            var targetSection = target.Section(StatusHeading) ?? string.Empty;
-            var backLinks = MarkdownLink
-                .Matches(targetSection)
-                .Select(m => m.Groups["file"].Value)
-                .ToList();
-
-            if (
-                !targetSection.Contains("Supersedes", StringComparison.Ordinal)
-                || !backLinks.Contains(adr.FileName, StringComparer.Ordinal)
-            )
-            {
-                offenders.Add(
-                    $"{target.RelativePath}: supersedes {adr.FileName} but does not say so. Its "
-                        + $"'## {StatusHeading}' section must write 'Supersedes "
-                        + $"[{adr.Number}](./{adr.FileName})' and say what was wrong with it"
-                );
-            }
+            CheckSupersessionLinks(adr, target, targetNumber, section, offenders);
         }
 
         return new GuardResult(
@@ -159,6 +137,50 @@ public static class LifecycleGuards
         );
     }
 
+    /// <summary>
+    /// The superseded ADR links forward to its target, and the target says 'Supersedes' and
+    /// links back.
+    /// </summary>
+    private static void CheckSupersessionLinks(
+        Adr adr,
+        Adr target,
+        string targetNumber,
+        string section,
+        List<string> offenders
+    )
+    {
+        var forwardLinks = MarkdownLink
+            .Matches(section)
+            .Select(m => m.Groups["file"].Value)
+            .ToList();
+
+        if (!forwardLinks.Contains(target.FileName, StringComparer.Ordinal))
+        {
+            offenders.Add(
+                $"{adr.RelativePath}: '## {StatusHeading}' must link forward to "
+                    + $"[{targetNumber}](./{target.FileName})"
+            );
+        }
+
+        var targetSection = target.Section(StatusHeading) ?? string.Empty;
+        var backLinks = MarkdownLink
+            .Matches(targetSection)
+            .Select(m => m.Groups["file"].Value)
+            .ToList();
+
+        if (
+            !targetSection.Contains("Supersedes", StringComparison.Ordinal)
+            || !backLinks.Contains(adr.FileName, StringComparer.Ordinal)
+        )
+        {
+            offenders.Add(
+                $"{target.RelativePath}: supersedes {adr.FileName} but does not say so. Its "
+                    + $"'## {StatusHeading}' section must write 'Supersedes "
+                    + $"[{adr.Number}](./{adr.FileName})' and say what was wrong with it"
+            );
+        }
+    }
+
     public static GuardResult Changelog(IReadOnlyList<Adr> adrs)
     {
         var offenders = new List<string>();
@@ -172,53 +194,7 @@ public static class LifecycleGuards
                 continue;
             }
 
-            var dates = new List<string>();
-            var malformed = new List<string>();
-
-            foreach (var line in section.Split('\n'))
-            {
-                var trimmed = line.Trim();
-                if (trimmed.Length == 0)
-                    continue;
-
-                var match = ChangelogEntry.Match(trimmed);
-                if (match.Success)
-                    dates.Add(match.Groups["date"].Value);
-                else if (ListItem.IsMatch(trimmed))
-                    malformed.Add(trimmed);
-            }
-
-            if (malformed.Count > 0)
-            {
-                offenders.Add(
-                    $"{adr.RelativePath}: malformed changelog entr(ies): {string.Join(" | ", malformed)}"
-                );
-                continue;
-            }
-
-            if (dates.Count == 0)
-            {
-                offenders.Add($"{adr.RelativePath}: '## {ChangelogHeading}' has no entries");
-                continue;
-            }
-
-            var impossible = dates
-                .Where(d => !DateOnly.TryParseExact(d, "yyyy-MM-dd", out _))
-                .ToList();
-            if (impossible.Count > 0)
-            {
-                offenders.Add(
-                    $"{adr.RelativePath}: changelog date(s) are not real dates: "
-                        + string.Join(", ", impossible)
-                );
-                continue;
-            }
-
-            var sorted = dates.OrderByDescending(d => d, StringComparer.Ordinal).ToList();
-            if (!dates.SequenceEqual(sorted, StringComparer.Ordinal))
-                offenders.Add(
-                    $"{adr.RelativePath}: changelog is not newest first: {string.Join(", ", dates)}"
-                );
+            CheckChangelogEntries(adr, section, offenders);
         }
 
         return new GuardResult(
@@ -231,6 +207,66 @@ public static class LifecycleGuards
                 + "cannot tell an amendment from a typo fix; this is the curated half, so record "
                 + "substantive changes only."
         );
+    }
+
+    /// <summary>One ADR's changelog entries are well formed, real dates and newest first.</summary>
+    private static void CheckChangelogEntries(Adr adr, string section, List<string> offenders)
+    {
+        var dates = new List<string>();
+        var malformed = new List<string>();
+
+        foreach (var line in section.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+                continue;
+
+            var match = ChangelogEntry.Match(trimmed);
+            if (match.Success)
+                dates.Add(match.Groups["date"].Value);
+            else if (ListItem.IsMatch(trimmed))
+                malformed.Add(trimmed);
+        }
+
+        if (malformed.Count > 0)
+        {
+            offenders.Add(
+                $"{adr.RelativePath}: malformed changelog entr(ies): {string.Join(" | ", malformed)}"
+            );
+            return;
+        }
+
+        if (dates.Count == 0)
+        {
+            offenders.Add($"{adr.RelativePath}: '## {ChangelogHeading}' has no entries");
+            return;
+        }
+
+        var impossible = dates
+            .Where(d =>
+                !DateOnly.TryParseExact(
+                    d,
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out _
+                )
+            )
+            .ToList();
+        if (impossible.Count > 0)
+        {
+            offenders.Add(
+                $"{adr.RelativePath}: changelog date(s) are not real dates: "
+                    + string.Join(", ", impossible)
+            );
+            return;
+        }
+
+        var sorted = dates.OrderDescending(StringComparer.Ordinal).ToList();
+        if (!dates.SequenceEqual(sorted, StringComparer.Ordinal))
+            offenders.Add(
+                $"{adr.RelativePath}: changelog is not newest first: {string.Join(", ", dates)}"
+            );
     }
 
     private static string FirstLine(string text)

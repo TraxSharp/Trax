@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -25,7 +26,7 @@ public class CancellationContractTests : TestSetup
 {
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         CancelProbe.Reset();
     }
 
@@ -37,14 +38,17 @@ public class CancellationContractTests : TestSetup
         await cts.CancelAsync();
 
         var run = async () =>
-            await execution.RunAsync(typeof(ICooperativeTrain).FullName!, "{}", cts.Token);
+            await execution
+                .RunAsync(typeof(ICooperativeTrain).FullName.NotNull(), "{}", cts.Token)
+                .ConfigureAwait(false);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
 
         CancelProbe.Started.Task.IsCompleted.Should().BeFalse();
 
-        using var context = NewContext();
-        var rows = await context.Metadatas.AsNoTracking().ToListAsync();
+        var context = NewContext();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var rows = await context.Metadatas.AsNoTracking().ToListAsync(CancellationToken.None);
         rows.Should().BeEmpty("nothing ran, so there is no execution to account for");
     }
 
@@ -54,14 +58,21 @@ public class CancellationContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         using var cts = new CancellationTokenSource();
 
-        var runTask = execution.RunAsync(typeof(ICooperativeTrain).FullName!, "{}", cts.Token);
+        var runTask = execution.RunAsync(
+            typeof(ICooperativeTrain).FullName.NotNull(),
+            "{}",
+            cts.Token
+        );
         try
         {
             await AwaitSignalAsync(CancelProbe.Started.Task, runTask, "the train started");
 
             await cts.CancelAsync();
 
-            var awaiting = async () => await runTask.WaitAsync(SignalTimeout);
+            var awaiting = async () =>
+                await runTask
+                    .WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None)
+                    .ConfigureAwait(false);
             await awaiting.Should().ThrowAsync<OperationCanceledException>();
 
             CancelProbe
@@ -84,7 +95,11 @@ public class CancellationContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         using var cts = new CancellationTokenSource();
 
-        var runTask = execution.RunAsync(typeof(IIndifferentTrain).FullName!, "{}", cts.Token);
+        var runTask = execution.RunAsync(
+            typeof(IIndifferentTrain).FullName.NotNull(),
+            "{}",
+            cts.Token
+        );
         try
         {
             await AwaitSignalAsync(CancelProbe.Started.Task, runTask, "the train started");
@@ -105,7 +120,7 @@ public class CancellationContractTests : TestSetup
             // up.
             try
             {
-                await runTask.WaitAsync(SignalTimeout);
+                await runTask.WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None);
             }
             catch (OperationCanceledException) { }
 
@@ -145,43 +160,51 @@ public class CancellationContractTests : TestSetup
     }
 
     /// <summary>A train that hands the caller's token to its downstream call.</summary>
-    internal class CooperativeTrain : ServiceTrain<CooperativeInput, Unit>, ICooperativeTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class CooperativeTrain : ServiceTrain<CooperativeInput, Unit>, ICooperativeTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             var parked = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            await using var registration = CancellationToken.Register(() =>
-                parked.TrySetCanceled()
+            var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled(CancellationToken.None)
             );
+            await using (registration.ConfigureAwait(false))
+            {
+                CancelProbe.Started.TrySetResult();
+                await parked.Task.ConfigureAwait(false);
 
-            CancelProbe.Started.TrySetResult();
-            await parked.Task;
-
-            CancelProbe.RanToCompletion = true;
-            return Resolve();
+                CancelProbe.RanToCompletion = true;
+                return Resolve();
+            }
         }
     }
 
     /// <summary>A train whose downstream call takes no token, as an un-cancellable SDK would.</summary>
-    internal class IndifferentTrain : ServiceTrain<IndifferentInput, Unit>, IIndifferentTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class IndifferentTrain : ServiceTrain<IndifferentInput, Unit>, IIndifferentTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             CancelProbe.Started.TrySetResult();
-            await CancelProbe.Downstream.Task;
+            await CancelProbe.Downstream.Task.ConfigureAwait(false);
 
             CancelProbe.RanToCompletion = true;
             return Resolve();
         }
     }
 
-    internal record CooperativeInput;
+    internal sealed record CooperativeInput;
 
-    internal record IndifferentInput;
+    internal sealed record IndifferentInput;
 
-    internal interface ICooperativeTrain : IServiceTrain<CooperativeInput, Unit> { }
+    internal interface ICooperativeTrain : IServiceTrain<CooperativeInput, Unit>;
 
-    internal interface IIndifferentTrain : IServiceTrain<IndifferentInput, Unit> { }
+    internal interface IIndifferentTrain : IServiceTrain<IndifferentInput, Unit>;
 }

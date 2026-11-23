@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata;
@@ -37,17 +38,19 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "test-host",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-abc-123",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = "HostTrackingTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -75,21 +78,23 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "test-host",
             HostEnvironment = "ecs",
             HostInstanceId = "task-456",
-            Labels = new Dictionary<string, string>
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["region"] = "us-east-1",
                 ["service"] = "content-shield",
             },
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = "HostLabelsTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -99,7 +104,9 @@ public class HostTrackingIntegrationTests : TestSetup
         var reloaded = await context.Metadatas.AsNoTracking().FirstAsync(m => m.Id == metadata.Id);
 
         reloaded.HostLabels.Should().NotBeNull();
-        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(reloaded.HostLabels!);
+        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(
+            reloaded.HostLabels.NotNull()
+        );
         labels.Should().ContainKey("region").WhoseValue.Should().Be("us-east-1");
         labels.Should().ContainKey("service").WhoseValue.Should().Be("content-shield");
     }
@@ -112,17 +119,19 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "test-host",
             HostEnvironment = "server",
             HostInstanceId = "test-1",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = "NullLabelsTest",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(metadata);
@@ -142,10 +151,11 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-alpha",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-1",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata1 = Metadata.Create(
             new CreateMetadata
@@ -153,7 +163,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "QueryTest1",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata1);
         await context.SaveChanges(CancellationToken.None);
@@ -164,7 +175,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-beta",
             HostEnvironment = "ecs",
             HostInstanceId = "task-2",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var metadata2 = Metadata.Create(
@@ -173,7 +184,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "QueryTest2",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata2);
         await context.SaveChanges(CancellationToken.None);
@@ -196,10 +208,11 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-1",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-a",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata1 = Metadata.Create(
             new CreateMetadata
@@ -207,7 +220,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "EnvQueryTest1",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata1);
         await context.SaveChanges(CancellationToken.None);
@@ -218,7 +232,7 @@ public class HostTrackingIntegrationTests : TestSetup
             HostName = "host-2",
             HostEnvironment = "ecs",
             HostInstanceId = "task-b",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var metadata2 = Metadata.Create(
@@ -227,7 +241,8 @@ public class HostTrackingIntegrationTests : TestSetup
                 Name = "EnvQueryTest2",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata2);
         await context.SaveChanges(CancellationToken.None);

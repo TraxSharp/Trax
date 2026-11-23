@@ -29,5 +29,5 @@ public sealed class LoanToBookEdge
         [Parent(requires: nameof(Loan.BookId))] Loan loan,
         CrossSchemaLoader<CatalogDbContext, Book> books,
         CancellationToken cancellationToken
-    ) => await books.LoadAsync(loan.BookId, cancellationToken);
+    ) => await books.LoadAsync(loan.BookId, cancellationToken).ConfigureAwait(false);
 }

@@ -148,9 +148,45 @@ files (`Trax.Samples/docker-compose.yml` has Postgres and RabbitMQ) take `TRAX_P
 side of the mapping. Several projects may share one Docker daemon: start only what you need, and do
 not stop or recreate containers you did not start.
 
-Do not suppress warnings with `#pragma` or `<NoWarn>` unless there is no alternative. Prefer the
-root cause: `= null!;` for uninitialised properties, `AssertLoaded()` instead of `!`, nullable
-return types.
+Do not suppress warnings with `#pragma` or `<NoWarn>`; the analyzer profile below refuses both.
+Fix the cause: give the member a real value, make it `required`, or make the type nullable.
+
+### The analyzer profile
+
+Every .NET folder, sample, template and the book's Shopfront builds under the Trax.Analyzers
+profile (`Trax.Docs/adr/0061`): each folder's `Directory.Build.props` imports
+`Trax.Analyzers/Trax.Analyzers.InRepo.props`, which builds the rules from source and applies the
+profile in `Trax.Analyzers/rules.txt`. Every rule listed there as `error` fails the build, in `src`
+and tests alike. Those are the rules Meziantou.Analyzer (which `Trax.Analyzers` copies, renamed
+`MA0004` to `TRX0004`) reports by default, plus the ones `rules.txt` marks `added by Trax`, such as
+TRX0045 (no blocking I/O, even where the caller must become async).
+
+On top of the rules come the bans in `Trax.Analyzers/src/Trax.Analyzers.Package/bans/`: reading
+the clock (`DateTime.Now`/`UtcNow`/`Today`, `Stopwatch`, `Environment.TickCount`), chance
+(`Random.Shared`, an unseeded `new Random()`), `System.Console`, `Environment.Exit`/`FailFast`, and
+the null-forgiving operator (`x!`, and `null!`/`default!` as TRX0191).
+
+- **The clock** comes from an injected `TimeProvider`. `TimeProvider.System` is written only where
+  a composition root or DI registration names the real clock; tests pass a fixed or fake one.
+- **Null-forgiving**: give the member a real value or make it `required`, test for null, or call
+  `NotNull()` (from `Trax.Core.Extensions`) where the assumption must fail loudly. Never call
+  `NotNull()` inside an EF query lambda; write the null test there. A test that passes null on
+  purpose writes `Null.Of<T>()`.
+- **Turning a rule off** happens in two places only. A rule off for the whole repository is a line
+  in the root `.globalconfig`, with `# Exempt:` (keeping it would break a published promise) or
+  `# Deferred:` (owed work) and the reason above it. A folder turns off a ban group
+  (`TraxBanConsole=false` and the like) in its own `Directory.Build.props`, with the reason in a
+  comment; only Trax.Cli does, for the console. `AnalyzerProfileTests` in Trax.Core.Tests.Meta
+  refuses everything else: `#pragma warning disable`, `[SuppressMessage]`, `NoWarn` or
+  `WarningsNotAsErrors` naming a rule, `RunAnalyzers=false`, and nearer `.editorconfig`,
+  `.globalconfig` or ban files.
+- **One type per file** (TRX0048). When you split a file, add the new file to the `source:` list of
+  any SDK reference page that named the old one.
+
+The automatic fixes help with the bulk (`dotnet format analyzers <sln> --diagnostics TRX0004
+--severity error`), but read the result: `ExplicitCapture` on a regex read by group index, a
+comparer added to a dictionary that is hashed or serialized, or a culture change in text that
+feeds a digest changes behaviour.
 
 ### Lockfiles
 
@@ -158,6 +194,11 @@ Every project commits a `packages.lock.json`, and CI restores with `--locked-mod
 lockfile you did not mean to change is a mistake; regenerate deliberately after a real dependency
 change with `dotnet restore <Folder>/<Folder>.slnx --use-lock-file --force-evaluate`
 (`Trax.StateMachine/dotnet/Trax.StateMachine.slnx` for the machines), for every folder whose graph moved (a root `Directory.Packages.props` change can move all of them).
+
+A version you bump by hand is at least 7 days old, the same cooldown Dependabot keeps
+(`.github/dependabot.yml`), so a hijacked release is usually caught and pulled before it lands.
+Security fixes are the exception. The same goes for a new upstream tag of the analyzers
+(`Trax.Analyzers/AGENTS.md`).
 
 ### A new runtime version forces itself on you
 

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using static Trax.Core.Tests.Integration.Examples.Failures.Checkout;
 
 namespace Trax.Core.Tests.Integration.Examples.Failures;
 

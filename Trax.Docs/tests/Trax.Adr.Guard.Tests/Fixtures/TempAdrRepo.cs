@@ -24,7 +24,13 @@ public sealed class TempAdrRepo : IDisposable
     public TempAdrRepo Write(string relativePath, string content)
     {
         var full = Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        Directory.CreateDirectory(
+            Path.GetDirectoryName(full)
+                ?? throw new ArgumentException(
+                    $"'{relativePath}' names no file.",
+                    nameof(relativePath)
+                )
+        );
         File.WriteAllText(full, content);
         return this;
     }

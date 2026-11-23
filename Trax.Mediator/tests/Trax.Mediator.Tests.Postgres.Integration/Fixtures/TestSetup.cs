@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -22,7 +23,7 @@ public abstract class TestSetup
 {
     private ServiceProvider ServiceProvider { get; set; }
 
-    public IServiceScope Scope { get; private set; }
+    public AsyncServiceScope Scope { get; private set; }
 
     public ITrainBus TrainBus { get; private set; }
 
@@ -34,7 +35,7 @@ public abstract class TestSetup
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
@@ -71,11 +72,12 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
         TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var cleanupContext = (IDataContext)factory.Create();
+        var cleanupContext = (IDataContext)factory.Create();
+        await using var cleanupContextDisposal = cleanupContext.ConfigureAwait(false);
         await CleanupDatabase(cleanupContext);
     }
 
@@ -86,20 +88,21 @@ public abstract class TestSetup
     private static async Task CleanupDatabase(IDataContext dataContext)
     {
         // Delete in FK-safe order (children before parents)
-        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await dataContext.Logs.ExecuteDeleteAsync();
-        await dataContext.WorkQueues.ExecuteDeleteAsync();
-        await dataContext.DeadLetters.ExecuteDeleteAsync();
-        await dataContext.Metadatas.ExecuteDeleteAsync();
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Clear self-referencing FK before deleting manifests
         await dataContext
             .Manifests.Where(m => m.DependsOnManifestId != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
-        await dataContext.Manifests.ExecuteDeleteAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null))
+            .ConfigureAwait(false);
+        await dataContext.Manifests.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Delete manifest groups after manifests (FK dependency)
-        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+        await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
 
         dataContext.Reset();
     }
@@ -118,11 +121,13 @@ public abstract class TestSetup
     /// </summary>
     protected static async Task AwaitSignalAsync(Task signal, Task run, string what)
     {
-        var first = await Task.WhenAny(signal, run).WaitAsync(SignalTimeout);
+        var first = await Task.WhenAny(signal, run)
+            .WaitAsync(SignalTimeout, TimeProvider.System)
+            .ConfigureAwait(false);
         if (first == signal)
             return;
 
-        await run;
+        await run.ConfigureAwait(false);
         Assert.Fail($"The run finished before {what}.");
     }
 
@@ -134,7 +139,7 @@ public abstract class TestSetup
     {
         try
         {
-            await run.WaitAsync(SignalTimeout);
+            await run.WaitAsync(SignalTimeout, TimeProvider.System).ConfigureAwait(false);
         }
         catch
         {
@@ -145,6 +150,6 @@ public abstract class TestSetup
     [TearDown]
     public async Task TestTearDown()
     {
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 }

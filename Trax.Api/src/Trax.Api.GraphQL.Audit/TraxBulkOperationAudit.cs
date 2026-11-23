@@ -40,7 +40,7 @@ internal sealed class TraxBulkOperationAudit(
                 ),
                 Success: finished,
                 ErrorText: finished ? null : $"{outcome.Status}: {outcome.Message}",
-                Metadata: new Dictionary<string, string>
+                Metadata: new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["bulkOperation"] = outcome.Id.ToString(),
                     ["kind"] = outcome.Kind.ToString(),

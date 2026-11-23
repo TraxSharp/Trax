@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -75,21 +76,21 @@ public class ParityOperationsOverHttpTests
                 "Fetch",
                 "Order",
                 "Order",
-                false,
+                Opaque: false,
                 []
             ),
             new ChainGraphNode(
                 "Switch<Lane>#0",
                 ChainStepKind.Switch,
-                null,
+                Junction: null,
                 "Order",
                 "Taken<Lane>",
-                false,
+                Opaque: false,
                 [
                     new ChainGraphTrack(
                         "Fast",
                         "Ship today",
-                        false,
+                        IsFallback: false,
                         [
                             new ChainGraphNode(
                                 "Switch<Lane>#0/Fast/Ship#0",
@@ -97,12 +98,12 @@ public class ParityOperationsOverHttpTests
                                 "Ship",
                                 "Order",
                                 "Order",
-                                false,
+                                Opaque: false,
                                 []
                             ),
                         ]
                     ),
-                    new ChainGraphTrack("Otherwise", null, true, []),
+                    new ChainGraphTrack("Otherwise", Description: null, IsFallback: true, []),
                 ]
             ),
             new ChainGraphNode(
@@ -111,23 +112,52 @@ public class ParityOperationsOverHttpTests
                 "IPay",
                 "Order",
                 "Receipt",
-                true,
+                Opaque: true,
                 []
             ),
         ],
         []
     );
 
-    private IHost _host = null!;
-    private IOperationsService _operations = null!;
-    private IEffectSettingsService _effects = null!;
-    private ILogLevelService _logLevels = null!;
+    private IHost? _host;
+    private IOperationsService? _operations;
+    private IEffectSettingsService? _effects;
+    private ILogLevelService? _logLevels;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
         _operations = Substitute.For<IOperationsService>();
+        StubBatchOperations();
+        StubRecordedDecisions();
+
+        _effects = Substitute.For<IEffectSettingsService>();
+        StubEffects();
+
+        _logLevels = Substitute.For<ILogLevelService>();
+        StubLogLevels();
+
+        _host = new HostBuilder()
+            .ConfigureWebHost(web =>
+                web.UseTestServer()
+                    .ConfigureServices(ConfigureParityServices)
+                    .Configure(app =>
+                    {
+                        app.UseRouting();
+                        app.UseAuthentication();
+                        app.UseAuthorization();
+                        app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
+                    })
+            )
+            .Build();
+
+        await _host.NotNull().StartAsync();
+    }
+
+    private void StubBatchOperations()
+    {
         _operations
+            .NotNull()
             .TriggerManifestsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<bool>(),
@@ -135,7 +165,7 @@ public class ParityOperationsOverHttpTests
             )
             .Returns(
                 new BatchTriggerResult(
-                    true,
+                    Success: true,
                     1,
                     1,
                     0,
@@ -146,18 +176,25 @@ public class ParityOperationsOverHttpTests
                 )
             );
         _operations
+            .NotNull()
             .TriggerManifestGroupsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new BatchTriggerResult(true, 1, 4, 0, 0, 0, "4 queued", []));
+            .Returns(new BatchTriggerResult(Success: true, 1, 4, 0, 0, 0, "4 queued", []));
         _operations
+            .NotNull()
             .CancelManifestGroupsAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(true, Count: 5, Message: "5 flagged"));
+            .Returns(new OperationResult(Success: true, Count: 5, Message: "5 flagged"));
+    }
+
+    private void StubRecordedDecisions()
+    {
         _operations
+            .NotNull()
             .GetRecordedDecisionsAsync(
                 Arg.Any<long>(),
                 Arg.Any<long?>(),
@@ -175,35 +212,38 @@ public class ParityOperationsOverHttpTests
                             "choice",
                             "{}",
                             """{"value": "Express", "replay_refused": "state changed"}""",
-                            null,
-                            false,
+                            Refused: null,
+                            IsRefused: false,
                             "f",
-                            null,
-                            null,
-                            false,
-                            null,
-                            null,
-                            null,
-                            DateTime.UtcNow,
-                            false,
-                            false
+                            Model: null,
+                            Decider: null,
+                            Replayed: false,
+                            Shadows: null,
+                            Routes: null,
+                            StateHash: null,
+                            TimeProvider.System.GetUtcNow().UtcDateTime,
+                            AnswerWithheld: false,
+                            TrackWithheld: false
                         ),
                     ],
                     10,
                     11
                 )
             );
+    }
 
-        _effects = Substitute.For<IEffectSettingsService>();
+    private void StubEffects()
+    {
         _effects
+            .NotNull()
             .GetEffects()
             .Returns([
                 new EffectSettings(
                     "Sink",
                     "Sink",
-                    true,
-                    true,
-                    true,
+                    Enabled: true,
+                    Toggleable: true,
+                    IsConfigurable: true,
                     "SinkSettings",
                     "{}",
                     [
@@ -211,10 +251,10 @@ public class ParityOperationsOverHttpTests
                             "ApiKey",
                             "String",
                             EffectFieldKind.Text,
-                            false,
-                            null,
-                            true,
-                            true,
+                            Nullable: false,
+                            EnumValues: null,
+                            Sensitive: true,
+                            HasValue: true,
                             // A service that slipped would still not leak it.
                             "sk-live-123",
                             "text"
@@ -223,78 +263,78 @@ public class ParityOperationsOverHttpTests
                 ),
             ]);
         _effects
+            .NotNull()
             .ConfigureEffect(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>>())
             .Returns(
                 new EffectConfigurationResult(
-                    false,
+                    Success: false,
                     0,
                     "not saved",
-                    new Dictionary<string, string> { ["BatchSize"] = "too big" }
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["BatchSize"] = "too big",
+                    }
                 )
             );
+    }
 
-        _logLevels = Substitute.For<ILogLevelService>();
+    private void StubLogLevels()
+    {
         _logLevels
+            .NotNull()
             .GetLogLevels()
-            .Returns([new CategoryLogLevel("Default", LogLevel.Information, "Information", false)]);
+            .Returns([
+                new CategoryLogLevel(
+                    "Default",
+                    LogLevel.Information,
+                    "Information",
+                    Overridden: false
+                ),
+            ]);
         _logLevels
+            .NotNull()
             .SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>())
-            .Returns(new LogLevelUpdateResult(true, 1, [], "1 set"));
+            .Returns(new LogLevelUpdateResult(Success: true, 1, [], "1 set"));
+    }
 
-        _host = new HostBuilder()
-            .ConfigureWebHost(web =>
-                web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(AdminKey, id: "admin", "Admin")
-                                .Add(ReaderKey, id: "reader", "Reader")
-                        );
-                        services.AddSingleton<TraxMarker>();
-                        var discovery = Substitute.For<ITrainDiscoveryService>();
-                        discovery.DiscoverTrains().Returns([]);
-                        services.AddSingleton(discovery);
-                        services.AddSingleton(Substitute.For<IEffectRegistry>());
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Admin")
-                        );
+    private void ConfigureParityServices(IServiceCollection services)
+    {
+        services.AddLogging();
+        services.AddRouting();
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(AdminKey, id: "admin", "Admin").Add(ReaderKey, id: "reader", "Reader")
+        );
+        services.AddSingleton<TraxMarker>();
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: "Admin")
+        );
 
-                        var graphs = Substitute.For<ITrainChainGraphs>();
-                        graphs.Find(RoutedTrain).Returns(RoutedGraph);
-                        services.AddSingleton(graphs);
+        var graphs = Substitute.For<ITrainChainGraphs>();
+        graphs.Find(RoutedTrain).Returns(RoutedGraph);
+        services.AddSingleton(graphs);
 
-                        services.AddScoped(_ => _operations);
-                        services.AddScoped(_ => _effects);
-                        services.AddSingleton(_logLevels);
-                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                        services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
-                        services.AddScoped(_ =>
-                            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(e => e.MapGraphQL("/trax/graphql", "trax"));
-                    })
-            )
-            .Build();
-
-        await _host.StartAsync();
+        services.AddScoped(_ => _operations.NotNull());
+        services.AddScoped(_ => _effects.NotNull());
+        services.AddSingleton(_logLevels.NotNull());
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+        services.AddScoped(_ =>
+            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
+        );
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     private static IEnumerable<TestCaseData> Documents()
@@ -343,12 +383,13 @@ public class ParityOperationsOverHttpTests
         payload.GetProperty("skipped").GetInt32().Should().Be(1);
         payload.GetProperty("notes")[0].GetProperty("id").GetInt64().Should().Be(2);
         await _operations
+            .NotNull()
             .Received()
             .TriggerManifestsAsync(
                 Arg.Is<IReadOnlyCollection<long>>(ids =>
                     ids != null && ids.SequenceEqual(new long[] { 1, 2 })
                 ),
-                true,
+                askAfresh: true,
                 Arg.Any<CancellationToken>()
             );
     }
@@ -361,6 +402,7 @@ public class ParityOperationsOverHttpTests
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
         payload.GetProperty("errors")[0].GetProperty("field").GetString().Should().Be("BatchSize");
         _effects
+            .NotNull()
             .Received()
             .ConfigureEffect(
                 "Sink",
@@ -401,6 +443,7 @@ public class ParityOperationsOverHttpTests
         await PostAsync(SetLogLevels, AdminKey);
 
         _logLevels
+            .NotNull()
             .Received()
             .SetLogLevels(
                 Arg.Is<IReadOnlyList<LogLevelChange>>(l =>
@@ -429,14 +472,14 @@ public class ParityOperationsOverHttpTests
 
     private async Task<JsonDocument> PostAsync(string query, string? apiKey)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),
         };
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

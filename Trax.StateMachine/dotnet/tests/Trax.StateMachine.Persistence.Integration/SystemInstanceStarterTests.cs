@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
@@ -18,29 +19,35 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// </summary>
 public class SystemInstanceStarterTests
 {
-    private string _dir = null!;
-    private string _file = null!;
+    private string? _dir;
+    private string? _file;
 
     [SetUp]
     public void SetUp()
     {
         _dir = Path.Combine(Path.GetTempPath(), $"trax-system-start-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(_dir.NotNull());
         _file = Path.Combine(Path.GetTempPath(), $"sm_system_start_{Guid.NewGuid():N}.db");
         var (irs, host) = PolicyRunnerTests.Definitions();
         foreach (var (id, ir) in irs)
-            File.WriteAllText(Path.Combine(_dir, id + IrDirectory.IrSuffix), ir.ToJsonString());
-        File.WriteAllText(Path.Combine(_dir, IrDirectory.HostFileName), host.ToJsonString());
+            File.WriteAllText(
+                Path.Combine(_dir.NotNull(), id + IrDirectory.IrSuffix),
+                ir.ToJsonString()
+            );
+        File.WriteAllText(
+            Path.Combine(_dir.NotNull(), IrDirectory.HostFileName),
+            host.ToJsonString()
+        );
     }
 
     [TearDown]
     public void TearDown()
     {
         SqliteConnection.ClearAllPools();
-        Directory.Delete(_dir, recursive: true);
+        Directory.Delete(_dir.NotNull(), recursive: true);
         try
         {
-            File.Delete(_file);
+            File.Delete(_file.NotNull());
         }
         catch (IOException)
         {
@@ -51,7 +58,8 @@ public class SystemInstanceStarterTests
     [Test]
     public async Task A_host_its_startup_checks_refuse_starts_no_system_instance()
     {
-        await using var provider = Build(withClash: true);
+        var provider = Build(withClash: true);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var refused = await Starting(provider);
 
@@ -66,7 +74,8 @@ public class SystemInstanceStarterTests
     [Test]
     public async Task A_host_that_starts_starts_its_system_instance()
     {
-        await using var provider = Build(withClash: false);
+        var provider = Build(withClash: false);
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         (await Starting(provider)).Should().BeNull();
 
@@ -78,8 +87,8 @@ public class SystemInstanceStarterTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(e => e.UseSqlite($"Data Source={_file}"))
-                .AddStateMachines(o => o.ServeFeatures(_dir))
+            trax.AddEffects(e => e.UseSqlite($"Data Source={_file.NotNull()}"))
+                .AddStateMachines(o => o.ServeFeatures(_dir.NotNull()))
         );
         if (withClash)
             services.AddSingleton(UserOwnedShop());
@@ -91,7 +100,7 @@ public class SystemInstanceStarterTests
     {
         var (irs, host) = PolicyRunnerTests.Definitions();
         var any = new JsonObject { ["anyAuthenticated"] = true };
-        var shop = host["machines"]!["p-shop"]!.AsObject();
+        var shop = host["machines"].NotNull()["p-shop"].NotNull().AsObject();
         shop["owner"] = "user";
         shop["start"] = any.DeepClone();
         shop["read"] = any.DeepClone();
@@ -110,7 +119,7 @@ public class SystemInstanceStarterTests
                     .GetServices<IHostedService>()
                     .OfType<IHostedLifecycleService>()
             )
-                await service.StartingAsync(CancellationToken.None);
+                await service.StartingAsync(CancellationToken.None).ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -122,10 +131,12 @@ public class SystemInstanceStarterTests
     private static async Task<int> SystemRows(IServiceProvider provider)
     {
         var id = SystemInstanceStarter.IdOf("p-shop", "p-shop/main");
-        await using var scope = provider.CreateAsyncScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
-            .CountAsync(d => d.Id == id);
+            .CountAsync(d => d.Id == id)
+            .ConfigureAwait(false);
     }
 }

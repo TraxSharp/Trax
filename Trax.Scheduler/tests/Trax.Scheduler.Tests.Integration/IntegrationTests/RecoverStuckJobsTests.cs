@@ -1,7 +1,9 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -32,7 +34,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -61,11 +63,13 @@ public class RecoverStuckJobsTests : TestSetup
         var metadataIds = new List<long>();
         for (var i = 0; i < 3; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Stuck_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Stuck_{i}")
+            );
             var metadata = await CreateAndSaveMetadata(
                 manifest,
                 TrainState.InProgress,
-                startTime: DateTime.UtcNow.AddMinutes(-10)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
             );
             metadataIds.Add(metadata.Id);
         }
@@ -93,7 +97,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -116,7 +120,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.Failed,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
@@ -142,7 +146,7 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: false);
@@ -167,14 +171,15 @@ public class RecoverStuckJobsTests : TestSetup
         await CreateAndSaveMetadata(
             manifest,
             TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-5)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
         var startupService = CreateStartupService(configuration);
 
         // Act & Assert
-        var act = async () => await startupService.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await startupService.StartAsync(CancellationToken.None).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -188,11 +193,13 @@ public class RecoverStuckJobsTests : TestSetup
 
         for (var i = 0; i < count; i++)
         {
-            var manifest = await CreateAndSaveManifest(inputValue: $"Stuck_{i}");
+            var manifest = await CreateAndSaveManifest(
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Stuck_{i}")
+            );
             var metadata = await CreateAndSaveMetadata(
                 manifest,
                 TrainState.InProgress,
-                startTime: DateTime.UtcNow.AddMinutes(-10)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
             );
             metadataIds.Add(metadata.Id);
         }
@@ -238,10 +245,8 @@ public class RecoverStuckJobsTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -258,8 +263,8 @@ public class RecoverStuckJobsTests : TestSetup
         manifest.ExternalId = $"recover-{Guid.NewGuid():N}";
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -274,19 +279,20 @@ public class RecoverStuckJobsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
         if (startTime.HasValue)
             metadata.StartTime = startTime.Value;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

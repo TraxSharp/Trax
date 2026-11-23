@@ -1,0 +1,78 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UseJSRuntimeInvokeVoidAsyncWhenReturnValueIsNotUsedAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UseJSRuntimeInvokeVoidAsyncWhenReturnValueIsNotUsed,
+        title: "Use InvokeVoidAsync when the returned value is not used",
+        messageFormat: "Use '{0}' when the returned value is not used",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseJSRuntimeInvokeVoidAsyncWhenReturnValueIsNotUsed),
+        customTags: [GeneratedCodeReporting.ReportInGeneratedCodeTag]);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics);
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzerContext = new AnalyzerContext(ctx.Compilation);
+            if (analyzerContext.IsValid)
+            {
+                ctx.RegisterOperationAction(analyzerContext.AnalyzeInvocation, OperationKind.Invocation);
+            }
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        public INamedTypeSymbol? IJSRuntimeSymbol { get; } = compilation.GetTypeByMetadataName("Microsoft.JSInterop.IJSRuntime");
+        public INamedTypeSymbol? JSRuntimeExtensionsSymbol { get; } = compilation.GetTypeByMetadataName("Microsoft.JSInterop.JSRuntimeExtensions");
+
+        public INamedTypeSymbol? IJSInProcessRuntimeSymbol { get; } = compilation.GetTypeByMetadataName("Microsoft.JSInterop.IJSInProcessRuntime");
+        public INamedTypeSymbol? JSInProcessRuntimeExtensionsSymbol { get; } = compilation.GetTypeByMetadataName("Microsoft.JSInterop.JSInProcessRuntimeExtensions");
+
+        public bool IsValid => IJSInProcessRuntimeSymbol is not null || IJSRuntimeSymbol is not null;
+
+        public void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+            var targetMethod = operation.TargetMethod;
+
+            if (targetMethod.ContainingType.IsEqualToAny(IJSRuntimeSymbol, JSRuntimeExtensionsSymbol))
+            {
+                if (targetMethod.Name is "InvokeAsync" && !IsValueUsed(operation))
+                {
+                    context.ReportDiagnostic(Rule, operation, "InvokeVoidAsync");
+                }
+            }
+            else if (targetMethod.ContainingType.IsEqualToAny(IJSInProcessRuntimeSymbol, JSInProcessRuntimeExtensionsSymbol))
+            {
+                if (targetMethod.Name is "InvokeAsync" or "Invoke" && !IsValueUsed(operation))
+                {
+                    context.ReportDiagnostic(Rule, operation, targetMethod.Name.EndsWith("Async", System.StringComparison.Ordinal) ? "InvokeVoidAsync" : "InvokeVoid");
+                }
+            }
+
+            static bool IsValueUsed(IInvocationOperation operation)
+            {
+                var parent = operation.Parent;
+                if (parent is IAwaitOperation)
+                {
+                    parent = parent.Parent;
+                }
+
+                if (parent is null or IBlockOperation or IExpressionStatementOperation)
+                    return false;
+
+                return true;
+            }
+        }
+    }
+}

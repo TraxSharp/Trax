@@ -49,7 +49,7 @@ public sealed class RecoveryPage
     public IPage Page { get; }
 
     /// <summary>Every GraphQL request the page sent over HTTP, in order.</summary>
-    public List<IRequest> GraphQLRequests { get; } = [];
+    public IList<IRequest> GraphQLRequests { get; } = [];
 
     /// <summary>
     /// Opens a context and a page with the routes in place. <paramref name="host"/> is read on every request,
@@ -66,16 +66,22 @@ public sealed class RecoveryPage
         Func<string, string, string>? replace = null
     )
     {
-        var context = await browser.NewContextAsync();
-        var page = await context.NewPageAsync();
+        var context = await browser.NewContextAsync().ConfigureAwait(false);
+        var page = await context.NewPageAsync().ConfigureAwait(false);
         var opened = new RecoveryPage(dist, host, context, page);
 
-        await context.RouteAsync($"{PageOrigin}/**", route => opened.ServeFile(route, replace));
-        await context.RouteAsync($"{ApiOrigin}/**", route => opened.Forward(route));
-        await context.RouteWebSocketAsync(
-            $"{ApiOrigin.Replace("http", "ws", StringComparison.Ordinal)}/**",
-            route => WebSocketBridge.Open(route, opened.ToHost(route.Url, "ws"))
-        );
+        await context
+            .RouteAsync($"{PageOrigin}/**", route => opened.ServeFile(route, replace))
+            .ConfigureAwait(false);
+        await context
+            .RouteAsync($"{ApiOrigin}/**", route => opened.Forward(route))
+            .ConfigureAwait(false);
+        await context
+            .RouteWebSocketAsync(
+                $"{ApiOrigin.Replace("http", "ws", StringComparison.Ordinal)}/**",
+                route => WebSocketBridge.Open(route, opened.ToHost(route.Url, "ws"))
+            )
+            .ConfigureAwait(false);
         page.Console += (_, message) =>
         {
             lock (opened.Diagnostics)
@@ -103,21 +109,22 @@ public sealed class RecoveryPage
     /// <summary>Loads the page and opens the topic map wizard.</summary>
     public async Task OpenTheWizardAsync()
     {
-        await Page.GotoAsync(PageOrigin + "/");
+        await Page.GotoAsync(PageOrigin + "/").ConfigureAwait(false);
         try
         {
-            await ShowTheTopicMapAsync(Page);
+            await ShowTheTopicMapAsync(Page).ConfigureAwait(false);
             await Assertions
                 .Expect(WizardState)
-                .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
+                .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
         {
             throw new InvalidOperationException(
                 "The wizard did not render. The page says:\n"
-                    + await Page.Locator("body").InnerTextAsync()
+                    + await Page.Locator("body").InnerTextAsync().ConfigureAwait(false)
                     + "\nIts console and failed requests:\n"
-                    + string.Join("\n", Diagnostics),
+                    + string.Join('\n', Diagnostics),
                 ex
             );
         }
@@ -130,13 +137,15 @@ public sealed class RecoveryPage
     public static async Task ShowTheTopicMapAsync(IPage page)
     {
         await page.GetByRole(AriaRole.Tab, new() { Name = "Workflows" })
-            .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
         await page.GetByRole(AriaRole.Tab, new() { Name = "Topic map" })
-            .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
     }
 
     /// <summary>What the page logged and which of its requests failed, for a harness failure's message.</summary>
-    public List<string> Diagnostics { get; } = [];
+    public IList<string> Diagnostics { get; } = [];
 
     /// <summary>The wizard's current step, as the page labels it.</summary>
     public ILocator WizardState => Page.Locator(".wizard-state");
@@ -151,7 +160,7 @@ public sealed class RecoveryPage
     public ILocator ReviewDeadline => Page.Locator(".review-deadline");
 
     /// <summary>The GraphQL requests sent since <paramref name="from"/>, whose body names <paramref name="field"/>.</summary>
-    public List<IRequest> RequestsNaming(string field, int from = 0)
+    public IReadOnlyList<IRequest> RequestsNaming(string field, int from = 0)
     {
         lock (GraphQLRequests)
             return GraphQLRequests
@@ -169,16 +178,18 @@ public sealed class RecoveryPage
 
         if (replace is null || !file.EndsWith(".js", StringComparison.Ordinal))
         {
-            await route.FulfillAsync(new() { Path = file });
+            await route.FulfillAsync(new() { Path = file }).ConfigureAwait(false);
             return;
         }
-        await route.FulfillAsync(
-            new()
-            {
-                ContentType = "text/javascript",
-                Body = replace(path, await File.ReadAllTextAsync(file)),
-            }
-        );
+        await route
+            .FulfillAsync(
+                new()
+                {
+                    ContentType = "text/javascript",
+                    Body = replace(path, await File.ReadAllTextAsync(file).ConfigureAwait(false)),
+                }
+            )
+            .ConfigureAwait(false);
     }
 
     // The request is sent from the test process and its answer fulfilled into the page, rather than continued
@@ -188,15 +199,15 @@ public sealed class RecoveryPage
     {
         try
         {
-            var response = await route.FetchAsync(
-                new() { Url = ToHost(route.Request.Url, "http").ToString() }
-            );
-            await route.FulfillAsync(new() { Response = response });
+            var response = await route
+                .FetchAsync(new() { Url = ToHost(route.Request.Url, "http").ToString() })
+                .ConfigureAwait(false);
+            await route.FulfillAsync(new() { Response = response }).ConfigureAwait(false);
         }
         catch (PlaywrightException)
         {
             // The host is down (a test kills it on purpose): the page sees a failed request, as it would.
-            await route.AbortAsync("connectionrefused");
+            await route.AbortAsync("connectionrefused").ConfigureAwait(false);
         }
     }
 
@@ -229,7 +240,7 @@ public sealed class RecoveryPage
         {
             var bridge = new WebSocketBridge(page);
             page.OnMessage(frame => bridge._toHost.Writer.TryWrite(frame.Text ?? ""));
-            page.OnClose((_, _) => bridge._closed.Cancel());
+            page.OnClose((_, _) => _ = bridge._closed.CancelAsync());
             _ = bridge.RunAsync(host);
         }
 
@@ -239,8 +250,8 @@ public sealed class RecoveryPage
             {
                 // graphql-ws speaks this subprotocol, which the host requires on the upgrade.
                 _host.Options.AddSubProtocol("graphql-transport-ws");
-                await _host.ConnectAsync(host, _closed.Token);
-                await Task.WhenAll(PumpToHost(), PumpToPage());
+                await _host.ConnectAsync(host, _closed.Token).ConfigureAwait(false);
+                await Task.WhenAll(PumpToHost(), PumpToPage()).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
             {
@@ -250,7 +261,7 @@ public sealed class RecoveryPage
             {
                 try
                 {
-                    await _page.CloseAsync();
+                    await _page.CloseAsync().ConfigureAwait(false);
                 }
                 catch (PlaywrightException)
                 {
@@ -262,13 +273,17 @@ public sealed class RecoveryPage
 
         private async Task PumpToHost()
         {
-            await foreach (var text in _toHost.Reader.ReadAllAsync(_closed.Token))
-                await _host.SendAsync(
-                    Encoding.UTF8.GetBytes(text),
-                    WebSocketMessageType.Text,
-                    endOfMessage: true,
-                    _closed.Token
-                );
+            await foreach (
+                var text in _toHost.Reader.ReadAllAsync(_closed.Token).ConfigureAwait(false)
+            )
+                await _host
+                    .SendAsync(
+                        Encoding.UTF8.GetBytes(text),
+                        WebSocketMessageType.Text,
+                        endOfMessage: true,
+                        _closed.Token
+                    )
+                    .ConfigureAwait(false);
         }
 
         private async Task PumpToPage()
@@ -281,10 +296,14 @@ public sealed class RecoveryPage
             {
                 while (!_closed.IsCancellationRequested)
                 {
-                    var received = await _host.ReceiveAsync(buffer, _closed.Token);
+                    var received = await _host
+                        .ReceiveAsync(buffer, _closed.Token)
+                        .ConfigureAwait(false);
                     if (received.MessageType == WebSocketMessageType.Close)
                         break;
-                    message.Write(buffer, 0, received.Count);
+                    await message
+                        .WriteAsync(buffer, 0, received.Count, CancellationToken.None)
+                        .ConfigureAwait(false);
                     if (!received.EndOfMessage)
                         continue;
                     _page.Send(
@@ -295,7 +314,7 @@ public sealed class RecoveryPage
             }
             finally
             {
-                _closed.Cancel();
+                await _closed.CancelAsync().ConfigureAwait(false);
             }
         }
     }

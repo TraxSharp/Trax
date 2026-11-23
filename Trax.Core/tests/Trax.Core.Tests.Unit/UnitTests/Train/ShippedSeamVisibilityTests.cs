@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
@@ -21,10 +22,9 @@ public class ShippedSeamVisibilityTests
     [Test]
     public void NewMonad_StaysProtectedVirtualAndHidden()
     {
-        var newMonad = typeof(Trax.Core.Train.Train<,>).GetMethod(
-            "NewMonad",
-            BindingFlags.Instance | BindingFlags.NonPublic
-        )!;
+        var newMonad = typeof(Trax.Core.Train.Train<,>)
+            .GetMethod("NewMonad", BindingFlags.Instance | BindingFlags.NonPublic)
+            .NotNull();
 
         newMonad
             .IsFamily.Should()

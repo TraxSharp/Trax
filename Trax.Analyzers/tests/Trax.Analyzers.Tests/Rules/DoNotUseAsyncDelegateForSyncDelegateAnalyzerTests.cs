@@ -1,0 +1,208 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Testing;
+using AnalyzerTest = Trax.Analyzers.Tests.Harness.CSharpAnalyzerTest<
+    Trax.Analyzers.Rules.DoNotUseAsyncDelegateForSyncDelegateAnalyzer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class DoNotUseAsyncDelegateForSyncDelegateAnalyzerTests
+{
+    private static AnalyzerTest CreateTest()
+    {
+        var test = new AnalyzerTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        return test;
+    }
+
+    [Fact]
+    public Task List_ForEach_Sync()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            new System.Collections.Generic.List<int>().ForEach(item => {});
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task List_ForEach_Async()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            new System.Collections.Generic.List<int>().ForEach({|TRX0147:async item => {}|});
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CustomDelegate_Sync()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(() => {});
+
+            void A(D a) => throw null;
+            delegate void D();
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CustomDelegate_AsyncVoid()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A({|TRX0147:async () => {}|});
+
+            void A(D a) => throw null;
+            delegate void D();
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Action_Sync()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(() => {});
+
+            void A(System.Action a) => throw null;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Action_AsyncVoid()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A({|TRX0147:async () => {}|});
+
+            void A(System.Action a) => throw null;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FuncTask_AsyncDelegate()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(async () => {});
+
+            void A(System.Func<System.Threading.Tasks.Task> a) => throw null;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FuncValueTask_AsyncDelegate()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(async () => {});
+
+            void A(System.Func<System.Threading.Tasks.ValueTask> a) => throw null;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FuncValueTaskOfInt_AsyncDelegate()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(async () => 1);
+
+            void A(System.Func<System.Threading.Tasks.ValueTask<int>> a) => throw null;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Action_SyncMethodGroup()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(Handler);
+
+            void A(System.Action a) => throw null;
+            void Handler() { }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Action_AsyncVoidMethodGroup()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A({|TRX0147:Handler|});
+
+            void A(System.Action a) => throw null;
+            async void Handler() { }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FuncTask_AsyncMethodGroup()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            A(Handler);
+
+            void A(System.Func<System.Threading.Tasks.Task> a) => throw null;
+            async System.Threading.Tasks.Task Handler() { }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Event_AsyncVoidMethodGroup()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            Sample.A += Sample.Handler;
+            Sample.A -= Sample.Handler;
+
+            class Sample
+            {
+                public static event System.EventHandler A;
+                public static async void Handler(object sender, System.EventArgs e) { }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Event_AsyncVoid()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            Sample.A += async (sender, e) => { };
+            Sample.A -= async (sender, e) => { };
+
+            class Sample
+            {
+                public static event System.EventHandler A;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

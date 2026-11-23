@@ -23,11 +23,11 @@ using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Scheduling;
+using Trax.StateMachine.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -90,7 +90,7 @@ builder.Services.AddTrax(trax =>
                             // network. A broker anywhere else is reached over amqps://.
                             rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
                                 "Broadcast:AllowInsecureTransport",
-                                false
+                                defaultValue: false
                             );
                         }
                     )
@@ -157,7 +157,8 @@ builder.Services.AddTrax(trax =>
 // run too, for the tests and for exploring by hand, and is read in Development only: anywhere else
 // the setting is ignored.
 var requirePersisted =
-    !development || builder.Configuration.GetValue("PersistedOperations:Require", true);
+    !development
+    || builder.Configuration.GetValue("PersistedOperations:Require", defaultValue: true);
 
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
@@ -191,10 +192,18 @@ var app = builder.Build();
 // The shop's schema is migrated before the hub serves. An export opens no database.
 if (!TraxClientExport.Requested)
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ShopfrontDbContext>>();
-    await using var db = await factory.CreateDbContextAsync();
-    await db.Database.MigrateAsync();
+    var scope = app.Services.CreateAsyncScope();
+    await using (scope.ConfigureAwait(false))
+    {
+        var factory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<ShopfrontDbContext>
+        >();
+        var db = await factory.CreateDbContextAsync().ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await db.Database.MigrateAsync().ConfigureAwait(false);
+        }
+    }
 }
 
 app.UseCors();
@@ -211,8 +220,8 @@ if (development)
 {
     app.MapGet(
             "/dev/token/{user}",
-            (string user, bool staff = false) =>
-                DevJwt.Mint(user, staff ? Roles.Staff : Roles.Customer)
+            (string user, TimeProvider clock, bool staff = false) =>
+                DevJwt.Mint(user, staff ? Roles.Staff : Roles.Customer, clock)
         )
         .AllowAnonymous();
 
@@ -221,7 +230,7 @@ if (development)
             "/dev/supplier/{state}",
             (string state, FakeSupplier supplier) =>
             {
-                supplier.IsDown = state == "down";
+                supplier.IsDown = string.Equals(state, "down", StringComparison.Ordinal);
                 return Results.NoContent();
             }
         )
@@ -229,4 +238,4 @@ if (development)
 }
 
 // Serves, or with --trax-export-client writes the client manifest and exits.
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);

@@ -38,7 +38,7 @@ public class FunctionalAssertTests : TestSetup
     [Test]
     public void AssertEachLoaded_OneNull_Throws()
     {
-        var items = new[] { new Holder("a"), new Holder(null) };
+        var items = new[] { new Holder("a"), new Holder(value: null) };
 
         Action act = () => items.AssertEachLoaded(x => x.Value);
 
@@ -55,7 +55,7 @@ public class FunctionalAssertTests : TestSetup
         act.Should().NotThrow();
     }
 
-    private class Holder
+    private sealed class Holder
     {
         public Holder(string? value) => Value = value;
 

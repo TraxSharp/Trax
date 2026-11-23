@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -13,19 +14,20 @@ namespace Trax.Cli.Tests.UnitTests;
 public class TwinLanguagesTests
 {
     [Test]
-    public void All_is_the_file_the_twin_generator_reads()
+    public async Task All_is_the_file_the_twin_generator_reads()
     {
         var file = Path.Combine(EngineTools(), "twin-languages.json");
         var expected = JsonNode
-            .Parse(File.ReadAllText(file))!
+            .Parse(await File.ReadAllTextAsync(file))
+            .NotNull()
             .AsArray()
             .Select(l => new TwinLanguage(
-                l!["lang"]!.GetValue<string>(),
-                l["writes"]!.GetValue<string>()
+                l.NotNull()["lang"].NotNull().GetValue<string>(),
+                l["writes"].NotNull().GetValue<string>()
             ));
 
-        TwinLanguages.All.Should().Equal(expected);
-        TwinLanguages.Default.Should().Be("typescript");
+        (await TwinLanguages.AllAsync().ConfigureAwait(false)).Should().Equal(expected);
+        (await TwinLanguages.DefaultAsync().ConfigureAwait(false)).Should().Be("typescript");
     }
 
     [Test]
@@ -56,14 +58,13 @@ public class TwinLanguagesTests
 
     [TestCase("generate")]
     [TestCase("check")]
-    public void The_lang_option_describes_every_language(string subcommand)
+    public async Task The_lang_option_describes_every_language(string subcommand)
     {
-        var lang = MachineCommand
-            .Create()
-            .Subcommands.Single(c => c.Name == subcommand)
-            .Options.Single(o => o.Name == "--lang");
+        var lang = (await MachineCommand.CreateAsync().ConfigureAwait(false))
+            .Subcommands.Single(c => string.Equals(c.Name, subcommand, StringComparison.Ordinal))
+            .Options.Single(o => string.Equals(o.Name, "--lang", StringComparison.Ordinal));
 
-        lang.Description.Should().Be(TwinLanguages.Help());
+        lang.Description.Should().Be(await TwinLanguages.HelpAsync().ConfigureAwait(false));
     }
 
     private static string EngineTools()

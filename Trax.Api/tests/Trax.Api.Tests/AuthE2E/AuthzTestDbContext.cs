@@ -1,172 +1,19 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
 
-/// <summary>
-/// Test entities for type-level <c>[TraxAuthorize]</c> on <c>[TraxQueryModel]</c>.
-/// Lives in its own <c>test_authz</c> schema so the data does not collide with
-/// the unauthorized fixtures in <see cref="TestDbContext"/>.
-///
-/// The relationship between <see cref="Owner"/> and <see cref="OwnedBook"/> is
-/// the centerpiece of the transitive-navigation security test: the parent
-/// type is ungated, the child type carries <c>[TraxAuthorize(Roles="Admin")]</c>,
-/// and the E2E suite verifies that a Player principal cannot reach the child
-/// through the parent's <c>books</c> navigation property.
-/// </summary>
-[TraxAllowAnonymous]
-[TraxQueryModel(Namespace = "vault", Description = "Owners of vault items (ungated).")]
-[Table("owners", Schema = "test_authz")]
-public class Owner
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("name")]
-    public string Name { get; set; } = "";
-
-    public List<OwnedBook> Books { get; set; } = new();
-
-    /// <summary>
-    /// Navigation to anonymous-readable bulletin entries owned by this Owner.
-    /// Owner is itself ungated; reaching <see cref="PublicBook"/> through this
-    /// navigation must succeed for anonymous callers because both sides allow
-    /// anonymous access.
-    /// </summary>
-    public List<PublicBook> PublicBooks { get; set; } = new();
-}
-
-/// <summary>
-/// Child entity gated with <c>[TraxAuthorize(Roles="Admin")]</c>. Direct access
-/// (top-level <c>ownedBooks</c>) and transitive access (through
-/// <c>owners[].books</c>) must both honor the role gate.
-/// </summary>
-[TraxQueryModel(Namespace = "vault", Description = "Admin-only books.")]
-[TraxAuthorize(Roles = "Admin")]
-[Table("owned_books", Schema = "test_authz")]
-public class OwnedBook
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("owner_id")]
-    public long OwnerId { get; set; }
-
-    [Column("title")]
-    public string Title { get; set; } = "";
-
-    public Owner Owner { get; set; } = null!;
-}
-
-/// <summary>
-/// Entity gated with a CSV role list (<c>Roles="Admin,Player"</c>). Both roles
-/// satisfy the gate (OR semantics within a single attribute).
-/// </summary>
-[TraxQueryModel(Namespace = "vault", Description = "Memos visible to Admin or Player.")]
-[TraxAuthorize(Roles = "Admin,Player")]
-[Table("memos", Schema = "test_authz")]
-public class Memo
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("body")]
-    public string Body { get; set; } = "";
-}
-
-/// <summary>
-/// Entity gated with two stacked attributes. AND semantics across attributes:
-/// the principal must hold <c>Admin</c> AND satisfy <c>AdminPolicy</c>. Both
-/// reduce to the same underlying claim in this test host, so the practical
-/// effect is "Admin only with both checks executed." The point of the test is
-/// that both directives fire.
-/// </summary>
-[TraxQueryModel(Namespace = "vault", Description = "Stacked-attribute restricted documents.")]
-[TraxAuthorize(Roles = "Admin")]
-[TraxAuthorize(Policy = "AdminPolicy")]
-[Table("restricted_docs", Schema = "test_authz")]
-public class RestrictedDoc
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("payload")]
-    public string Payload { get; set; } = "";
-}
-
-/// <summary>
-/// Entity gated with bare <c>[TraxAuthorize]</c>: any authenticated user passes,
-/// anonymous callers fail.
-/// </summary>
-[TraxQueryModel(Namespace = "vault", Description = "Members-only area.")]
-[TraxAuthorize]
-[Table("member_areas", Schema = "test_authz")]
-public class MemberArea
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("name")]
-    public string Name { get; set; } = "";
-}
-
-/// <summary>
-/// Entity opened to anonymous reads with <c>[TraxAllowAnonymous]</c>. The
-/// E2E suite exercises three compositions that exist only because this entity
-/// is anonymously readable:
-/// <list type="bullet">
-/// <item>Direct anonymous read of <c>publicBooks</c> succeeds.</item>
-/// <item>Transitive <c>publicBook.linkedOwnedBook</c> still rejects anonymous —
-/// the gated child's <c>@authorize</c> directive fires regardless of how the
-/// parent opened the cascade. This is the Option B no-cascade contract.</item>
-/// <item>Transitive <c>owner.publicBooks</c> succeeds for anonymous callers —
-/// reaching an anonymous target through an ungated parent does not raise the
-/// gate.</item>
-/// </list>
-/// </summary>
-[TraxQueryModel(Namespace = "vault", Description = "Public bulletin (anonymous-readable).")]
-[TraxAllowAnonymous]
-[Table("public_books", Schema = "test_authz")]
-public class PublicBook
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("owner_id")]
-    public long OwnerId { get; set; }
-
-    [Column("title")]
-    public string Title { get; set; } = "";
-
-    /// <summary>
-    /// Nullable FK to a gated OwnedBook. The transitive-from-anonymous test
-    /// requires at least one PublicBook with a real link; rows without a link
-    /// prove the resolver does not over-eagerly join.
-    /// </summary>
-    [Column("linked_owned_book_id")]
-    public long? LinkedOwnedBookId { get; set; }
-
-    public Owner Owner { get; set; } = null!;
-
-    public OwnedBook? LinkedOwnedBook { get; set; }
-}
-
 public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : DbContext(options)
 {
-    public DbSet<Owner> Owners { get; set; } = null!;
-    public DbSet<OwnedBook> OwnedBooks { get; set; } = null!;
-    public DbSet<Memo> Memos { get; set; } = null!;
-    public DbSet<RestrictedDoc> RestrictedDocs { get; set; } = null!;
-    public DbSet<MemberArea> MemberAreas { get; set; } = null!;
-    public DbSet<PublicBook> PublicBooks { get; set; } = null!;
+    public DbSet<Owner> Owners => Set<Owner>();
+    public DbSet<OwnedBook> OwnedBooks => Set<OwnedBook>();
+    public DbSet<Memo> Memos => Set<Memo>();
+    public DbSet<RestrictedDoc> RestrictedDocs => Set<RestrictedDoc>();
+    public DbSet<MemberArea> MemberAreas => Set<MemberArea>();
+    public DbSet<PublicBook> PublicBooks => Set<PublicBook>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -227,7 +74,7 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
     public static void EnsureSeeded(string connectionString)
     {
         AuthE2EHost.EnsureDatabaseExists(
-            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database!
+            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database.NotNull()
         );
 
         var opts = new DbContextOptionsBuilder<AuthzTestDbContext>()
@@ -268,6 +115,13 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
 
         db.SaveChanges();
 
+        AddPublicBooks(db, alice, bob);
+
+        db.SaveChanges();
+    }
+
+    private static void AddPublicBooks(AuthzTestDbContext db, Owner alice, Owner bob)
+    {
         // PublicBook seed runs after the Owner/OwnedBook seed so the FKs
         // resolve. Alice's first PublicBook intentionally links to one of her
         // OwnedBooks to exercise the cascade-from-anonymous-to-gated path.
@@ -292,7 +146,5 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
                 LinkedOwnedBookId = null,
             }
         );
-
-        db.SaveChanges();
     }
 }

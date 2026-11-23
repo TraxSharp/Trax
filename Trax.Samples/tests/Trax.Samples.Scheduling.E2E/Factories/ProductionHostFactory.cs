@@ -25,9 +25,13 @@ public sealed class ProductionHostFactory : SchedulingHostFactory
                     .Where(d =>
                         d.ServiceType == typeof(IHostedService)
                         && (
-                            d.ImplementationType?.Namespace?.StartsWith("Trax.Scheduler") == true
+                            d.ImplementationType?.Namespace?.StartsWith(
+                                "Trax.Scheduler",
+                                StringComparison.Ordinal
+                            ) == true
                             || d.ImplementationFactory?.Method.ReturnType.Namespace?.StartsWith(
-                                "Trax.Scheduler"
+                                "Trax.Scheduler",
+                                StringComparison.Ordinal
                             ) == true
                         )
                     )

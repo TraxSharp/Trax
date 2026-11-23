@@ -1,6 +1,6 @@
 namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
 {
-    public class SignalRSinkOptions
+    public sealed class SignalRSinkOptions
     {
         public const int DefaultDeliveryQueueCapacity = 1024;
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForEvents(params string[] eventTypes) { }
@@ -25,7 +25,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
 }
 namespace Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions
 {
-    public class TraxTrainEventHubOptions
+    public sealed class TraxTrainEventHubOptions
     {
         public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions AllowAnonymous() { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions AllowOrigins(params string[] origins) { }

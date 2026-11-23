@@ -21,7 +21,7 @@ public class WorkQueueMutations
         CancellationToken ct
     )
     {
-        var result = await operationsService.QueueTrainAsync(input, ct);
+        var result = await operationsService.QueueTrainAsync(input, ct).ConfigureAwait(false);
         return ToResponse(result);
     }
 
@@ -42,7 +42,7 @@ public class WorkQueueMutations
         RunTrainInput input,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.RunTrainAsync(input, ct));
+    ) => ToResponse(await operationsService.RunTrainAsync(input, ct).ConfigureAwait(false));
 
     /// <summary>
     /// Cancels a queued work queue entry. Only entries with status <c>Queued</c> can be
@@ -56,7 +56,9 @@ public class WorkQueueMutations
         CancellationToken ct
     )
     {
-        var result = await operationsService.CancelWorkQueueEntryAsync(id, ct);
+        var result = await operationsService
+            .CancelWorkQueueEntryAsync(id, ct)
+            .ConfigureAwait(false);
         return ToResponse(result);
     }
 
@@ -71,7 +73,10 @@ public class WorkQueueMutations
         long[] ids,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.CancelWorkQueueEntriesAsync(ids, ct));
+    ) =>
+        ToResponse(
+            await operationsService.CancelWorkQueueEntriesAsync(ids, ct).ConfigureAwait(false)
+        );
 
     private static OperationResponse ToResponse(OperationResult result) =>
         new(result.Success, result.Count, result.Message) { Id = result.Id };

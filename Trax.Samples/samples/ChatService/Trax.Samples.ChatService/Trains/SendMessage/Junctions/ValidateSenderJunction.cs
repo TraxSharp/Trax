@@ -16,9 +16,12 @@ public class ValidateSenderJunction(ChatDbContext db, TraxPrincipal caller)
             throw new TrainException("Message content cannot be empty.");
 
         if (
-            !await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-            )
+            !await db
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
         )
             throw new TrainException($"You are not a participant in room {input.ChatRoomId}.");
 

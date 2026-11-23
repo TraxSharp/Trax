@@ -6,7 +6,7 @@ namespace Trax.StateMachine.Tests.UnitTests;
 /// <summary>
 /// The declarative <see cref="Rule"/> vocabulary is the shared semantics the runtime, the IR, and the
 /// generated per-language validators all agree on, so every primitive needs pinned, total behavior: a real
-/// predicate for the happy case, and a definite <c>false</c> (never a throw) for a missing or wrong-typed
+/// predicate for the happy case, and a definite <see langword="false"/> (never a throw) for a missing or wrong-typed
 /// field.
 /// </summary>
 public class RuleEvaluatorTests
@@ -252,13 +252,15 @@ public class RuleEvaluatorTests
             ["s"] = "true",
         };
 
-        Eval(new Rule.BoolEquals(RuleSource.Context, "guided", true), ctx).Should().BeTrue();
-        Eval(new Rule.BoolEquals(RuleSource.Context, "guided", false), ctx).Should().BeFalse();
-        Eval(new Rule.BoolEquals(RuleSource.Context, "off", false), ctx).Should().BeTrue();
-        Eval(new Rule.BoolEquals(RuleSource.Context, "s", true), ctx)
+        Eval(new Rule.BoolEquals(RuleSource.Context, "guided", Value: true), ctx).Should().BeTrue();
+        Eval(new Rule.BoolEquals(RuleSource.Context, "guided", Value: false), ctx)
+            .Should()
+            .BeFalse();
+        Eval(new Rule.BoolEquals(RuleSource.Context, "off", Value: false), ctx).Should().BeTrue();
+        Eval(new Rule.BoolEquals(RuleSource.Context, "s", Value: true), ctx)
             .Should()
             .BeFalse("the string \"true\" is not the boolean true");
-        Eval(new Rule.BoolEquals(RuleSource.Context, "missing", false), ctx)
+        Eval(new Rule.BoolEquals(RuleSource.Context, "missing", Value: false), ctx)
             .Should()
             .BeFalse("a missing field is absent, not false");
     }
@@ -337,20 +339,28 @@ public class RuleEvaluatorTests
     public void Custom_resolves_through_the_handler_map_and_is_false_when_unregistered()
     {
         var ctx = new JsonObject();
-        var handlers = new Dictionary<string, Func<JsonObject, JsonNode?, bool>>
+        var handlers = new Dictionary<string, Func<JsonObject, JsonNode?, bool>>(
+            StringComparer.Ordinal
+        )
         {
             ["yes"] = (_, _) => true,
             ["no"] = (_, _) => false,
         };
 
-        RuleEvaluator.Evaluate(new Rule.Custom("yes"), ctx, null, handlers).Should().BeTrue();
-        RuleEvaluator.Evaluate(new Rule.Custom("no"), ctx, null, handlers).Should().BeFalse();
         RuleEvaluator
-            .Evaluate(new Rule.Custom("unregistered"), ctx, null, handlers)
+            .Evaluate(new Rule.Custom("yes"), ctx, input: null, handlers)
+            .Should()
+            .BeTrue();
+        RuleEvaluator
+            .Evaluate(new Rule.Custom("no"), ctx, input: null, handlers)
+            .Should()
+            .BeFalse();
+        RuleEvaluator
+            .Evaluate(new Rule.Custom("unregistered"), ctx, input: null, handlers)
             .Should()
             .BeFalse("an unregistered custom guard is an authoritative reject, not a crash");
         RuleEvaluator
-            .Evaluate(new Rule.Custom("yes"), ctx, null, customGuards: null)
+            .Evaluate(new Rule.Custom("yes"), ctx, input: null, customGuards: null)
             .Should()
             .BeFalse("no handler map at all is also a reject");
     }

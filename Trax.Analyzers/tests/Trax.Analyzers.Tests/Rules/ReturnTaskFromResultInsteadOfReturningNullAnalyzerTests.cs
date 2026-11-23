@@ -1,0 +1,305 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.ReturnTaskFromResultInsteadOfReturningNullAnalyzer,
+    Trax.Analyzers.Rules.ReturnTaskFromResultInsteadOfReturningNullFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class ReturnTaskFromResultInsteadOfReturningNullAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task MethodFixer_Task_Completed()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A() { {|TRX0022:return null;|} }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A() { return Task.CompletedTask; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MethodFixer_Task_Completed2()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A() => {|TRX0022:null|};
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A() => Task.CompletedTask;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MethodFixer_Task_FromResult()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task<int> A() { {|TRX0022:return null;|} }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task<int> A() { return Task.FromResult(0); }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MethodFixer_Task_FromResult2()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task<string> A() => {|TRX0022:null|};
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task<string> A() => Task.FromResult<string>(null);
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Task A() { {|TRX0022:return null;|} }")]
+    [InlineData("Task A() { {|TRX0022:return default;|} }")]
+    [InlineData("Task A() => {|TRX0022:null|};")]
+    [InlineData("Task A() => {|TRX0022:default|};")]
+    [InlineData("Task A() { {|TRX0022:return ((Test)null)?.A();|} }")]
+    [InlineData("Task A() { {|TRX0022:return 1 switch { _ => null };|} }")]
+    [InlineData("Task A(int value) { {|TRX0022:return value switch { 1 => A(0), _ => null };|} }")]
+    [InlineData("Task A(bool a) { {|TRX0022:return a ? null : A(a);|} }")]
+    [InlineData("Task<object> A() { {|TRX0022:return null;|} }")]
+    [InlineData("Task<object> A() { {|TRX0022:return default;|} }")]
+    [InlineData("Task<object> A() => {|TRX0022:null|};")]
+    [InlineData("Task<object> A() => {|TRX0022:default|};")]
+    [InlineData("async Task<object> Valid() { return null; }")]
+    [InlineData("object Valid() { return null; }")]
+    public Task Method(string code)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Threading.Tasks;
+            class Test
+            {
+                {{code}}
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalFunction()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                void A()
+                {
+                    Task<object> Valid1() { return Task.FromResult<object>(null); }
+                    async Task<object> Valid2() { return null; }
+                    Task A() { {|TRX0022:return null;|} }
+                    Task<object> B() { {|TRX0022:return null;|} }
+                    Task<object> C() => {|TRX0022:null|};
+                    object       D() => null;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LambdaExpression()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                void A()
+                {
+                    System.Func<Task>         a = () => {|TRX0022:null|};
+                    System.Func<Task<object>> b = () => {|TRX0022:null|};
+                    System.Func<Task<object>> c = () => { {|TRX0022:return null;|} };
+                    System.Func<Task>         valid1 = async () => { };
+                    System.Func<Task<object>> valid2 = async () => null;
+                    System.Func<object>       valid3 = () => null;
+                    System.Func<Task<object>> valid4 = async () => { return null; };
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AnonymousMethods()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                void A()
+                {
+                    System.Func<Task> a = delegate () { {|TRX0022:return null;|} };
+                    System.Func<Task<object>> b = delegate () { {|TRX0022:return null;|} };
+                    System.Func<Task> c = async delegate () { };
+                    System.Func<Task<object>> d = async delegate () { return null; };
+                    System.Func<object> e = delegate () { return null; };
+                    System.Action f = () => { };
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AsyncLambdaInTask()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A()
+                {
+                    System.Func<Task<object>> valid4 = async () => { return null; };
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MethodFixer_ConditionalExpression_OnlyReplacesNull()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task<int> A(bool a) { {|TRX0022:return a ? null : Task.FromResult(1);|} }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task<int> A(bool a) { return a ? Task.FromResult(0) : Task.FromResult(1); }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MethodFixer_SwitchExpression_OnlyReplacesNull()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A(int value) => {|TRX0022:value switch { 1 => A(0), 2 => null, _ => default }|};
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A(int value) => value switch { 1 => A(0), 2 => Task.CompletedTask, _ => Task.CompletedTask };
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MethodFixer_ConditionalAccess_NoFix()
+    {
+        const string Code = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                Task A() { {|TRX0022:return ((Test)null)?.A();|} }
+            }
+            """;
+        var test = CreateTest();
+        test.TestCode = Code;
+        test.FixedCode = Code;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AsyncMethodReturningTaskOfTask_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                async Task<Task> A()
+                {
+                    await Task.Yield();
+                    return null;
+                }
+
+                void B()
+                {
+                    System.Func<Task<Task>> lambda = async () => null;
+                    async Task<Task> Local() => null;
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Trax.Docs.Snippets.Tests.Tests;
 
@@ -24,36 +25,45 @@ namespace Trax.Docs.Snippets.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class DocsPackageVersionsTests
+public partial class DocsPackageVersionsTests
 {
-    private static readonly Regex TraxReference = new(
+    [GeneratedRegex(
         @"<Package(?:Reference|Version)\s+Include=""(?<id>Trax\.[^""]+)""\s+Version=""(?<version>[^""]+)""",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TraxReference { get; }
 
     /// <summary><c>dotnet tool install Trax.Cli --version x.y.z</c>, <c>dotnet add package Trax.X --version x.y.z</c>.</summary>
-    private static readonly Regex TraxCommand = new(
+    [GeneratedRegex(
         @"dotnet\s+(?:tool\s+install|add\s+package)\s+(?:--global\s+)?(?<id>Trax\.\S+)\s+--version\s+(?<version>\S+)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TraxCommand { get; }
 
-    private static readonly Regex ExactVersion = new(@"^\d+\.\d+\.\d+$", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\d+\.\d+\.\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ExactVersion { get; }
 
-    private static readonly Regex ReleaseTag = new(
+    [GeneratedRegex(
         @"^v(?<version>\d+\.\d+\.\d+)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ReleaseTag { get; }
 
     /// <summary>A package's project: <c>Trax.X/src/Id/Id.csproj</c> or <c>Trax.X/dotnet/src/Id/Id.csproj</c>.</summary>
-    private static readonly Regex PackageProject = new(
+    [GeneratedRegex(
         @"^Trax\.[^/]+/(?:dotnet/)?src/(?<id>[^/]+)/\k<id>\.csproj$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PackageProject { get; }
 
     [Test]
-    public void TraxVersionsOnPages_AreOneExactVersion()
+    public async Task TraxVersionsOnPages_AreOneExactVersion()
     {
-        var found = Pins();
+        var found = await PinsAsync().ConfigureAwait(false);
 
         var versions = found.Select(f => f.Version).Distinct(StringComparer.Ordinal).ToList();
         var offenders = found
@@ -74,13 +84,15 @@ public class DocsPackageVersionsTests
     }
 
     [Test]
-    public void TraxPackagesOnPages_ShippedAtTheVersionPinned()
+    public async Task TraxPackagesOnPages_ShippedAtTheVersionPinned()
     {
-        var found = Pins().Where(f => ExactVersion.IsMatch(f.Version)).ToList();
+        var found = (await PinsAsync().ConfigureAwait(false))
+            .Where(f => ExactVersion.IsMatch(f.Version))
+            .ToList();
         if (found.Count == 0)
             return;
 
-        var releases = Git("tag", "--list", "v*")
+        var releases = (await GitAsync("tag", "--list", "v*").ConfigureAwait(false))
             .Select(t => ReleaseTag.Match(t.Trim()))
             .Where(m => m.Success)
             .Select(m => m.Groups["version"].Value)
@@ -92,9 +104,11 @@ public class DocsPackageVersionsTests
                     + "the newest release tag, as CI does (.github/scripts/fetch-docs-release-tags.sh)"
             );
 
-        var latest = releases.MaxBy(Version.Parse)!;
-        var packagesAtLatest = PackagesAt($"v{latest}");
-        var packagesAtHead = PackagesAt("HEAD");
+        var latest =
+            releases.MaxBy(Version.Parse)
+            ?? throw new InvalidOperationException("No release tag is left to compare against.");
+        var packagesAtLatest = await PackagesAtAsync($"v{latest}").ConfigureAwait(false);
+        var packagesAtHead = await PackagesAtAsync("HEAD").ConfigureAwait(false);
         var packagesAt = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
 
         var offenders = new List<string>();
@@ -109,7 +123,8 @@ public class DocsPackageVersionsTests
             }
 
             if (!packagesAt.TryGetValue(version, out var shipped))
-                packagesAt[version] = shipped = PackagesAt($"v{version}");
+                packagesAt[version] = shipped = await PackagesAtAsync($"v{version}")
+                    .ConfigureAwait(false);
             if (shipped.Contains(id))
                 continue;
 
@@ -133,7 +148,7 @@ public class DocsPackageVersionsTests
     }
 
     /// <summary>Every Trax package version written on a published or skill page; ADRs are skipped.</summary>
-    private static List<(string Where, string Id, string Version)> Pins()
+    private static async Task<List<(string Where, string Id, string Version)>> PinsAsync()
     {
         var found = new List<(string Where, string Id, string Version)>();
 
@@ -144,16 +159,28 @@ public class DocsPackageVersionsTests
             if (page.StartsWith("adr/", StringComparison.Ordinal))
                 continue;
 
-            var lines = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var lines = (await File.ReadAllTextAsync(file).ConfigureAwait(false))
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
                 foreach (Match m in TraxReference.Matches(lines[i]))
-                    found.Add(($"{page}:{i + 1}", m.Groups["id"].Value, m.Groups["version"].Value));
+                    found.Add(
+                        (
+                            string.Create(CultureInfo.InvariantCulture, $"{page}:{i + 1}"),
+                            m.Groups["id"].Value,
+                            m.Groups["version"].Value
+                        )
+                    );
                 foreach (Match m in TraxCommand.Matches(lines[i]))
                     // A placeholder such as `--version <the Trax version>` names no version.
                     if (!m.Groups["version"].Value.StartsWith('<'))
                         found.Add(
-                            ($"{page}:{i + 1}", m.Groups["id"].Value, m.Groups["version"].Value)
+                            (
+                                string.Create(CultureInfo.InvariantCulture, $"{page}:{i + 1}"),
+                                m.Groups["id"].Value,
+                                m.Groups["version"].Value
+                            )
                         );
             }
         }
@@ -162,22 +189,28 @@ public class DocsPackageVersionsTests
     }
 
     /// <summary>The package ids <paramref name="treeish"/> builds: its packable package projects.</summary>
-    private static IReadOnlySet<string> PackagesAt(string treeish)
+    private static async Task<IReadOnlySet<string>> PackagesAtAsync(string treeish)
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in Git("ls-tree", "-r", "--name-only", treeish))
+        foreach (
+            var path in await GitAsync("ls-tree", "-r", "--name-only", treeish)
+                .ConfigureAwait(false)
+        )
         {
             var m = PackageProject.Match(path);
             if (!m.Success)
                 continue;
-            var project = string.Join('\n', Git("show", $"{treeish}:{path}"));
+            var project = string.Join(
+                '\n',
+                await GitAsync("show", $"{treeish}:{path}").ConfigureAwait(false)
+            );
             if (!project.Contains("<IsPackable>false</IsPackable>", StringComparison.Ordinal))
                 ids.Add(m.Groups["id"].Value);
         }
         return ids;
     }
 
-    private static List<string> Git(params string[] args)
+    private static async Task<List<string>> GitAsync(params string[] args)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -189,16 +222,24 @@ public class DocsPackageVersionsTests
         foreach (var arg in args)
             start.ArgumentList.Add(arg);
 
-        using var git = Process.Start(start)!;
+        using var git =
+            Process.Start(start)
+            ?? throw new InvalidOperationException($"git {string.Join(' ', args)} did not start.");
         var stderr = git.StandardError.ReadToEndAsync();
         var lines = new List<string>();
-        while (git.StandardOutput.ReadLine() is { } line)
+        while (await git.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } line)
             lines.Add(line);
-        git.WaitForExit();
+        await git.WaitForExitAsync().ConfigureAwait(false);
         if (git.ExitCode != 0)
+        {
+            var error = await stderr.ConfigureAwait(false);
             throw new InvalidOperationException(
-                $"git {string.Join(' ', args)} failed ({git.ExitCode}): {stderr.Result}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"git {string.Join(' ', args)} failed ({git.ExitCode}): {error}"
+                )
             );
+        }
         return lines;
     }
 }

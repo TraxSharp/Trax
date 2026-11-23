@@ -77,7 +77,7 @@ public class Order
     public decimal Total { get; set; }
     public required string TransactionId { get; set; }
     public DateTime PlacedAt { get; set; }
-    public List<OrderItem> Items { get; set; } = [];
+    public ICollection<OrderItem> Items { get; set; } = [];
 }
 ```
 

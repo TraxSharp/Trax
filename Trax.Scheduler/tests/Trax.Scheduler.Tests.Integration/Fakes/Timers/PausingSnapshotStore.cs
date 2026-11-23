@@ -1,51 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.Timers;
-
-/// <summary>
-/// A test's hold on a <see cref="PausingSnapshotStore"/>: armed, the store's next write waits after the caller's
-/// read until the test releases it, so a test can put another write between a client's read and its update.
-/// </summary>
-public sealed class PauseGate
-{
-    private TaskCompletionSource _reached = New();
-    private TaskCompletionSource _release = New();
-    private int _armed;
-
-    /// <summary>Completes once a write has been held.</summary>
-    public Task Reached => _reached.Task;
-
-    /// <summary>Holds the next write through the store.</summary>
-    public void Arm()
-    {
-        _reached = New();
-        _release = New();
-        Volatile.Write(ref _armed, 1);
-    }
-
-    /// <summary>Lets the held write go on.</summary>
-    public void Release() => _release.TrySetResult();
-
-    /// <summary>Disarms the gate and lets any held write go on.</summary>
-    public void Reset()
-    {
-        Volatile.Write(ref _armed, 0);
-        _release.TrySetResult();
-    }
-
-    internal async Task HoldIfArmed()
-    {
-        if (Interlocked.Exchange(ref _armed, 0) == 0)
-            return;
-        _reached.TrySetResult();
-        await _release.Task;
-    }
-
-    private static TaskCompletionSource New() =>
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
-}
 
 /// <summary>
 /// A test-only decorator over <see cref="ISnapshotStore"/> that, while its <see cref="PauseGate"/> is armed, holds
@@ -58,7 +16,7 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
     {
         var registered = services.Last(d => d.ServiceType == typeof(ISnapshotStore));
         services.Remove(registered);
-        var create = registered.ImplementationFactory!;
+        var create = registered.ImplementationFactory.NotNull();
         services.AddScoped<ISnapshotStore>(sp => new PausingSnapshotStore(
             (ISnapshotStore)create(sp),
             gate
@@ -95,8 +53,8 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.Upsert(userKey, id, snapshot, cancellationToken);
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner.Upsert(userKey, id, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> Insert(
@@ -106,8 +64,8 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.Insert(userKey, id, snapshot, cancellationToken);
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner.Insert(userKey, id, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> Update(
@@ -119,15 +77,10 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.Update(
-            userKey,
-            id,
-            snapshot,
-            expectedToken,
-            requestId,
-            cancellationToken
-        );
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner
+            .Update(userKey, id, snapshot, expectedToken, requestId, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<bool> UpdateWithRequest(
@@ -139,14 +92,9 @@ internal sealed class PausingSnapshotStore(ISnapshotStore inner, PauseGate gate)
         CancellationToken cancellationToken = default
     )
     {
-        await gate.HoldIfArmed();
-        return await inner.UpdateWithRequest(
-            userKey,
-            id,
-            snapshot,
-            expectedToken,
-            request,
-            cancellationToken
-        );
+        await gate.HoldIfArmed().ConfigureAwait(false);
+        return await inner
+            .UpdateWithRequest(userKey, id, snapshot, expectedToken, request, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

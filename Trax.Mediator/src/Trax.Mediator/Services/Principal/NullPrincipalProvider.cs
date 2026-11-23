@@ -1,7 +1,7 @@
 namespace Trax.Mediator.Services.Principal;
 
 /// <summary>
-/// Default <see cref="ICurrentPrincipalProvider"/> that always returns <c>null</c>.
+/// Default <see cref="ICurrentPrincipalProvider"/> that always returns <see langword="null"/>.
 /// Used in hosts that do not run inside an HTTP request pipeline (scheduler,
 /// remote worker). Replaced by <c>AddTraxApi</c> with an HttpContext-backed
 /// implementation.

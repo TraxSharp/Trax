@@ -8,5 +8,9 @@ public class ChatParticipant
     public required string DisplayName { get; set; }
     public DateTime JoinedAt { get; set; }
 
-    public ChatRoom ChatRoom { get; set; } = null!;
+    public ChatRoom ChatRoom
+    {
+        get => field ?? throw new InvalidOperationException("The chat room was not loaded.");
+        set;
+    }
 }

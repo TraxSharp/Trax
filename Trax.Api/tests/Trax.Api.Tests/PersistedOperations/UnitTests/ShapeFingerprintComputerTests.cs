@@ -261,7 +261,7 @@ public class ShapeFingerprintComputerTests
         Action emptyAct = () => Fp(string.Empty);
         emptyAct.Should().Throw<ArgumentException>();
 
-        Action nullAct = () => Fp(null!);
+        Action nullAct = () => Fp(Null.Of<string>());
         nullAct.Should().Throw<ArgumentException>();
     }
 }

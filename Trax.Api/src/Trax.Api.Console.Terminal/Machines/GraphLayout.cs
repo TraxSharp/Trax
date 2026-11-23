@@ -1,33 +1,8 @@
+using System.Runtime.InteropServices;
 using System.Text;
+using Trax.Api.Console.Terminal.Checks;
 
 namespace Trax.Api.Console.Terminal.Machines;
-
-/// <summary>A state as the graph draws it.</summary>
-/// <param name="Name">The state's name, written in its box.</param>
-/// <param name="Initial">Drawn with the entry arrow.</param>
-/// <param name="Final">Drawn with rounded corners.</param>
-/// <param name="Note">What the legend says of it (invokes a train, spawns a machine), or null.</param>
-internal sealed record GraphState(string Name, bool Initial, bool Final, string? Note = null);
-
-/// <summary>A transition as the graph draws it: a line from one box to another, its label written on the line.</summary>
-internal sealed record GraphEdge(string From, string To, string Label);
-
-/// <summary>
-/// Lays a machine out as boxes and arrows in text. States go in columns by how far they are from the initial state
-/// (the longest way there that does not go back), ordered in each column to keep lines short; each transition is
-/// routed as box-drawing lines around the boxes, crossing where it must, with its label on its first straight run
-/// and an arrowhead where it enters its target. A transition back to an earlier column is routed the same way, so it
-/// runs around the boxes. A transition to the same state is written inside the box. The current state has a double
-/// border. Laid out vertically, the columns are rows instead, top to bottom, and lines leave downward and enter from
-/// above; a label with no horizontal stretch of line to sit on is written beside the line.
-/// A machine too big to draw in a terminal is listed instead, state by state with its transitions; a transition to a
-/// state the machine does not declare, or a second state of one name, is said under the graph.
-/// </summary>
-/// <summary>
-/// How much routing one drawing took: the search steps of all its lines together, out of the budget they share, and
-/// the cells their search windows covered.
-/// </summary>
-internal readonly record struct LayoutWork(long Steps, long CellsSearched, long Budget);
 
 internal static class GraphLayout
 {
@@ -73,16 +48,7 @@ internal static class GraphLayout
             return ["(no states)"];
         // What the graph cannot draw is said under it rather than left out.
         var problems = new List<string>();
-        // A second state of a name is drawn once.
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        var twice = new HashSet<string>(StringComparer.Ordinal);
-        var distinct = new List<GraphState>(states.Count);
-        foreach (var state in states)
-            if (names.Add(state.Name))
-                distinct.Add(state);
-            else if (twice.Add(state.Name))
-                problems.Add($"{state.Name}: declared more than once, drawn once");
-        states = distinct;
+        states = DistinctStates(states, problems);
         var index = states
             .Select((s, i) => (s.Name, i))
             .ToDictionary(p => p.Name, p => p.i, StringComparer.Ordinal);
@@ -95,30 +61,11 @@ internal static class GraphLayout
 
         // A transition every state takes the same way (StartOver from anywhere) is said once under the graph, not
         // drawn from each.
-        var everywhere = known
-            .Where(e => e.From != e.To)
-            .GroupBy(e => (e.Label, e.To))
-            .Where(g => g.Count() >= FanIn)
-            .ToList();
+        var everywhere = Everywhere(known);
         var said = everywhere.SelectMany(g => g).ToHashSet();
         // Several transitions between the same two states are one line with their labels joined.
-        var lines = known
-            .Where(e => e.From != e.To && !said.Contains(e))
-            .GroupBy(e => (e.From, e.To))
-            .Select(g => new GraphEdge(
-                g.Key.From,
-                g.Key.To,
-                Join(g.Select(e => e.Label).Distinct().ToList())
-            ))
-            .ToList();
-        var loops = known
-            .Where(e => e.From == e.To)
-            .GroupBy(e => e.From)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Select(e => e.Label).Distinct().ToList(),
-                StringComparer.Ordinal
-            );
+        var lines = JoinedLines(known, said);
+        var loops = SelfLoops(known);
 
         var layers = Layers(states, lines, index);
         var columns = Order(layers, lines, index, states.Count);
@@ -130,13 +77,99 @@ internal static class GraphLayout
         if ((long)width * height > MaxCells)
             return Listed(states, known, current, problems);
 
+        var canvas = DrawBoxes(boxes, width, height, vertical, current, loops);
+
+        var unplaced = RouteLines(canvas, boxes, lines, index);
+
+        var output = Trimmed(canvas);
+        var legend = Legend(everywhere, unplaced, problems, states);
+        work = new LayoutWork(canvas.Steps, canvas.CellsSearched, SearchBudget);
+        if (legend.Count > 0)
+        {
+            output.Add("");
+            output.AddRange(legend);
+        }
+        return output;
+    }
+
+    // A second state of a name is drawn once.
+    private static List<GraphState> DistinctStates(
+        IReadOnlyList<GraphState> states,
+        List<string> problems
+    )
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var twice = new HashSet<string>(StringComparer.Ordinal);
+        var distinct = new List<GraphState>(states.Count);
+        foreach (var state in states)
+            if (names.Add(state.Name))
+                distinct.Add(state);
+            else if (twice.Add(state.Name))
+                problems.Add($"{state.Name}: declared more than once, drawn once");
+        return distinct;
+    }
+
+    private static List<IGrouping<(string Label, string To), GraphEdge>> Everywhere(
+        List<GraphEdge> known
+    ) =>
+        known
+            .Where(e => !string.Equals(e.From, e.To, StringComparison.Ordinal))
+            .GroupBy(e => (e.Label, e.To))
+            .Where(g => g.Skip(2).Any())
+            .ToList();
+
+    private static List<GraphEdge> JoinedLines(List<GraphEdge> known, HashSet<GraphEdge> said) =>
+        known
+            .Where(e => !string.Equals(e.From, e.To, StringComparison.Ordinal) && !said.Contains(e))
+            .GroupBy(e => (e.From, e.To))
+            .Select(g => new GraphEdge(
+                g.Key.From,
+                g.Key.To,
+                Join(g.Select(e => e.Label).Distinct(StringComparer.Ordinal).ToList())
+            ))
+            .ToList();
+
+    private static Dictionary<string, List<string>> SelfLoops(List<GraphEdge> known) =>
+        known
+            .Where(e => string.Equals(e.From, e.To, StringComparison.Ordinal))
+            .GroupBy(e => e.From, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(e => e.Label).Distinct(StringComparer.Ordinal).ToList(),
+                StringComparer.Ordinal
+            );
+
+    // The canvas with each state's box, the current one marked, and the arrow into the initial state.
+    private static Canvas DrawBoxes(
+        List<Placed> boxes,
+        int width,
+        int height,
+        bool vertical,
+        string? current,
+        Dictionary<string, List<string>> loops
+    )
+    {
         var canvas = new Canvas(width, height, vertical);
         foreach (var box in boxes)
-            canvas.Box(box, box.State.Name == current, loops.GetValueOrDefault(box.State.Name));
+            canvas.Box(
+                box,
+                string.Equals(box.State.Name, current, StringComparison.Ordinal),
+                loops.GetValueOrDefault(box.State.Name)
+            );
         var initial = boxes.FirstOrDefault(b => b.State.Initial);
         if (initial is not null && (vertical ? initial.Y >= 2 : initial.X >= 3))
             canvas.Entry(initial);
+        return canvas;
+    }
 
+    // Draws each line, short ones first, and labels it. Returns the lines that could not be drawn or labelled.
+    private static List<string> RouteLines(
+        Canvas canvas,
+        List<Placed> boxes,
+        List<GraphEdge> lines,
+        Dictionary<string, int> index
+    )
+    {
         var unplaced = new List<string>();
         var routes = new List<(GraphEdge Edge, List<(int X, int Y)> Path)>();
         // The cells of the lines already drawn into each state, which a later line into it may join.
@@ -163,15 +196,26 @@ internal static class GraphLayout
         foreach (var (edge, path) in routes)
             if (!canvas.Label(path, edge.Label))
                 unplaced.Add($"{edge.From} ──▶ {edge.To}: {edge.Label}");
+        return unplaced;
+    }
 
-        // The margins kept free for routing are dropped where no line used them.
-        var output = canvas
+    // The margins kept free for routing are dropped where no line used them.
+    private static List<string> Trimmed(Canvas canvas) =>
+        canvas
             .Lines()
             .SkipWhile(l => l.Length == 0)
             .Reverse()
             .SkipWhile(l => l.Length == 0)
             .Reverse()
             .ToList();
+
+    private static List<string> Legend(
+        List<IGrouping<(string Label, string To), GraphEdge>> everywhere,
+        List<string> unplaced,
+        List<string> problems,
+        IReadOnlyList<GraphState> states
+    )
+    {
         var legend = new List<string>();
         legend.AddRange(
             everywhere.Select(g =>
@@ -181,13 +225,7 @@ internal static class GraphLayout
         legend.AddRange(unplaced);
         legend.AddRange(problems);
         legend.AddRange(states.Where(s => s.Note is not null).Select(s => $"{s.Name}: {s.Note}"));
-        work = new LayoutWork(canvas.Steps, canvas.CellsSearched, SearchBudget);
-        if (legend.Count > 0)
-        {
-            output.Add("");
-            output.AddRange(legend);
-        }
-        return output;
+        return legend;
     }
 
     // A machine too big to draw: each state, marked as the graph would mark it, and the transitions that leave it.
@@ -207,7 +245,7 @@ internal static class GraphLayout
         foreach (var state in states)
         {
             output.Add(
-                (state.Name == current ? "▶ " : "  ")
+                (string.Equals(state.Name, current, StringComparison.Ordinal) ? "▶ " : "  ")
                     + state.Name
                     + (state.Initial ? "  (initial)" : "")
                     + (state.Final ? "  (final)" : "")
@@ -246,40 +284,8 @@ internal static class GraphLayout
         foreach (var e in lines)
             outgoing[index[e.From]].Add(index[e.To]);
 
-        // A transition into a state still on the walk's path goes back: it is left out of the layering.
-        var back = new HashSet<(int, int)>();
-        var mark = new int[n]; // 0 unseen, 1 on the path, 2 done
-        // Depth first with a stack of its own, not the call stack, so a long chain of states does not overflow it.
-        var path = new Stack<(int V, int Next)>();
-        void Walk(int root)
-        {
-            mark[root] = 1;
-            path.Push((root, 0));
-            while (path.Count > 0)
-            {
-                var (v, next) = path.Pop();
-                if (next == outgoing[v].Count)
-                {
-                    mark[v] = 2;
-                    continue;
-                }
-                path.Push((v, next + 1));
-                var w = outgoing[v][next];
-                if (mark[w] == 1)
-                    back.Add((v, w));
-                else if (mark[w] == 0)
-                {
-                    mark[w] = 1;
-                    path.Push((w, 0));
-                }
-            }
-        }
         var start = states.ToList().FindIndex(s => s.Initial);
-        if (start >= 0)
-            Walk(start);
-        for (var v = 0; v < n; v++)
-            if (mark[v] == 0)
-                Walk(v);
+        var back = BackEdges(outgoing, start);
 
         var layer = new int[n];
         var incoming = new int[n];
@@ -315,6 +321,46 @@ internal static class GraphLayout
                 if (v != start && layer[v] == 0 && !reached[v])
                     layer[v] = 1;
         return layer;
+    }
+
+    // The transitions that go back: into a state still on the walk's path, walking first from the initial state.
+    private static HashSet<(int, int)> BackEdges(List<int>[] outgoing, int start)
+    {
+        var n = outgoing.Length;
+        // A transition into a state still on the walk's path goes back: it is left out of the layering.
+        var back = new HashSet<(int, int)>();
+        var mark = new int[n]; // 0 unseen, 1 on the path, 2 done
+        // Depth first with a stack of its own, not the call stack, so a long chain of states does not overflow it.
+        var path = new Stack<(int V, int Next)>();
+        void Walk(int root)
+        {
+            mark[root] = 1;
+            path.Push((root, 0));
+            while (path.Count > 0)
+            {
+                var (v, next) = path.Pop();
+                if (next == outgoing[v].Count)
+                {
+                    mark[v] = 2;
+                    continue;
+                }
+                path.Push((v, next + 1));
+                var w = outgoing[v][next];
+                if (mark[w] == 1)
+                    back.Add((v, w));
+                else if (mark[w] == 0)
+                {
+                    mark[w] = 1;
+                    path.Push((w, 0));
+                }
+            }
+        }
+        if (start >= 0)
+            Walk(start);
+        for (var v = 0; v < n; v++)
+            if (mark[v] == 0)
+                Walk(v);
+        return back;
     }
 
     // The states of each column, ordered by the mean position of their neighbours in the column before and after,
@@ -543,7 +589,7 @@ internal static class GraphLayout
             }
             Write(box.X + 2, box.Y + 1, box.State.Name);
             for (var i = 0; i < (loops?.Count ?? 0); i++)
-                Write(box.X + 2, box.Y + 2 + i, $"↻ {loops![i]}");
+                Write(box.X + 2, box.Y + 2 + i, $"↻ {loops.NotNull()[i]}");
         }
 
         // The initial state's entry: a dot and an arrow into its left side.
@@ -624,23 +670,7 @@ internal static class GraphLayout
                     p => (In: (p.Out + 2) % 4, Cost: EndCost(p.Out) + Facing(to, from, p.Out))
                 );
             var dist = _dist;
-            var prev = _prev;
-            for (var y = y0; y <= y1; y++)
-                Array.Fill(dist, int.MaxValue, Cell(x0, y, 0), (x1 - x0 + 1) * 4);
-            CellsSearched += (long)(x1 - x0 + 1) * (y1 - y0 + 1);
-            var queue = new PriorityQueue<(int X, int Y, int D), int>();
-            foreach (var s in starts)
-            {
-                if (!Inside(s.X, s.Y) || !Free(s.X, s.Y))
-                    continue;
-                var cost = s.Cost + Penalty(s.X, s.Y, s.Dir);
-                if (cost < dist[Cell(s.X, s.Y, s.Dir)])
-                {
-                    dist[Cell(s.X, s.Y, s.Dir)] = cost;
-                    prev[Cell(s.X, s.Y, s.Dir)] = -1;
-                    queue.Enqueue((s.X, s.Y, s.Dir), cost);
-                }
-            }
+            var queue = Seed(starts, x0, y0, x1, y1);
             (int X, int Y, int D)? best = null;
             (int X, int Y, int D)? join = null;
             var bestCost = int.MaxValue;
@@ -653,17 +683,7 @@ internal static class GraphLayout
                     continue;
                 if (--_budget <= 0)
                     return null;
-                // The arrowhead's cell is reached heading into the box, so the arrow points the way the line runs.
-                if (ends.TryGetValue((at.X, at.Y), out var end) && at.D == end.In)
-                {
-                    var total = cost + end.Cost;
-                    if (total < bestCost)
-                    {
-                        bestCost = total;
-                        best = at;
-                        join = null;
-                    }
-                }
+                Arrive(at, cost, ends, ref bestCost, ref best, ref join);
                 for (var d = 0; d < 4; d++)
                 {
                     if (d == (at.D + 2) % 4)
@@ -686,23 +706,102 @@ internal static class GraphLayout
                     }
                     if (!Free(nx, ny))
                         continue;
-                    // Laid out down, a step across costs more the further it is below the box the line leaves, so lines
-                    // leaving one box turn off sideways at once rather than running down side by side, and the one
-                    // that goes straight down keeps clear rows for its label.
-                    var step =
-                        vertical && d is 1 or 3 ? 1 + Math.Max(0, ny - (from.Y + from.Height)) : 1;
-                    var next = cost + step + (d == at.D ? 0 : 4) + Penalty(nx, ny, d);
-                    if (next < dist[Cell(nx, ny, d)])
-                    {
-                        dist[Cell(nx, ny, d)] = next;
-                        prev[Cell(nx, ny, d)] = Cell(at.X, at.Y, at.D);
-                        queue.Enqueue((nx, ny, d), next);
-                    }
+                    Relax(queue, at, cost, d, nx, ny, from);
                 }
             }
             if (best is not { } last)
                 return null;
 
+            return DrawCheapest(last, join, from, ends);
+        }
+
+        // Fills the search area's costs and queues each start that is inside it and free.
+        private PriorityQueue<(int X, int Y, int D), int> Seed(
+            List<(int X, int Y, int Dir, int Cost)> starts,
+            int x0,
+            int y0,
+            int x1,
+            int y1
+        )
+        {
+            bool Inside(int x, int y) => x >= x0 && y >= y0 && x <= x1 && y <= y1;
+            var dist = _dist;
+            var prev = _prev;
+            for (var y = y0; y <= y1; y++)
+                Array.Fill(dist, int.MaxValue, Cell(x0, y, 0), (x1 - x0 + 1) * 4);
+            CellsSearched += (long)(x1 - x0 + 1) * (y1 - y0 + 1);
+            var queue = new PriorityQueue<(int X, int Y, int D), int>();
+            foreach (var s in starts)
+            {
+                if (!Inside(s.X, s.Y) || !Free(s.X, s.Y))
+                    continue;
+                var cost = s.Cost + Penalty(s.X, s.Y, s.Dir);
+                if (cost < dist[Cell(s.X, s.Y, s.Dir)])
+                {
+                    dist[Cell(s.X, s.Y, s.Dir)] = cost;
+                    prev[Cell(s.X, s.Y, s.Dir)] = -1;
+                    queue.Enqueue((s.X, s.Y, s.Dir), cost);
+                }
+            }
+            return queue;
+        }
+
+        private static void Arrive(
+            (int X, int Y, int D) at,
+            int cost,
+            Dictionary<(int X, int Y), (int In, int Cost)> ends,
+            ref int bestCost,
+            ref (int X, int Y, int D)? best,
+            ref (int X, int Y, int D)? join
+        )
+        {
+            // The arrowhead's cell is reached heading into the box, so the arrow points the way the line runs.
+            if (ends.TryGetValue((at.X, at.Y), out var end) && at.D == end.In)
+            {
+                var total = cost + end.Cost;
+                if (total < bestCost)
+                {
+                    bestCost = total;
+                    best = at;
+                    join = null;
+                }
+            }
+        }
+
+        private void Relax(
+            PriorityQueue<(int X, int Y, int D), int> queue,
+            (int X, int Y, int D) at,
+            int cost,
+            int d,
+            int nx,
+            int ny,
+            Placed from
+        )
+        {
+            var dist = _dist;
+            var prev = _prev;
+            // Laid out down, a step across costs more the further it is below the box the line leaves, so lines
+            // leaving one box turn off sideways at once rather than running down side by side, and the one
+            // that goes straight down keeps clear rows for its label.
+            var step = vertical && d is 1 or 3 ? 1 + Math.Max(0, ny - (from.Y + from.Height)) : 1;
+            var next = cost + step + (d == at.D ? 0 : 4) + Penalty(nx, ny, d);
+            if (next < dist[Cell(nx, ny, d)])
+            {
+                dist[Cell(nx, ny, d)] = next;
+                prev[Cell(nx, ny, d)] = Cell(at.X, at.Y, at.D);
+                queue.Enqueue((nx, ny, d), next);
+            }
+        }
+
+        // The cells of the cheapest line, drawn, with its arrowhead unless it joins a trunk.
+        private List<(int X, int Y)> DrawCheapest(
+            (int X, int Y, int D) last,
+            (int X, int Y, int D)? join,
+            Placed from,
+            Dictionary<(int X, int Y), (int In, int Cost)> ends
+        )
+        {
+            var prev = _prev;
             var path = new List<(int X, int Y, int D)>();
             for (var cell = Cell(last.X, last.Y, last.D); cell >= 0; cell = prev[cell])
                 path.Add((cell / 4 % width, cell / 4 / width, cell % 4));

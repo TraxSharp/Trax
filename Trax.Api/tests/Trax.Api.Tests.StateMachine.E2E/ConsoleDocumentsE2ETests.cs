@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -266,8 +267,8 @@ public partial class ConsoleDocumentsE2ETests
         };
         await using var host = await HostAsync("trax_sm_console_docs_late", options);
 
-        var console = () => mapped!.UseTraxOperatorConsoleDocuments();
-        var dashboard = () => mapped!.UseTraxApiDashboard(d => d.AllowAnonymousShell());
+        var console = () => mapped.NotNull().UseTraxOperatorConsoleDocuments();
+        var dashboard = () => mapped.NotNull().UseTraxApiDashboard(d => d.AllowAnonymousShell());
 
         console.Should().Throw<InvalidOperationException>().WithMessage("*after the host started*");
         dashboard
@@ -284,37 +285,61 @@ public partial class ConsoleDocumentsE2ETests
         );
 
     // A console document's text as the dashboard package embeds it, so a test that sends it raw sends a valid document.
-    private static string ConsoleTextOf(string name)
+    private static string ConsoleTextOf(string name) =>
+        ConsoleTexts.Single(d => string.Equals(d.Name, name, StringComparison.Ordinal)).Text;
+
+    private static List<(string Name, string Text)> ConsoleTexts = [];
+
+    [OneTimeSetUp]
+    public async Task ReadConsoleTexts()
     {
-        using var stream =
-            typeof(ApiDashboardEndpointExtensions).Assembly.GetManifestResourceStream(
-                "TraxApiDashboardDocuments/console-documents.json"
-            )!;
-        using var file = JsonDocument.Parse(stream);
-        return file
-            .RootElement.GetProperty("documents")
-            .EnumerateArray()
-            .Single(d => d.GetProperty("name").GetString() == name)
-            .GetProperty("text")
-            .GetString()!;
+        var stream = typeof(ApiDashboardEndpointExtensions)
+            .Assembly.GetManifestResourceStream("TraxApiDashboardDocuments/console-documents.json")
+            .NotNull();
+        await using var streamDisposal = stream.ConfigureAwait(false);
+        using var file = await JsonDocument
+            .ParseAsync(stream, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        ConsoleTexts =
+        [
+            .. file
+                .RootElement.GetProperty("documents")
+                .EnumerateArray()
+                .Select(d =>
+                    (
+                        d.GetProperty("name").GetString().NotNull(),
+                        d.GetProperty("text").GetString().NotNull()
+                    )
+                ),
+        ];
     }
 
     // The ids the page is told, read from the runtime config the dashboard writes into its entry page.
     private static async Task<Dictionary<string, string>> DocumentIdsAsync(IHost host)
     {
         var client = host.GetTestServer().CreateClient();
-        var response = await client.GetAsync("/trax/dashboard/");
+        var response = await client.GetAsync("/trax/dashboard/").ConfigureAwait(false);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var html = await response.Content.ReadAsStringAsync();
-        var content = ConfigMeta().Match(html).Groups["content"].Value;
+        var html = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var content = ConfigMeta.Match(html).Groups["content"].Value;
         using var config = JsonDocument.Parse(WebUtility.HtmlDecode(content));
         return config.RootElement.TryGetProperty("documents", out var documents)
-            ? documents.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!)
+            ? documents
+                .EnumerateObject()
+                .ToDictionary(
+                    p => p.Name,
+                    p => p.Value.GetString().NotNull(),
+                    StringComparer.Ordinal
+                )
             : [];
     }
 
-    [GeneratedRegex("<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"")]
-    private static partial Regex ConfigMeta();
+    [GeneratedRegex(
+        "<meta name=\"trax-dashboard-config\" content=\"(?<content>[^\"]*)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConfigMeta { get; }
 
     private static E2EHostOptions Options(bool persisted) =>
         new()
@@ -323,7 +348,9 @@ public partial class ConsoleDocumentsE2ETests
             ExposeOperations = true,
             GraphQL = persisted
                 ? graphql =>
-                    graphql.UsePersistedOperations(po => po.SingleNode().RequirePersisted(true))
+                    graphql.UsePersistedOperations(po =>
+                        po.SingleNode().RequirePersisted(require: true)
+                    )
                 : null,
             Endpoints = endpoints => endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell()),
         };
@@ -348,15 +375,17 @@ public partial class ConsoleDocumentsE2ETests
 
     private static async Task<HostedDatabase> HostAsync(string database, E2EHostOptions options)
     {
-        await E2EHost.RecreateDatabaseAsync(database);
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         try
         {
-            var host = await E2EHost.StartAsync(database, new CountingCharge(), options);
+            var host = await E2EHost
+                .StartAsync(database, new CountingCharge(), options)
+                .ConfigureAwait(false);
             return new HostedDatabase(database, host);
         }
         catch
         {
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
             throw;
         }
     }
@@ -366,7 +395,7 @@ public partial class ConsoleDocumentsE2ETests
         public async ValueTask DisposeAsync()
         {
             Host.Dispose();
-            await E2EHost.DropDatabaseAsync(Database);
+            await E2EHost.DropDatabaseAsync(Database).ConfigureAwait(false);
         }
     }
 }

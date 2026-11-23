@@ -4,22 +4,6 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
 
-public enum BadgeState
-{
-    Issued,
-    Returned,
-}
-
-public enum BadgeTrigger
-{
-    Return,
-}
-
-public sealed record BadgeContext
-{
-    public string? Holder { get; init; }
-}
-
 /// <summary>
 /// A machine whose push needs a policy as well as ownership: only an owner who satisfies
 /// <see cref="WatchPolicy"/> may watch an instance. Abstract, so only a host that serves it

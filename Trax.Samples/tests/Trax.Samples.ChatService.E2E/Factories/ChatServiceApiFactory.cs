@@ -19,7 +19,7 @@ public class ChatServiceApiFactory : WebApplicationFactory<Trax.Samples.ChatServ
 
     public override async ValueTask DisposeAsync()
     {
-        await base.DisposeAsync();
+        await base.DisposeAsync().ConfigureAwait(false);
 
         foreach (var path in new[] { TraxDbPath, ChatDbPath })
         {

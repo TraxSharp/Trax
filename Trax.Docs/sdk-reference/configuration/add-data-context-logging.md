@@ -15,6 +15,7 @@ source:
   - Trax.Effect/src/Trax.Effect.Data/Services/DataContextLoggingProvider/DataContextLoggingProvider.cs
   - Trax.Effect/src/Trax.Effect.Data/Services/DataContextLoggingProvider/DataContextLogger.cs
   - Trax.Effect/src/Trax.Effect.Data/Services/DataContextLoggingProvider/IDataContextLoggingProviderConfiguration.cs
+  - Trax.Effect/src/Trax.Effect.Data/Services/DataContextLoggingProvider/DataContextLoggingProviderConfiguration.cs
 redirect_from:
   - /docs/sdk-reference/configuration/add-effect-data-context-logging
 ---

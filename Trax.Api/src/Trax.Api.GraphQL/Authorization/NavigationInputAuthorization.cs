@@ -167,7 +167,9 @@ internal static class NavigationInputAuthorization
                 continue;
 
             var directives = objectType
-                .Directives.Where(d => d.Type.Name == "authorize")
+                .Directives.Where(d =>
+                    string.Equals(d.Type.Name, "authorize", StringComparison.Ordinal)
+                )
                 .Select(d => d.ToValue<AuthorizeDirective>())
                 .ToArray();
 

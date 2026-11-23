@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Typed;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -16,7 +17,11 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class TypedRequestPathExtractTests
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     [Test]
     public void Extract_NoPath_DescendsIntoRootField()
@@ -55,7 +60,7 @@ public class TypedRequestPathExtractTests
         var result = request.Extract(data, Options);
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("c1");
+        result.NotNull().Id.Should().Be("c1");
         result.Name.Should().Be("Acme");
     }
 

@@ -1,5 +1,7 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
@@ -14,7 +16,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainBusTypedOutputTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -36,7 +38,7 @@ public class TrainBusTypedOutputTests
     public async Task RunAsync_NonGeneric_WorksWithTypedOutputTrain()
     {
         // Arrange — MemoryTestTrain returns MemoryTestOutput, not Unit
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput(id: "typed-output-1", processingDelayMs: 0);
 
         // Act — non-generic RunAsync should not throw InvalidCastException
@@ -47,7 +49,7 @@ public class TrainBusTypedOutputTests
     public async Task RunAsync_NonGeneric_WithCancellationToken_WorksWithTypedOutputTrain()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput(id: "typed-output-ct", processingDelayMs: 0);
 
         // Act
@@ -58,7 +60,7 @@ public class TrainBusTypedOutputTests
     public async Task RunAsync_Generic_ReturnsTypedOutput()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput(id: "typed-generic", processingDelayMs: 0);
 
         // Act
@@ -74,7 +76,7 @@ public class TrainBusTypedOutputTests
     public async Task RunAsync_Generic_WithCancellationToken_ReturnsTypedOutput()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput(
             id: "typed-generic-ct",
             processingDelayMs: 0
@@ -93,12 +95,15 @@ public class TrainBusTypedOutputTests
     public async Task RunAsync_NonGeneric_MultipleTypedTrains_AllSucceed()
     {
         // Arrange — run multiple typed output trains to verify no cross-contamination
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act — run several trains with non-Unit output via non-generic RunAsync
         for (var i = 0; i < 10; i++)
         {
-            var input = MemoryTestModelFactory.CreateInput(id: $"batch-{i}", processingDelayMs: 0);
+            var input = MemoryTestModelFactory.CreateInput(
+                id: string.Create(CultureInfo.InvariantCulture, $"batch-{i}"),
+                processingDelayMs: 0
+            );
             await trainBus.RunAsync(input);
         }
     }
@@ -107,13 +112,13 @@ public class TrainBusTypedOutputTests
     public async Task RunAsync_NonGeneric_ConcurrentTypedTrains_AllSucceed()
     {
         // Arrange — concurrent execution to verify thread safety
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var tasks = Enumerable
             .Range(0, 20)
             .Select(i =>
             {
                 var input = MemoryTestModelFactory.CreateInput(
-                    id: $"concurrent-{i}",
+                    id: string.Create(CultureInfo.InvariantCulture, $"concurrent-{i}"),
                     processingDelayMs: 0
                 );
                 return trainBus.RunAsync(input);

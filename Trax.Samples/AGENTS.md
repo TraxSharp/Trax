@@ -115,8 +115,8 @@ because its tests log in to Postgres and RabbitMQ as the book does: CI runs it i
 suite (locally `trax-test book-sample`). The folder's own guards do not scan it, and
 `.csharpierignore` leaves it as the book prints it.
 
-`tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs` is the consumer adoption
-path for the shipped guard packages, and has no test bodies by design.
+The `Bookworm*Guards.cs` files in `tests/Trax.Samples.Tests.Reflection/` are the consumer adoption
+path for the shipped guard packages, and have no test bodies by design.
 
 `tests/Trax.Samples.Tests.Chains/` holds a golden of every sample train's declared graph
 (`ChainGraph`), one `UnitTests/Goldens/<TrainName>.chain.json` per train. A change to a train's

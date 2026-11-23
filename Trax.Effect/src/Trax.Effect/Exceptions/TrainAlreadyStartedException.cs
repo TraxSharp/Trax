@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Exceptions;
 
 namespace Trax.Effect.Exceptions;
@@ -18,7 +19,10 @@ namespace Trax.Effect.Exceptions;
 /// <param name="trainName">The train the row belongs to.</param>
 public class TrainAlreadyStartedException(long metadataId, string trainName)
     : TrainException(
-        $"Metadata ({metadataId}) for train ({trainName}) is no longer Pending: another execution has already started it."
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Metadata ({metadataId}) for train ({trainName}) is no longer Pending: another execution has already started it."
+        )
     )
 {
     /// <summary>The id of the row that was already started.</summary>

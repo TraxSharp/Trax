@@ -4,14 +4,17 @@ using System.Text;
 namespace Trax.Docs.Tests.Infrastructure;
 
 /// <summary>The heading ids traxsharp.net gives a page, computed the way rehype-slug does.</summary>
-internal static class Headings
+internal static partial class Headings
 {
-    private static readonly Regex Fence = new(@"^\s*(```|~~~)", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Fence { get; }
 
-    private static readonly Regex AtxHeading = new(
+    [GeneratedRegex(
         @"^ {0,3}#{1,6}[ \t]+(?<text>.*?)(?:[ \t]+#+)?[ \t]*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AtxHeading { get; }
 
     /// <summary>
     /// The ids rehype-slug gives a page's headings: github-slugger over each heading's text,
@@ -21,12 +24,12 @@ internal static class Headings
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
-        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var inFence = false;
         var start = 0;
 
         // Front matter is not part of the rendered page.
-        if (lines.Length > 0 && lines[0] == "---")
+        if (lines.Length > 0 && string.Equals(lines[0], "---", StringComparison.Ordinal))
         {
             var end = Array.IndexOf(lines, "---", 1);
             if (end > 0)
@@ -52,7 +55,7 @@ internal static class Headings
             while (occurrences.ContainsKey(unique))
             {
                 occurrences[slug]++;
-                unique = $"{slug}-{occurrences[slug]}";
+                unique = string.Create(CultureInfo.InvariantCulture, $"{slug}-{occurrences[slug]}");
             }
             occurrences[unique] = 0;
             ids.Add(unique);
@@ -63,10 +66,10 @@ internal static class Headings
     /// <summary>A heading's rendered text: link and code markup dropped, their text kept.</summary>
     public static string PlainText(string heading)
     {
-        var text = Regex.Replace(heading, @"!\[[^\]]*\]\([^)]*\)", "");
-        text = Regex.Replace(text, @"\[([^\]]*)\]\([^)]*\)", "$1");
-        text = Regex.Replace(text, @"`([^`]*)`", "$1");
-        text = Regex.Replace(text, @"\\(\p{P}|\p{S})", "$1");
+        var text = ImageMarkup.Replace(heading, "");
+        text = LinkMarkup.Replace(text, "${text}");
+        text = CodeMarkup.Replace(text, "${text}");
+        text = EscapedPunctuation.Replace(text, "${text}");
         return text;
     }
 
@@ -99,4 +102,20 @@ internal static class Headings
         }
         return sb.ToString();
     }
+
+    [GeneratedRegex(@"!\[[^\]]*\]\([^)]*\)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ImageMarkup { get; }
+
+    [GeneratedRegex(
+        @"\[(?<text>[^\]]*)\]\([^)]*\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LinkMarkup { get; }
+
+    [GeneratedRegex(@"`(?<text>[^`]*)`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex CodeMarkup { get; }
+
+    [GeneratedRegex(@"\\(?<text>\p{P}|\p{S})", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EscapedPunctuation { get; }
 }

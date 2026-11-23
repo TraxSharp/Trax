@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -23,7 +24,8 @@ public class PostgresDataSourceLifetimeTests
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false)
             .Build()
-            .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+            .NotNull()
     );
 
     [Test]
@@ -31,12 +33,13 @@ public class PostgresDataSourceLifetimeTests
     {
         var provider = BuildProvider(new ServiceCollection());
         var dataSource = provider.GetRequiredService<NpgsqlDataSource>();
-        await using (var connection = await dataSource.OpenConnectionAsync())
+        var connection = await dataSource.OpenConnectionAsync();
+        await using (connection.ConfigureAwait(false))
             connection.State.Should().Be(System.Data.ConnectionState.Open);
 
         await provider.DisposeAsync();
 
-        var open = async () => await dataSource.OpenConnectionAsync();
+        var open = async () => await dataSource.OpenConnectionAsync().ConfigureAwait(false);
         await open.Should()
             .ThrowAsync<ObjectDisposedException>(
                 "the container owns the data source, so disposing it closes the pool"
@@ -47,7 +50,7 @@ public class PostgresDataSourceLifetimeTests
     public async Task Two_providers_from_one_collection_do_not_share_a_data_source()
     {
         var services = new ServiceCollection();
-        BuildProvider(services, build: false);
+        Register(services);
         var first = services.BuildServiceProvider();
         var second = services.BuildServiceProvider();
 
@@ -57,14 +60,17 @@ public class PostgresDataSourceLifetimeTests
         ).DisposeAsync();
         await first.DisposeAsync();
 
-        await using (second)
+        await using ((second).ConfigureAwait(false))
         {
             var factory = second.GetRequiredService<IDataContextProviderFactory>();
-            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            await using var contextDisposal = context.ConfigureAwait(false);
             var reading = async () =>
-                await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
-                    context.Metadatas
-                );
+                await Microsoft
+                    .EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
+                        context.Metadatas
+                    )
+                    .ConfigureAwait(false);
             await reading
                 .Should()
                 .NotThrowAsync(
@@ -73,10 +79,15 @@ public class PostgresDataSourceLifetimeTests
         }
     }
 
-    private static ServiceProvider BuildProvider(IServiceCollection services, bool build = true)
+    private static ServiceProvider BuildProvider(IServiceCollection services)
+    {
+        Register(services);
+        return services.BuildServiceProvider();
+    }
+
+    private static void Register(IServiceCollection services)
     {
         services.AddLogging();
         services.AddTrax(trax => trax.AddEffects(effects => effects.UsePostgres(ConnectionString)));
-        return build ? services.BuildServiceProvider() : null!;
     }
 }

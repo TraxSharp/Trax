@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -6,6 +7,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 
@@ -31,7 +33,7 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// manifest is enabled. Both loads decide this in the query, before the per-group limit is applied,
 /// so held entries never take a group's share of a cycle.
 /// </remarks>
-internal class LoadQueuedJobsJunction(
+internal sealed class LoadQueuedJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ISqlDialect sqlDialect
@@ -40,8 +42,8 @@ internal class LoadQueuedJobsJunction(
     public override async Task<List<WorkQueue>> Run(Unit input)
     {
         var entries = config.MaxQueuedJobsPerCycle.HasValue
-            ? await LoadGroupFair(config.MaxQueuedJobsPerCycle.Value)
-            : await LoadAllQueued();
+            ? await LoadGroupFair(config.MaxQueuedJobsPerCycle.Value).ConfigureAwait(false)
+            : await LoadAllQueued().ConfigureAwait(false);
 
         return FirstPerSubject(entries);
     }
@@ -69,16 +71,29 @@ internal class LoadQueuedJobsJunction(
     {
         return await dataContext
             .WorkQueues.AsNoTracking()
-            .Include(q => q.Manifest)
-                .ThenInclude(m => m!.ManifestGroup)
+            .Include(
+                $"{nameof(Trax.Effect.Models.WorkQueue.WorkQueue.Manifest)}.{nameof(Trax.Effect.Models.Manifest.Manifest.ManifestGroup)}"
+            )
             .Where(q => q.Status == WorkQueueStatus.Queued)
             // An entry staged by a two-phase enqueue is not dispatchable until promoted. The claim
             // query rejects it anyway; excluding it here keeps it out of the candidate batch so it
             // cannot crowd out work that is actually ready.
             .Where(q => q.ConfirmedAt != null)
-            .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
-            .Where(q => q.ManifestId == null || q.Manifest!.IsEnabled || q.IsExplicitTrigger)
-            .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+            .Where(q =>
+                q.ManifestId == null
+                || (
+                    q.Manifest != null
+                    && q.Manifest.ManifestGroup != null
+                    && q.Manifest.ManifestGroup.IsEnabled
+                )
+            )
+            .Where(q =>
+                q.ManifestId == null
+                || (q.Manifest != null && q.Manifest.IsEnabled)
+                || q.IsExplicitTrigger
+            )
+            // Due by the database's clock, the one the claim compares with.
+            .Where(DatabaseClock.IsDue())
             // Subjects with a run still in flight are not candidates. The claim refuses them
             // anyway; dropping them here keeps a blocked subject from crowding the batch.
             .Where(q =>
@@ -93,10 +108,15 @@ internal class LoadQueuedJobsJunction(
                     )
                 )
             )
-            .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+            .OrderByDescending(q =>
+                q.Manifest != null && q.Manifest.ManifestGroup != null
+                    ? q.Manifest.ManifestGroup.Priority
+                    : 0
+            )
             .ThenByDescending(q => q.Priority)
             .ThenBy(q => q.CreatedAt)
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -115,9 +135,11 @@ internal class LoadQueuedJobsJunction(
         var entries = await dataContext
             .WorkQueues.FromSqlRaw(sqlDialect.LoadGroupFairQueuedJobs(), perGroupLimit)
             .AsNoTracking()
-            .Include(q => q.Manifest)
-                .ThenInclude(m => m!.ManifestGroup)
-            .ToListAsync(CancellationToken);
+            .Include(
+                $"{nameof(Trax.Effect.Models.WorkQueue.WorkQueue.Manifest)}.{nameof(Trax.Effect.Models.Manifest.Manifest.ManifestGroup)}"
+            )
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         // Sort in-memory: group priority (desc), entry priority (desc), created_at (asc).
         // This matches the ordering expected by ApplyCapacityLimitsJunction.

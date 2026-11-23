@@ -36,7 +36,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             IntervalSchedule,
             new ManifestOptions { Priority = 1, MaxRetries = 1 },
             groupId: "g1",
-            group: new ManifestGroupSeed(PriorityIfNew: 1)
+            group: new ManifestGroupSeed(PriorityIfNew: 1),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -45,7 +46,7 @@ public class DataContextExtensionsCoverageTests : TestSetup
             typeof(SchedulerTestTrain),
             externalId,
             new SchedulerTestInput { Value = "second" },
-            Schedule.FromCron("0 0 * * *"),
+            Schedule.FromCron("0 0 * * *", TimeProvider.System),
             new ManifestOptions
             {
                 Priority = 9,
@@ -55,7 +56,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 MisfireThreshold = TimeSpan.FromMinutes(3),
             },
             groupId: "g1",
-            group: new ManifestGroupSeed(PriorityIfNew: 1)
+            group: new ManifestGroupSeed(PriorityIfNew: 1),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -83,7 +85,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             IntervalSchedule,
             new ManifestOptions(),
             groupId: "dep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -97,7 +100,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             parent.Id,
             new ManifestOptions { IsDormant = false, Priority = 2 },
             groupId: "dep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -117,7 +121,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 MisfirePolicy = MisfirePolicy.DoNothing,
             },
             groupId: "dep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -141,7 +146,7 @@ public class DataContextExtensionsCoverageTests : TestSetup
     public async Task UpsertOnceManifestAsync_NewThenExisting_UpdatesScheduledAt()
     {
         var externalId = $"once-{Guid.NewGuid():N}";
-        var firstAt = DateTime.UtcNow.AddHours(1);
+        var firstAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1);
 
         var created = await DataContext.UpsertOnceManifestAsync(
             typeof(SchedulerTestTrain),
@@ -150,12 +155,13 @@ public class DataContextExtensionsCoverageTests : TestSetup
             firstAt,
             new ManifestOptions { Priority = 1 },
             groupId: "once-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var secondAt = DateTime.UtcNow.AddHours(3);
+        var secondAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(3);
         var updated = await DataContext.UpsertOnceManifestAsync(
             typeof(SchedulerTestTrain),
             externalId,
@@ -170,7 +176,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 MisfireThreshold = TimeSpan.FromMinutes(1),
             },
             groupId: "once-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -191,7 +198,7 @@ public class DataContextExtensionsCoverageTests : TestSetup
     public async Task UpsertOnceManifestAsync_ReseedingAnUnrunOneOff_KeepsTheFirstScheduledAt()
     {
         var externalId = $"once-keep-{Guid.NewGuid():N}";
-        var firstAt = DateTime.UtcNow.AddMinutes(5);
+        var firstAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5);
 
         await DataContext.UpsertOnceManifestAsync(
             typeof(SchedulerTestTrain),
@@ -200,7 +207,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             firstAt,
             new ManifestOptions { Priority = 1 },
             groupId: "once-keep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -215,7 +223,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             secondAt,
             new ManifestOptions { Priority = 1 },
             groupId: "once-keep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -233,7 +242,7 @@ public class DataContextExtensionsCoverageTests : TestSetup
     public async Task UpsertOnceManifestAsync_ReseedingAnUnrunOneOffWithANewInput_SchedulesItFromTheNewSeed()
     {
         var externalId = $"once-new-input-{Guid.NewGuid():N}";
-        var firstAt = DateTime.UtcNow.AddMinutes(5);
+        var firstAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5);
 
         await DataContext.UpsertOnceManifestAsync(
             typeof(SchedulerTestTrain),
@@ -242,7 +251,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             firstAt,
             new ManifestOptions { Priority = 1 },
             groupId: "once-keep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -255,7 +265,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             secondAt,
             new ManifestOptions { Priority = 1 },
             groupId: "once-keep-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -282,7 +293,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             IntervalSchedule,
             new ManifestOptions(),
             groupId: "en-group",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         var childId = $"en-child-{Guid.NewGuid():N}";
@@ -295,7 +307,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 parent.Id,
                 options,
                 groupId: "en-group",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
+                group: new ManifestGroupSeed(PriorityIfNew: 0),
+                TimeProvider.System
             );
 
         await AssertEnabledIsWrittenOnlyWhenStated(childId, Seed);
@@ -311,10 +324,11 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 typeof(SchedulerTestTrain),
                 externalId,
                 new SchedulerTestInput(),
-                DateTime.UtcNow.AddHours(1),
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
                 options,
                 groupId: "en-once-group",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
+                group: new ManifestGroupSeed(PriorityIfNew: 0),
+                TimeProvider.System
             );
 
         await AssertEnabledIsWrittenOnlyWhenStated(externalId, Seed);
@@ -329,22 +343,23 @@ public class DataContextExtensionsCoverageTests : TestSetup
         Func<ManifestOptions, Task<Trax.Effect.Models.Manifest.Manifest>> seed
     )
     {
-        await seed(new ManifestOptions());
-        await DataContext.SaveChanges(CancellationToken.None);
+        await seed(new ManifestOptions()).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         await DataContext
             .Manifests.Where(m => m.ExternalId == externalId)
-            .ExecuteUpdateAsync(u => u.SetProperty(m => m.IsEnabled, false));
+            .ExecuteUpdateAsync(u => u.SetProperty(m => m.IsEnabled, valueExpression: false))
+            .ConfigureAwait(false);
         DataContext.Reset();
 
-        var reseeded = await seed(new ManifestOptions());
-        await DataContext.SaveChanges(CancellationToken.None);
+        var reseeded = await seed(new ManifestOptions()).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         reseeded
             .IsEnabled.Should()
             .BeFalse("options that do not state Enabled leave the operator's choice alone");
 
-        var stated = await seed(new ManifestOptions { IsEnabled = true });
-        await DataContext.SaveChanges(CancellationToken.None);
+        var stated = await seed(new ManifestOptions { IsEnabled = true }).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         stated.IsEnabled.Should().BeTrue("options that state Enabled write it");
     }
 
@@ -357,35 +372,15 @@ public class DataContextExtensionsCoverageTests : TestSetup
     {
         var externalId = $"cron-first-{Guid.NewGuid():N}";
 
-        Task<Trax.Effect.Models.Manifest.Manifest> Seed(Schedule schedule) =>
-            DataContext.UpsertManifestAsync(
-                typeof(SchedulerTestTrain),
-                externalId,
-                new SchedulerTestInput(),
-                schedule,
-                new ManifestOptions(),
-                groupId: "cron-first-group",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
-            );
+        Task<DateTime?> SeedAndRead(Schedule schedule) =>
+            SeedCronFirstAndReadNextRun(externalId, schedule);
 
-        async Task<DateTime?> SeedAndRead(Schedule schedule)
-        {
-            await Seed(schedule);
-            await DataContext.SaveChanges(CancellationToken.None);
-            DataContext.Reset();
-            return await DataContext
-                .Manifests.AsNoTracking()
-                .Where(m => m.ExternalId == externalId)
-                .Select(m => m.NextScheduledRun)
-                .SingleAsync();
-        }
-
-        var daily = Schedule.FromCron("0 3 * * *");
+        var daily = Schedule.FromCron("0 3 * * *", TimeProvider.System);
         (await SeedAndRead(daily)).Should().NotBeNull("a new cron waits for its first occurrence");
 
         // Stand in for an occurrence recorded earlier, so keeping it is distinguishable from
         // computing the next one again.
-        var recorded = DateTime.UtcNow.AddDays(2).Date.AddHours(3);
+        var recorded = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(2).Date.AddHours(3);
         await DataContext
             .Manifests.Where(m => m.ExternalId == externalId)
             .ExecuteUpdateAsync(u => u.SetProperty(m => m.NextScheduledRun, recorded));
@@ -394,13 +389,13 @@ public class DataContextExtensionsCoverageTests : TestSetup
             .Should()
             .Be(recorded, "re-stating the same cron keeps the pending first occurrence");
 
-        var hourly = Schedule.FromCron("0 * * * *");
+        var hourly = Schedule.FromCron("0 * * * *", TimeProvider.System);
         var afterChange = await SeedAndRead(hourly);
         afterChange
             .Should()
             .NotBe(recorded, "a different cron computes its own first occurrence")
-            .And.BeAfter(DateTime.UtcNow)
-            .And.BeBefore(DateTime.UtcNow.AddHours(1).AddMinutes(1));
+            .And.BeAfter(TimeProvider.System.GetUtcNow().UtcDateTime)
+            .And.BeBefore(TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1).AddMinutes(1));
 
         (await SeedAndRead(IntervalSchedule))
             .Should()
@@ -418,6 +413,34 @@ public class DataContextExtensionsCoverageTests : TestSetup
             .NotBeNull("the same cron with no occurrence recorded computes one");
     }
 
+    private Task<Trax.Effect.Models.Manifest.Manifest> SeedCronFirst(
+        string externalId,
+        Schedule schedule
+    ) =>
+        DataContext.UpsertManifestAsync(
+            typeof(SchedulerTestTrain),
+            externalId,
+            new SchedulerTestInput(),
+            schedule,
+            new ManifestOptions(),
+            groupId: "cron-first-group",
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
+        );
+
+    private async Task<DateTime?> SeedCronFirstAndReadNextRun(string externalId, Schedule schedule)
+    {
+        await SeedCronFirst(externalId, schedule).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+        return await DataContext
+            .Manifests.AsNoTracking()
+            .Where(m => m.ExternalId == externalId)
+            .Select(m => m.NextScheduledRun)
+            .SingleAsync()
+            .ConfigureAwait(false);
+    }
+
     #endregion
 
     #region Variance validation
@@ -429,15 +452,18 @@ public class DataContextExtensionsCoverageTests : TestSetup
 
         var act = async () =>
         {
-            await DataContext.UpsertManifestAsync(
-                typeof(SchedulerTestTrain),
-                $"neg-var-{Guid.NewGuid():N}",
-                new SchedulerTestInput(),
-                schedule,
-                new ManifestOptions(),
-                groupId: "var-g",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
-            );
+            await DataContext
+                .UpsertManifestAsync(
+                    typeof(SchedulerTestTrain),
+                    $"neg-var-{Guid.NewGuid():N}",
+                    new SchedulerTestInput(),
+                    schedule,
+                    new ManifestOptions(),
+                    groupId: "var-g",
+                    group: new ManifestGroupSeed(PriorityIfNew: 0),
+                    TimeProvider.System
+                )
+                .ConfigureAwait(false);
         };
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*non-negative*");
@@ -448,19 +474,22 @@ public class DataContextExtensionsCoverageTests : TestSetup
     {
         var act = async () =>
         {
-            await DataContext.UpsertManifestAsync(
-                typeof(SchedulerTestTrain),
-                $"bad-var-{Guid.NewGuid():N}",
-                new SchedulerTestInput(),
-                Schedule.FromInterval(TimeSpan.FromMinutes(1)) with
-                {
-                    Type = ScheduleType.OnDemand,
-                    Variance = TimeSpan.FromSeconds(10),
-                },
-                new ManifestOptions(),
-                groupId: "var-g2",
-                group: new ManifestGroupSeed(PriorityIfNew: 0)
-            );
+            await DataContext
+                .UpsertManifestAsync(
+                    typeof(SchedulerTestTrain),
+                    $"bad-var-{Guid.NewGuid():N}",
+                    new SchedulerTestInput(),
+                    Schedule.FromInterval(TimeSpan.FromMinutes(1)) with
+                    {
+                        Type = ScheduleType.OnDemand,
+                        Variance = TimeSpan.FromSeconds(10),
+                    },
+                    new ManifestOptions(),
+                    groupId: "var-g2",
+                    group: new ManifestGroupSeed(PriorityIfNew: 0),
+                    TimeProvider.System
+                )
+                .ConfigureAwait(false);
         };
 
         await act.Should()
@@ -481,7 +510,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             schedule,
             new ManifestOptions(),
             groupId: "var-g3",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -504,7 +534,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             },
             new ManifestOptions(),
             groupId: "var-g4",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -516,7 +547,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
             IntervalSchedule,
             new ManifestOptions(),
             groupId: "var-g4",
-            group: new ManifestGroupSeed(PriorityIfNew: 0)
+            group: new ManifestGroupSeed(PriorityIfNew: 0),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -539,7 +571,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 MaxActiveJobsStated: true,
                 MaxActiveJobs: 5,
                 IsEnabled: true
-            )
+            ),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -550,7 +583,8 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 MaxActiveJobsStated: true,
                 MaxActiveJobs: 10,
                 IsEnabled: false
-            )
+            ),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
@@ -575,11 +609,16 @@ public class DataContextExtensionsCoverageTests : TestSetup
                 MaxActiveJobsStated: true,
                 MaxActiveJobs: 3,
                 IsEnabled: false
-            )
+            ),
+            TimeProvider.System
         );
         await DataContext.SaveChanges(CancellationToken.None);
 
-        await DataContext.EnsureManifestGroupAsync(name, new ManifestGroupSeed(PriorityIfNew: 30));
+        await DataContext.EnsureManifestGroupAsync(
+            name,
+            new ManifestGroupSeed(PriorityIfNew: 30),
+            TimeProvider.System
+        );
         await DataContext.SaveChanges(CancellationToken.None);
 
         var reloaded = await DataContext.ManifestGroups.AsNoTracking().FirstAsync(g => g.Id == id);

@@ -1,4 +1,6 @@
+using System.Globalization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.Principal;
@@ -38,7 +40,7 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration();
         var principal = new StubPrincipal { CurrentId = "alice" };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         // Many concurrent acquires for the same principal: all proceed because
         // PerPrincipalMaxConcurrentRun is null.
@@ -54,7 +56,7 @@ public class PerPrincipalConcurrencyTests
     [Test]
     public async Task AThrowingPrincipalProvider_HandsBackThePerTrainSlot()
     {
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
         config.ConcurrencyOverrides[train] = 1;
         var principal = new ThrowingPrincipal();
@@ -65,7 +67,9 @@ public class PerPrincipalConcurrencyTests
 
         principal.Throw = false;
         var next = () =>
-            limiter.AcquireAsync(train, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            limiter
+                .AcquireAsync(train, CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System);
 
         (
             await next.Should()
@@ -82,11 +86,11 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
         var principal = new StubPrincipal();
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         for (var i = 0; i < 100; i++)
         {
-            principal.CurrentId = $"principal-{i}";
+            principal.CurrentId = string.Create(CultureInfo.InvariantCulture, $"principal-{i}");
             using var permit = await limiter.AcquireAsync(train, CancellationToken.None);
             limiter.PerPrincipalEntryCount.Should().Be(1);
         }
@@ -106,7 +110,7 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
         var principal = new StubPrincipal { CurrentId = "alice" };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         var held = await limiter.AcquireAsync(train, CancellationToken.None);
 
@@ -128,7 +132,7 @@ public class PerPrincipalConcurrencyTests
         // A fresh semaphore starts with the full limit.
         using var next = await limiter
             .AcquireAsync(train, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System, CancellationToken.None);
     }
 
     [Test]
@@ -141,7 +145,7 @@ public class PerPrincipalConcurrencyTests
         };
         var principal = new StubPrincipal { CurrentId = "bob" };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         // Bob holds the only global slot.
         var bob = await limiter.AcquireAsync(train, CancellationToken.None);
@@ -158,7 +162,11 @@ public class PerPrincipalConcurrencyTests
 
         bob.Dispose();
 
-        using var secondPermit = await second.WaitAsync(TimeSpan.FromSeconds(5));
+        using var secondPermit = await second.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TimeProvider.System,
+            CancellationToken.None
+        );
         limiter
             .PerPrincipalEntryCount.Should()
             .Be(1, "alice's second run holds her slot, which the cancelled run gave back");
@@ -170,14 +178,15 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 2 };
         var principal = new StubPrincipal { CurrentId = "alice" };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         var permit1 = await limiter.AcquireAsync(train, CancellationToken.None);
         var permit2 = await limiter.AcquireAsync(train, CancellationToken.None);
 
         // Third acquire must block.
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
-        Func<Task> act = async () => await limiter.AcquireAsync(train, cts.Token);
+        Func<Task> act = async () =>
+            await limiter.AcquireAsync(train, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // After releasing one, a new acquire succeeds immediately.
@@ -195,7 +204,7 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
         var principal = new StubPrincipal { CurrentId = "alice" };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         var permitAlice = await limiter.AcquireAsync(train, CancellationToken.None);
 
@@ -214,7 +223,7 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
         var principal = new StubPrincipal { CurrentId = null };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         var permits = new List<IDisposable>();
         for (var i = 0; i < 5; i++)
@@ -231,7 +240,7 @@ public class PerPrincipalConcurrencyTests
         var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
         var principal = new StubPrincipal { CurrentId = "alice" };
         var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
-        var train = typeof(IFakeTrain).FullName!;
+        var train = typeof(IFakeTrain).FullName.NotNull();
 
         var permit1 = await limiter.AcquireAsync(train, CancellationToken.None);
         permit1.Dispose();

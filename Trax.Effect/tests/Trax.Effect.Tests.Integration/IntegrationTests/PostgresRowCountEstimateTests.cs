@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -23,8 +25,10 @@ public class PostgresRowCountEstimateTests : TestSetup
     [Test]
     public async Task An_analyzed_table_reports_its_row_count()
     {
-        using var context = (DbContext)DataContextFactory.Create();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var transaction = await context.Database.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         var table = await CreateTable(context, rows: 4321);
         await Execute(context, $"ANALYZE trax.{table}");
 
@@ -38,8 +42,10 @@ public class PostgresRowCountEstimateTests : TestSetup
     [Test]
     public async Task A_table_never_analyzed_has_no_estimate()
     {
-        using var context = (DbContext)DataContextFactory.Create();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var transaction = await context.Database.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         var table = await CreateTable(context, rows: 10);
 
         var estimate = await Estimate(context, table);
@@ -55,7 +61,8 @@ public class PostgresRowCountEstimateTests : TestSetup
     [Test]
     public async Task A_missing_table_has_no_estimate()
     {
-        using var context = (DbContext)DataContextFactory.Create();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var estimate = await Estimate(context, $"missing_{Guid.NewGuid():N}");
 
@@ -65,8 +72,10 @@ public class PostgresRowCountEstimateTests : TestSetup
     [Test]
     public async Task Only_the_trax_schema_is_read()
     {
-        using var context = (DbContext)DataContextFactory.Create();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var transaction = await context.Database.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         var table = $"estimate_probe_{Guid.NewGuid():N}";
         await Execute(
             context,
@@ -80,15 +89,21 @@ public class PostgresRowCountEstimateTests : TestSetup
     }
 
     private Task<List<long>> Estimate(DbContext context, string table) =>
-        context.Database.SqlQueryRaw<long>(Dialect.EstimateRowCount()!, table).ToListAsync();
+        context
+            .Database.SqlQueryRaw<long>(Dialect.EstimateRowCount().NotNull(), table)
+            .ToListAsync();
 
     private static async Task<string> CreateTable(DbContext context, int rows)
     {
         var table = $"estimate_probe_{Guid.NewGuid():N}";
         await Execute(
-            context,
-            $"CREATE TABLE trax.{table} AS SELECT g FROM generate_series(1, {rows}) AS g"
-        );
+                context,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"CREATE TABLE trax.{table} AS SELECT g FROM generate_series(1, {rows}) AS g"
+                )
+            )
+            .ConfigureAwait(false);
         return table;
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -29,13 +30,6 @@ using Trax.Scheduler.Trains.JobRunner;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fixtures;
-
-/// <summary>The stores the invoked-train delivery tests run on.</summary>
-public enum ClusterStore
-{
-    Postgres,
-    Sqlite,
-}
 
 /// <summary>
 /// Several hosts over one database of their own, as a deployment has them: API hosts that register the machines
@@ -92,24 +86,28 @@ public sealed class InvokeCluster : IAsyncDisposable
                 Path.GetTempPath(),
                 $"trax_invoke_delivery_{Guid.NewGuid():N}.db"
             );
-            var onSqlite = new InvokeCluster(store, $"Data Source={file}", file, null);
+            var onSqlite = new InvokeCluster(store, $"Data Source={file}", file, database: null);
             Open[onSqlite] = 0;
             return onSqlite;
         }
 
-        var database =
-            $"trax_invoke_delivery_{Environment.ProcessId}_{Interlocked.Increment(ref _clusters)}";
-        await using (var admin = new NpgsqlConnection(TestPostgres.ConnectionStringFor("postgres")))
+        var database = string.Create(
+            CultureInfo.InvariantCulture,
+            $"trax_invoke_delivery_{Environment.ProcessId}_{Interlocked.Increment(ref _clusters)}"
+        );
+        var admin = new NpgsqlConnection(TestPostgres.ConnectionStringFor("postgres"));
+        await using (admin.ConfigureAwait(false))
         {
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
-            await Exec(admin, $"CREATE DATABASE {database}");
+            await admin.OpenAsync().ConfigureAwait(false);
+            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)")
+                .ConfigureAwait(false);
+            await Exec(admin, $"CREATE DATABASE {database}").ConfigureAwait(false);
         }
 
         var cluster = new InvokeCluster(
             store,
             TestPostgres.ConnectionStringFor(database),
-            null,
+            sqliteFile: null,
             database
         );
         Open[cluster] = 0;
@@ -176,10 +174,11 @@ public sealed class InvokeCluster : IAsyncDisposable
     public async Task Reset()
     {
         var host = _hosts.FirstOrDefault() ?? Host(machines: false, scheduler: false);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await context.SnapshotDrafts.ExecuteDeleteAsync();
-        await TestSetup.CleanupDatabase(context);
+        await context.SnapshotDrafts.ExecuteDeleteAsync().ConfigureAwait(false);
+        await TestSetup.CleanupDatabase(context).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
@@ -187,7 +186,7 @@ public sealed class InvokeCluster : IAsyncDisposable
         Open.TryRemove(this, out _);
 
         foreach (var host in _hosts)
-            await host.DisposeAsync();
+            await host.DisposeAsync().ConfigureAwait(false);
 
         if (_sqliteFile is not null)
         {
@@ -206,217 +205,23 @@ public sealed class InvokeCluster : IAsyncDisposable
         if (_database is not null)
         {
             NpgsqlConnection.ClearAllPools();
-            await using var admin = new NpgsqlConnection(
-                TestPostgres.ConnectionStringFor("postgres")
-            );
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {_database} WITH (FORCE)");
+            var admin = new NpgsqlConnection(TestPostgres.ConnectionStringFor("postgres"));
+            await using (admin.ConfigureAwait(false))
+            {
+                await admin.OpenAsync().ConfigureAwait(false);
+                await Exec(admin, $"DROP DATABASE IF EXISTS {_database} WITH (FORCE)")
+                    .ConfigureAwait(false);
+            }
         }
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
-    }
-}
-
-/// <summary>The runs a scheduler host's dispatcher handed over, by metadata id, with their inputs.</summary>
-public sealed class HeldJobs
-{
-    public ConcurrentDictionary<long, object?> Inputs { get; } = new();
-}
-
-/// <summary>A submitter that holds each dispatched run for the test to run, on the host it chooses.</summary>
-public sealed class HeldSubmitter(HeldJobs held) : IJobSubmitter
-{
-    public Task<string> EnqueueAsync(long metadataId)
-    {
-        held.Inputs[metadataId] = null;
-        return Task.FromResult($"held-{metadataId}");
-    }
-
-    public Task<string> EnqueueAsync(long metadataId, object input)
-    {
-        held.Inputs[metadataId] = input;
-        return Task.FromResult($"held-{metadataId}");
-    }
-}
-
-/// <summary>One host of an <see cref="InvokeCluster"/>.</summary>
-public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyncDisposable
-{
-    public ServiceProvider Services => services;
-
-    internal InvokeOutcomeReconciler Reconciler =>
-        services.GetRequiredService<InvokeOutcomeReconciler>();
-
-    /// <summary>Starts a system-owned instance whose initial state invokes the step, with <paramref name="context"/>.</summary>
-    public async Task<MachineInstance> Start(JsonObject context)
-    {
-        using var scope = services.CreateScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IMachineInstances>()
-            .Start<SystemStepMachine>(
-                MachineKey.Of("delivery", Guid.NewGuid().ToString("N")),
-                context
-            );
-    }
-
-    /// <summary>Saves <paramref name="user"/>'s draft in <c>Idle</c> with <paramref name="context"/> and advances it into <c>Running</c>.</summary>
-    public async Task<AdvanceOutcome> EnterRunning(string user, Guid id, JsonObject context)
-    {
-        await StepMachine.Seed(services, user, id, UserStepMachine.MachineId, "Idle", context);
-        using var scope = services.CreateScope();
-        return await Drafts(scope).Advance(user, id, nameof(StepTrigger.Go));
-    }
-
-    public async Task<AdvanceOutcome> Advance(string user, Guid id, StepTrigger trigger)
-    {
-        using var scope = services.CreateScope();
-        return await Drafts(scope).Advance(user, id, trigger.ToString());
-    }
-
-    private static ISnapshotDraftService Drafts(IServiceScope scope) =>
-        scope
-            .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-            .Service(UserStepMachine.MachineId)!;
-
-    internal Task<IReadOnlyList<InvokeDelivery>> Sweep() =>
-        Reconciler.SweepOnce(CancellationToken.None);
-
-    internal Task<InvokeDelivery?> Deliver(string token) =>
-        Reconciler.TryDeliver(token, CancellationToken.None);
-
-    /// <summary>Runs the dispatcher once and returns the run it created for <paramref name="token"/>'s entry.</summary>
-    public async Task<long> Dispatch(string token)
-    {
-        using (var scope = services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
-
-        var entry = await Entry(token);
-        return entry?.MetadataId
-            ?? throw new InvalidOperationException(
-                $"The entry {token} was not dispatched: it is {entry?.Status.ToString() ?? "missing"}."
-            );
-    }
-
-    /// <summary>
-    /// Runs the dispatched run <paramref name="metadataId"/> here, as a worker would, to its end. A run that fails
-    /// or is cancelled records that on its row, which is what a test reads; the runner's rethrow is not.
-    /// </summary>
-    public async Task RunJob(long metadataId)
-    {
-        if (!held.Inputs.TryGetValue(metadataId, out var input))
-            throw new InvalidOperationException(
-                $"Run {metadataId} was not dispatched to this host."
-            );
-
-        using var scope = services.CreateScope();
-        try
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
         {
-            await scope
-                .ServiceProvider.GetRequiredService<IJobRunnerTrain>()
-                .Run(new RunJobRequest(metadataId, input));
-        }
-        catch (Exception)
-        {
-            // Recorded on the run's row.
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         }
     }
-
-    /// <summary>The input this host's dispatcher handed over with the run <paramref name="metadataId"/>.</summary>
-    public object? HeldInput(long metadataId) =>
-        held.Inputs.TryGetValue(metadataId, out var input)
-            ? input
-            : throw new InvalidOperationException(
-                $"Run {metadataId} was not dispatched to this host."
-            );
-
-    /// <summary>Dispatches <paramref name="token"/>'s entry and runs it here to its end.</summary>
-    public async Task<long> DispatchAndRun(string token)
-    {
-        var id = await Dispatch(token);
-        await RunJob(id);
-        return id;
-    }
-
-    /// <summary>
-    /// One manifest manager cycle through the polling service: the timeouts, the reapers, and their lifecycle
-    /// events once it commits.
-    /// </summary>
-    public async Task RunManifestManager()
-    {
-        var polling = new ManifestManagerPollingService(
-            services,
-            services.GetRequiredService<SchedulerConfiguration>(),
-            NullLogger<ManifestManagerPollingService>.Instance,
-            services.GetRequiredService<ISqlDialect>()
-        );
-        await polling.RunManifestManager(CancellationToken.None);
-    }
-
-    public async Task<SnapshotDraft?> Row(Guid id, string machine)
-    {
-        using var scope = services.CreateScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .SnapshotDrafts.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == id && x.Machine == machine);
-    }
-
-    /// <summary>Every owner's row of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
-    public async Task<List<SnapshotDraft>> Rows(Guid id, string machine)
-    {
-        using var scope = services.CreateScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .SnapshotDrafts.AsNoTracking()
-            .Where(x => x.Id == id && x.Machine == machine)
-            .ToListAsync();
-    }
-
-    public async Task<WorkQueue?> Entry(string token)
-    {
-        using var scope = services.CreateScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.ExternalId == token);
-    }
-
-    /// <summary>Every entry an instance's invoking states queued, oldest first.</summary>
-    public async Task<List<WorkQueue>> Entries(Guid instance)
-    {
-        using var scope = services.CreateScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .Where(x => x.InvokingInstanceId == instance)
-            .OrderBy(x => x.Id)
-            .ToListAsync();
-    }
-
-    public async Task<Metadata> Run(long metadataId)
-    {
-        using var scope = services.CreateScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .Metadatas.AsNoTracking()
-            .SingleAsync(x => x.Id == metadataId);
-    }
-
-    /// <summary>Moves a run's start back by <paramref name="age"/>, as if it had been going that long.</summary>
-    public async Task Age(long metadataId, TimeSpan age)
-    {
-        using var scope = services.CreateScope();
-        var start = DateTime.UtcNow - age;
-        await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .Metadatas.Where(x => x.Id == metadataId)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, start));
-    }
-
-    public ValueTask DisposeAsync() => services.DisposeAsync();
 }

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -24,7 +25,7 @@ internal static class GraphQLExecutionResultExtensions
     /// The result's <c>data</c> as a plain nested map: objects become
     /// <see cref="IReadOnlyDictionary{TKey,TValue}"/>, lists become
     /// <see cref="IReadOnlyList{T}"/>, and scalars become <c>string</c>, <c>long</c>,
-    /// <c>double</c>, <c>bool</c> or <c>null</c>.
+    /// <c>double</c>, <c>bool</c> or <see langword="null"/>.
     /// </summary>
     /// <remarks>
     /// HotChocolate 16 materialises results into an internal result document rather than
@@ -43,7 +44,7 @@ internal static class GraphQLExecutionResultExtensions
 
         data.ValueKind.Should().Be(JsonValueKind.Object);
 
-        return (IReadOnlyDictionary<string, object?>)ToClrValue(data)!;
+        return (IReadOnlyDictionary<string, object?>)ToClrValue(data).NotNull();
     }
 
     private static object? ToClrValue(JsonElement element) =>

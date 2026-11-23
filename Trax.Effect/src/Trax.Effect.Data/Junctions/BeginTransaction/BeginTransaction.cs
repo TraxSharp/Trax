@@ -23,7 +23,7 @@ public class BeginTransaction(IDataContext dataContext) : Junction<Unit, Unit>
     /// <returns><see cref="Unit.Default"/>.</returns>
     public override async Task<Unit> Run(Unit input)
     {
-        await dataContext.BeginTransaction(CancellationToken);
+        await dataContext.BeginTransaction(CancellationToken).ConfigureAwait(false);
 
         return Unit.Default;
     }

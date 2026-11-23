@@ -9,6 +9,7 @@ using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectRegistry;
@@ -49,7 +50,7 @@ public class LifecycleExternalIdFilterTests
         var executor = await BuildAsync(g =>
             g.ExposeOperationQueries().GateOperations(roles: "Admin")
         );
-        var subscription = executor.Schema.SubscriptionType!;
+        var subscription = executor.Schema.SubscriptionType.NotNull();
 
         foreach (var name in LifecycleFields)
         {
@@ -74,10 +75,12 @@ public class LifecycleExternalIdFilterTests
         );
 
         var received = await sub.NextAsync(
-            () =>
+            async () =>
             {
-                Publish(nameof(LifecycleSubscriptions.OnTrainCompleted), Event("run-a"));
-                Publish(nameof(LifecycleSubscriptions.OnTrainCompleted), Event("run-b"));
+                await PublishAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), Event("run-a"))
+                    .ConfigureAwait(false);
+                await PublishAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), Event("run-b"))
+                    .ConfigureAwait(false);
             },
             "onTrainCompleted"
         );
@@ -99,9 +102,9 @@ public class LifecycleExternalIdFilterTests
 
         // Other runs are published many times first: none of them may be the one delivered.
         for (var i = 0; i < 20; i++)
-            Publish(nameof(LifecycleSubscriptions.OnTrainStateChanged), Event("run-a"));
+            await PublishAsync(nameof(LifecycleSubscriptions.OnTrainStateChanged), Event("run-a"));
         var received = await sub.NextAsync(
-            () => Publish(nameof(LifecycleSubscriptions.OnTrainStateChanged), Event("run-b")),
+            () => PublishAsync(nameof(LifecycleSubscriptions.OnTrainStateChanged), Event("run-b")),
             "onTrainStateChanged"
         );
 
@@ -121,7 +124,7 @@ public class LifecycleExternalIdFilterTests
         );
 
         var received = await sub.NextAsync(
-            () => Publish(nameof(LifecycleSubscriptions.OnTrainCompleted), Event("run-a")),
+            () => PublishAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), Event("run-a")),
             "onTrainCompleted"
         );
 
@@ -165,19 +168,19 @@ public class LifecycleExternalIdFilterTests
             ExternalId: externalId,
             TrainName: "Some.Train",
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null
         );
 
-    private void Publish(string topic, TrainLifecycleEvent e) =>
-        _provider!
+    private async Task PublishAsync(string topic, TrainLifecycleEvent e) =>
+        await _provider
+            .NotNull()
             .GetRequiredService<ITopicEventSender>()
             .SendAsync(topic, e)
             .AsTask()
-            .GetAwaiter()
-            .GetResult();
+            .ConfigureAwait(false);
 
     private async Task<IRequestExecutor> BuildAsync(
         Func<TraxGraphQLBuilder, TraxGraphQLBuilder> configure
@@ -202,7 +205,8 @@ public class LifecycleExternalIdFilterTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static async Task<Subscription> SubscribeAsync(
@@ -211,15 +215,19 @@ public class LifecycleExternalIdFilterTests
         ClaimsPrincipal user
     )
     {
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(query)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(query)
+                    .SetGlobalState("ClaimsPrincipal", user)
+                    .Build()
+            )
+            .ConfigureAwait(false);
 
-        return result is IResponseStream stream ? new Subscription(stream) : new Subscription(null);
+        return result is IResponseStream stream
+            ? new Subscription(stream)
+            : new Subscription(stream: null);
     }
 
     private sealed class Subscription(IResponseStream? stream) : IAsyncDisposable
@@ -231,7 +239,7 @@ public class LifecycleExternalIdFilterTests
         /// returns the first payload it receives.
         /// </summary>
         public async Task<IReadOnlyDictionary<string, object?>> NextAsync(
-            Action publish,
+            Func<Task> publish,
             string field
         )
         {
@@ -241,7 +249,9 @@ public class LifecycleExternalIdFilterTests
             );
             var reader = Task.Run(async () =>
             {
-                await foreach (var item in stream!.ReadResultsAsync())
+                await foreach (
+                    var item in stream.NotNull().ReadResultsAsync().ConfigureAwait(false)
+                )
                 {
                     received.TrySetResult(item);
                     break;
@@ -250,26 +260,28 @@ public class LifecycleExternalIdFilterTests
 
             // ExecuteAsync can return before the topic subscription is registered, so a single
             // publish can race ahead of it.
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+            while (
+                !received.Task.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+            )
             {
-                publish();
+                await publish().ConfigureAwait(false);
                 // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes
                 // the instant the subscriber receives.
-                await Task.WhenAny(received.Task, Task.Delay(100));
+                await Task.WhenAny(received.Task, Task.Delay(100)).ConfigureAwait(false);
             }
 
             received.Task.IsCompleted.Should().BeTrue("an event should reach the subscriber");
-            var payload = await received.Task;
+            var payload = await received.Task.ConfigureAwait(false);
             payload.Errors.Should().BeNullOrEmpty();
-            await reader;
-            return (IReadOnlyDictionary<string, object?>)payload.DataMap()[field]!;
+            await reader.ConfigureAwait(false);
+            return (IReadOnlyDictionary<string, object?>)payload.DataMap()[field].NotNull();
         }
 
         public async ValueTask DisposeAsync()
         {
             if (stream is not null)
-                await stream.DisposeAsync();
+                await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 

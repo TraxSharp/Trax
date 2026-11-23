@@ -21,6 +21,7 @@ using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
@@ -115,7 +116,11 @@ public class PersistedOperationsManagementGateTests
         var schema = (await ExecutorAsync(gated)).Schema;
 
         schema.QueryType.Fields.Select(f => f.Name).Should().Contain("persistedOperations");
-        schema.MutationType!.Fields.Select(f => f.Name).Should().Contain("persistedOperations");
+        schema
+            .MutationType.NotNull()
+            .Fields.Select(f => f.Name)
+            .Should()
+            .Contain("persistedOperations");
         RootFields(schema)
             .Should()
             .NotContain("operations", "a management gate exposes nothing under operations");
@@ -275,7 +280,7 @@ public class PersistedOperationsManagementGateTests
             .Which.ToString()
             .Should()
             .Contain("RootQuery.persistedOperations")
-            .And.Contain(typeof(HostResolvers).FullName!);
+            .And.Contain(typeof(HostResolvers).FullName.NotNull());
     }
 
     [Test]
@@ -310,11 +315,59 @@ public class PersistedOperationsManagementGateTests
     public async Task The_gate_and_the_persistedOperations_fields_admit_the_same_principals()
     {
         // Gate, then for each principal whether both surfaces admit it.
-        var table = new (
-            string Gate,
-            Action<PersistedOperationsBuilder> Declare,
-            string[] Admitted
-        )[]
+        var table = GateTable();
+
+        var mismatches = new List<string>();
+        foreach (var (gateName, declare, admitted) in table)
+        {
+            await using var app = await StartAsync(
+                g => g.ExposeOperationQueries().AllowAnonymousOperations(),
+                po => declare(po.SingleNode()),
+                services =>
+                    services.AddAuthorization(o =>
+                        o.AddPolicy(ClaimPolicy, p => p.RequireClaim("can-manage"))
+                    ),
+                withTestPrincipals: true
+            );
+
+            foreach (var (name, principal) in Principals)
+            {
+                var expected = admitted.Contains(name);
+
+                var response = await PostAsPrincipalAsync(app, name, List);
+                var graphql = !response.RootElement.TryGetProperty("errors", out _);
+
+                await using var scope = app.Services.CreateAsyncScope();
+                var gate = await scope
+                    .ServiceProvider.GetRequiredService<IPersistedOperationsManagementGate>()
+                    .AllowsAsync(principal, ct: CancellationToken.None);
+
+                // What the console asks to decide whether to show the management pages.
+                var console = CanManageOf(await PostAsPrincipalAsync(app, name, CanManage));
+
+                if (graphql != expected || gate != expected || console != expected)
+                    mismatches.Add(
+                        $"{gateName}, {name}: expected {expected}, GraphQL {graphql}, gate {gate}, "
+                            + $"canManagePersistedOperations {console}"
+                    );
+            }
+        }
+
+        mismatches
+            .Should()
+            .BeEmpty(
+                "the dashboard's gate, the GraphQL persistedOperations fields and "
+                    + "operations.config.canManagePersistedOperations refuse the same people"
+            );
+    }
+
+    private static (
+        string Gate,
+        Action<PersistedOperationsBuilder> Declare,
+        string[] Admitted
+    )[] GateTable()
+    {
+        return new (string Gate, Action<PersistedOperationsBuilder> Declare, string[] Admitted)[]
         {
             (
                 "roles Deployer",
@@ -345,49 +398,6 @@ public class PersistedOperationsManagementGateTests
                 ]
             ),
         };
-
-        var mismatches = new List<string>();
-        foreach (var (gateName, declare, admitted) in table)
-        {
-            await using var app = await StartAsync(
-                g => g.ExposeOperationQueries().AllowAnonymousOperations(),
-                po => declare(po.SingleNode()),
-                services =>
-                    services.AddAuthorization(o =>
-                        o.AddPolicy(ClaimPolicy, p => p.RequireClaim("can-manage"))
-                    ),
-                withTestPrincipals: true
-            );
-
-            foreach (var (name, principal) in Principals)
-            {
-                var expected = admitted.Contains(name);
-
-                var response = await PostAsPrincipalAsync(app, name, List);
-                var graphql = !response.RootElement.TryGetProperty("errors", out _);
-
-                await using var scope = app.Services.CreateAsyncScope();
-                var gate = await scope
-                    .ServiceProvider.GetRequiredService<IPersistedOperationsManagementGate>()
-                    .AllowsAsync(principal);
-
-                // What the console asks to decide whether to show the management pages.
-                var console = CanManageOf(await PostAsPrincipalAsync(app, name, CanManage));
-
-                if (graphql != expected || gate != expected || console != expected)
-                    mismatches.Add(
-                        $"{gateName}, {name}: expected {expected}, GraphQL {graphql}, gate {gate}, "
-                            + $"canManagePersistedOperations {console}"
-                    );
-            }
-        }
-
-        mismatches
-            .Should()
-            .BeEmpty(
-                "the dashboard's gate, the GraphQL persistedOperations fields and "
-                    + "operations.config.canManagePersistedOperations refuse the same people"
-            );
     }
 
     [Test]
@@ -442,7 +452,9 @@ public class PersistedOperationsManagementGateTests
     private const string ClaimPolicy = "HoldsCanManage";
     private const string PrincipalHeader = "X-Test-Principal";
 
-    private static readonly Dictionary<string, ClaimsPrincipal> Principals = new()
+    private static readonly Dictionary<string, ClaimsPrincipal> Principals = new(
+        StringComparer.Ordinal
+    )
     {
         ["deployer"] = Authenticated(new Claim(ClaimTypes.Role, "Deployer")),
         ["reader"] = Authenticated(new Claim(ClaimTypes.Role, "Reader")),
@@ -499,8 +511,14 @@ public class PersistedOperationsManagementGateTests
         };
         request.Headers.Add(PrincipalHeader, principal);
 
-        var response = await app.GetTestClient().SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return JsonDocument.Parse(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     // Built with a descriptor rather than [ExtendObjectType], so an assembly scan does not pick it up.
@@ -520,9 +538,9 @@ public class PersistedOperationsManagementGateTests
     }
 
     private static Dictionary<string, object?> UploadVariables(string id) =>
-        new()
+        new(StringComparer.Ordinal)
         {
-            ["input"] = new Dictionary<string, object?>
+            ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["id"] = id,
                 ["document"] = GraphQLFixture.ValidDocument,
@@ -547,7 +565,46 @@ public class PersistedOperationsManagementGateTests
         );
         builder.WebHost.UseTestServer();
         builder.Host.UseDefaultServiceProvider(o => o.ValidateOnBuild = false);
-        var services = builder.Services;
+        RegisterServices(builder.Services, graphql, persisted, configure, configureAfter);
+
+        var app = builder.Build();
+        app.UseRouting();
+        app.UseAuthentication();
+        if (withTestPrincipals)
+            // The principal a request names, as an authentication handler would have set it.
+            app.Use(
+                (context, next) =>
+                {
+                    if (
+                        context.Request.Headers.TryGetValue(PrincipalHeader, out var name)
+                        && Principals.TryGetValue(name.ToString(), out var principal)
+                    )
+                        context.User = principal;
+                    return next(context);
+                }
+            );
+        app.UseAuthorization();
+        app.UseTraxGraphQL();
+        try
+        {
+            await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            await app.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+        return app;
+    }
+
+    private static void RegisterServices(
+        IServiceCollection services,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder> graphql,
+        Action<PersistedOperationsBuilder> persisted,
+        Action<IServiceCollection>? configure,
+        Action<IServiceCollection>? configureAfter
+    )
+    {
         services.AddLogging();
         services.AddRouting();
         services.AddTraxApiKeyAuth(keys =>
@@ -582,46 +639,17 @@ public class PersistedOperationsManagementGateTests
                 .AddTypeExtension<GraphQLFixture.HelloQuery>()
                 .UsePersistedOperations(po =>
                 {
-                    po.RequirePersisted(false).LogNonPersistedRequests(true);
+                    po.RequirePersisted(require: false).LogNonPersistedRequests(log: true);
                     persisted(po);
                 })
         );
         configureAfter?.Invoke(services);
-
-        var app = builder.Build();
-        app.UseRouting();
-        app.UseAuthentication();
-        if (withTestPrincipals)
-            // The principal a request names, as an authentication handler would have set it.
-            app.Use(
-                (context, next) =>
-                {
-                    if (
-                        context.Request.Headers.TryGetValue(PrincipalHeader, out var name)
-                        && Principals.TryGetValue(name.ToString(), out var principal)
-                    )
-                        context.User = principal;
-                    return next(context);
-                }
-            );
-        app.UseAuthorization();
-        app.UseTraxGraphQL();
-        try
-        {
-            await app.StartAsync();
-        }
-        catch
-        {
-            await app.DisposeAsync();
-            throw;
-        }
-        return app;
     }
 
     private static Task<IRequestExecutor> ExecutorAsync(WebApplication app) =>
         app
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax")
+            .GetExecutorAsync("trax", cancellationToken: CancellationToken.None)
             .AsTask();
 
     private static async Task<JsonDocument> PostAsync(
@@ -638,8 +666,14 @@ public class PersistedOperationsManagementGateTests
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await app.GetTestClient().SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        return JsonDocument.Parse(
+            await response
+                .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false)
+        );
     }
 
     // operations.config.canManagePersistedOperations, from an answer that carries no error.
@@ -663,6 +697,6 @@ public class PersistedOperationsManagementGateTests
             .Any(e =>
                 e.TryGetProperty("extensions", out var ext)
                 && ext.TryGetProperty("code", out var c)
-                && c.GetString() == code
+                && string.Equals(c.GetString(), code, StringComparison.Ordinal)
             );
 }

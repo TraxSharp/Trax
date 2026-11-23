@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Fixtures;
 using Trax.Samples.ChatService.E2E.Utilities;
 
@@ -17,10 +19,9 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
             """;
 
     private static async Task<GraphQLWebSocketClient> ConnectAsync(string? apiKey) =>
-        await GraphQLWebSocketClient.ConnectAsync(
-            SharedChatApiSetup.Factory.Server.CreateWebSocketClient(),
-            apiKey: apiKey
-        );
+        await GraphQLWebSocketClient
+            .ConnectAsync(SharedChatApiSetup.Factory.Server.CreateWebSocketClient(), apiKey: apiKey)
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Sends messages as <paramref name="senderKey"/> until <paramref name="sub"/> receives one, and
@@ -36,11 +37,16 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     {
         for (var attempt = 0; attempt < 10; attempt++)
         {
-            var sent = await SendMessageAsAsync(senderKey, roomId, $"{content} {attempt}");
+            var sent = await SendMessageAsAsync(
+                    senderKey,
+                    roomId,
+                    string.Create(CultureInfo.InvariantCulture, $"{content} {attempt}")
+                )
+                .ConfigureAwait(false);
             sent.HasErrors.Should().BeFalse(sent.FirstErrorMessage);
             try
             {
-                return (await sub.ReceiveNextAsync(TimeSpan.FromSeconds(1)))
+                return (await sub.ReceiveNextAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false))
                     .GetProperty("data")
                     .GetProperty("onChatEvent");
             }
@@ -57,13 +63,16 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     {
         try
         {
-            var message = await sub.ReceiveAnyAsync();
+            var message = await sub.ReceiveAnyAsync().ConfigureAwait(false);
             message.GetProperty("type").GetString().Should().NotBe("complete");
             return message.GetRawText();
         }
         catch (WebSocketClosedException closed)
         {
-            return $"closed {(int?)closed.Status} {closed.Description}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"closed {(int?)closed.Status} {closed.Description}"
+            );
         }
     }
 
@@ -114,7 +123,9 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
 
         var chatEvent = await SendUntilReceivedAsync(bob, AliceKey, roomId, "hi bob");
 
-        using var payload = JsonDocument.Parse(chatEvent.GetProperty("payload").GetString()!);
+        using var payload = JsonDocument.Parse(
+            chatEvent.GetProperty("payload").GetString().NotNull()
+        );
         payload
             .RootElement.GetProperty("senderUserId")
             .GetString()
@@ -178,21 +189,27 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
 
         // Warm up until every lifecycle field has answered, by an event or a refusal, and Bob's
         // own room has delivered: from then on, anything Bob may receive reaches him.
-        var answered = new HashSet<string>();
+        var answered = new HashSet<string>(StringComparer.Ordinal);
         for (
             var attempt = 0;
             attempt < 10 && !answered.IsSupersetOf([.. lifecycleFields, "bobs-room"]);
             attempt++
         )
         {
-            (await SendMessageAsAsync(BobKey, bobsRoom, $"warm-up {attempt}"))
+            (
+                await SendMessageAsAsync(
+                    BobKey,
+                    bobsRoom,
+                    string.Create(CultureInfo.InvariantCulture, $"warm-up {attempt}")
+                )
+            )
                 .HasErrors.Should()
                 .BeFalse();
             foreach (var message in await DrainAsync(bob, TimeSpan.FromSeconds(1)))
             {
                 received.Add(message.GetRawText());
                 if (message.TryGetProperty("id", out var id))
-                    answered.Add(id.GetString()!);
+                    answered.Add(id.GetString().NotNull());
             }
         }
         answered.Should().Contain([.. lifecycleFields, "bobs-room"], "every subscription answered");
@@ -224,16 +241,16 @@ public class ChatEventSubscriptionTests : ChatApiTestFixture
     )
     {
         var messages = new List<JsonElement>();
-        var deadline = DateTime.UtcNow + window;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + window;
         for (
             var remaining = window;
             remaining > TimeSpan.Zero;
-            remaining = deadline - DateTime.UtcNow
+            remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime
         )
         {
             try
             {
-                messages.Add(await sub.ReceiveAnyAsync(remaining));
+                messages.Add(await sub.ReceiveAnyAsync(remaining).ConfigureAwait(false));
             }
             catch (TimeoutException)
             {

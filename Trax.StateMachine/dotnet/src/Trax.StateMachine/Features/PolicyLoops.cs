@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -33,15 +34,16 @@ internal static class PolicyLoops
         var loops = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         foreach (var (from, into, id) in fired)
         {
-            if (into != from && !Reach(into).Contains(from))
+            if (!string.Equals(into, from, StringComparison.Ordinal) && !Reach(into).Contains(from))
                 continue;
             var key = Reach(from)
                 .Where(s => Reach(s).Contains(from))
                 .Append(from)
-                .Min(StringComparer.Ordinal)!;
+                .Min(StringComparer.Ordinal)
+                .NotNull();
             if (!loops.TryGetValue(key, out var loop))
                 loops[key] = loop = new SortedSet<string>(StringComparer.Ordinal);
-            loop.Add(id!);
+            loop.Add(id.NotNull());
         }
         return loops
             .Values.Select(l => (IReadOnlyList<string>)l.ToList())
@@ -96,22 +98,29 @@ internal static class PolicyLoops
             if (!irs.TryGetValue(later.Target, out var target))
                 continue;
             // A broadcast reaches the instances waiting in one state; any other policy those its trigger leaves.
-            var waits =
-                later.Shape == "broadcast"
-                    ? new List<string> { later.By }
-                    : Array(target["transitions"])
-                        .Where(e => Text(e?["trigger"]) == later.Trigger)
-                        .Select(e => Text(e?["from"]))
-                        .OfType<string>()
-                        .Distinct()
-                        .ToList();
+            var waits = string.Equals(later.Shape, "broadcast", StringComparison.Ordinal)
+                ? new List<string> { later.By }
+                : Array(target["transitions"])
+                    .Where(e =>
+                        string.Equals(Text(e?["trigger"]), later.Trigger, StringComparison.Ordinal)
+                    )
+                    .Select(e => Text(e?["from"]))
+                    .OfType<string>()
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
             foreach (var earlier in policies)
             {
-                if (earlier.Id == later.Id || earlier.Target != later.Target)
+                if (
+                    string.Equals(earlier.Id, later.Id, StringComparison.Ordinal)
+                    || !string.Equals(earlier.Target, later.Target, StringComparison.Ordinal)
+                )
                     continue;
                 // The states the earlier policy's landing moves an instance into, and those a train or a short timer
                 // moves it on to from there: those land later still.
-                var landings = moves.Where(m => m.Policy == earlier.Id).Select(m => m.To).ToList();
+                var landings = moves
+                    .Where(m => string.Equals(m.Policy, earlier.Id, StringComparison.Ordinal))
+                    .Select(m => m.To)
+                    .ToList();
                 var into = landings
                     .Concat(landings.SelectMany(l => Reached(l, unpaced)))
                     .ToHashSet(StringComparer.Ordinal);
@@ -122,8 +131,14 @@ internal static class PolicyLoops
                 var from = $"{earlier.When}.{earlier.Enters}";
                 var to = $"{later.When}.{later.Enters}";
                 if (
-                    from == to
-                    || Reached(from, moves.Where(m => m.Policy != earlier.Id)).Contains(to)
+                    string.Equals(from, to, StringComparison.Ordinal)
+                    || Reached(
+                            from,
+                            moves.Where(m =>
+                                !string.Equals(m.Policy, earlier.Id, StringComparison.Ordinal)
+                            )
+                        )
+                        .Contains(to)
                 )
                     races.Add(new Race(later, earlier, state));
             }
@@ -158,10 +173,10 @@ internal static class PolicyLoops
             var from = $"{policy.When}.{policy.Enters}";
             foreach (var edge in Array(target["transitions"]))
                 if (
-                    Text(edge?["trigger"]) == policy.Trigger
+                    string.Equals(Text(edge?["trigger"]), policy.Trigger, StringComparison.Ordinal)
                     && Text(edge?["from"]) is { } edgeFrom
                     && Text(edge?["to"]) is { } to
-                    && edgeFrom != to
+                    && !string.Equals(edgeFrom, to, StringComparison.Ordinal)
                 )
                     moves.Add(new Move(from, $"{policy.Target}.{to}", policy.Id));
         }
@@ -173,8 +188,11 @@ internal static class PolicyLoops
             if (Text(outcome?["state"]) is not { } state)
                 continue;
             foreach (var edge in Array(outcome?["edges"]))
-                if (Text(edge?["to"]) is { } to && to != state)
-                    moves.Add(new Move($"{id}.{state}", $"{id}.{to}", null));
+                if (
+                    Text(edge?["to"]) is { } to
+                    && !string.Equals(to, state, StringComparison.Ordinal)
+                )
+                    moves.Add(new Move($"{id}.{state}", $"{id}.{to}", Policy: null));
         }
         return moves;
     }
@@ -188,11 +206,11 @@ internal static class PolicyLoops
             if (
                 Text(timer?["state"]) is { } state
                 && Text(timer?["target"]) is { } target
-                && target != state
+                && !string.Equals(target, state, StringComparison.Ordinal)
                 && IsoDuration.TryParse(Text(timer?["after"]), out var after)
                 && after < RunnerInterval
             )
-                yield return new Move($"{id}.{state}", $"{id}.{target}", null);
+                yield return new Move($"{id}.{state}", $"{id}.{target}", Policy: null);
     }
 
     // Every state the moves reach from one, not counting it unless a move comes back to it.

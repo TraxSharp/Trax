@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -6,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Trax.Core.Extensions;
 using Trax.Core.Testing;
 using Trax.Core.Testing.Infrastructure;
 using Trax.Effect.Attributes;
@@ -18,7 +20,7 @@ namespace Trax.Effect.Data.Testing;
 /// <see cref="GuardResult"/> the consumer asserts on with its own test framework.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-data-testing">SDK reference</seealso>
-public static class DataLayerGuards
+public static partial class DataLayerGuards
 {
     private const string DefaultBaseTypeName = "DomainDataContext";
 
@@ -46,7 +48,11 @@ public static class DataLayerGuards
         var offenders = MissingScanRoots(root, options.SourceScanRoots);
         var inspected = 0;
 
-        foreach (var context in ClassesUnder(root, options.SourceScanRoots))
+        // The guards are synchronous; every await below is ConfigureAwait(false), so this waits
+        // on no context of its own.
+        foreach (
+            var context in ClassesUnderAsync(root, options.SourceScanRoots).GetAwaiter().GetResult()
+        )
         {
             if (
                 !context.Name.EndsWith("DbContext", StringComparison.Ordinal)
@@ -89,13 +95,17 @@ public static class DataLayerGuards
         var offenders = MissingScanRoots(root, options.SourceScanRoots);
         var inspected = 0;
 
-        foreach (var context in ClassesUnder(root, options.SourceScanRoots))
+        // The guards are synchronous; every await below is ConfigureAwait(false), so this waits
+        // on no context of its own.
+        foreach (
+            var context in ClassesUnderAsync(root, options.SourceScanRoots).GetAwaiter().GetResult()
+        )
         {
             if (!context.GenericBaseNames.Contains(baseTypeName))
                 continue;
 
             inspected++;
-            var directory = Path.GetDirectoryName(Path.Combine(root, context.File))!;
+            var directory = Path.GetDirectoryName(Path.Combine(root, context.File)).NotNull();
             if (!File.Exists(Path.Combine(directory, $"I{context.Name}.cs")))
                 offenders.Add($"{context.File} (expected I{context.Name}.cs alongside it)");
         }
@@ -121,7 +131,8 @@ public static class DataLayerGuards
 
         foreach (var contextType in contextTypes)
         {
-            var schema = SchemaOf(contextType);
+            using var context = BuildOffline(contextType);
+            var schema = context.Model.GetDefaultSchema();
             if (string.IsNullOrEmpty(schema))
             {
                 offenders.Add($"{contextType.Name} declares no default schema");
@@ -212,14 +223,13 @@ public static class DataLayerGuards
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(options.OwnerType);
-        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType);
+        ArgumentNullException.ThrowIfNull(options.OwnerType, nameof(options));
+        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType, nameof(options));
 
         var offenders = new List<string>();
         var perUser = new HashSet<Type>();
         var navigationOnly = new HashSet<Type>();
         var exposedAndGatedByRoleOrPolicy = new HashSet<Type>();
-        var inspected = 0;
 
         var entities = model
             .GetEntityTypes()
@@ -227,31 +237,53 @@ public static class DataLayerGuards
             .OrderBy(e => e.DisplayName(), StringComparer.Ordinal)
             .ToList();
 
+        var inspected = CensusEntities(
+            entities,
+            options,
+            offenders,
+            perUser,
+            navigationOnly,
+            exposedAndGatedByRoleOrPolicy
+        );
+
+        CheckNavigationScoped(options, perUser, navigationOnly, offenders);
+        CheckExemptions(options, perUser, offenders);
+        CheckGated(options, perUser, exposedAndGatedByRoleOrPolicy, offenders);
+
+        var message =
+            "Every entity holding per-user data must be scoped to its owner by a HasQueryFilter "
+            + $"that reads {options.PrincipalAccessorType.Name}, and a per-user [TraxQueryModel] "
+            + "must be a bare [TraxAuthorize]. Trax's authorization sees the attribute, not the "
+            + "filter, so a missing filter passes every other check. Offenders:\n  "
+            + string.Join("\n  ", offenders);
+
+        return new GuardResult(offenders, inspected, message);
+    }
+
+    // Finds the per-user entities, records which have no owner key and which are exposed behind a
+    // role or policy, and reports the ones without an owner-scope filter or with the wrong
+    // posture. Returns how many were inspected.
+    private static int CensusEntities(
+        List<IReadOnlyEntityType> entities,
+        OwnerScopeCensusOptions options,
+        List<string> offenders,
+        HashSet<Type> perUser,
+        HashSet<Type> navigationOnly,
+        HashSet<Type> exposedAndGatedByRoleOrPolicy
+    )
+    {
+        var inspected = 0;
+
         // A second mapping over a per-user table (a view or table mapping of the same name) reads
         // the same rows, so it is per-user whatever its own keys say. Without this, an unfiltered
         // alias of a filtered table would be invisible to the census.
-        var perUserStorage = entities
-            .Where(e =>
-                HasDirectOwnerKey(e, options)
-                || HasOwnerScopeFilter(e, options.PrincipalAccessorType)
-            )
-            .SelectMany(e => StorageOf(e).Select(storage => (storage, e)))
-            .GroupBy(x => x.storage, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.e).ToList(), StringComparer.Ordinal);
+        var perUserStorage = PerUserStorage(entities, options);
 
         foreach (var entity in entities)
         {
             var clr = entity.ClrType;
             var name = entity.DisplayName();
-            var sharedWith = StorageOf(entity)
-                .SelectMany(storage =>
-                    perUserStorage.TryGetValue(storage, out var owners)
-                        ? owners
-                            .Where(o => o.GetRootType() != entity.GetRootType())
-                            .Select(o => $"{o.DisplayName()} ({storage})")
-                        : []
-                )
-                .ToList();
+            var sharedWith = SharedPerUserStorage(entity, perUserStorage);
             var hasOwnerKey = HasDirectOwnerKey(entity, options) || sharedWith.Count > 0;
             var hasOwnerFilter = HasOwnerScopeFilter(entity, options.PrincipalAccessorType);
 
@@ -281,42 +313,97 @@ public static class DataLayerGuards
                         + "or exempt it with a reason."
                 );
 
-            if (clr.GetCustomAttribute<TraxQueryModelAttribute>(inherit: true) is null)
+            if (!Attribute.IsDefined(clr, typeof(TraxQueryModelAttribute), inherit: true))
                 continue;
 
-            var posture = TraxAuthorization.Read(clr);
-            var gates = posture
-                .Authorize.Select(a =>
-                    !string.IsNullOrWhiteSpace(a.Roles) ? $"Roles = \"{a.Roles}\""
-                    : !string.IsNullOrWhiteSpace(a.Policy) ? $"Policy = \"{a.Policy}\""
-                    : null
-                )
-                .OfType<string>()
-                .ToArray();
-
-            if (posture.AllowAnonymous)
-                offenders.Add(
-                    $"{name}: per-user [TraxQueryModel] marked [TraxAllowAnonymous], which "
-                        + "exposes owners' rows to anonymous callers. Use a bare [TraxAuthorize]."
-                );
-            else if (!posture.HasAuthorize)
-                offenders.Add(
-                    $"{name}: per-user [TraxQueryModel] without [TraxAuthorize]. Add a bare "
-                        + "[TraxAuthorize]; the row filter does the per-owner narrowing."
-                );
-            else if (gates.Length > 0 && options.Gated.ContainsKey(clr))
-                exposedAndGatedByRoleOrPolicy.Add(clr);
-            else if (gates.Length > 0)
-                offenders.Add(
-                    $"{name}: per-user [TraxQueryModel] gated by [TraxAuthorize("
-                        + string.Join("), [TraxAuthorize(", gates)
-                        + ")], which locks owners without it out of their own rows. Use a bare "
-                        + "[TraxAuthorize]; the row filter is the access control. If the gate is "
-                        + "deliberate, list it in Gated with a reason; the filter is still required."
-                );
+            CheckExposedPosture(clr, name, options, offenders, exposedAndGatedByRoleOrPolicy);
         }
 
-        foreach (var (type, reason) in options.NavigationScoped.OrderBy(n => n.Key.FullName))
+        return inspected;
+    }
+
+    private static Dictionary<string, List<IReadOnlyEntityType>> PerUserStorage(
+        List<IReadOnlyEntityType> entities,
+        OwnerScopeCensusOptions options
+    ) =>
+        entities
+            .Where(e =>
+                HasDirectOwnerKey(e, options)
+                || HasOwnerScopeFilter(e, options.PrincipalAccessorType)
+            )
+            .SelectMany(e => StorageOf(e).Select(storage => (storage, e)))
+            .GroupBy(x => x.storage, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.e).ToList(), StringComparer.Ordinal);
+
+    // The other per-user entities, with the storage, that read the same storage as this one.
+    private static List<string> SharedPerUserStorage(
+        IReadOnlyEntityType entity,
+        Dictionary<string, List<IReadOnlyEntityType>> perUserStorage
+    ) =>
+        StorageOf(entity)
+            .SelectMany(storage =>
+                perUserStorage.TryGetValue(storage, out var owners)
+                    ? owners
+                        .Where(o => o.GetRootType() != entity.GetRootType())
+                        .Select(o => $"{o.DisplayName()} ({storage})")
+                    : []
+            )
+            .ToList();
+
+    // A per-user [TraxQueryModel] must be a bare [TraxAuthorize], or a gate listed in Gated.
+    private static void CheckExposedPosture(
+        Type clr,
+        string name,
+        OwnerScopeCensusOptions options,
+        List<string> offenders,
+        HashSet<Type> exposedAndGatedByRoleOrPolicy
+    )
+    {
+        var posture = TraxAuthorization.Read(clr);
+        var gates = posture
+            .Authorize.Select(a =>
+                !string.IsNullOrWhiteSpace(a.Roles) ? $"Roles = \"{a.Roles}\""
+                : !string.IsNullOrWhiteSpace(a.Policy) ? $"Policy = \"{a.Policy}\""
+                : null
+            )
+            .OfType<string>()
+            .ToArray();
+
+        if (posture.AllowAnonymous)
+            offenders.Add(
+                $"{name}: per-user [TraxQueryModel] marked [TraxAllowAnonymous], which "
+                    + "exposes owners' rows to anonymous callers. Use a bare [TraxAuthorize]."
+            );
+        else if (!posture.HasAuthorize)
+            offenders.Add(
+                $"{name}: per-user [TraxQueryModel] without [TraxAuthorize]. Add a bare "
+                    + "[TraxAuthorize]; the row filter does the per-owner narrowing."
+            );
+        else if (gates.Length > 0 && options.Gated.ContainsKey(clr))
+            exposedAndGatedByRoleOrPolicy.Add(clr);
+        else if (gates.Length > 0)
+            offenders.Add(
+                $"{name}: per-user [TraxQueryModel] gated by [TraxAuthorize("
+                    + string.Join("), [TraxAuthorize(", gates)
+                    + ")], which locks owners without it out of their own rows. Use a bare "
+                    + "[TraxAuthorize]; the row filter is the access control. If the gate is "
+                    + "deliberate, list it in Gated with a reason; the filter is still required."
+            );
+    }
+
+    private static void CheckNavigationScoped(
+        OwnerScopeCensusOptions options,
+        HashSet<Type> perUser,
+        HashSet<Type> navigationOnly,
+        List<string> offenders
+    )
+    {
+        foreach (
+            var (type, reason) in options.NavigationScoped.OrderBy(
+                n => n.Key.FullName,
+                StringComparer.Ordinal
+            )
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -338,7 +425,7 @@ public static class DataLayerGuards
                 );
         }
 
-        foreach (var type in navigationOnly.OrderBy(t => t.FullName))
+        foreach (var type in navigationOnly.OrderBy(t => t.FullName, StringComparer.Ordinal))
         {
             if (
                 !options.NavigationScoped.ContainsKey(type) && !options.Exemptions.ContainsKey(type)
@@ -351,8 +438,20 @@ public static class DataLayerGuards
                         + "un-scope it."
                 );
         }
+    }
 
-        foreach (var (type, reason) in options.Exemptions.OrderBy(e => e.Key.FullName))
+    private static void CheckExemptions(
+        OwnerScopeCensusOptions options,
+        HashSet<Type> perUser,
+        List<string> offenders
+    )
+    {
+        foreach (
+            var (type, reason) in options.Exemptions.OrderBy(
+                e => e.Key.FullName,
+                StringComparer.Ordinal
+            )
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -366,8 +465,18 @@ public static class DataLayerGuards
                         + "cover whatever it becomes. Remove it."
                 );
         }
+    }
 
-        foreach (var (type, reason) in options.Gated.OrderBy(g => g.Key.FullName))
+    private static void CheckGated(
+        OwnerScopeCensusOptions options,
+        HashSet<Type> perUser,
+        HashSet<Type> exposedAndGatedByRoleOrPolicy,
+        List<string> offenders
+    )
+    {
+        foreach (
+            var (type, reason) in options.Gated.OrderBy(g => g.Key.FullName, StringComparer.Ordinal)
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -399,21 +508,12 @@ public static class DataLayerGuards
             {
                 if (!perUser.Contains(t) || options.Exemptions.ContainsKey(t))
                     return false;
-                if (t.GetCustomAttribute<TraxQueryModelAttribute>(inherit: true) is null)
+                if (!Attribute.IsDefined(t, typeof(TraxQueryModelAttribute), inherit: true))
                     return false;
                 var posture = TraxAuthorization.Read(t);
                 return posture.AllowAnonymous || !posture.HasAuthorize;
             }
         }
-
-        var message =
-            "Every entity holding per-user data must be scoped to its owner by a HasQueryFilter "
-            + $"that reads {options.PrincipalAccessorType.Name}, and a per-user [TraxQueryModel] "
-            + "must be a bare [TraxAuthorize]. Trax's authorization sees the attribute, not the "
-            + "filter, so a missing filter passes every other check. Offenders:\n  "
-            + string.Join("\n  ", offenders);
-
-        return new GuardResult(offenders, inspected, message);
     }
 
     /// <summary>
@@ -457,7 +557,7 @@ public static class DataLayerGuards
         ArgumentNullException.ThrowIfNull(scan);
         ArgumentNullException.ThrowIfNull(models);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType);
+        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType, nameof(options));
 
         // Entities whose root carries an owner-scope filter: the ones a bypass exposes. Keyed by
         // simple name, because that is all the source text gives.
@@ -468,24 +568,68 @@ public static class DataLayerGuards
         var perUserTypeNames = scopedEntities
             .Select(e => e.ClrType.Name)
             .ToHashSet(StringComparer.Ordinal);
-        var ownerFilterNames = scopedEntities
-            .SelectMany(e => e.GetRootType().GetDeclaredQueryFilters())
-            .Where(f =>
-                !f.IsAnonymous
-                && f.Expression is not null
-                && References(f.Expression, options.PrincipalAccessorType)
-            )
-            .Select(f => f.Key!)
-            .ToHashSet(StringComparer.Ordinal);
+        var ownerFilterNames = OwnerFilterNames(scopedEntities, options.PrincipalAccessorType);
 
         var root = scan.RepoRootOverride ?? RepoRoot.Path;
-        var files = SourceFiles
-            .CSharpUnder(root, [.. scan.SourceScanRoots])
-            .Select(file => (Path: Rel(root, file), Text: File.ReadAllText(file)))
+        var files = ReadSourcesAsync(root, scan.SourceScanRoots)
+            .GetAwaiter()
+            .GetResult()
             .Select(f => (f.Path, f.Text, Stripped: SourceText.StripCommentsAndStrings(f.Text)))
             .ToList();
 
         // Set name -> element type names, from every DbSet/IQueryable property under the roots.
+        var sets = SetDeclarations(files);
+
+        // Every entity the models map, by simple name. Set<T>() or a set property whose element
+        // type is not one of these (a type parameter, say) names no set the scan can tell.
+        var entityTypeNames = models
+            .SelectMany(m => m.GetEntityTypes())
+            .Select(e => e.ClrType.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var offenders = MissingScanRoots(root, scan.SourceScanRoots);
+        var bypassingFiles = new HashSet<string>(StringComparer.Ordinal);
+        var inspected = ReportBypasses(
+            files,
+            sets,
+            entityTypeNames,
+            perUserTypeNames,
+            ownerFilterNames,
+            options,
+            offenders,
+            bypassingFiles
+        );
+
+        CheckBypassAllowlist(options, bypassingFiles, offenders);
+
+        var message =
+            "Query code must not switch an owner-scope filter off on a per-user set: the census "
+            + "sees the filter in the model and cannot see it disabled at a call site. Keep the "
+            + "filter, or allowlist the file in FilterBypassAllowlist with the reason "
+            + "(docs/adr/0008-per-user-data-is-filtered-by-its-owner.md). Offenders:\n  "
+            + string.Join("\n  ", offenders);
+
+        return new GuardResult(offenders, inspected, message);
+    }
+
+    private static HashSet<string> OwnerFilterNames(
+        List<IReadOnlyEntityType> scopedEntities,
+        Type principalAccessorType
+    ) =>
+        scopedEntities
+            .SelectMany(e => e.GetRootType().GetDeclaredQueryFilters())
+            .Where(f =>
+                !f.IsAnonymous
+                && f.Expression is not null
+                && References(f.Expression, principalAccessorType)
+            )
+            .Select(f => f.Key.NotNull())
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static Dictionary<string, HashSet<string>> SetDeclarations(
+        List<(string Path, string Text, string Stripped)> files
+    )
+    {
         var sets = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var file in files)
         foreach (Match declaration in SetDeclaration.Matches(file.Stripped))
@@ -495,36 +639,50 @@ public static class DataLayerGuards
                 sets[name] = types = new HashSet<string>(StringComparer.Ordinal);
             types.Add(declaration.Groups["type"].Value);
         }
+        return sets;
+    }
 
-        // Every entity the models map, by simple name. Set<T>() or a set property whose element
-        // type is not one of these (a type parameter, say) names no set the scan can tell.
-        var entityTypeNames = models
-            .SelectMany(m => m.GetEntityTypes())
-            .Select(e => e.ClrType.Name)
-            .ToHashSet(StringComparer.Ordinal);
+    private static IEnumerable<string> ElementTypes(
+        Match reference,
+        Dictionary<string, HashSet<string>> sets
+    ) =>
+        reference.Groups["type"] is { Success: true } typed ? [typed.Value]
+        : sets.TryGetValue(reference.Value, out var types) ? types
+        : [];
 
-        IEnumerable<string> ElementTypes(Match reference) =>
-            reference.Groups["type"] is { Success: true } typed ? [typed.Value]
-            : sets.TryGetValue(reference.Value, out var types) ? types
-            : [];
-
-        // The receiver is the first set reference in the chain the call ends, read with every
-        // argument list emptied: db.Notes, db.Set<Note>(), or a query parameter the scan cannot
-        // name. It is named only when every element type it can hold is a mapped entity.
-        bool ReceiverIsNamedSet(string stripped, int callIndex)
+    // The receiver is the first set reference in the chain the call ends, read with every
+    // argument list emptied: db.Notes, db.Set<Note>(), or a query parameter the scan cannot
+    // name. It is named only when every element type it can hold is a mapped entity.
+    private static bool ReceiverIsNamedSet(
+        string stripped,
+        int callIndex,
+        Dictionary<string, HashSet<string>> sets,
+        HashSet<string> entityTypeNames
+    )
+    {
+        var chain = TopLevel(ChainBefore(stripped, callIndex));
+        foreach (Match reference in SetReference.Matches(chain))
         {
-            var chain = TopLevel(ChainBefore(stripped, callIndex));
-            foreach (Match reference in SetReference.Matches(chain))
-            {
-                var types = ElementTypes(reference).ToList();
-                if (types.Count > 0)
-                    return types.All(entityTypeNames.Contains);
-            }
-            return false;
+            var types = ElementTypes(reference, sets).ToList();
+            if (types.Count > 0)
+                return types.TrueForAll(entityTypeNames.Contains);
         }
+        return false;
+    }
 
-        var offenders = MissingScanRoots(root, scan.SourceScanRoots);
-        var bypassingFiles = new HashSet<string>(StringComparer.Ordinal);
+    // Reports each IgnoreQueryFilters call that may switch an owner-scope filter off on a per-user
+    // set, and records the files that make one. Returns how many calls were inspected.
+    private static int ReportBypasses(
+        List<(string Path, string Text, string Stripped)> files,
+        Dictionary<string, HashSet<string>> sets,
+        HashSet<string> entityTypeNames,
+        HashSet<string> perUserTypeNames,
+        HashSet<string> ownerFilterNames,
+        OwnerScopeCensusOptions options,
+        List<string> offenders,
+        HashSet<string> bypassingFiles
+    )
+    {
         var inspected = 0;
 
         foreach (var file in files)
@@ -550,15 +708,14 @@ public static class DataLayerGuards
             // Any per-user set mentioned in the statement is reported: the call switches filters
             // off for the whole query, subqueries included.
             var statement = StatementBefore(file.Stripped, call.Index);
-            var perUser = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (Match reference in SetReference.Matches(statement))
-            foreach (var type in ElementTypes(reference))
-                if (perUserTypeNames.Contains(type))
-                    perUser.Add(type);
+            var perUser = PerUserSetsIn(statement, sets, perUserTypeNames);
 
             // Only the set the chain starts from makes the call a shared one. A shared set named
             // elsewhere in the statement (inside a lambda, say) says nothing about the receiver.
-            if (perUser.Count == 0 && ReceiverIsNamedSet(file.Stripped, call.Index))
+            if (
+                perUser.Count == 0
+                && ReceiverIsNamedSet(file.Stripped, call.Index, sets, entityTypeNames)
+            )
                 continue;
 
             bypassingFiles.Add(file.Path);
@@ -566,17 +723,56 @@ public static class DataLayerGuards
                 continue;
 
             var what = disables ?? "every query filter, the owner scope included";
-            offenders.Add(
-                perUser.Count > 0
-                    ? $"{file.Path}:{line}: IgnoreQueryFilters switches off {what} on "
-                        + $"{string.Join(", ", perUser)}, which holds per-user data. Every caller "
-                        + "reaching this query reads every owner's rows."
-                    : $"{file.Path}:{line}: IgnoreQueryFilters switches off {what}, and the scan "
-                        + "cannot tell which set it applies to, so it may be a per-user one."
-            );
+            offenders.Add(BypassOffence(file.Path, line, what, perUser));
         }
 
-        foreach (var (path, reason) in options.FilterBypassAllowlist.OrderBy(a => a.Key))
+        return inspected;
+    }
+
+    private static SortedSet<string> PerUserSetsIn(
+        string statement,
+        Dictionary<string, HashSet<string>> sets,
+        HashSet<string> perUserTypeNames
+    )
+    {
+        var perUser = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (Match reference in SetReference.Matches(statement))
+        foreach (var type in ElementTypes(reference, sets))
+            if (perUserTypeNames.Contains(type))
+                perUser.Add(type);
+        return perUser;
+    }
+
+    private static string BypassOffence(
+        string path,
+        int line,
+        string what,
+        SortedSet<string> perUser
+    ) =>
+        perUser.Count > 0
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"{path}:{line}: IgnoreQueryFilters switches off {what} on "
+            )
+                + $"{string.Join(", ", perUser)}, which holds per-user data. Every caller "
+                + "reaching this query reads every owner's rows."
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{path}:{line}: IgnoreQueryFilters switches off {what}, and the scan "
+            ) + "cannot tell which set it applies to, so it may be a per-user one.";
+
+    private static void CheckBypassAllowlist(
+        OwnerScopeCensusOptions options,
+        HashSet<string> bypassingFiles,
+        List<string> offenders
+    )
+    {
+        foreach (
+            var (path, reason) in options.FilterBypassAllowlist.OrderBy(
+                a => a.Key,
+                StringComparer.Ordinal
+            )
+        )
         {
             if (string.IsNullOrWhiteSpace(reason))
                 offenders.Add(
@@ -590,50 +786,17 @@ public static class DataLayerGuards
                         + "file does next. Remove it."
                 );
         }
-
-        var message =
-            "Query code must not switch an owner-scope filter off on a per-user set: the census "
-            + "sees the filter in the model and cannot see it disabled at a call site. Keep the "
-            + "filter, or allowlist the file in FilterBypassAllowlist with the reason "
-            + "(docs/adr/0008-per-user-data-is-filtered-by-its-owner.md). Offenders:\n  "
-            + string.Join("\n  ", offenders);
-
-        return new GuardResult(offenders, inspected, message);
     }
 
-    private static readonly Regex IgnoreQueryFiltersCall = new(
-        @"\.\s*IgnoreQueryFilters\s*\(",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex SetDeclaration = new(
-        @"\b(?:DbSet|IQueryable)\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
-        RegexOptions.Compiled
-    );
-
     // Set<Note>() names its type; any other identifier might be a set property, and is looked up.
-    private static readonly Regex SetReference = new(
-        @"\bSet\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>|\b\w+\b",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex StringLiteral = new(
-        @"""((?:[^""\\]|\\.)*)""",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex LiteralCollection = new(
-        @"^(?:new\s*(?:string)?\s*\[\s*\]\s*\{|\[)?\s*(?:""(?:[^""\\]|\\.)*""\s*,?\s*)*(?:\}|\])?$",
-        RegexOptions.Compiled
-    );
 
     /// <summary>
-    /// The filter names in a named-filter disable, or <c>null</c> when they are not all string
+    /// The filter names in a named-filter disable, or <see langword="null"/> when they are not all string
     /// literals in a collection expression or array initializer.
     /// </summary>
     private static IReadOnlyList<string>? LiteralNames(string arguments) =>
         LiteralCollection.IsMatch(arguments)
-            ? StringLiteral.Matches(arguments).Select(m => m.Groups[1].Value).ToList()
+            ? StringLiteral.Matches(arguments).Select(m => m.Groups["content"].Value).ToList()
             : null;
 
     /// <summary>
@@ -826,12 +989,6 @@ public static class DataLayerGuards
         }
     }
 
-    private static string? SchemaOf(Type contextType)
-    {
-        using var context = BuildOffline(contextType);
-        return context.Model.GetDefaultSchema();
-    }
-
     /// <summary>
     /// Builds a context instance offline (PostgreSQL provider, no connection) via its
     /// <c>DbContextOptions</c> constructor, for reflection-only model inspection.
@@ -839,7 +996,7 @@ public static class DataLayerGuards
     private static DbContext BuildOffline(Type contextType)
     {
         var builderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(contextType);
-        var builder = (DbContextOptionsBuilder)Activator.CreateInstance(builderType)!;
+        var builder = (DbContextOptionsBuilder)Activator.CreateInstance(builderType).NotNull();
         builder.UseNpgsql("Host=localhost;Database=offline_model_only");
 
         // DbContextOptionsBuilder<T> shadows the base Options property (DbContextOptions<T> vs the
@@ -850,9 +1007,10 @@ public static class DataLayerGuards
                 System.Reflection.BindingFlags.Public
                     | System.Reflection.BindingFlags.Instance
                     | System.Reflection.BindingFlags.DeclaredOnly
-            )!
+            )
+            .NotNull()
             .GetValue(builder);
-        return (DbContext)Activator.CreateInstance(contextType, options)!;
+        return (DbContext)Activator.CreateInstance(contextType, options).NotNull();
     }
 
     /// <summary>
@@ -867,15 +1025,32 @@ public static class DataLayerGuards
         HashSet<string> GenericBaseNames
     );
 
-    private static List<ClassDeclaration> ClassesUnder(string root, IReadOnlyList<string> scanRoots)
+    private static async Task<List<(string Path, string Text)>> ReadSourcesAsync(
+        string root,
+        IReadOnlyList<string> scanRoots
+    )
+    {
+        var files = new List<(string Path, string Text)>();
+        foreach (var file in SourceFiles.CSharpUnder(root, [.. scanRoots]))
+            files.Add((Rel(root, file), await File.ReadAllTextAsync(file).ConfigureAwait(false)));
+        return files;
+    }
+
+    private static async Task<List<ClassDeclaration>> ClassesUnderAsync(
+        string root,
+        IReadOnlyList<string> scanRoots
+    )
     {
         var classes = new Dictionary<string, ClassDeclaration>(StringComparer.Ordinal);
 
         foreach (var file in SourceFiles.CSharpUnder(root, [.. scanRoots]))
         {
-            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file));
+            var tree = CSharpSyntaxTree.ParseText(
+                await File.ReadAllTextAsync(file).ConfigureAwait(false)
+            );
+            var syntaxRoot = await tree.GetRootAsync().ConfigureAwait(false);
             foreach (
-                var declaration in tree.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
+                var declaration in syntaxRoot.DescendantNodes().OfType<ClassDeclarationSyntax>()
             )
             {
                 var key = FullName(declaration);
@@ -927,7 +1102,7 @@ public static class DataLayerGuards
         }
 
         parts.Reverse();
-        return string.Join(".", parts);
+        return string.Join('.', parts);
     }
 
     /// <summary>
@@ -945,4 +1120,39 @@ public static class DataLayerGuards
 
     private static string Rel(string root, string file) =>
         Path.GetRelativePath(root, file).Replace('\\', '/');
+
+    [GeneratedRegex(
+        @"\.\s*IgnoreQueryFilters\s*\(",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IgnoreQueryFiltersCall { get; }
+
+    [GeneratedRegex(
+        @"\b(?:DbSet|IQueryable)\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SetDeclaration { get; }
+
+    [GeneratedRegex(
+        @"\bSet\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>|\b\w+\b",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SetReference { get; }
+
+    [GeneratedRegex(
+        @"""(?<content>(?:[^""\\]|\\.)*)""",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StringLiteral { get; }
+
+    [GeneratedRegex(
+        @"^(?:new\s*(?:string)?\s*\[\s*\]\s*\{|\[)?\s*(?:""(?:[^""\\]|\\.)*""\s*,?\s*)*(?:\}|\])?$",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LiteralCollection { get; }
 }

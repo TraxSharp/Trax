@@ -31,6 +31,7 @@ public static class ApiServiceExtensions
     public static IServiceCollection AddTraxApi(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ITraxHealthService, TraxHealthService>();
         services.AddScoped<ITrainAuthorizationService, TrainAuthorizationService>();
         // A state-machine event's Requires and RequiresPolicy rules are checked against the request's user.

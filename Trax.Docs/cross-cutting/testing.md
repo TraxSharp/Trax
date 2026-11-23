@@ -26,6 +26,7 @@ versions pinned in the template's `Directory.Packages.props`:
 <!-- ... -->
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
@@ -41,8 +42,9 @@ assertion library works; Trax's own test projects use AwesomeAssertions.
 
 ## Construct the junction and call Run
 
-Pass the junction what its constructor asks for and await `Run` with an input. A junction that
-takes only a logger gets `NullLogger<T>.Instance`:
+Pass the junction what its constructor asks for and await `Run` with an input. A logger is
+`NullLogger<T>.Instance`, and a junction that reads the clock takes a `TimeProvider`, which a test
+fixes with `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`):
 
 ```csharp from=Trax.Samples/templates/content/Trax.Samples.Hub/tests/Trax.Samples.Hub.Tests/UnitTests/FetchDataJunctionTests.cs
 [TestFixture]
@@ -51,11 +53,17 @@ public class FetchDataJunctionTests
     [Test]
     public async Task Run_WithAnId_ReturnsTheRecordForThatId()
     {
-        var junction = new FetchDataJunction(NullLogger<FetchDataJunction>.Instance);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
+        var junction = new FetchDataJunction(NullLogger<FetchDataJunction>.Instance, clock);
 
         var output = await junction.Run(new LookupInput { Id = "42" });
 
         Assert.That(output.Id, Is.EqualTo("42"), "the lookup returns the record it was asked for");
+        Assert.That(
+            output.CreatedAt,
+            Is.EqualTo(clock.GetUtcNow().UtcDateTime),
+            "the record is stamped with the clock the junction was given"
+        );
     }
 }
 ```

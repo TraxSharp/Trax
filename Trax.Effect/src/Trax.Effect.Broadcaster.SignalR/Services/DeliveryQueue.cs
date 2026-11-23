@@ -30,8 +30,8 @@ internal sealed class DeliveryQueue(int capacity)
 
     /// <summary>Queues <paramref name="message"/>, making room by the policy above when full.</summary>
     /// <param name="message">The event to queue.</param>
-    /// <param name="dropped">The event given up, or <c>null</c> when nothing was dropped.</param>
-    /// <returns><c>false</c> only when the queue was completed; nothing is dropped then.</returns>
+    /// <param name="dropped">The event given up, or <see langword="null"/> when nothing was dropped.</param>
+    /// <returns><see langword="false"/> only when the queue was completed; nothing is dropped then.</returns>
     public bool TryWrite(
         TrainLifecycleEventMessage message,
         out TrainLifecycleEventMessage? dropped
@@ -70,10 +70,10 @@ internal sealed class DeliveryQueue(int capacity)
         }
     }
 
-    /// <summary>Waits for the next event; <c>null</c> once the queue is completed and empty.</summary>
+    /// <summary>Waits for the next event; <see langword="null"/> once the queue is completed and empty.</summary>
     public async ValueTask<TrainLifecycleEventMessage?> ReadAsync(CancellationToken ct)
     {
-        await _available.WaitAsync(ct);
+        await _available.WaitAsync(ct).ConfigureAwait(false);
         lock (_items)
         {
             if (_items.First is not { } first)
@@ -84,7 +84,7 @@ internal sealed class DeliveryQueue(int capacity)
         }
     }
 
-    /// <summary>Stops accepting events; the reader drains what is queued, then gets <c>null</c>.</summary>
+    /// <summary>Stops accepting events; the reader drains what is queued, then gets <see langword="null"/>.</summary>
     public void Complete()
     {
         lock (_items)

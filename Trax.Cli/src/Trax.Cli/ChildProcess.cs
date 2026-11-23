@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Trax.Cli;
 
@@ -11,7 +12,9 @@ internal static class ChildProcess
     /// soon as the child fills the other's pipe buffer (about 64 KB), because the child then blocks on
     /// that write and never closes the stream being read.
     /// </summary>
-    public static (int ExitCode, string StdOut, string StdErr) Run(ProcessStartInfo psi)
+    public static async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(
+        ProcessStartInfo psi
+    )
     {
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
@@ -24,16 +27,20 @@ internal static class ChildProcess
 
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        return (
+            process.ExitCode,
+            await stdout.ConfigureAwait(false),
+            await stderr.ConfigureAwait(false)
+        );
     }
 
     /// <summary>
-    /// <see cref="Run(ProcessStartInfo)"/>, stopping the process and everything it started when it runs longer than
-    /// <paramref name="timeout"/> (a <see cref="TimeoutException"/> holding what it wrote) or when
+    /// <see cref="RunAsync(ProcessStartInfo)"/>, stopping the process and everything it started when it runs longer
+    /// than <paramref name="timeout"/> (a <see cref="TimeoutException"/> holding what it wrote) or when
     /// <paramref name="ct"/> is cancelled (an <see cref="OperationCanceledException"/>).
     /// </summary>
-    public static (int ExitCode, string StdOut, string StdErr) Run(
+    public static async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(
         ProcessStartInfo psi,
         TimeSpan timeout,
         CancellationToken ct
@@ -54,9 +61,9 @@ internal static class ChildProcess
         limit.CancelAfter(timeout);
         try
         {
-            process.WaitForExitAsync(limit.Token).GetAwaiter().GetResult();
+            await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             try
             {
@@ -66,14 +73,22 @@ internal static class ChildProcess
             {
                 // It exited on its own in the meantime.
             }
-            process.WaitForExit();
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             throw new TimeoutException(
-                $"'{psi.FileName}' did not finish within {timeout.TotalMinutes:0.#} minutes and was stopped. "
-                    + $"Its output:\n{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{psi.FileName}' did not finish within {timeout.TotalMinutes:0.#} minutes and was stopped. "
+                )
+                    + $"Its output:\n{await stdout.ConfigureAwait(false)}{await stderr.ConfigureAwait(false)}",
+                ex
             );
         }
-        process.WaitForExit();
-        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+        await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+        return (
+            process.ExitCode,
+            await stdout.ConfigureAwait(false),
+            await stderr.ConfigureAwait(false)
+        );
     }
 }

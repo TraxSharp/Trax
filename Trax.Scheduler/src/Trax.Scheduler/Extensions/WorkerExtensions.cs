@@ -48,7 +48,7 @@ public static class WorkerExtensions
         if (problems.Count > 0)
             throw new InvalidOperationException(
                 "The worker options have values the worker pool cannot run with. "
-                    + string.Join(" ", problems)
+                    + string.Join(' ', problems)
             );
         LocalWorkerOptions.Register(services, options);
 

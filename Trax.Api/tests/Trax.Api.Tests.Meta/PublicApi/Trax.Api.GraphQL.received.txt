@@ -1,6 +1,6 @@
 namespace Trax.Api.GraphQL.Configuration
 {
-    public class GraphQLConfiguration
+    public sealed class GraphQLConfiguration
     {
         public System.TimeSpan ConnectionCredentialRecheckInterval { get; }
         public System.TimeSpan MaxConnectionLifetime { get; }
@@ -24,7 +24,7 @@ namespace Trax.Api.GraphQL.Configuration
 }
 namespace Trax.Api.GraphQL.Configuration.TraxFilterBuilder
 {
-    public class TraxFilterBuilder
+    public sealed class TraxFilterBuilder
     {
         public Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder AddCaseInsensitiveStringOperations() { }
     }
@@ -126,6 +126,7 @@ namespace Trax.Api.GraphQL.Hooks
     public class GraphQLSubscriptionHook : Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
     {
         public GraphQLSubscriptionHook(HotChocolate.Subscriptions.ITopicEventSender eventSender, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Api.GraphQL.Subscriptions.TrainLifecycleStreamOptions options) { }
+        public GraphQLSubscriptionHook(HotChocolate.Subscriptions.ITopicEventSender eventSender, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Api.GraphQL.Subscriptions.TrainLifecycleStreamOptions options, System.TimeProvider clock) { }
         public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }

@@ -1,23 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fakes;
-
-/// <summary>Where a <see cref="ObservedLauncher"/> fails the write it is part of.</summary>
-public enum LaunchFault
-{
-    None,
-
-    /// <summary>After the snapshot is written, before the run's entry is.</summary>
-    BeforeEnqueue,
-
-    /// <summary>After the run's entry is written, before the transaction commits.</summary>
-    AfterEnqueue,
-
-    /// <summary>Before the run's entry is written, as an authorization the caller fails.</summary>
-    Forbidden,
-}
 
 /// <summary>
 /// Wraps the mediator's launcher: runs an observation after the real enqueue (from another connection, while the
@@ -34,7 +20,7 @@ internal sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTr
     {
         var registered = services.Last(d => d.ServiceType == typeof(IInvokedTrainLauncher));
         services.Remove(registered);
-        var implementation = registered.ImplementationType!;
+        var implementation = registered.ImplementationType.NotNull();
         services.AddScoped<IInvokedTrainLauncher>(sp => new ObservedLauncher(
             (IInvokedTrainLauncher)ActivatorUtilities.CreateInstance(sp, implementation)
         ));
@@ -59,10 +45,10 @@ internal sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTr
                 "The host died between the advance and the enqueue."
             );
 
-        await inner.Launch(launch, context, cancellationToken);
+        await inner.Launch(launch, context, cancellationToken).ConfigureAwait(false);
 
         if (Observe is { } observe)
-            await observe();
+            await observe().ConfigureAwait(false);
 
         if (Fault == LaunchFault.AfterEnqueue)
             throw new InvalidOperationException("The host died before the commit.");

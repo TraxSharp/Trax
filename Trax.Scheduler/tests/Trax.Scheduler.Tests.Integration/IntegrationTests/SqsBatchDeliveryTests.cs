@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -34,9 +35,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class SqsBatchDeliveryTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private IDataContext _dataContext = null!;
-    private IServiceScope _scope = null!;
+    private ServiceProvider? _serviceProvider;
+    private IDataContext? _dataContext;
+    private AsyncServiceScope _scope;
     private readonly List<string> _keys = [];
 
     [OneTimeSetUp]
@@ -61,25 +62,29 @@ public class SqsBatchDeliveryTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
-    public void TestTearDown()
+    public async Task TestTearDown()
     {
         foreach (var key in _keys)
             DeliveryProbeTrain.Forget(key);
         _keys.Clear();
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -89,7 +94,7 @@ public class SqsBatchDeliveryTests
         var (second, _) = await PendingRun();
         var (third, thirdKey) = await PendingRun(fail: true);
 
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent
         {
             Records =
@@ -110,7 +115,7 @@ public class SqsBatchDeliveryTests
         DeliveryProbeTrain.Runs[firstKey].Should().Be(1);
         DeliveryProbeTrain.Runs[thirdKey].Should().Be(1, "a record after a bad one still runs");
 
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         (await StateOf(second)).Should().Be(TrainState.Pending);
         (await StateOf(third)).Should().Be(TrainState.Failed);
     }
@@ -119,7 +124,7 @@ public class SqsBatchDeliveryTests
     public async Task A_record_naming_a_run_that_does_not_exist_is_reported()
     {
         var (run, key) = await PendingRun();
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent
         {
             Records = [Record("m1", run, key), Record("m2", run + 1_000_000, "missing")],
@@ -138,7 +143,7 @@ public class SqsBatchDeliveryTests
     public async Task A_redelivered_record_whose_run_already_completed_is_acknowledged()
     {
         var (run, key) = await PendingRun();
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent { Records = [Record("m1", run, key)] };
 
         (await handler.HandleBatchAsync(batch)).BatchItemFailures.Should().BeEmpty();
@@ -157,7 +162,7 @@ public class SqsBatchDeliveryTests
         var (second, _) = await PendingRun();
         var (third, thirdKey) = await PendingRun();
 
-        var handler = new SqsJobRunnerHandler(_serviceProvider);
+        var handler = new SqsJobRunnerHandler(_serviceProvider.NotNull());
         var batch = new SQSEvent
         {
             Records =
@@ -168,7 +173,7 @@ public class SqsBatchDeliveryTests
             ],
         };
 
-        var act = async () => await handler.HandleAsync(batch);
+        var act = async () => await handler.HandleAsync(batch).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Exception>("m2 must be delivered again");
         DeliveryProbeTrain.Runs[firstKey].Should().Be(1);
@@ -177,7 +182,11 @@ public class SqsBatchDeliveryTests
 
     private async Task<TrainState> StateOf(long metadataId) =>
         (
-            await _dataContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == metadataId)
+            await _dataContext
+                .NotNull()
+                .Metadatas.AsNoTracking()
+                .SingleAsync(m => m.Id == metadataId)
+                .ConfigureAwait(false)
         ).TrainState;
 
     private async Task<(long MetadataId, string Key)> PendingRun(bool fail = false)
@@ -187,14 +196,15 @@ public class SqsBatchDeliveryTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IDeliveryProbeTrain).FullName!,
+                Name = typeof(IDeliveryProbeTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
-        await _dataContext.Track(metadata);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(metadata).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
         _probeInputs[key] = new DeliveryProbeInput { Key = key, Fail = fail };
         return (metadata.Id, key);
     }

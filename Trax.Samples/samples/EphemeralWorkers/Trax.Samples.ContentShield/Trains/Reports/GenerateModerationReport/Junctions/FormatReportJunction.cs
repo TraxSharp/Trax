@@ -15,7 +15,7 @@ public class FormatReportJunction(ILogger<FormatReportJunction> logger)
     {
         logger.LogInformation("Formatting {ReportPeriod} moderation report", input.ReportPeriod);
 
-        await Task.Delay(100);
+        await Task.Delay(100, CancellationToken).ConfigureAwait(false);
 
         return new GenerateModerationReportOutput
         {

@@ -62,6 +62,13 @@ public class TrainExecutionService(
     private static readonly ConcurrentDictionary<Type, PropertyInfo?> DeferPromotionCache = new();
 
     /// <summary>
+    /// The clock the rows an enqueue writes are stamped from: the container's
+    /// <see cref="TimeProvider"/> (AddTrax registers the system's), or the system's when the
+    /// container has none.
+    /// </summary>
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
+    /// <summary>
     /// The enqueue whose <c>OnQueue</c> hook is running on this async flow, which an enqueue
     /// started from inside that hook joins. Static so every instance of this scoped service sees
     /// it, the same way <c>EnqueueContextAccessor</c> keeps its value; each enqueue only joins one
@@ -102,25 +109,50 @@ public class TrainExecutionService(
         var priority = options.Priority;
         var scheduledAt = options.ScheduledAt;
 
-        var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
+        var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct)
+            .ConfigureAwait(false);
 
         registration.ServiceType.FullName.AssertLoaded();
 
         // Measured before the entry exists: the stored form is written indented and with every
         // member present, so it is capped too, not only the caller's text.
-        var serializedInput = TrainInputReader.WriteForStorage(
-            input,
-            registration,
-            mediatorConfiguration.MaxInputJsonBytes
-        );
+        var serializedInput = await TrainInputReader
+            .WriteForStorageAsync(input, registration, mediatorConfiguration.MaxInputJsonBytes)
+            .ConfigureAwait(false);
 
         // The train is resolved at most once per enqueue, in a scope of its own that is disposed
         // when the enqueue returns. The caller's scope can live as long as a Blazor circuit, so
         // resolving from it kept every train and its scoped dependencies alive for the life of
         // the tab, and a scoped DbContext a hook left a failed write in failed every later
         // enqueue of the train from that tab.
-        await using var train = new EnqueueTrain(serviceProvider, registration);
+        var train = new EnqueueTrain(serviceProvider, registration);
+        await using (train.ConfigureAwait(false))
+        {
+            return await QueueWithTrainAsync(
+                    registration,
+                    train,
+                    input,
+                    serializedInput,
+                    options,
+                    priority,
+                    scheduledAt,
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+    }
 
+    private async Task<QueueTrainResult> QueueWithTrainAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        string serializedInput,
+        QueueTrainOptions options,
+        int priority,
+        DateTime? scheduledAt,
+        CancellationToken ct
+    )
+    {
         // An enqueue started from inside another train's OnQueue hook joins that enqueue's
         // transaction, so it commits with the outer entry or not at all (mediator/0003).
         var outer = FindEnqueueToJoin();
@@ -142,38 +174,71 @@ public class TrainExecutionService(
 
         var entry = CreateEntry(
             registration,
-            new CreateWorkQueue
-            {
-                TrainName = registration.ServiceType.FullName,
-                Input = serializedInput,
-                InputTypeName = registration.InputType.FullName,
-                Priority = priority,
-                ScheduledAt = ToUtc(scheduledAt),
-                DeferPromotion = deferPromotion,
-                SubjectKey = subjectKey,
-                ReplayDecisionsOf = options.ReplayDecisionsOf,
-                ResumeFrom = options.ResumeFrom,
-                ResumeAt = options.ResumeAt,
-                StarterHash = options.StarterHash ?? (options.RecordCaller ? CallerHash() : null),
-            }
+            QueuedWorkQueue(
+                registration,
+                serializedInput,
+                options,
+                priority,
+                scheduledAt,
+                deferPromotion,
+                subjectKey
+            )
         );
         entry.ExternalId = externalId;
 
         if (outer is not null)
             return await QueueIntoOuterAsync(
-                outer,
-                registration,
-                train,
-                input,
-                entry,
-                declaresDeferral,
-                ct
-            );
+                    outer,
+                    registration,
+                    train,
+                    input,
+                    entry,
+                    declaresDeferral,
+                    ct
+                )
+                .ConfigureAwait(false);
 
         if (deferPromotion)
-            return await QueueWithDeferredPromotionAsync(registration, train, input, entry, ct);
+            return await QueueWithDeferredPromotionAsync(registration, train, input, entry, ct)
+                .ConfigureAwait(false);
 
-        using var dataContext = await dataContextFactory.CreateDbContextAsync(ct);
+        return await QueueDirectAsync(registration, train, input, entry, ct).ConfigureAwait(false);
+    }
+
+    private CreateWorkQueue QueuedWorkQueue(
+        TrainRegistration registration,
+        string serializedInput,
+        QueueTrainOptions options,
+        int priority,
+        DateTime? scheduledAt,
+        bool deferPromotion,
+        string? subjectKey
+    ) =>
+        new()
+        {
+            TrainName = registration.ServiceType.FullName.NotNull(),
+            Input = serializedInput,
+            InputTypeName = registration.InputType.FullName,
+            Priority = priority,
+            ScheduledAt = ToUtc(scheduledAt),
+            DeferPromotion = deferPromotion,
+            SubjectKey = subjectKey,
+            ReplayDecisionsOf = options.ReplayDecisionsOf,
+            ResumeFrom = options.ResumeFrom,
+            ResumeAt = options.ResumeAt,
+            StarterHash = options.StarterHash ?? (options.RecordCaller ? CallerHash() : null),
+        };
+
+    private async Task<QueueTrainResult> QueueDirectAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        WorkQueue entry,
+        CancellationToken ct
+    )
+    {
+        var dataContext = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
         // Queue-time hook: fire OnQueue before the work queue row is inserted, so a consumer
         // can perform a side-effect (e.g. an optimistic shadow write) the moment the mutation
@@ -189,61 +254,84 @@ public class TrainExecutionService(
         // Only a train with a hook needs the transaction: without one there is a single write,
         // and an explicit BEGIN/COMMIT would add two round trips to every enqueue for nothing.
         var hasHook = ResolveOnQueueOverride(registration.ImplementationType) is not null;
-        using var transaction = hasHook ? await TryBeginTransactionAsync(dataContext, ct) : null;
+        using var transaction = hasHook
+            ? await TryBeginTransactionAsync(dataContext, ct).ConfigureAwait(false)
+            : null;
         try
         {
-            await dataContext.Track(entry);
+            await dataContext.Track(entry).ConfigureAwait(false);
 
             if (hasHook)
-            {
-                // Resolved rather than injected so the public constructor signature is
-                // unchanged: adding a parameter to a public service type is a breaking API
-                // change for anyone constructing it directly.
-                var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
+                await RunQueueHookAsync(
+                        registration,
+                        train,
+                        input,
+                        entry,
+                        dataContext,
+                        transaction,
+                        ct
+                    )
+                    .ConfigureAwait(false);
 
-                // Only a real transaction can take a nested enqueue with it, so a provider that
-                // has none leaves nested enqueues to commit on their own, as they always did.
-                var joinable = transaction is null
-                    ? null
-                    : new JoinableEnqueue(dataContext, dataContextFactory);
-
-                using (enqueueContext.Enter(dataContext))
-                using (joinable?.Enter())
-                {
-                    try
-                    {
-                        await InvokeQueueHookWithinLimitAsync(
-                            registration,
-                            train,
-                            input,
-                            entry.ExternalId,
-                            joinable,
-                            ct
-                        );
-                    }
-                    finally
-                    {
-                        joinable?.Close();
-                    }
-                }
-
-                joinable?.ThrowIfNestedIncomplete(registration);
-            }
-
-            await dataContext.SaveChanges(ct);
+            await dataContext.SaveChanges(ct).ConfigureAwait(false);
 
             if (transaction is not null)
-                await transaction.Commit();
+                await transaction.Commit().ConfigureAwait(false);
         }
         catch
         {
             if (transaction is not null)
-                await RollbackQuietlyAsync(transaction);
+                await RollbackQuietlyAsync(transaction).ConfigureAwait(false);
 
             throw;
         }
 
         return new QueueTrainResult(entry.Id, entry.ExternalId);
+    }
+
+    private async Task RunQueueHookAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        WorkQueue entry,
+        IDataContext dataContext,
+        IDataContextTransaction? transaction,
+        CancellationToken ct
+    )
+    {
+        // Resolved rather than injected so the public constructor signature is
+        // unchanged: adding a parameter to a public service type is a breaking API
+        // change for anyone constructing it directly.
+        var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
+
+        // Only a real transaction can take a nested enqueue with it, so a provider that
+        // has none leaves nested enqueues to commit on their own, as they always did.
+        var joinable = transaction is null
+            ? null
+            : new JoinableEnqueue(dataContext, dataContextFactory);
+
+        using (enqueueContext.Enter(dataContext))
+        using (joinable?.Enter())
+        {
+            try
+            {
+                await InvokeQueueHookWithinLimitAsync(
+                        registration,
+                        train,
+                        input,
+                        entry.ExternalId,
+                        joinable,
+                        ct
+                    )
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                joinable?.Close();
+            }
+        }
+
+        joinable?.ThrowIfNestedIncomplete(registration);
     }
 
     /// <summary>
@@ -280,6 +368,63 @@ public class TrainExecutionService(
 
         var registration = FindTrain(launch.TrainType.FullName ?? launch.TrainType.Name);
 
+        RefuseUninvokable(launch, registration);
+
+        await AuthorizeInvokedAsync(launch, registration, ct).ConfigureAwait(false);
+
+        if (!registration.InputType.IsInstanceOfType(launch.Input))
+            throw new InvalidOperationException(
+                $"The input built for {registration.ServiceTypeName} is a "
+                    + $"{launch.Input.GetType().Name}, not its input type "
+                    + $"{registration.InputType.Name}."
+            );
+
+        registration.ServiceType.FullName.AssertLoaded();
+
+        var serializedInput = await TrainInputReader
+            .WriteForStorageAsync(
+                launch.Input,
+                registration,
+                mediatorConfiguration.MaxInputJsonBytes
+            )
+            .ConfigureAwait(false);
+
+        var train = new EnqueueTrain(serviceProvider, registration);
+        await using (train.ConfigureAwait(false))
+        {
+            var subjectKey = ResolveSubjectKey(
+                registration,
+                train,
+                launch.Input,
+                launch.ExternalId
+            );
+
+            var entry = CreateEntry(
+                registration,
+                new CreateWorkQueue
+                {
+                    TrainName = registration.ServiceType.FullName,
+                    Input = serializedInput,
+                    InputTypeName = registration.InputType.FullName,
+                    SubjectKey = subjectKey,
+                    InvokedBy = launch.InvokedBy,
+                    StarterHash = launch.StarterHash,
+                }
+            );
+            entry.ExternalId = launch.ExternalId;
+
+            await context.Track(entry).ConfigureAwait(false);
+            await context.SaveChanges(ct).ConfigureAwait(false);
+
+            return new QueueTrainResult(entry.Id, entry.ExternalId);
+        }
+    }
+
+    /// <summary>
+    /// Refuses a train <see cref="QueueInvokedAsync"/> must not queue, before it is authorized.
+    /// </summary>
+    private static void RefuseUninvokable(InvokedTrainLaunch launch, TrainRegistration registration)
+    {
         if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
             throw new InvalidOperationException(
                 $"{registration.ServiceTypeName} has an OnQueue hook, which commits on its own, so a "
@@ -309,7 +454,14 @@ public class TrainExecutionService(
                     + $"'{launch.InvokedBy.Machine}', which no user is present to authorize. Only a "
                     + "system-owned machine chains runs through outcomes."
             );
+    }
 
+    private async Task AuthorizeInvokedAsync(
+        InvokedTrainLaunch launch,
+        TrainRegistration registration,
+        CancellationToken ct
+    )
+    {
         // A system-owned instance's run is authorized as a scheduled manifest run is. The trusted scope does not
         // check a user's requirements, so a train that declares any is refused here, fail-closed, as the
         // state-machine startup check refuses it, rather than approved without a user.
@@ -327,47 +479,10 @@ public class TrainExecutionService(
                     .GetRequiredService<ITrustedExecutionScope>()
                     .BeginTrusted("state machine")
             )
-                await AuthorizeAsync(registration, ct);
+                await AuthorizeAsync(registration, ct).ConfigureAwait(false);
         }
         else
-            await AuthorizeAsync(registration, ct);
-
-        if (!registration.InputType.IsInstanceOfType(launch.Input))
-            throw new InvalidOperationException(
-                $"The input built for {registration.ServiceTypeName} is a "
-                    + $"{launch.Input.GetType().Name}, not its input type "
-                    + $"{registration.InputType.Name}."
-            );
-
-        registration.ServiceType.FullName.AssertLoaded();
-
-        var serializedInput = TrainInputReader.WriteForStorage(
-            launch.Input,
-            registration,
-            mediatorConfiguration.MaxInputJsonBytes
-        );
-
-        await using var train = new EnqueueTrain(serviceProvider, registration);
-        var subjectKey = ResolveSubjectKey(registration, train, launch.Input, launch.ExternalId);
-
-        var entry = CreateEntry(
-            registration,
-            new CreateWorkQueue
-            {
-                TrainName = registration.ServiceType.FullName,
-                Input = serializedInput,
-                InputTypeName = registration.InputType.FullName,
-                SubjectKey = subjectKey,
-                InvokedBy = launch.InvokedBy,
-                StarterHash = launch.StarterHash,
-            }
-        );
-        entry.ExternalId = launch.ExternalId;
-
-        await context.Track(entry);
-        await context.SaveChanges(ct);
-
-        return new QueueTrainResult(entry.Id, entry.ExternalId);
+            await AuthorizeAsync(registration, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -403,7 +518,7 @@ public class TrainExecutionService(
     {
         try
         {
-            await outer.WithContextAsync(context => context.Track(entry));
+            await outer.WithContextAsync(context => context.Track(entry)).ConfigureAwait(false);
 
             if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
             {
@@ -417,10 +532,11 @@ public class TrainExecutionService(
                         ? enqueueContext.Suppress()
                         : enqueueContext.Enter(outer.Context)
                 )
-                    await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
+                    await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct)
+                        .ConfigureAwait(false);
             }
 
-            await outer.WithContextAsync(context => context.SaveChanges(ct));
+            await outer.WithContextAsync(context => context.SaveChanges(ct)).ConfigureAwait(false);
         }
         catch (Exception failure)
         {
@@ -447,9 +563,10 @@ public class TrainExecutionService(
     )
     {
         ArgumentNullException.ThrowIfNull(options);
-        var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
+        var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct)
+            .ConfigureAwait(false);
 
-        return await ExecuteAsync(registration, input, options, ct);
+        return await ExecuteAsync(registration, input, options, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -479,18 +596,19 @@ public class TrainExecutionService(
     {
         registration.ServiceType.FullName.AssertLoaded();
 
-        using var permit = await concurrencyLimiter.AcquireAsync(
-            registration.ServiceType.FullName,
-            ct
-        );
+        using var permit = await concurrencyLimiter
+            .AcquireAsync(registration.ServiceType.FullName, ct)
+            .ConfigureAwait(false);
 
-        return await runExecutor.ExecuteAsync(
-            registration.ServiceType.FullName,
-            input,
-            registration.OutputType,
-            options.RecordCaller ? CallerHash() : null,
-            ct
-        );
+        return await runExecutor
+            .ExecuteAsync(
+                registration.ServiceType.FullName,
+                input,
+                registration.OutputType,
+                options.RecordCaller ? CallerHash() : null,
+                ct
+            )
+            .ConfigureAwait(false);
     }
 
     // The current caller as the run's starter: the hash of the principal id the host's provider reads. Resolved here
@@ -507,7 +625,8 @@ public class TrainExecutionService(
         CancellationToken ct = default
     )
     {
-        var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
+        var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct)
+            .ConfigureAwait(false);
         return new PreparedTrain(registration, input);
     }
 
@@ -525,7 +644,7 @@ public class TrainExecutionService(
 
         // Before the input is read, so a caller who may not use the train learns nothing about
         // its input from a parse error.
-        await AuthorizeAsync(registration, ct);
+        await AuthorizeAsync(registration, ct).ConfigureAwait(false);
 
         // A run needs an input instance, and the runner refuses an entry that has none, so
         // storing null only deferred the failure to dispatch, where nobody who could fix it would
@@ -567,10 +686,11 @@ public class TrainExecutionService(
         var keyMetadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = registration.ServiceType.FullName!,
+                Name = registration.ServiceType.FullName.NotNull(),
                 ExternalId = externalId,
                 Input = input,
-            }
+            },
+            Clock
         );
 
         string? key;
@@ -597,16 +717,16 @@ public class TrainExecutionService(
     /// and throws it as the <see cref="InvalidOperationException"/> an enqueue refusal has always
     /// been.
     /// </summary>
-    private static WorkQueue CreateEntry(TrainRegistration registration, CreateWorkQueue dto)
+    private WorkQueue CreateEntry(TrainRegistration registration, CreateWorkQueue dto)
     {
         try
         {
-            return WorkQueue.Create(dto);
+            return WorkQueue.Create(dto, Clock);
         }
         catch (ArgumentException refused) when (dto.SubjectKey is not null)
         {
             var reason = refused.ParamName is { } param
-                ? refused.Message.Replace($" (Parameter '{param}')", "")
+                ? refused.Message.Replace($" (Parameter '{param}')", "", StringComparison.Ordinal)
                 : refused.Message;
 
             throw new InvalidOperationException(
@@ -653,10 +773,13 @@ public class TrainExecutionService(
         CancellationToken ct
     )
     {
-        using (var stagingContext = await dataContextFactory.CreateDbContextAsync(ct))
+        var stagingContext = await dataContextFactory
+            .CreateDbContextAsync(ct)
+            .ConfigureAwait(false);
+        await using (stagingContext.ConfigureAwait(false))
         {
-            await stagingContext.Track(entry);
-            await stagingContext.SaveChanges(ct);
+            await stagingContext.Track(entry).ConfigureAwait(false);
+            await stagingContext.SaveChanges(ct).ConfigureAwait(false);
         }
 
         try
@@ -667,7 +790,8 @@ public class TrainExecutionService(
             var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
 
             using (enqueueContext.Suppress())
-                await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
+                await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct)
+                    .ConfigureAwait(false);
         }
         catch (Exception hookFailure)
         {
@@ -677,7 +801,7 @@ public class TrainExecutionService(
             // resolves an entry left behind.
             try
             {
-                await RemoveStagedEntryAsync(entry.Id);
+                await RemoveStagedEntryAsync(entry.Id).ConfigureAwait(false);
             }
             catch
             {
@@ -698,8 +822,8 @@ public class TrainExecutionService(
         // StaleStagedEntryTimeout. The hook's side-effect may have landed but the work will not
         // run, and reporting success would say otherwise.
         if (
-            !await promotion.PromoteAsync(entry.Id, CancellationToken.None)
-            && !await WasConfirmedElsewhereAsync(entry.Id)
+            !await promotion.PromoteAsync(entry.Id, CancellationToken.None).ConfigureAwait(false)
+            && !await WasConfirmedElsewhereAsync(entry.Id).ConfigureAwait(false)
         )
             throw new QueuedWorkCancelledException(
                 entry.Id,
@@ -716,7 +840,10 @@ public class TrainExecutionService(
     /// </summary>
     private async Task<bool> WasConfirmedElsewhereAsync(long workQueueId)
     {
-        using var context = await dataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        var context = await dataContextFactory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .WorkQueues.AsNoTracking()
@@ -726,7 +853,8 @@ public class TrainExecutionService(
                     && w.ConfirmedAt != null
                     && w.Status != WorkQueueStatus.Cancelled,
                 CancellationToken.None
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -734,7 +862,10 @@ public class TrainExecutionService(
     /// </summary>
     private async Task RemoveStagedEntryAsync(long workQueueId)
     {
-        using var context = await dataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        var context = await dataContextFactory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // Only an entry that is still staged. One the sweep promoted may already be dispatched
         // and running, and deleting it would orphan the run and free its subject.
@@ -748,12 +879,13 @@ public class TrainExecutionService(
                         && w.ConfirmedAt == null
                         && w.Status == WorkQueueStatus.Queued,
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
 
             if (staged is not null)
             {
                 db.Remove(staged);
-                await db.SaveChangesAsync(CancellationToken.None);
+                await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
             }
 
             return;
@@ -763,7 +895,8 @@ public class TrainExecutionService(
             .WorkQueues.Where(w =>
                 w.Id == workQueueId && w.ConfirmedAt == null && w.Status == WorkQueueStatus.Queued
             )
-            .ExecuteDeleteAsync(CancellationToken.None);
+            .ExecuteDeleteAsync(CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -816,7 +949,7 @@ public class TrainExecutionService(
     {
         try
         {
-            return await dataContext.BeginTransaction(ct);
+            return await dataContext.BeginTransaction(ct).ConfigureAwait(false);
         }
         catch (InvalidOperationException)
         {
@@ -844,7 +977,7 @@ public class TrainExecutionService(
     {
         try
         {
-            await transaction.Rollback();
+            await transaction.Rollback().ConfigureAwait(false);
         }
         catch (Exception rollbackFailure)
         {
@@ -873,7 +1006,7 @@ public class TrainExecutionService(
     /// from <c>IServiceTrain&lt;,&gt;</c>, but reflection finds only trains that override the
     /// hook, so a train without one is never resolved for it.
     /// </remarks>
-    private static async Task InvokeQueueHookAsync(
+    private async Task InvokeQueueHookAsync(
         TrainRegistration registration,
         EnqueueTrain train,
         object input,
@@ -888,10 +1021,11 @@ public class TrainExecutionService(
         var hookMetadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = registration.ServiceType.FullName!,
+                Name = registration.ServiceType.FullName.NotNull(),
                 ExternalId = externalId,
                 Input = input,
-            }
+            },
+            Clock
         );
 
         // Entered here, in the method that awaits the hook, so the input flows with the hook's
@@ -900,7 +1034,9 @@ public class TrainExecutionService(
 
         try
         {
-            await (Task)onQueue.Invoke(train.Instance, [hookMetadata, ct])!;
+            await (
+                (Task)onQueue.Invoke(train.Instance, [hookMetadata, ct]).NotNull()
+            ).ConfigureAwait(false);
         }
         catch (TargetInvocationException ex)
         {
@@ -937,7 +1073,8 @@ public class TrainExecutionService(
 
         if (limit == Timeout.InfiniteTimeSpan)
         {
-            await InvokeQueueHookAsync(registration, train, input, externalId, ct);
+            await InvokeQueueHookAsync(registration, train, input, externalId, ct)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -948,7 +1085,7 @@ public class TrainExecutionService(
 
         try
         {
-            await hook.WaitAsync(limited.Token);
+            await hook.WaitAsync(limited.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
             when (limited.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -1028,7 +1165,7 @@ public class TrainExecutionService(
 
         if (authService is not null)
         {
-            await authService.AuthorizeAsync(registration, ct);
+            await authService.AuthorizeAsync(registration, ct).ConfigureAwait(false);
             return;
         }
 
@@ -1062,11 +1199,15 @@ public class TrainExecutionService(
     {
         var trains = discoveryService.DiscoverTrains();
 
-        var byFullName = trains.FirstOrDefault(t => t.ServiceType.FullName == trainName);
+        var byFullName = trains.FirstOrDefault(t =>
+            string.Equals(t.ServiceType.FullName, trainName, StringComparison.Ordinal)
+        );
         if (byFullName is not null)
             return byFullName;
 
-        var byFriendlyName = trains.Where(t => t.ServiceTypeName == trainName).ToList();
+        var byFriendlyName = trains
+            .Where(t => string.Equals(t.ServiceTypeName, trainName, StringComparison.Ordinal))
+            .ToList();
         if (byFriendlyName.Count == 1)
             return byFriendlyName[0];
         if (byFriendlyName.Count > 1)
@@ -1137,7 +1278,7 @@ public class TrainExecutionService(
 
             try
             {
-                return (IDisposable)enter.Invoke(Instance, [metadata])!;
+                return (IDisposable)enter.Invoke(Instance, [metadata]).NotNull();
             }
             catch (TargetInvocationException ex)
             {
@@ -1162,7 +1303,7 @@ public class TrainExecutionService(
     private sealed class JoinableEnqueue(IDataContext context, IDataContextProviderFactory factory)
     {
         private readonly SemaphoreSlim _writes = new(1, 1);
-        private readonly object _state = new();
+        private readonly Lock _state = new();
         private int _inFlight;
         private bool _closed;
         private bool _abandoned;
@@ -1209,10 +1350,10 @@ public class TrainExecutionService(
 
         public async Task WithContextAsync(Func<IDataContext, Task> write)
         {
-            await _writes.WaitAsync();
+            await _writes.WaitAsync().ConfigureAwait(false);
             try
             {
-                await write(Context);
+                await write(Context).ConfigureAwait(false);
             }
             finally
             {

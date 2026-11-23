@@ -1,5 +1,7 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -79,7 +81,10 @@ public class SqliteTrainExecutionTests : TestSetup
         for (var i = 0; i < 3; i++)
         {
             await TrainBus.RunAsync<Unit>(
-                new SchedulerTestInput { Value = $"train-{i}" },
+                new SchedulerTestInput
+                {
+                    Value = string.Create(CultureInfo.InvariantCulture, $"train-{i}"),
+                },
                 CancellationToken.None
             );
         }
@@ -104,10 +109,11 @@ public class SqliteTrainExecutionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "job-runner-test" },
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata);

@@ -33,7 +33,8 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = reason,
                 RetryCount = retryCount,
-            }
+            },
+            TestTime.Clock
         );
 
         // Assert
@@ -42,7 +43,7 @@ public class DeadLetterTests
         deadLetter.Reason.Should().Be(reason);
         deadLetter.RetryCountAtDeadLetter.Should().Be(retryCount);
         deadLetter.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
-        deadLetter.DeadLetteredAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        deadLetter.DeadLetteredAt.Should().Be(TestTime.UtcDateTime);
         deadLetter.ResolvedAt.Should().BeNull();
         deadLetter.ResolutionNote.Should().BeNull();
         deadLetter.RetryMetadataId.Should().BeNull();
@@ -69,7 +70,8 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Non-retryable exception",
                 RetryCount = 0,
-            }
+            },
+            TestTime.Clock
         );
 
         // Assert
@@ -95,18 +97,19 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TestTime.Clock
         );
         var note = "Data was manually corrected in the database";
 
         // Act
-        deadLetter.Acknowledge(note);
+        deadLetter.Acknowledge(note, TestTime.Clock);
 
         // Assert
         deadLetter.Status.Should().Be(DeadLetterStatus.Acknowledged);
         deadLetter.ResolutionNote.Should().Be(note);
         deadLetter.ResolvedAt.Should().NotBeNull();
-        deadLetter.ResolvedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        deadLetter.ResolvedAt.Should().Be(TestTime.UtcDateTime);
         deadLetter.RetryMetadataId.Should().BeNull(); // Not retried, so no retry metadata
     }
 
@@ -129,18 +132,19 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TestTime.Clock
         );
         var retryMetadataId = 42;
 
         // Act
-        deadLetter.MarkRetried(retryMetadataId);
+        deadLetter.MarkRetried(retryMetadataId, TestTime.Clock);
 
         // Assert
         deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
         deadLetter.RetryMetadataId.Should().Be(retryMetadataId);
         deadLetter.ResolvedAt.Should().NotBeNull();
-        deadLetter.ResolvedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        deadLetter.ResolvedAt.Should().Be(TestTime.UtcDateTime);
         deadLetter.ResolutionNote.Should().BeNull(); // Retried, not acknowledged
     }
 
@@ -163,14 +167,15 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Test reason",
                 RetryCount = 1,
-            }
+            },
+            TestTime.Clock
         );
 
         // Assert initial state
         deadLetter.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        deadLetter.Acknowledge("Issue resolved out-of-band");
+        deadLetter.Acknowledge("Issue resolved out-of-band", TestTime.Clock);
 
         // Assert final state
         deadLetter.Status.Should().Be(DeadLetterStatus.Acknowledged);
@@ -195,14 +200,15 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Test reason",
                 RetryCount = 1,
-            }
+            },
+            TestTime.Clock
         );
 
         // Assert initial state
         deadLetter.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        deadLetter.MarkRetried(123);
+        deadLetter.MarkRetried(123, TestTime.Clock);
 
         // Assert final state
         deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
@@ -229,18 +235,19 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TestTime.Clock
         );
         var note = "Re-queued via dashboard (WorkQueue 42)";
 
         // Act
-        deadLetter.Requeue(note);
+        deadLetter.Requeue(note, TestTime.Clock);
 
         // Assert
         deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
         deadLetter.ResolutionNote.Should().Be(note);
         deadLetter.ResolvedAt.Should().NotBeNull();
-        deadLetter.ResolvedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        deadLetter.ResolvedAt.Should().Be(TestTime.UtcDateTime);
         deadLetter.RetryMetadataId.Should().BeNull();
     }
 
@@ -263,11 +270,12 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TestTime.Clock
         );
 
         // Act
-        deadLetter.Requeue("Requeued for retry");
+        deadLetter.Requeue("Requeued for retry", TestTime.Clock);
 
         // Assert — RetryMetadataId is NOT set; it gets linked later by the dispatcher
         deadLetter.RetryMetadataId.Should().BeNull();
@@ -293,11 +301,12 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Max retries exceeded",
                 RetryCount = 3,
-            }
+            },
+            TestTime.Clock
         );
 
         // Requeue first (the normal flow)
-        deadLetter.Requeue("Re-queued via dashboard");
+        deadLetter.Requeue("Re-queued via dashboard", TestTime.Clock);
 
         // Act — dispatcher links the metadata after creating it
         deadLetter.LinkRetryMetadata(99);
@@ -326,14 +335,15 @@ public class DeadLetterTests
                 Manifest = manifest,
                 Reason = "Test reason",
                 RetryCount = 1,
-            }
+            },
+            TestTime.Clock
         );
 
         // Assert initial state
         deadLetter.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
 
         // Act
-        deadLetter.Requeue("Requeued");
+        deadLetter.Requeue("Requeued", TestTime.Clock);
 
         // Assert final state
         deadLetter.Status.Should().Be(DeadLetterStatus.Retried);

@@ -1,82 +1,8 @@
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
-
-/// <summary>
-/// Whether a run can resume, and from where: the plan when it can, the reason when it cannot.
-/// </summary>
-/// <param name="RefusalCode">Why it cannot, as a stable code, or null when it can. See <see cref="ResumeRefusals"/>.</param>
-/// <param name="Refusal">Why it cannot, phrased for an operator, or null when it can.</param>
-/// <param name="Target">The node the resumed run skips to, or null to run the main chain from the top.</param>
-/// <param name="Inclusive">True when the target is a checkpoint the run restores rather than runs.</param>
-/// <param name="MainCheckpoint">The checkpoint the main chain restores, or null.</param>
-/// <param name="BranchCheckpoints">The checkpoint each branch restores, by branch path.</param>
-/// <param name="StateTypes">Each restored checkpoint's declared state type, by node id.</param>
-/// <param name="TrackTypes">
-/// The <see cref="TrackTaken{TKey}"/> types each restored checkpoint can hold, by node id: one
-/// for every routing step before it on its path.
-/// </param>
-internal sealed record ResumeOutcome(
-    string? RefusalCode,
-    string? Refusal,
-    string? Target,
-    bool Inclusive,
-    string? MainCheckpoint,
-    IReadOnlyDictionary<string, string> BranchCheckpoints,
-    IReadOnlyDictionary<string, Type> StateTypes,
-    IReadOnlyDictionary<string, IReadOnlyList<Type>> TrackTypes
-)
-{
-    /// <summary>True when the run can resume as planned.</summary>
-    public bool CanResume => RefusalCode is null;
-
-    internal static ResumeOutcome Refused(string code, string reason) =>
-        new(
-            code,
-            reason,
-            null,
-            false,
-            null,
-            new Dictionary<string, string>(),
-            new Dictionary<string, Type>(),
-            new Dictionary<string, IReadOnlyList<Type>>()
-        );
-}
-
-/// <summary>The codes a refused resume carries, each with its own reason.</summary>
-internal static class ResumeRefusals
-{
-    /// <summary>The run wrote no checkpoint that covers the point.</summary>
-    public const string NoCheckpoint = "no-checkpoint";
-
-    /// <summary>The chain declares no step with that id.</summary>
-    public const string UnknownStep = "unknown-step";
-
-    /// <summary>The id names a step a run cannot start at: an extraction, a seed or the end.</summary>
-    public const string NotAStep = "not-a-step";
-
-    /// <summary>The point is inside a <c>Parallel</c> branch; a branch resumes from its own checkpoint.</summary>
-    public const string InsideABranch = "inside-a-branch";
-
-    /// <summary>The point is in a track of a routing step after the checkpoint, which the run would not ask.</summary>
-    public const string OffThePath = "off-the-path";
-
-    /// <summary>A step from the point on needs a type nothing restores or produces.</summary>
-    public const string MissingInput = "missing-input";
-
-    /// <summary>
-    /// A step from the point on reads a type a skipped step overwrote, which the checkpoint does
-    /// not hold: a resumed run would read an older value.
-    /// </summary>
-    public const string StaleValue = "stale-value";
-
-    /// <summary>The chain changed since the checkpoint was written.</summary>
-    public const string ChainChanged = "chain-changed";
-
-    /// <summary>The checkpoint's state type changed shape since it was written.</summary>
-    public const string StateChanged = "state-changed";
-}
 
 public static partial class ChainVerification
 {
@@ -114,111 +40,170 @@ public static partial class ChainVerification
     )
     {
         var nodes = Walk(chain);
-        var byId = nodes.ToDictionary(n => n.Id);
+        var byId = nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
 
         var checkpoints = nodes
-            .Where(n => n.Step.Kind == ChainStepKind.Checkpoint && written.Contains(n.Id))
+            .Where(n =>
+                n.Step.Kind == ChainStepKind.Checkpoint
+                && written.Contains(n.Id, StringComparer.Ordinal)
+            )
             .ToList();
 
         var latestInBranch = checkpoints
             .Where(n => n.BranchPath is not null)
-            .GroupBy(n => n.BranchPath!)
-            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order)!);
+            .GroupBy(n => n.BranchPath.NotNull(), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order).NotNull(), StringComparer.Ordinal);
 
-        Node? main;
-        string? target;
-        bool inclusive;
-        Dictionary<string, Node> branchCheckpoints;
+        var start = resumeAt is null
+            ? StartAfterLatestCheckpoint(nodes, byId, checkpoints, latestInBranch)
+            : StartAtStep(nodes, byId, checkpoints, latestInBranch, resumeAt);
 
-        if (resumeAt is null)
-        {
-            main = checkpoints.Where(n => n.BranchPath is null).MaxBy(n => n.Order);
-            branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, null);
+        if (start.Refusal is { } refused)
+            return refused;
 
-            if (main is null && branchCheckpoints.Count == 0)
-                return ResumeOutcome.Refused(
+        return WalkFromStart(chain, input, output, availableElsewhere, withheld, nodes, start);
+    }
+
+    /// <summary>
+    /// Where a resume starts: the main checkpoint it restores, the branch checkpoints it restores,
+    /// the step it resumes at and whether that step runs again. <see cref="Refusal"/> is set
+    /// instead when it cannot start at all.
+    /// </summary>
+    private sealed record ResumeStart(
+        ResumeOutcome? Refusal,
+        Node? Main,
+        Dictionary<string, Node> BranchCheckpoints,
+        string? Target,
+        bool Inclusive
+    )
+    {
+        public static ResumeStart Refused(ResumeOutcome refusal) =>
+            new(refusal, Main: null, [], Target: null, Inclusive: false);
+    }
+
+    private static ResumeStart StartAfterLatestCheckpoint(
+        List<Node> nodes,
+        Dictionary<string, Node> byId,
+        List<Node> checkpoints,
+        Dictionary<string, Node> latestInBranch
+    )
+    {
+        var main = checkpoints.Where(n => n.BranchPath is null).MaxBy(n => n.Order);
+        var branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, point: null);
+
+        if (main is null && branchCheckpoints.Count == 0)
+            return ResumeStart.Refused(
+                ResumeOutcome.Refused(
                     ResumeRefusals.NoCheckpoint,
                     "The run wrote no checkpoint, so it can only run again from the top."
-                );
+                )
+            );
 
-            (target, inclusive) = (main?.Id, true);
-        }
-        else
-        {
-            if (!byId.TryGetValue(resumeAt, out var point))
-                return ResumeOutcome.Refused(
+        return new ResumeStart(Refusal: null, main, branchCheckpoints, main?.Id, Inclusive: true);
+    }
+
+    private static ResumeStart StartAtStep(
+        List<Node> nodes,
+        Dictionary<string, Node> byId,
+        List<Node> checkpoints,
+        Dictionary<string, Node> latestInBranch,
+        string resumeAt
+    )
+    {
+        if (!byId.TryGetValue(resumeAt, out var point))
+            return ResumeStart.Refused(
+                ResumeOutcome.Refused(
                     ResumeRefusals.UnknownStep,
                     $"The chain declares no step '{resumeAt}'."
-                );
+                )
+            );
 
-            if (
-                point.Step.Kind
-                is ChainStepKind.Seed
-                    or ChainStepKind.Extract
-                    or ChainStepKind.Resolve
-            )
-                return ResumeOutcome.Refused(
+        if (point.Step.Kind is ChainStepKind.Seed or ChainStepKind.Extract or ChainStepKind.Resolve)
+            return ResumeStart.Refused(
+                ResumeOutcome.Refused(
                     ResumeRefusals.NotAStep,
                     $"'{resumeAt}' is not a step a run can start at. Resume at the step after it."
-                );
+                )
+            );
 
-            // A routing step that asks its own question records the question as a Decide just
-            // before it, and routes on what that asks: resuming at the routing step asks it again.
-            if (
-                point.Step.Kind is ChainStepKind.Switch or ChainStepKind.Gate or ChainStepKind.Scale
-                && point.Order > 0
-                && nodes[point.Order - 1] is { Step.Kind: ChainStepKind.Decide } question
-                && question.Scope == point.Scope
-                && question.Step.Out == point.Step.In
-            )
-            {
-                point = question;
-                resumeAt = question.Id;
-            }
+        // A routing step that asks its own question records the question as a Decide just
+        // before it, and routes on what that asks: resuming at the routing step asks it again.
+        if (
+            point.Step.Kind is ChainStepKind.Switch or ChainStepKind.Gate or ChainStepKind.Scale
+            && point.Order > 0
+            && nodes[point.Order - 1] is { Step.Kind: ChainStepKind.Decide } question
+            && string.Equals(question.Scope, point.Scope, StringComparison.Ordinal)
+            && question.Step.Out == point.Step.In
+        )
+        {
+            point = question;
+            resumeAt = question.Id;
+        }
 
-            if (point.BranchPath is not null)
-                return ResumeOutcome.Refused(
+        if (point.BranchPath is not null)
+            return ResumeStart.Refused(
+                ResumeOutcome.Refused(
                     ResumeRefusals.InsideABranch,
                     $"'{resumeAt}' is inside the Parallel branch '{point.BranchPath}'. Resume at "
                         + "the Parallel step: each branch resumes from its own checkpoint."
-                );
+                )
+            );
 
-            main = checkpoints
-                .Where(n => n.BranchPath is null && n.Order < point.Order)
-                .MaxBy(n => n.Order);
+        return StartBeforePoint(nodes, byId, checkpoints, latestInBranch, point, resumeAt);
+    }
 
-            branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, point);
+    private static ResumeStart StartBeforePoint(
+        List<Node> nodes,
+        Dictionary<string, Node> byId,
+        List<Node> checkpoints,
+        Dictionary<string, Node> latestInBranch,
+        Node point,
+        string resumeAt
+    )
+    {
+        var main = checkpoints
+            .Where(n => n.BranchPath is null && n.Order < point.Order)
+            .MaxBy(n => n.Order);
 
-            if (main is null && branchCheckpoints.Count == 0)
-                return ResumeOutcome.Refused(
+        var branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, point);
+
+        if (main is null && branchCheckpoints.Count == 0)
+            return ResumeStart.Refused(
+                ResumeOutcome.Refused(
                     ResumeRefusals.NoCheckpoint,
                     $"No checkpoint the run wrote comes before '{resumeAt}', so it can only run "
                         + "again from the top."
-                );
+                )
+            );
 
-            // The point must be on the path to the checkpoint: a track the run entered after it
-            // was entered by a routing step the resumed run would skip, and never asks.
-            if (main is not null && !main.Scope.StartsWith(point.Scope, StringComparison.Ordinal))
-                return ResumeOutcome.Refused(
+        // The point must be on the path to the checkpoint: a track the run entered after it
+        // was entered by a routing step the resumed run would skip, and never asks.
+        if (main is not null && !main.Scope.StartsWith(point.Scope, StringComparison.Ordinal))
+            return ResumeStart.Refused(
+                ResumeOutcome.Refused(
                     ResumeRefusals.OffThePath,
                     $"'{resumeAt}' is in a track of a routing step after the checkpoint "
                         + $"'{main.Id}', which a resumed run would not ask. Resume at that "
                         + "routing step."
-                );
+                )
+            );
 
-            (target, inclusive) = (resumeAt, false);
-        }
+        return new ResumeStart(Refusal: null, main, branchCheckpoints, resumeAt, Inclusive: false);
+    }
 
-        var restored = new List<Node>();
-        if (main is not null)
-            restored.Add(main);
-        restored.AddRange(branchCheckpoints.Values);
-
-        var stateTypes = restored.ToDictionary(n => n.Id, n => n.Step.In!);
-        var trackTypes = restored.ToDictionary(
-            n => n.Id,
-            n => (IReadOnlyList<Type>)TracksBefore(nodes, n, withheld).ToList()
-        );
+    private static ResumeOutcome WalkFromStart(
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        Func<Type, bool>? availableElsewhere,
+        Func<Type, bool>? withheld,
+        List<Node> nodes,
+        ResumeStart start
+    )
+    {
+        var main = start.Main;
+        var branchCheckpoints = start.BranchCheckpoints;
+        var (stateTypes, trackTypes) = RestoredTypes(nodes, start, withheld);
 
         // The walk: Memory as the resumed run starts, then every step from the point on.
         var memory = new System.Collections.Generic.HashSet<Type> { typeof(Unit) };
@@ -230,19 +215,7 @@ public static partial class ChainVerification
             memory.UnionWith(trackTypes[main.Id]);
         }
 
-        var walk = new ResumeWalk(
-            target,
-            inclusive,
-            main is null ? [] : [stateTypes[main.Id], .. trackTypes[main.Id]],
-            branchCheckpoints.ToDictionary(
-                b => b.Key,
-                b =>
-                    (
-                        b.Value.Id,
-                        (IReadOnlyList<Type>)[stateTypes[b.Value.Id], .. trackTypes[b.Value.Id]]
-                    )
-            )
-        );
+        var walk = NewResumeWalk(start, stateTypes, trackTypes);
 
         var faults = new List<ChainFault>();
         Replay(
@@ -260,20 +233,68 @@ public static partial class ChainVerification
         if (faults.Count > 0)
             return ResumeOutcome.Refused(
                 walk.ReadStale ? ResumeRefusals.StaleValue : ResumeRefusals.MissingInput,
-                string.Join(" ", faults.Select(f => f.Reason))
+                string.Join(' ', faults.Select(f => f.Reason))
             );
 
         return new ResumeOutcome(
-            null,
-            null,
-            target,
-            inclusive,
+            RefusalCode: null,
+            Refusal: null,
+            start.Target,
+            start.Inclusive,
             main?.Id,
-            branchCheckpoints.ToDictionary(b => b.Key, b => b.Value.Id),
+            branchCheckpoints.ToDictionary(b => b.Key, b => b.Value.Id, StringComparer.Ordinal),
             stateTypes,
             trackTypes
         );
     }
+
+    /// <summary>
+    /// What each checkpoint a resume restores holds: its state type, and the route of every
+    /// routing step the run passed before it.
+    /// </summary>
+    private static (
+        Dictionary<string, Type> StateTypes,
+        Dictionary<string, IReadOnlyList<Type>> TrackTypes
+    ) RestoredTypes(List<Node> nodes, ResumeStart start, Func<Type, bool>? withheld)
+    {
+        var restored = new List<Node>();
+        if (start.Main is not null)
+            restored.Add(start.Main);
+        restored.AddRange(start.BranchCheckpoints.Values);
+
+        var stateTypes = restored.ToDictionary(
+            n => n.Id,
+            n => n.Step.In.NotNull(),
+            StringComparer.Ordinal
+        );
+        var trackTypes = restored.ToDictionary(
+            n => n.Id,
+            n => (IReadOnlyList<Type>)TracksBefore(nodes, n, withheld).ToList(),
+            StringComparer.Ordinal
+        );
+
+        return (stateTypes, trackTypes);
+    }
+
+    private static ResumeWalk NewResumeWalk(
+        ResumeStart start,
+        Dictionary<string, Type> stateTypes,
+        Dictionary<string, IReadOnlyList<Type>> trackTypes
+    ) =>
+        new(
+            start.Target,
+            start.Inclusive,
+            start.Main is null ? [] : [stateTypes[start.Main.Id], .. trackTypes[start.Main.Id]],
+            start.BranchCheckpoints.ToDictionary(
+                b => b.Key,
+                b =>
+                    (
+                        b.Value.Id,
+                        (IReadOnlyList<Type>)[stateTypes[b.Value.Id], .. trackTypes[b.Value.Id]]
+                    ),
+                StringComparer.Ordinal
+            )
+        );
 
     /// <summary>
     /// Refuses a stored checkpoint that no longer matches the running code: the chain's hash, or
@@ -343,7 +364,7 @@ public static partial class ChainVerification
                 byId.TryGetValue(b.Key[..b.Key.LastIndexOf('/')], out var parallel)
                 && (
                     point is not null
-                        ? parallel.Id == point.Id
+                        ? string.Equals(parallel.Id, point.Id, StringComparison.Ordinal)
                         : parallel.Order > (main?.Order ?? -1)
                             && nodes
                                 .Skip((main?.Order ?? -1) + 1)
@@ -353,7 +374,7 @@ public static partial class ChainVerification
                                 )
                 )
             )
-            .ToDictionary(b => b.Key, b => b.Value);
+            .ToDictionary(b => b.Key, b => b.Value, StringComparer.Ordinal);
 
     /// <summary>
     /// The ids of every step of the chain, its tracks' and its branches', in the order a run
@@ -374,7 +395,7 @@ public static partial class ChainVerification
     private static List<Node> Walk(ChainRecorder chain)
     {
         var nodes = new List<Node>();
-        Visit(chain, new ChainNodeScope(""), null);
+        Visit(chain, new ChainNodeScope(""), branchPath: null);
         return nodes;
 
         void Visit(ChainRecorder steps, ChainNodeScope scope, string? branchPath)
@@ -414,71 +435,6 @@ public static partial class ChainVerification
                 && taken.GetGenericTypeDefinition() == typeof(TrackTaken<>)
                 && withheld?.Invoke(taken.GetGenericArguments()[0]) != true
             )
-            .Select(n => n.Step.Out!)
+            .Select(n => n.Step.Out.NotNull())
             .Distinct();
-}
-
-/// <summary>
-/// Where a resume walk is: the point it skips to, whether it has reached it, and what each branch
-/// restores.
-/// </summary>
-internal sealed class ResumeWalk(
-    string? target,
-    bool inclusive,
-    IReadOnlyCollection<Type> restores,
-    IReadOnlyDictionary<string, (string Checkpoint, IReadOnlyList<Type> Restores)> branches
-)
-{
-    /// <summary>What the checkpoint this walk starts from restores, as it was when it was taken.</summary>
-    public System.Collections.Generic.HashSet<Type> Restores { get; } = [.. restores];
-
-    /// <summary>The types a skipped step wrote that nothing restores.</summary>
-    public System.Collections.Generic.HashSet<Type> Stale { get; } = [];
-
-    /// <summary>True once a step from the point on read a stale type, here or in a branch.</summary>
-    public bool ReadStale { get; private set; }
-
-    /// <summary>The walk a branch's walk started from, which learns that a branch read a stale type.</summary>
-    private ResumeWalk? _parent;
-
-    /// <summary>Whether <paramref name="type"/> is stale, noting that a step read it.</summary>
-    public bool ReadsStale(Type type)
-    {
-        if (!Stale.Contains(type))
-            return false;
-
-        for (var walk = this; walk is not null; walk = walk._parent)
-            walk.ReadStale = true;
-
-        return true;
-    }
-
-    public string Target { get; } = target ?? "";
-
-    public bool Inclusive { get; } = inclusive;
-
-    public bool Skipping { get; set; } = target is not null;
-
-    /// <summary>
-    /// The walk of the branch at <paramref name="path"/>: from its own checkpoint when it has one,
-    /// whose state and routes go into <paramref name="memory"/>, else from its start. A type a
-    /// skipped step before the <c>Parallel</c> overwrote is stale in the branch too, unless the
-    /// branch's own checkpoint holds it.
-    /// </summary>
-    public ResumeWalk ForBranch(string path, System.Collections.Generic.HashSet<Type> memory)
-    {
-        ResumeWalk walk;
-
-        if (branches.TryGetValue(path, out var restored))
-        {
-            memory.UnionWith(restored.Restores);
-            walk = new ResumeWalk(restored.Checkpoint, true, restored.Restores, branches);
-        }
-        else
-            walk = new ResumeWalk(null, false, [], branches);
-
-        walk._parent = this;
-        walk.Stale.UnionWith(Stale.Where(t => !walk.Restores.Contains(t)));
-        return walk;
-    }
 }

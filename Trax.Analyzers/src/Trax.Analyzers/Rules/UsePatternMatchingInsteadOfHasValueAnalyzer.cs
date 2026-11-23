@@ -1,0 +1,89 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UsePatternMatchingInsteadOfHasValueAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UsePatternMatchingInsteadOfHasvalue,
+        title: "Use 'is null' / 'is not null' instead of Nullable<T>.HasValue",
+        messageFormat: "Use pattern matching instead of HasValue for Nullable<T> check",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: false,
+        description: null,
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UsePatternMatchingInsteadOfHasvalue));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            var tree = context.Compilation.SyntaxTrees.FirstOrDefault();
+            if (tree is null)
+                return;
+
+            if (tree.GetCSharpLanguageVersion() < Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp8)
+                return;
+
+            var analyzerContext = new AnalyzerContext(context.Compilation);
+            context.RegisterOperationAction(analyzerContext.AnalyzeHasValue, OperationKind.PropertyReference);
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        private readonly OperationUtilities _operationUtilities = new(compilation);
+        private readonly ISymbol? _nullableSymbol = compilation.GetTypeByMetadataName("System.Nullable`1");
+
+        public void AnalyzeHasValue(OperationAnalysisContext context)
+        {
+            var propertyReference = (IPropertyReferenceOperation)context.Operation;
+            if (propertyReference.Property.Name is "HasValue" && propertyReference.Property.ContainingType.ConstructedFrom.IsEqualTo(_nullableSymbol))
+            {
+                if (_operationUtilities.IsInExpressionContext(propertyReference))
+                    return;
+
+                if (propertyReference.IsInNameofOperation())
+                    return;
+
+                if (IsPartOfConditionalAccess(propertyReference))
+                    return;
+
+                context.ReportDiagnostic(Rule, propertyReference);
+            }
+        }
+
+        // In a?.B.HasValue, HasValue is only evaluated when a is not null, so the expression is a Nullable<bool>
+        // and the instance of HasValue (.B) cannot be used in a pattern
+        private static bool IsPartOfConditionalAccess(IOperation operation)
+        {
+            while (true)
+            {
+                var parent = operation.Parent;
+                switch (parent)
+                {
+                    case IConditionalAccessOperation conditionalAccess:
+                        return conditionalAccess.WhenNotNull == operation;
+
+                    case IConversionOperation { IsImplicit: true } conversion when conversion.Operand == operation:
+                    case IMemberReferenceOperation memberReference when memberReference.Instance == operation:
+                    case IInvocationOperation invocation when invocation.Instance == operation:
+                        operation = parent;
+                        break;
+
+                    // a?.B.HasValue.Extension()
+                    case IArgumentOperation { Parent: IInvocationOperation { Instance: null, TargetMethod.IsExtensionMethod: true } extensionInvocation, Parameter.Ordinal: 0 }:
+                        operation = extensionInvocation;
+                        break;
+
+                    default:
+                        return false;
+                }
+            }
+        }
+    }
+}

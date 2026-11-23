@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -56,12 +57,12 @@ public static class IrExporter
 
         var context = new JsonObject();
         foreach (var (state, schema) in declarative.ContextSchemas)
-            context[state.ToString()!] = WriteSchema(schema);
+            context[state.ToString().NotNull()] = WriteSchema(schema);
 
         // Only what a client may send: an invoked train's output is exported under its outcome instead.
         var inputs = new JsonObject();
         foreach (var (trigger, schema) in declarative.TriggerInputs)
-            inputs[trigger.ToString()!] = WriteSchema(schema);
+            inputs[trigger.ToString().NotNull()] = WriteSchema(schema);
 
         var transitions = BuildTransitions(machine, declarative);
 
@@ -77,12 +78,28 @@ public static class IrExporter
             ["states"] = ToSortedArray(Enum.GetNames<TState>()),
             ["triggers"] = ToSortedArray(Enum.GetNames<TTrigger>()),
             ["committedStates"] = ToSortedArray(
-                machine.CommittedStates.Select(s => s.ToString()!).ToArray()
+                machine.CommittedStates.Select(s => s.ToString().NotNull()).ToArray()
             ),
             ["context"] = context,
             ["inputs"] = inputs,
             ["transitions"] = transitions,
         };
+
+        AddOptionalSections(ir, machine, declarative);
+
+        return CanonicalJson.Serialize(ir);
+    }
+
+    // The sections an IR holds only when the machine has them, so a machine without them exports as before.
+    private static void AddOptionalSections<TState, TTrigger>(
+        JsonObject ir,
+        BuiltMachine<TState, TTrigger> machine,
+        DeclarativeModel<TState, TTrigger> declarative
+    )
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
+        var def = machine.Definition;
 
         // Per-state invariants (the .Requires(...) policy, on top of the context schema). Omitted when a
         // machine has none, so a shape-only machine's IR is unchanged.
@@ -90,7 +107,7 @@ public static class IrExporter
         {
             var invariants = new JsonObject();
             foreach (var (state, rule) in declarative.StateInvariants)
-                invariants[state.ToString()!] = WriteRule(rule);
+                invariants[state.ToString().NotNull()] = WriteRule(rule);
             ir["invariants"] = invariants;
         }
 
@@ -109,8 +126,6 @@ public static class IrExporter
         // hand-written machine.json. Omitted when empty, so a machine without .Differential has identical IR.
         if (declarative.Differential is { IsEmpty: false } differential)
             ir["differential"] = WriteDifferential(differential);
-
-        return CanonicalJson.Serialize(ir);
     }
 
     // A delegate is opaque, so the IR would carry its edge with no guard or reducer (which a generated twin reads
@@ -128,7 +143,7 @@ public static class IrExporter
             throw new InvalidOperationException(
                 $"IR export refuses the machine '{machine.Definition.Id}': the IR cannot carry a C# delegate, so a "
                     + "generated twin would accept what the server refuses. "
-                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+                    + string.Join(' ', problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
             );
     }
 
@@ -255,7 +270,7 @@ public static class IrExporter
         {
             var samples = new JsonObject();
             foreach (var (trigger, inputs) in diff.Samples)
-                samples[trigger.ToString()!] = Copy(inputs);
+                samples[trigger.ToString().NotNull()] = Copy(inputs);
             foreach (var (state, outputs) in diff.OutcomeSamples)
                 samples[OutcomeTriggers.Name(state, InvokeOutcomeKind.Done)] = Copy(outputs);
             obj["samples"] = samples;
@@ -267,7 +282,7 @@ public static class IrExporter
             // One seed is written as the context itself and several as a list of them, so the IR of a machine that
             // seeds each state once is the same as before a state could take more than one, and so is its hash.
             foreach (var (state, contexts) in diff.Seeds)
-                seeds[state.ToString()!] =
+                seeds[state.ToString().NotNull()] =
                     contexts.Count == 1 ? contexts[0].DeepClone() : Copy(contexts);
             obj["seeds"] = seeds;
         }
@@ -341,9 +356,9 @@ public static class IrExporter
         {
             var dt = declarative.Transitions[i];
             var td = machine.Definition.Transitions[i];
-            var from = dt.From.ToString()!;
-            var trigger = dt.Trigger.ToString()!;
-            var to = dt.To.ToString()!;
+            var from = dt.From.ToString().NotNull();
+            var trigger = dt.Trigger.ToString().NotNull();
+            var to = dt.To.ToString().NotNull();
 
             var obj = new JsonObject
             {
@@ -359,9 +374,9 @@ public static class IrExporter
                 obj["reduce"] = WriteReduction(dt.Reduce);
 
             var effect = machine.Effects.FirstOrDefault(e =>
-                e.From.ToString() == from
-                && e.Trigger.ToString() == trigger
-                && e.To.ToString() == to
+                string.Equals(e.From.ToString(), from, StringComparison.Ordinal)
+                && string.Equals(e.Trigger.ToString(), trigger, StringComparison.Ordinal)
+                && string.Equals(e.To.ToString(), to, StringComparison.Ordinal)
             );
             // The IR reaches every browser: the edge says it is effect-bound and which claim keys it writes, and
             // the effect's type stays on the server.
@@ -459,35 +474,13 @@ public static class IrExporter
                 return o;
             }
             case Rule.OneOf r:
-            {
-                var o = FieldRule("oneOf", r.Source, r.Field);
-                var values = new JsonArray();
-                foreach (var v in r.Values)
-                    values.Add(v);
-                o["values"] = values;
-                return o;
-            }
+                return WriteOneOf(r);
             case Rule.Compare r:
-            {
-                var o = FieldRule("compare", r.Source, r.Field);
-                o["op"] = OpName(r.Op);
-                o["value"] = r.Value;
-                return o;
-            }
+                return WriteCompare(r);
             case Rule.Count r:
-            {
-                var o = FieldRule("count", r.Source, r.Field);
-                o["op"] = OpName(r.Op);
-                o["value"] = r.Value;
-                return o;
-            }
+                return WriteCount(r);
             case Rule.Length r:
-            {
-                var o = FieldRule("length", r.Source, r.Field);
-                o["op"] = OpName(r.Op);
-                o["value"] = r.Value;
-                return o;
-            }
+                return WriteLength(r);
             case Rule.BoolEquals r:
             {
                 var o = FieldRule("boolEquals", r.Source, r.Field);
@@ -509,6 +502,40 @@ public static class IrExporter
             default:
                 throw new InvalidOperationException($"Unknown rule {rule.GetType().Name}.");
         }
+    }
+
+    private static JsonObject WriteOneOf(Rule.OneOf r)
+    {
+        var o = FieldRule("oneOf", r.Source, r.Field);
+        var values = new JsonArray();
+        foreach (var v in r.Values)
+            values.Add(v);
+        o["values"] = values;
+        return o;
+    }
+
+    private static JsonObject WriteCompare(Rule.Compare r)
+    {
+        var o = FieldRule("compare", r.Source, r.Field);
+        o["op"] = OpName(r.Op);
+        o["value"] = r.Value;
+        return o;
+    }
+
+    private static JsonObject WriteCount(Rule.Count r)
+    {
+        var o = FieldRule("count", r.Source, r.Field);
+        o["op"] = OpName(r.Op);
+        o["value"] = r.Value;
+        return o;
+    }
+
+    private static JsonObject WriteLength(Rule.Length r)
+    {
+        var o = FieldRule("length", r.Source, r.Field);
+        o["op"] = OpName(r.Op);
+        o["value"] = r.Value;
+        return o;
     }
 
     private static JsonArray WriteRules(IReadOnlyList<Rule> rules)
@@ -572,7 +599,7 @@ public static class IrExporter
     private static JsonArray ToSortedArray(IEnumerable<string> values)
     {
         var array = new JsonArray();
-        foreach (var value in values.OrderBy(v => v, StringComparer.Ordinal))
+        foreach (var value in values.Order(StringComparer.Ordinal))
             array.Add(value);
         return array;
     }

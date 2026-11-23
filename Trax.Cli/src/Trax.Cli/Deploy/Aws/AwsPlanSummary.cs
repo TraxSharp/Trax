@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Deploy.Aws;
 
@@ -21,12 +22,12 @@ internal static class AwsPlanSummary
     )
     {
         var env = file.Environment(environment);
-        var resources = (JsonObject)template["Resources"]!;
+        var resources = (JsonObject)template["Resources"].NotNull();
         yield return $"{file.StackName(environment)} ({env.Profile}, {env.Region}) has {resources.Count} resources:";
         foreach (
             var group in resources
-                .Select(r => (string)r.Value!["Type"]!)
-                .GroupBy(t => t)
+                .Select(r => r.Value.NotNull()["Type"].NotNull().GetValue<string>())
+                .GroupBy(t => t, StringComparer.Ordinal)
                 .OrderBy(g => g.Key, StringComparer.Ordinal)
         )
             yield return $"  {group.Count(), 3}  {group.Key}";
@@ -39,13 +40,29 @@ internal static class AwsPlanSummary
             costs.Add(("Load balancer", LoadBalancer));
         if (resources.ContainsKey("Database"))
             costs.Add(
-                env.Profile == DeployEnvironment.Production
+                string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
                     ? ("Database, db.t4g.small Multi-AZ", SmallMultiAzDatabase)
                     : ("Database, db.t4g.micro", MicroDatabase)
             );
-        costs.Add(($"{tasks} Fargate task(s), 0.5 vCPU and 1 GB each", tasks * Task));
-        if (env.Profile == DeployEnvironment.Try && env.Network is null)
-            costs.Add(($"{tasks} public task address(es)", tasks * PublicAddress));
+        costs.Add(
+            (
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{tasks} Fargate task(s), 0.5 vCPU and 1 GB each"
+                ),
+                tasks * Task
+            )
+        );
+        if (
+            string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
+            && env.Network is null
+        )
+            costs.Add(
+                (
+                    string.Create(CultureInfo.InvariantCulture, $"{tasks} public task address(es)"),
+                    tasks * PublicAddress
+                )
+            );
 
         yield return "Idle cost, roughly (us-east-1 on-demand prices; traffic, storage growth and CloudFront extra):";
         foreach (var (what, monthly) in costs)

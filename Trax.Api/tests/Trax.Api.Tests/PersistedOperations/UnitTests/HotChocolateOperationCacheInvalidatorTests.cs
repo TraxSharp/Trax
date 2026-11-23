@@ -90,7 +90,7 @@ public class HotChocolateOperationCacheInvalidatorTests
             .AddQueryType(d => d.Name("Query").Field("ping").Type<StringType>().Resolve("pong"));
         var provider = services.BuildServiceProvider();
         var invalidator = Build(provider);
-        invalidator.SetSchemaName(null);
+        invalidator.SetSchemaName(schemaName: null);
 
         var act = () => invalidator.InvalidateAsync(CancellationToken.None);
 
@@ -104,21 +104,21 @@ public class HotChocolateOperationCacheInvalidatorTests
 
         var nullServices = () =>
             new HotChocolateOperationCacheInvalidator(
-                null!,
+                Null.Of<IServiceProvider>(),
                 new PersistedOperationCacheGeneration(),
                 NullLogger<HotChocolateOperationCacheInvalidator>.Instance
             );
         var nullGeneration = () =>
             new HotChocolateOperationCacheInvalidator(
                 services,
-                null!,
+                Null.Of<Trax.Api.GraphQL.PersistedOperations.Storage.PersistedOperationCacheGeneration>(),
                 NullLogger<HotChocolateOperationCacheInvalidator>.Instance
             );
         var nullLogger = () =>
             new HotChocolateOperationCacheInvalidator(
                 services,
                 new PersistedOperationCacheGeneration(),
-                null!
+                Null.Of<Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.PersistedOperations.Storage.HotChocolateOperationCacheInvalidator>>()
             );
 
         nullServices.Should().Throw<ArgumentNullException>();

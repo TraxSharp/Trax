@@ -93,21 +93,21 @@ public class ChainShortCircuitEdgeCaseTests : TestSetup
         either.IsLeft.Should().BeTrue();
     }
 
-    private interface IUnregistered : IJunction<string, string> { }
+    private interface IUnregistered : IJunction<string, string>;
 
-    private class EchoJunction : Junction<string, string>
+    private sealed class EchoJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
-    private class MultiCtorJunction
+    private sealed class MultiCtorJunction
     {
         public MultiCtorJunction() { }
 
         public MultiCtorJunction(int x) { }
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

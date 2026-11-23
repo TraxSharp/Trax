@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Types;
 using Trax.Api.GraphQL.Validation;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
@@ -72,7 +73,7 @@ internal static partial class DocumentTypes
                     .Where(name => !wrappers.Contains(name) && definitions.ContainsKey(name))
                     .Select(name => definitions[name].ToString(indented: true))
             )
-            .Replace("\r\n", "\n");
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -103,15 +104,15 @@ internal static partial class DocumentTypes
     /// <summary>A definition's SDL without its descriptions, so editing a doc comment changes nothing.</summary>
     public static string WithoutDescriptions(INamedSyntaxNode node)
     {
-        var text = node.ToString(indented: true).Replace("\r\n", "\n");
-        text = BlockDescription().Replace(text, "");
-        return LineDescription().Replace(text, "");
+        var text = node.ToString(indented: true).Replace("\r\n", "\n", StringComparison.Ordinal);
+        text = BlockDescription.Replace(text, "");
+        return LineDescription.Replace(text, "");
     }
 
     private static HashSet<string> Roots(ISchemaDefinition schema) =>
         new[] { schema.QueryType, schema.MutationType, schema.SubscriptionType }
             .Where(t => t is not null)
-            .Select(t => t!.Name)
+            .Select(t => t.NotNull().Name)
             .ToHashSet(StringComparer.Ordinal);
 
     private static void Select(
@@ -159,7 +160,7 @@ internal static partial class DocumentTypes
     )
     {
         var segment = path.Split(" > ")[^1];
-        var dot = segment.IndexOf('.');
+        var dot = segment.IndexOf('.', StringComparison.Ordinal);
         if (
             dot < 0
             || !schema.Types.TryGetType(segment[..dot], out var owner)
@@ -191,7 +192,11 @@ internal static partial class DocumentTypes
                 next = next.Concat(
                     schema
                         .Types.OfType<IObjectTypeDefinition>()
-                        .Where(o => o.Implements.Any(i => i.Name == @interface.Name))
+                        .Where(o =>
+                            o.Implements.Any(i =>
+                                string.Equals(i.Name, @interface.Name, StringComparison.Ordinal)
+                            )
+                        )
                 );
             foreach (var t in next)
                 pending.Enqueue(t);
@@ -210,9 +215,17 @@ internal static partial class DocumentTypes
 
     // A block string on lines of its own, and a string alone on its line: where the printer puts a description. A
     // default value is never alone on its line.
-    [GeneratedRegex(@"^[ \t]*""""""[\s\S]*?""""""[ \t]*\n?", RegexOptions.Multiline)]
-    private static partial Regex BlockDescription();
+    [GeneratedRegex(
+        @"^[ \t]*""""""[\s\S]*?""""""[ \t]*\n?",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex BlockDescription { get; }
 
-    [GeneratedRegex(@"^[ \t]*""(?:[^""\\\n]|\\.)*""[ \t]*\n?", RegexOptions.Multiline)]
-    private static partial Regex LineDescription();
+    [GeneratedRegex(
+        @"^[ \t]*""(?:[^""\\\n]|\\.)*""[ \t]*\n?",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LineDescription { get; }
 }

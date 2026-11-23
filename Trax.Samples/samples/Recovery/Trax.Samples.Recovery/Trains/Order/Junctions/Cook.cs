@@ -7,7 +7,7 @@ public class Cook(DemoPace pace) : EffectJunction<SentToRestaurant, Cooked>
 {
     public override async Task<Cooked> Run(SentToRestaurant order)
     {
-        await Task.Delay(pace.StepDelay * 2, CancellationToken);
+        await Task.Delay(pace.StepDelay * 2, CancellationToken).ConfigureAwait(false);
         return new Cooked(order.OrderId);
     }
 }

@@ -45,10 +45,9 @@ public partial class OperationsMutations
             );
 
         return MachineInstanceCancelResponse.From(
-            await operationsService.CancelMachineInstanceAsync(
-                new MachineInstanceKey(machine, ownerKind, id),
-                ct
-            )
+            await operationsService
+                .CancelMachineInstanceAsync(new MachineInstanceKey(machine, ownerKind, id), ct)
+                .ConfigureAwait(false)
         );
     }
 }

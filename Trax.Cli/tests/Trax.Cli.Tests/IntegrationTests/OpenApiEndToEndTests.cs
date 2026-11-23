@@ -7,9 +7,9 @@ namespace Trax.Cli.Tests.IntegrationTests;
 [TestFixture]
 public class OpenApiEndToEndTests
 {
-    private OpenApiSchemaParser _parser = null!;
-    private TraxProjectGenerator _generator = null!;
-    private string _outputDir = null!;
+    private OpenApiSchemaParser _parser = new();
+    private TraxProjectGenerator _generator = new();
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp()
@@ -32,10 +32,12 @@ public class OpenApiEndToEndTests
     #region Petstore
 
     [Test]
-    public void GenerateTrainsLibrary_Petstore_AllExpectedFilesExist()
+    public async Task GenerateTrainsLibrary_Petstore_AllExpectedFilesExist()
     {
-        var schema = _parser.Parse(FixturePath("petstore.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // Trains library files
         File.Exists(Path.Combine(_outputDir, "TestProject.Trains.csproj")).Should().BeTrue();
@@ -73,12 +75,15 @@ public class OpenApiEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_Petstore_ManifestNamesContainsAllOperations()
+    public async Task GenerateTrainsLibrary_Petstore_ManifestNamesContainsAllOperations()
     {
-        var schema = _parser.Parse(FixturePath("petstore.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
-        var content = File.ReadAllText(Path.Combine(_outputDir, "ManifestNames.cs"));
+        var content = await File.ReadAllTextAsync(Path.Combine(_outputDir, "ManifestNames.cs"))
+            .ConfigureAwait(false);
 
         content.Should().Contain("ListPets");
         content.Should().Contain("CreatePet");
@@ -87,10 +92,12 @@ public class OpenApiEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_Petstore_DeleteJunctionContainsHttpComment()
+    public async Task GenerateTrainsLibrary_Petstore_DeleteJunctionContainsHttpComment()
     {
-        var schema = _parser.Parse(FixturePath("petstore.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var junctionFile = Path.Combine(
             _outputDir,
@@ -100,16 +107,18 @@ public class OpenApiEndToEndTests
             "Junctions",
             "DeletePetJunction.cs"
         );
-        var content = File.ReadAllText(junctionFile);
+        var content = await File.ReadAllTextAsync(junctionFile).ConfigureAwait(false);
 
         content.Should().Contain("DELETE /pets/{petId}");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_Petstore_PetModelExists()
+    public async Task GenerateTrainsLibrary_Petstore_PetModelExists()
     {
-        var schema = _parser.Parse(FixturePath("petstore.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var petFile = Path.Combine(_outputDir, "Models", "Pet.cs");
         File.Exists(petFile).Should().BeTrue();
@@ -120,28 +129,32 @@ public class OpenApiEndToEndTests
     #region GraphQLNamespaces
 
     [Test]
-    public void GenerateTrainsLibrary_Petstore_GraphQLNamespacesFileGenerated()
+    public async Task GenerateTrainsLibrary_Petstore_GraphQLNamespacesFileGenerated()
     {
-        var schema = _parser.Parse(FixturePath("petstore.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var namespacesFile = Path.Combine(_outputDir, "GraphQLNamespaces.cs");
         File.Exists(namespacesFile).Should().BeTrue();
 
-        var content = File.ReadAllText(namespacesFile);
+        var content = await File.ReadAllTextAsync(namespacesFile).ConfigureAwait(false);
         content.Should().Contain("public static class GraphQLNamespaces");
         content.Should().Contain("Pets");
         content.Should().Contain("\"pets\"");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_Petstore_TrainImplementationReferencesNamespace()
+    public async Task GenerateTrainsLibrary_Petstore_TrainImplementationReferencesNamespace()
     {
-        var schema = _parser.Parse(FixturePath("petstore.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser.ParseAsync(FixturePath("petstore.json")).ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var trainFile = Path.Combine(_outputDir, "Trains", "Pets", "ListPets", "ListPetsTrain.cs");
-        var content = File.ReadAllText(trainFile);
+        var content = await File.ReadAllTextAsync(trainFile).ConfigureAwait(false);
         content.Should().Contain("Namespace = GraphQLNamespaces.Pets");
     }
 
@@ -150,10 +163,14 @@ public class OpenApiEndToEndTests
     #region ComplexOpenApi
 
     [Test]
-    public void GenerateTrainsLibrary_ComplexOpenApi_AllOperationsGenerated()
+    public async Task GenerateTrainsLibrary_ComplexOpenApi_AllOperationsGenerated()
     {
-        var schema = _parser.Parse(FixturePath("complex-openapi.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         // ListUsers
         var listUsersDir = Path.Combine(_outputDir, "Trains", "Users", "ListUsers");
@@ -185,15 +202,19 @@ public class OpenApiEndToEndTests
     }
 
     [Test]
-    public void GenerateTrainsLibrary_ComplexOpenApi_UserModelContainsLongId()
+    public async Task GenerateTrainsLibrary_ComplexOpenApi_UserModelContainsLongId()
     {
-        var schema = _parser.Parse(FixturePath("complex-openapi.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = await _parser
+            .ParseAsync(FixturePath("complex-openapi.json"))
+            .ConfigureAwait(false);
+        await _generator
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "TestProject")
+            .ConfigureAwait(false);
 
         var userFile = Path.Combine(_outputDir, "Models", "User.cs");
         File.Exists(userFile).Should().BeTrue();
 
-        var content = File.ReadAllText(userFile);
+        var content = await File.ReadAllTextAsync(userFile).ConfigureAwait(false);
         content.Should().Contain("long");
     }
 

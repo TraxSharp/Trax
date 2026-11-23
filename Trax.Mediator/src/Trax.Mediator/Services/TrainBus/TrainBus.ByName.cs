@@ -13,7 +13,7 @@ namespace Trax.Mediator.Services.TrainBus;
 /// these reach the train a caller named, which is the one a by-name caller looked up and
 /// authorized.
 /// </summary>
-internal partial class TrainBus
+internal sealed partial class TrainBus
 {
     /// <inheritdoc/>
     public async Task<TOut> RunByNameAsync<TOut>(
@@ -25,10 +25,15 @@ internal partial class TrainBus
     {
         var registration = FindRegistration(trainName, trainInput);
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var train = ResolveTrain(scope.ServiceProvider, registration);
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var train = ResolveTrain(scope.ServiceProvider, registration);
 
-        return await (Task<TOut>)InvokeRun(train, trainInput, cancellationToken, metadata);
+            return await (
+                (Task<TOut>)InvokeRun(train, trainInput, cancellationToken, metadata)
+            ).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -41,10 +46,13 @@ internal partial class TrainBus
     {
         var registration = FindRegistration(trainName, trainInput);
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var train = ResolveTrain(scope.ServiceProvider, registration);
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var train = ResolveTrain(scope.ServiceProvider, registration);
 
-        await InvokeRun(train, trainInput, cancellationToken, metadata);
+            await InvokeRun(train, trainInput, cancellationToken, metadata).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -69,11 +77,16 @@ internal partial class TrainBus
     {
         var registration = FindRegistration(trainName, trainInput);
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var train = ResolveTrain(scope.ServiceProvider, registration);
-        var metadata = await createPendingMetadata(cancellationToken);
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var train = ResolveTrain(scope.ServiceProvider, registration);
+            var metadata = await createPendingMetadata(cancellationToken).ConfigureAwait(false);
 
-        return await (Task<TOut>)InvokeRun(train, trainInput, cancellationToken, metadata);
+            return await (
+                (Task<TOut>)InvokeRun(train, trainInput, cancellationToken, metadata)
+            ).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -89,7 +102,9 @@ internal partial class TrainBus
             serviceProvider
                 .GetRequiredService<ITrainDiscoveryService>()
                 .DiscoverTrains()
-                .FirstOrDefault(t => t.ServiceType.FullName == trainName)
+                .FirstOrDefault(t =>
+                    string.Equals(t.ServiceType.FullName, trainName, StringComparison.Ordinal)
+                )
             ?? throw new TrainException($"No train is registered under the name ({trainName})");
 
         if (!registration.InputType.IsInstanceOfType(trainInput))
@@ -150,21 +165,21 @@ internal partial class TrainBus
 
     private static MethodInfo FindRunWithMetadataAndCancellation(Type type) =>
         type.GetMethods()
-            .Where(x => x.Name == "Run")
-            .Where(x => x.GetParameters().Length == 3)
             .FirstOrDefault(x =>
-                x.GetParameters()[1].ParameterType == typeof(Metadata)
+                string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                && x.GetParameters().Length == 3
+                && x.GetParameters()[1].ParameterType == typeof(Metadata)
                 && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
             )
         ?? MissingMethod<MethodInfo>("Run(input, metadata, ct)", type.Name);
 
     private static MethodInfo FindRunWithCancellation(Type type) =>
         type.GetMethods()
-            .Where(x => x.Name == "Run")
-            .Where(x => x.GetParameters().Length == 2)
             .FirstOrDefault(x =>
-                x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                && x.Module.Name.Contains("Effect")
+                string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                && x.GetParameters().Length == 2
+                && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
             )
         ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
 }

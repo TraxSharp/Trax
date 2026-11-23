@@ -49,17 +49,37 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         IDataContextProviderFactory dbContextFactory,
         IDataContextLoggingProviderConfiguration configuration
     )
+        : this(dbContextFactory, configuration, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates the provider as the two-argument constructor does, timing the wait for its writer
+    /// at dispose on <paramref name="timeProvider"/>. The container uses this one.
+    /// </summary>
+    /// <param name="dbContextFactory">Creates the data contexts the log rows are written through.</param>
+    /// <param name="configuration">Which categories are logged, at what level.</param>
+    /// <param name="timeProvider">The clock the drain at dispose is timed on.</param>
+    public DataContextLoggingProvider(
+        IDataContextProviderFactory dbContextFactory,
+        IDataContextLoggingProviderConfiguration configuration,
+        TimeProvider timeProvider
+    )
     {
+        _clock = timeProvider;
         _dbContextFactory = dbContextFactory;
         _configuration = configuration;
 
         foreach (var pattern in configuration.Blacklist)
         {
-            if (pattern.Contains('*'))
+            if (pattern.Contains('*', StringComparison.Ordinal))
             {
                 // Convert wildcard to regex, escaping dots and replacing '*' with '.*'
-                var regexPattern = "^" + Regex.Escape(pattern).Replace(@"\*", ".*") + "$";
-                _wildcardBlacklist.Add(new Regex(regexPattern, RegexOptions.Compiled));
+                var regexPattern =
+                    "^"
+                    + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal)
+                    + "$";
+                _wildcardBlacklist.Add(
+                    new Regex(regexPattern, RegexOptions.Compiled, TimeSpan.FromSeconds(1))
+                );
             }
             else
                 _exactBlacklist.Add(pattern);
@@ -68,7 +88,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         // The provider is often built on a train run's flow (the first logger asked for). The writer
         // must not inherit that run, or its own lines would be stored against it.
         using (ExecutionContext.SuppressFlow())
-            _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token));
+            _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token), CancellationToken.None);
     }
 
     /// <summary>
@@ -95,11 +115,14 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
         try
         {
-            using var dataContext = await _dbContextFactory.CreateDbContextAsync(ct);
+            var dataContext = await _dbContextFactory
+                .CreateDbContextAsync(ct)
+                .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
             // WaitToReadAsync returns false only once the queue is completed and empty, so after
             // Dispose completes it the loop still writes everything queued before that, then ends.
-            while (await reader.WaitToReadAsync(ct))
+            while (await reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
                 batch.Clear();
                 // The loop is the queue's only reader, so after WaitToReadAsync returns true the
@@ -109,8 +132,8 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
                 try
                 {
-                    await dataContext.Logs.AddRangeAsync(batch, ct);
-                    await dataContext.SaveChanges(ct);
+                    await dataContext.Logs.AddRangeAsync(batch, ct).ConfigureAwait(false);
+                    await dataContext.SaveChanges(ct).ConfigureAwait(false);
                     dataContext.Reset();
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -122,7 +145,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
                     // One entry the database refuses fails the whole batch, so store the entries
                     // one at a time and lose only the ones that still fail.
                     dataContext.Reset();
-                    if (!await SaveOneByOne(dataContext, batch, ct))
+                    if (!await SaveOneByOne(dataContext, batch, ct).ConfigureAwait(false))
                         break;
                 }
             }
@@ -135,7 +158,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
     /// <summary>
     /// Stores each entry of a failed batch on its own. An entry that still fails is dropped
-    /// rather than retried, so a bad entry cannot hold up the loop. Returns <c>false</c> when
+    /// rather than retried, so a bad entry cannot hold up the loop. Returns <see langword="false"/> when
     /// shutdown cancelled it.
     /// </summary>
     private static async Task<bool> SaveOneByOne(
@@ -148,8 +171,8 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         {
             try
             {
-                await dataContext.Logs.AddAsync(log, ct);
-                await dataContext.SaveChanges(ct);
+                await dataContext.Logs.AddAsync(log, ct).ConfigureAwait(false);
+                await dataContext.SaveChanges(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -179,10 +202,12 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
         _logChannel.Writer.TryComplete();
 
-        if (!WaitForWriter(DrainTimeout))
+        // Dispose is synchronous, so it waits here. The writer's awaits are all
+        // ConfigureAwait(false), so it never needs this thread to finish.
+        if (!WaitForWriterAsync(DrainTimeout).GetAwaiter().GetResult())
         {
             _cts.Cancel();
-            WaitForWriter(TimeSpan.FromSeconds(1));
+            WaitForWriterAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
         }
 
         _cts.Dispose();
@@ -192,17 +217,26 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
 
     private int _disposed;
 
+    private readonly TimeProvider _clock;
+
     /// <summary>
     /// True when the writer has stopped within <paramref name="timeout"/>. A writer that failed
     /// (its database unreachable, say) has stopped too, and logging never throws into the caller.
     /// </summary>
-    private bool WaitForWriter(TimeSpan timeout)
+    private async Task<bool> WaitForWriterAsync(TimeSpan timeout)
     {
         try
         {
-            return _flushTask.Wait(timeout);
+            await _flushTask
+                .WaitAsync(timeout, _clock, CancellationToken.None)
+                .ConfigureAwait(false);
+            return true;
         }
-        catch (AggregateException)
+        catch (TimeoutException) when (!_flushTask.IsCompleted)
+        {
+            return false;
+        }
+        catch
         {
             return true;
         }

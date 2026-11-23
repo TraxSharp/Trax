@@ -121,8 +121,9 @@ public class GraphQLTests : HubTestFixture
         trains
             .EnumerateArray()
             .Any(t =>
-                t.GetProperty("serviceTypeName").GetString()?.Contains("MonitorSolarProduction")
-                    == true
+                t.GetProperty("serviceTypeName")
+                    .GetString()
+                    ?.Contains("MonitorSolarProduction", StringComparison.Ordinal) == true
                 && t.GetProperty("isQuery").GetBoolean()
             )
             .Should()

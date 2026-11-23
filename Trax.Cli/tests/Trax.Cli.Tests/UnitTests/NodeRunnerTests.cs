@@ -14,9 +14,9 @@ namespace Trax.Cli.Tests.UnitTests;
 public class NodeRunnerTests
 {
     [Test]
-    public void Run_captures_the_exit_code_and_stdout()
+    public async Task Run_captures_the_exit_code_and_stdout()
     {
-        var result = new NodeRunner("dotnet").Run("--version", []);
+        var result = await new NodeRunner("dotnet").RunAsync("--version", []).ConfigureAwait(false);
 
         result
             .ExitCode.Should()
@@ -29,15 +29,17 @@ public class NodeRunnerTests
     }
 
     [Test]
-    public void IsAvailable_is_true_for_a_real_executable()
+    public async Task IsAvailable_is_true_for_a_real_executable()
     {
-        new NodeRunner("dotnet").IsAvailable().Should().BeTrue();
+        (await new NodeRunner("dotnet").IsAvailableAsync().ConfigureAwait(false)).Should().BeTrue();
     }
 
     [Test]
-    public void IsAvailable_is_false_when_the_executable_is_missing()
+    public async Task IsAvailable_is_false_when_the_executable_is_missing()
     {
-        new NodeRunner("trax-no-such-binary-zzz").IsAvailable().Should().BeFalse();
+        (await new NodeRunner("trax-no-such-binary-zzz").IsAvailableAsync().ConfigureAwait(false))
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -50,11 +52,10 @@ public class NodeRunnerTests
 
         // 200 KB to stderr, then a line to stdout: reading stdout to the end first waits for a child
         // that is itself blocked writing to a full stderr pipe.
-        var run = System.Threading.Tasks.Task.Run(() =>
-            new NodeRunner("sh").Run(
-                "-c",
-                ["head -c 200000 /dev/zero | tr '\\0' 'e' 1>&2; echo done"]
-            )
+        var run = System.Threading.Tasks.Task.Run(async () =>
+            await new NodeRunner("sh")
+                .RunAsync("-c", ["head -c 200000 /dev/zero | tr '\\0' 'e' 1>&2; echo done"])
+                .ConfigureAwait(false)
         );
 
         run.Wait(TimeSpan.FromSeconds(30))

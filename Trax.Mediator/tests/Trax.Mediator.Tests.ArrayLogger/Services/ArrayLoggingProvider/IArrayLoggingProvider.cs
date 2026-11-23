@@ -13,5 +13,5 @@ public interface IArrayLoggingProvider : ILoggerProvider
     /// each entry's <c>Category</c> or flatten the <see cref="ArrayLoggerEffect.Logs"/> lists to find
     /// an entry. Not synchronized for readers: read it after the code under test has finished.
     /// </summary>
-    public List<ArrayLoggerEffect> Loggers { get; }
+    public IList<ArrayLoggerEffect> Loggers { get; }
 }

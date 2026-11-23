@@ -13,11 +13,13 @@ namespace Trax.Scheduler.Configuration;
 /// calls both submit through <see cref="HttpJobSubmitter"/>, each to its own endpoint with its own
 /// options, so the type alone cannot say which one a train belongs to.
 /// </remarks>
-internal class JobSubmitterRoutingConfiguration
+internal sealed class JobSubmitterRoutingConfiguration
 {
-    private readonly Dictionary<string, RoutedSubmitterRegistration> _routes = new();
+    private readonly Dictionary<string, RoutedSubmitterRegistration> _routes = new(
+        StringComparer.Ordinal
+    );
     private RoutedSubmitterRegistration? _attributeDefault;
-    private readonly HashSet<string> _attributeRemoteTrains = new();
+    private readonly HashSet<string> _attributeRemoteTrains = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Adds a builder-level route mapping a train to a routed submitter registration.

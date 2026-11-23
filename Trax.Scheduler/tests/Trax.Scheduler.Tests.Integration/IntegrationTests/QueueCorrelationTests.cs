@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -35,7 +36,7 @@ public class QueueCorrelationTests
         var execution = fx.Services.GetRequiredService<ITrainExecutionService>();
 
         var receipt = await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
+            typeof(ISchedulerTestTrain).FullName.NotNull(),
             """{"value":"reconcile-me"}""",
             ct: default
         );
@@ -80,7 +81,7 @@ public class QueueCorrelationTests
         var execution = fx.Services.GetRequiredService<ITrainExecutionService>();
 
         var receipt = await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
+            typeof(ISchedulerTestTrain).FullName.NotNull(),
             """{"value":"find-me"}""",
             ct: default
         );

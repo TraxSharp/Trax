@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -77,7 +78,7 @@ public class TraxMigrateTests
     {
         var gate = new MigrateServeGate();
 
-        var act = async () => await gate.StartAsync(CancellationToken.None);
+        var act = async () => await gate.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -123,6 +124,6 @@ public class TraxMigrateTests
                 return captured;
             })
         );
-        return captured!;
+        return captured.NotNull();
     }
 }

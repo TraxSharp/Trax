@@ -4,31 +4,10 @@ using System.ComponentModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Services.RequestSigning;
-
-/// <summary>
-/// The outcome of <see cref="RunnerRequestVerifier.VerifyAsync"/>.
-/// </summary>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
-public enum RunnerRequestVerdict
-{
-    /// <summary>The request may run.</summary>
-    Accepted,
-
-    /// <summary>A signing key is configured and the request carries no signature.</summary>
-    Missing,
-
-    /// <summary>The signature is malformed or does not match the body.</summary>
-    Invalid,
-
-    /// <summary>The signature's timestamp is further from this clock than the allowed skew.</summary>
-    Stale,
-
-    /// <summary>The signature's nonce was already accepted inside the skew window.</summary>
-    Replayed,
-}
 
 /// <summary>
 /// Checks a runner request against the posture in <see cref="TraxJobRunnerOptions"/>. Registered
@@ -50,7 +29,7 @@ public sealed class RunnerRequestVerifier
     private readonly ConcurrentDictionary<string, bool> _warnedEntryPoints = new(
         StringComparer.Ordinal
     );
-    private readonly object _refusalLog = new();
+    private readonly Lock _refusalLog = new();
     private DateTimeOffset _lastRefusalWarning = DateTimeOffset.MinValue;
     private int _refusalsSinceWarning;
 
@@ -118,7 +97,7 @@ public sealed class RunnerRequestVerifier
                     + " or call AllowUnsignedRequests() to accept requests from anyone who can reach it."
             );
 
-        if (_warnedEntryPoints.TryAdd(entryPoint, true))
+        if (_warnedEntryPoints.TryAdd(entryPoint, value: true))
             _logger.LogWarning(
                 "Trax runner entry point {EntryPoint} accepts unsigned requests (AllowUnsignedRequests). "
                     + "Anyone who can reach it can run any registered train.",
@@ -202,7 +181,8 @@ public sealed class RunnerRequestVerifier
             return (default, StatusCodes.Status401Unauthorized);
         }
 
-        var body = await ReadBoundedAsync(request, _options.MaxRequestBodyBytes);
+        var body = await ReadBoundedAsync(request, _options.MaxRequestBodyBytes)
+            .ConfigureAwait(false);
         if (body is null)
         {
             ReportRefusal(request.Path, "body over MaxRequestBodyBytes");
@@ -210,12 +190,13 @@ public sealed class RunnerRequestVerifier
         }
 
         var verdict = await VerifyAsync(
-            purpose,
-            body.Value,
-            signature,
-            requireFresh: true,
-            request.HttpContext.RequestAborted
-        );
+                purpose,
+                body.Value,
+                signature,
+                requireFresh: true,
+                request.HttpContext.RequestAborted
+            )
+            .ConfigureAwait(false);
         if (verdict != RunnerRequestVerdict.Accepted)
         {
             ReportRefusal(request.Path, $"signature {verdict}");
@@ -294,13 +275,19 @@ public sealed class RunnerRequestVerifier
         {
             int read;
             while (
-                (read = await request.Body.ReadAsync(chunk, request.HttpContext.RequestAborted)) > 0
+                (
+                    read = await request
+                        .Body.ReadAsync(chunk, request.HttpContext.RequestAborted)
+                        .ConfigureAwait(false)
+                ) > 0
             )
             {
                 if (buffer.Length + read > limit)
                     return null;
 
-                buffer.Write(chunk, 0, read);
+                await buffer
+                    .WriteAsync(chunk.AsMemory(0, read), request.HttpContext.RequestAborted)
+                    .ConfigureAwait(false);
             }
         }
         catch (BadHttpRequestException ex)
@@ -366,12 +353,15 @@ public sealed class RunnerRequestVerifier
             return RunnerRequestVerdict.Stale;
 
         // Remembered until the timestamp itself goes stale; after that freshness refuses it.
-        var recorded = await _nonces!.TryRecordAsync(
-            nonce,
-            DateTimeOffset.FromUnixTimeSeconds(timestamp + skew),
-            now,
-            cancellationToken
-        );
+        var recorded = await _nonces
+            .NotNull()
+            .TryRecordAsync(
+                nonce,
+                DateTimeOffset.FromUnixTimeSeconds(timestamp + skew),
+                now,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         return recorded ? RunnerRequestVerdict.Accepted : RunnerRequestVerdict.Replayed;
     }

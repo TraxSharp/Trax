@@ -31,36 +31,19 @@ internal static class SourceText
         var output = source.ToCharArray();
         var i = 0;
 
-        // Blanks source[from..to) in place, keeping line structure intact.
-        void Blank(int from, int to)
-        {
-            for (var k = from; k < to && k < output.Length; k++)
-            {
-                if (output[k] != '\n' && output[k] != '\r')
-                    output[k] = ' ';
-            }
-        }
-
         while (i < source.Length)
         {
             var c = source[i];
 
             if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
             {
-                var end = source.IndexOf('\n', i);
-                if (end < 0)
-                    end = source.Length;
-                Blank(i, end);
-                i = end;
+                i = SkipLineComment(source, output, i);
                 continue;
             }
 
             if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
             {
-                var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                end = end < 0 ? source.Length : end + 2;
-                Blank(i, end);
-                i = end;
+                i = SkipBlockComment(source, output, i);
                 continue;
             }
 
@@ -78,82 +61,19 @@ internal static class SourceText
                 && source[i + dollars + 2] == '"'
             )
             {
-                var quoteStart = i + dollars;
-                var open = 0;
-                while (quoteStart + open < source.Length && source[quoteStart + open] == '"')
-                    open++;
-
-                var scan = quoteStart + open;
-                while (scan < source.Length)
-                {
-                    if (source[scan] != '"')
-                    {
-                        scan++;
-                        continue;
-                    }
-
-                    var run = 0;
-                    while (scan + run < source.Length && source[scan + run] == '"')
-                        run++;
-                    if (run >= open)
-                        break;
-                    scan += run;
-                }
-
-                var end = scan >= source.Length ? source.Length : scan + open;
-                Blank(quoteStart + open, Math.Min(scan, end));
-                i = end;
+                i = SkipRawString(source, output, i + dollars);
                 continue;
             }
 
-            // Verbatim string, optionally interpolated: @"...", $@"...", @$"...".
-            var verbatim = c == '@' && i + 1 < source.Length && source[i + 1] == '"';
-            var interpolatedVerbatim =
-                (c == '$' || c == '@')
-                && i + 2 < source.Length
-                && (
-                    (source[i + 1] == '@' && source[i + 2] == '"')
-                    || (source[i + 1] == '$' && source[i + 2] == '"')
-                );
-
-            if (verbatim || interpolatedVerbatim)
+            if (OpensVerbatimString(source, i, c))
             {
-                var quote = source.IndexOf('"', i);
-                var scan = quote + 1;
-                while (scan < source.Length)
-                {
-                    if (source[scan] != '"')
-                    {
-                        scan++;
-                        continue;
-                    }
-
-                    // "" is an escaped quote inside a verbatim string.
-                    if (scan + 1 < source.Length && source[scan + 1] == '"')
-                    {
-                        scan += 2;
-                        continue;
-                    }
-
-                    break;
-                }
-
-                Blank(quote + 1, scan);
-                i = scan < source.Length ? scan + 1 : source.Length;
+                i = SkipVerbatimString(source, output, i);
                 continue;
             }
 
             if (c == '"' || c == '\'')
             {
-                var scan = i + 1;
-                while (scan < source.Length && source[scan] != c)
-                {
-                    // A backslash escapes the next character, including the delimiter.
-                    scan += source[scan] == '\\' ? 2 : 1;
-                }
-
-                Blank(i + 1, Math.Min(scan, source.Length));
-                i = scan < source.Length ? scan + 1 : source.Length;
+                i = SkipQuoted(source, output, i, c);
                 continue;
             }
 
@@ -163,13 +83,124 @@ internal static class SourceText
         return new string(output);
     }
 
+    private static int SkipLineComment(string source, char[] output, int i)
+    {
+        var end = source.IndexOf('\n', i);
+        if (end < 0)
+            end = source.Length;
+        Blank(output, i, end);
+        return end;
+    }
+
+    private static int SkipBlockComment(string source, char[] output, int i)
+    {
+        var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+        end = end < 0 ? source.Length : end + 2;
+        Blank(output, i, end);
+        return end;
+    }
+
+    // Verbatim string, optionally interpolated: @"...", $@"...", @$"...".
+    private static bool OpensVerbatimString(string source, int i, char c)
+    {
+        var verbatim = c == '@' && i + 1 < source.Length && source[i + 1] == '"';
+        var interpolatedVerbatim =
+            (c == '$' || c == '@')
+            && i + 2 < source.Length
+            && (
+                (source[i + 1] == '@' && source[i + 2] == '"')
+                || (source[i + 1] == '$' && source[i + 2] == '"')
+            );
+        return verbatim || interpolatedVerbatim;
+    }
+
+    // Blanks the content of the raw string whose quotes start at quoteStart; answers where the scan goes on.
+    private static int SkipRawString(string source, char[] output, int quoteStart)
+    {
+        var open = 0;
+        while (quoteStart + open < source.Length && source[quoteStart + open] == '"')
+            open++;
+
+        var scan = quoteStart + open;
+        while (scan < source.Length)
+        {
+            if (source[scan] != '"')
+            {
+                scan++;
+                continue;
+            }
+
+            var run = 0;
+            while (scan + run < source.Length && source[scan + run] == '"')
+                run++;
+            if (run >= open)
+                break;
+            scan += run;
+        }
+
+        var end = scan >= source.Length ? source.Length : scan + open;
+        Blank(output, quoteStart + open, Math.Min(scan, end));
+        return end;
+    }
+
+    // Blanks the content of the verbatim string that starts at i; answers where the scan goes on.
+    private static int SkipVerbatimString(string source, char[] output, int i)
+    {
+        var quote = source.IndexOf('"', i);
+        var scan = quote + 1;
+        while (scan < source.Length)
+        {
+            if (source[scan] != '"')
+            {
+                scan++;
+                continue;
+            }
+
+            // "" is an escaped quote inside a verbatim string.
+            if (scan + 1 < source.Length && source[scan + 1] == '"')
+            {
+                scan += 2;
+                continue;
+            }
+
+            break;
+        }
+
+        Blank(output, quote + 1, scan);
+        return scan < source.Length ? scan + 1 : source.Length;
+    }
+
+    // Blanks the content of the string or char literal that c opens at i; answers where the scan goes on.
+    private static int SkipQuoted(string source, char[] output, int i, char c)
+    {
+        var scan = i + 1;
+        while (scan < source.Length && source[scan] != c)
+        {
+            // A backslash escapes the next character, including the delimiter.
+            scan += source[scan] == '\\' ? 2 : 1;
+        }
+
+        Blank(output, i + 1, Math.Min(scan, source.Length));
+        return scan < source.Length ? scan + 1 : source.Length;
+    }
+
+    // Blanks source[from..to) in place, keeping line structure intact.
+    private static void Blank(char[] output, int from, int to)
+    {
+        for (var k = from; k < to && k < output.Length; k++)
+        {
+            if (output[k] != '\n' && output[k] != '\r')
+                output[k] = ' ';
+        }
+    }
+
     public static IReadOnlyList<(int LineNumber, string Line)> MatchingLines(
         string source,
         Regex pattern
     )
     {
         var hits = new List<(int, string)>();
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
             if (pattern.IsMatch(lines[i]))

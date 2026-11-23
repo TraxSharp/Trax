@@ -1,0 +1,68 @@
+using Microsoft.CodeAnalysis.Formatting;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class UseLazyInitializerEnsureInitializeFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds =>
+        ImmutableArray.Create(RuleIdentifiers.UseLazyInitializerEnsureInitialize);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null)
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null)
+            return;
+
+        if (semanticModel.GetOperation(nodeToFix, context.CancellationToken) is not IInvocationOperation)
+            return;
+
+        var lazyInitializerType = semanticModel.Compilation.GetTypeByMetadataName("System.Threading.LazyInitializer");
+        if (lazyInitializerType is null)
+            return;
+
+        context.RegisterCodeFix(
+            CodeAction.Create(
+                "Use LazyInitializer.EnsureInitialized",
+                ct => Update(context.Document, nodeToFix, lazyInitializerType, ct),
+                equivalenceKey: "Use LazyInitializer.EnsureInitialized"),
+            context.Diagnostics);
+    }
+
+    private static async Task<Document> Update(Document document, SyntaxNode nodeToFix, INamedTypeSymbol lazyInitializerType, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var semanticModel = editor.SemanticModel;
+
+        if (semanticModel.GetOperation(nodeToFix, cancellationToken) is not IInvocationOperation invocation)
+            return document;
+
+        var generator = editor.Generator;
+        var refArgSyntax = (ArgumentSyntax)invocation.Arguments[0].Syntax;
+        var valueExpression = ((ArgumentSyntax)invocation.Arguments[1].Syntax).Expression;
+
+        var lambdaExpression = ParenthesizedLambdaExpression()
+            .WithExpressionBody(valueExpression.WithoutTrivia());
+
+        var newInvocation = InvocationExpression(
+            (ExpressionSyntax)generator.TypeMemberAccessExpression(lazyInitializerType, "EnsureInitialized"))
+            .WithArgumentList(ArgumentList(SeparatedList<ArgumentSyntax>(
+            [
+                refArgSyntax,
+                Argument(lambdaExpression),
+            ])));
+
+        editor.ReplaceNode(nodeToFix, newInvocation
+            .WithTriviaFrom(nodeToFix)
+            .WithAdditionalAnnotations(Formatter.Annotation));
+        return editor.GetChangedDocument();
+    }
+}

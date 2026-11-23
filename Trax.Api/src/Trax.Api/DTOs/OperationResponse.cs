@@ -7,7 +7,7 @@ namespace Trax.Api.DTOs;
 /// the server itself, or a caller not allowed to run the train, is a GraphQL error instead.
 /// </summary>
 /// <param name="Success">Whether the operation did what was asked.</param>
-/// <param name="Count">How many items the operation affected, for operations that act on a set; <c>null</c> otherwise.</param>
+/// <param name="Count">How many items the operation affected, for operations that act on a set; <see langword="null"/> otherwise.</param>
 /// <param name="Message">A human-readable description of the outcome.</param>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/operation-response">SDK reference</seealso>
 public record OperationResponse(bool Success, int? Count = null, string? Message = null)
@@ -16,7 +16,7 @@ public record OperationResponse(bool Success, int? Count = null, string? Message
     /// The id of the one row the operation acted on, when there is one: the work queue entry
     /// <c>queueTrain</c> and <c>requeueExecution</c> created, the execution (metadata) id
     /// <c>runTrain</c> started, the work queue entry a manifest trigger queued or released, or the
-    /// manifest or group <c>updateManifest</c> or <c>updateManifestGroup</c> patched. <c>null</c>
+    /// manifest or group <c>updateManifest</c> or <c>updateManifestGroup</c> patched. <see langword="null"/>
     /// otherwise, and on a failure that touched no row.
     /// </summary>
     public long? Id { get; init; }

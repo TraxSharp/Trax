@@ -89,7 +89,10 @@ public class ExclusionTests
     [Test]
     public void IsExcluded_WhenWithinTimeWindow_ReturnsTrue()
     {
-        var exclusion = Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"));
+        var exclusion = Exclude.TimeWindow(
+            TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture),
+            TimeOnly.Parse("04:00", System.Globalization.CultureInfo.InvariantCulture)
+        );
         var insideWindow = new DateTime(2026, 3, 2, 3, 0, 0, DateTimeKind.Utc);
 
         exclusion.IsExcluded(insideWindow).Should().BeTrue();
@@ -98,7 +101,10 @@ public class ExclusionTests
     [Test]
     public void IsExcluded_WhenOutsideTimeWindow_ReturnsFalse()
     {
-        var exclusion = Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"));
+        var exclusion = Exclude.TimeWindow(
+            TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture),
+            TimeOnly.Parse("04:00", System.Globalization.CultureInfo.InvariantCulture)
+        );
         var outsideWindow = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
         exclusion.IsExcluded(outsideWindow).Should().BeFalse();
@@ -107,7 +113,10 @@ public class ExclusionTests
     [Test]
     public void IsExcluded_WhenTimeWindowCrossesMidnight_InsideBeforeMidnight_ReturnsTrue()
     {
-        var exclusion = Exclude.TimeWindow(TimeOnly.Parse("23:00"), TimeOnly.Parse("02:00"));
+        var exclusion = Exclude.TimeWindow(
+            TimeOnly.Parse("23:00", System.Globalization.CultureInfo.InvariantCulture),
+            TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture)
+        );
         var beforeMidnight = new DateTime(2026, 3, 2, 23, 30, 0, DateTimeKind.Utc);
 
         exclusion.IsExcluded(beforeMidnight).Should().BeTrue();
@@ -116,7 +125,10 @@ public class ExclusionTests
     [Test]
     public void IsExcluded_WhenTimeWindowCrossesMidnight_InsideAfterMidnight_ReturnsTrue()
     {
-        var exclusion = Exclude.TimeWindow(TimeOnly.Parse("23:00"), TimeOnly.Parse("02:00"));
+        var exclusion = Exclude.TimeWindow(
+            TimeOnly.Parse("23:00", System.Globalization.CultureInfo.InvariantCulture),
+            TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture)
+        );
         var afterMidnight = new DateTime(2026, 3, 3, 1, 0, 0, DateTimeKind.Utc);
 
         exclusion.IsExcluded(afterMidnight).Should().BeTrue();
@@ -125,7 +137,10 @@ public class ExclusionTests
     [Test]
     public void IsExcluded_WhenTimeWindowCrossesMidnight_OutsideWindow_ReturnsFalse()
     {
-        var exclusion = Exclude.TimeWindow(TimeOnly.Parse("23:00"), TimeOnly.Parse("02:00"));
+        var exclusion = Exclude.TimeWindow(
+            TimeOnly.Parse("23:00", System.Globalization.CultureInfo.InvariantCulture),
+            TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture)
+        );
         var outsideWindow = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
         exclusion.IsExcluded(outsideWindow).Should().BeFalse();
@@ -142,7 +157,10 @@ public class ExclusionTests
             Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday),
             Exclude.Dates(new DateOnly(2026, 12, 25)),
             Exclude.DateRange(new DateOnly(2026, 12, 23), new DateOnly(2027, 1, 2)),
-            Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00")),
+            Exclude.TimeWindow(
+                TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture),
+                TimeOnly.Parse("04:00", System.Globalization.CultureInfo.InvariantCulture)
+            ),
         };
 
         manifest.SetExclusions(exclusions);
@@ -162,8 +180,12 @@ public class ExclusionTests
         deserialized[2].EndDate.Should().Be(new DateOnly(2027, 1, 2));
 
         deserialized[3].Type.Should().Be(ExclusionType.TimeWindow);
-        deserialized[3].StartTime.Should().Be(TimeOnly.Parse("02:00"));
-        deserialized[3].EndTime.Should().Be(TimeOnly.Parse("04:00"));
+        deserialized[3]
+            .StartTime.Should()
+            .Be(TimeOnly.Parse("02:00", System.Globalization.CultureInfo.InvariantCulture));
+        deserialized[3]
+            .EndTime.Should()
+            .Be(TimeOnly.Parse("04:00", System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Test]

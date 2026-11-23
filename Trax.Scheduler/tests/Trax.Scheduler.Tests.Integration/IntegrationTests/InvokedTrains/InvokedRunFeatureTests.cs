@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.DataContext;
@@ -40,41 +41,46 @@ public class InvokedRunFeatureTests(ClusterStore store)
 
     private readonly InvokedLaneDecider _decider = new();
 
-    private InvokeCluster _cluster = null!;
+    private InvokeCluster? _cluster;
 
     // Registers the machines: their hook and their reconciler. No scheduler.
-    private ClusterHost _api = null!;
+    private ClusterHost? _api;
 
     // Dispatches and runs trains, records decisions and asks the decider; registers no machines, so every
     // outcome comes back through the sweep.
-    private ClusterHost _worker = null!;
+    private ClusterHost? _worker;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
     {
         _cluster = await InvokeCluster.Create(store);
-        _api = _cluster.Host(machines: true, scheduler: false);
-        _worker = _cluster.Host(
-            machines: false,
-            scheduler: true,
-            configure: s => s.AddSingleton<IDecider>(_decider),
-            data: d => d.AddDecisionRecording()
-        );
+        _api = _cluster.NotNull().Host(machines: true, scheduler: false);
+        _worker = _cluster
+            .NotNull()
+            .Host(
+                machines: false,
+                scheduler: true,
+                configure: s => s.AddSingleton<IDecider>(_decider),
+                data: d => d.AddDecisionRecording()
+            );
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _api.DisposeAsync();
-        await _worker.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_api is not null)
+            await _api.DisposeAsync();
+        if (_worker is not null)
+            await _worker.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [SetUp]
     public async Task Reset()
     {
         InvokedStepGate.Reset();
-        await _cluster.Reset();
+        await _cluster.NotNull().Reset();
     }
 
     [TearDown]
@@ -89,9 +95,11 @@ public class InvokedRunFeatureTests(ClusterStore store)
         await Enter(user, id, FeatureTrigger.Decide, StepMachine.Context("ok", note: "lanes"));
 
         // The decider sends the first run down the express lane, which fails.
-        var firstRun = await _worker.DispatchAndRun((await Row(id)).InvokeToken!);
-        (await _worker.Run(firstRun)).TrainState.Should().Be(TrainState.Failed);
-        (await _api.Sweep())
+        var firstRun = await _worker
+            .NotNull()
+            .DispatchAndRun((await Row(id)).InvokeToken.NotNull());
+        (await _worker.NotNull().Run(firstRun)).TrainState.Should().Be(TrainState.Failed);
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -101,11 +109,13 @@ public class InvokedRunFeatureTests(ClusterStore store)
         (await Advance(user, id, FeatureTrigger.Retry))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        var secondRun = await _worker.DispatchAndRun((await Row(id)).InvokeToken!);
-        var second = await _worker.Run(secondRun);
+        var secondRun = await _worker
+            .NotNull()
+            .DispatchAndRun((await Row(id)).InvokeToken.NotNull());
+        var second = await _worker.NotNull().Run(secondRun);
         second.TrainState.Should().Be(TrainState.Completed);
         second.ReplayDecisionsOf.Should().BeNull("an invoked run is never a replay of another");
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -123,7 +133,11 @@ public class InvokedRunFeatureTests(ClusterStore store)
         var again = (await Decisions(secondRun)).Should().ContainSingle().Subject;
         again.Answer.Should().Contain(nameof(InvokedLane.Ground));
         again.Replayed.Should().BeFalse("the decider was asked afresh");
-        Context(await Row(id))["artifact"]!.GetValue<string>().Should().Be("lane:ground:lanes");
+        Context(await Row(id))["artifact"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("lane:ground:lanes");
     }
 
     [Test]
@@ -137,7 +151,7 @@ public class InvokedRunFeatureTests(ClusterStore store)
             FeatureTrigger.Shorten,
             StepMachine.Context(InvokedStepModes.Short, note: "cut")
         );
-        await _worker.DispatchAndRun((await Row(shortId)).InvokeToken!);
+        await _worker.NotNull().DispatchAndRun((await Row(shortId)).InvokeToken.NotNull());
 
         // A short circuit that fails is ignored, and the run ends at its last junction.
         var through = NewUser();
@@ -148,35 +162,40 @@ public class InvokedRunFeatureTests(ClusterStore store)
             FeatureTrigger.Shorten,
             StepMachine.Context(InvokedStepModes.Ok, note: "whole")
         );
-        await _worker.DispatchAndRun((await Row(throughId)).InvokeToken!);
+        await _worker.NotNull().DispatchAndRun((await Row(throughId)).InvokeToken.NotNull());
 
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .HaveCount(2)
             .And.AllSatisfy(d => d.Should().BeEquivalentTo(new { To = "Done" }));
-        Context(await Row(shortId))["artifact"]!
+        Context(await Row(shortId))["artifact"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be(
                 "short:cut",
                 $"the short circuit's value is the run's output, and the output OnDone reduces. See {Adr}"
             );
-        Context(await Row(throughId))["artifact"]!.GetValue<string>().Should().Be("artifact:whole");
+        Context(await Row(throughId))["artifact"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("artifact:whole");
     }
 
     [Test]
     public async Task An_invoked_run_writes_its_junction_events_and_progress_as_any_run_does()
     {
-        var observed = _cluster.Host(
-            machines: false,
-            scheduler: true,
-            data: d => d.AddJunctionEvents()
-        );
-        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Gate));
-        var token = (await _api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
+        var observed = _cluster
+            .NotNull()
+            .Host(machines: false, scheduler: true, data: d => d.AddJunctionEvents());
+        var instance = await _api.NotNull().Start(StepMachine.Context(InvokedStepModes.Gate));
+        var token = (await _api.NotNull().Row(instance.Id, SystemStepMachine.MachineId))
+            .NotNull()
+            .InvokeToken.NotNull();
         var runId = await observed.Dispatch(token);
         var job = observed.RunJob(runId);
-        await InvokedStepGate.Entered.WaitAsync(Bound);
+        await InvokedStepGate.Entered.WaitAsync(Bound, TimeProvider.System);
 
         (await observed.Run(runId))
             .CurrentlyRunningJunction.Should()
@@ -186,15 +205,17 @@ public class InvokedRunFeatureTests(ClusterStore store)
             );
 
         InvokedStepGate.Release();
-        await job.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(Bound);
+        await job.ContinueWith(_ => { }, TaskScheduler.Default)
+            .WaitAsync(Bound, TimeProvider.System);
         // Disposing the host drains the junction-event writer.
         await observed.DisposeAsync();
 
-        var run = await _api.Run(runId);
+        var run = await _api.NotNull().Run(runId);
         run.TrainState.Should().Be(TrainState.Completed);
         run.CurrentlyRunningJunction.Should().BeNull("every junction has ended");
         List<JunctionRun> steps;
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             steps = await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .JunctionRuns.AsNoTracking()
@@ -210,7 +231,7 @@ public class InvokedRunFeatureTests(ClusterStore store)
                 ],
                 "an invoked run's junctions write their events with their node ids"
             );
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -220,17 +241,23 @@ public class InvokedRunFeatureTests(ClusterStore store)
     [Test]
     public async Task An_invoked_run_sent_to_a_remote_worker_runs_there_and_its_outcome_comes_back()
     {
-        await using var remote = _cluster.Host(
-            machines: false,
-            scheduler: false,
-            configure: s => s.AddTraxJobRunner(o => o.AllowUnsignedRequests())
-        );
-        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "remote"));
-        var token = (await _api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
-        var runId = await _worker.Dispatch(token);
+        var remote = _cluster
+            .NotNull()
+            .Host(
+                machines: false,
+                scheduler: false,
+                configure: s => s.AddTraxJobRunner(o => o.AllowUnsignedRequests())
+            );
+        await using var remoteDisposal = remote.ConfigureAwait(false);
+        var instance = await _api.NotNull()
+            .Start(StepMachine.Context(InvokedStepModes.Ok, note: "remote"));
+        var token = (await _api.NotNull().Row(instance.Id, SystemStepMachine.MachineId))
+            .NotNull()
+            .InvokeToken.NotNull();
+        var runId = await _worker.NotNull().Dispatch(token);
 
         // The request the HTTP submitter sends, across the wire.
-        var input = _worker.HeldInput(runId)!;
+        var input = _worker.NotNull().HeldInput(runId).NotNull();
         var sent = new RemoteJobRequest(
             runId,
             JsonSerializer.Serialize(
@@ -240,17 +267,18 @@ public class InvokedRunFeatureTests(ClusterStore store)
             ),
             input.GetType().FullName
         );
-        var received = JsonSerializer.Deserialize<RemoteJobRequest>(
-            JsonSerializer.Serialize(sent)
-        )!;
-        using (var scope = remote.Services.CreateScope())
+        var received = JsonSerializer
+            .Deserialize<RemoteJobRequest>(JsonSerializer.Serialize(sent))
+            .NotNull();
+        var scope = remote.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<ITraxRequestHandler>()
                 .ExecuteJobAsync(received)
-                .WaitAsync(Bound);
+                .WaitAsync(Bound, TimeProvider.System);
 
-        (await _api.Run(runId)).TrainState.Should().Be(TrainState.Completed);
-        (await _api.Sweep())
+        (await _api.NotNull().Run(runId)).TrainState.Should().Be(TrainState.Completed);
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -258,7 +286,10 @@ public class InvokedRunFeatureTests(ClusterStore store)
                 new { To = "Done", Applied = "done" },
                 $"the worker recorded the output its machine reads, in the run's own row. See {Adr}"
             );
-        Context((await _api.Row(instance.Id, SystemStepMachine.MachineId))!)["artifact"]!
+        Context((await _api.NotNull().Row(instance.Id, SystemStepMachine.MachineId)).NotNull())[
+            "artifact"
+        ]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("artifact:remote");
@@ -266,45 +297,55 @@ public class InvokedRunFeatureTests(ClusterStore store)
 
     private async Task Enter(string user, Guid id, FeatureTrigger trigger, JsonObject context)
     {
-        await StepMachine.Seed(
-            _api.Services,
-            user,
-            id,
-            InvokedFeatureMachine.MachineId,
-            "Idle",
-            context
-        );
-        using var scope = _api.Services.CreateScope();
-        (await Drafts(scope).Advance(user, id, trigger.ToString()))
+        await StepMachine
+            .Seed(
+                _api.NotNull().Services,
+                user,
+                id,
+                InvokedFeatureMachine.MachineId,
+                "Idle",
+                context
+            )
+            .ConfigureAwait(false);
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        (await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
     }
 
     private async Task<AdvanceOutcome> Advance(string user, Guid id, FeatureTrigger trigger)
     {
-        using var scope = _api.Services.CreateScope();
-        return await Drafts(scope).Advance(user, id, trigger.ToString());
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        return await Drafts(scope).Advance(user, id, trigger.ToString()).ConfigureAwait(false);
     }
 
     private static ISnapshotDraftService Drafts(IServiceScope scope) =>
         scope
             .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-            .Service(InvokedFeatureMachine.MachineId)!;
+            .Service(InvokedFeatureMachine.MachineId)
+            .NotNull();
 
     private async Task<SnapshotDraft> Row(Guid id) =>
-        (await _api.Row(id, InvokedFeatureMachine.MachineId))!;
+        (
+            await _api.NotNull().Row(id, InvokedFeatureMachine.MachineId).ConfigureAwait(false)
+        ).NotNull();
 
     private async Task<List<Effect.Models.RecordedDecision.RecordedDecision>> Decisions(long runId)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == runId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
-    private static JsonObject Context(SnapshotDraft row) => JsonNode.Parse(row.Context)!.AsObject();
+    private static JsonObject Context(SnapshotDraft row) =>
+        JsonNode.Parse(row.Context).NotNull().AsObject();
 
     private static string NewUser() => "user-" + Guid.NewGuid().ToString("N");
 }

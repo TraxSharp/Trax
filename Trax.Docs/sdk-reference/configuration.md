@@ -41,6 +41,7 @@ each member ships in.
 - [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect): the SQL that differs between providers
 - [IQueuedWorkListener](/docs/sdk-reference/configuration/i-queued-work-listener): the notice that wakes the job dispatcher
 - [LikePattern](/docs/sdk-reference/configuration/like-pattern): escaped, lowered `LIKE` patterns for text search
+- [DatabaseFunctions](/docs/sdk-reference/configuration/database-functions): the database's clock and its `lower()`, for LINQ queries
 
 ## Data providers
 

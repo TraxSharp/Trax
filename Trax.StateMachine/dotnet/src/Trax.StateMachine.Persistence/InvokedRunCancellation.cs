@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
@@ -38,7 +39,7 @@ internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRun
         ArgumentException.ThrowIfNullOrEmpty(invokeToken);
 
         // A token a spawning state holds names a child instead of a run: the child goes, and what it waits on with it.
-        if (await RemoveChildren(context, invokeToken, cancellationToken))
+        if (await RemoveChildren(context, invokeToken, cancellationToken).ConfigureAwait(false))
             return true;
 
         var queued = context.WorkQueues.Where(w =>
@@ -52,27 +53,34 @@ internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRun
 
         if (context is DbContext db && db.Database.IsRelational())
         {
-            var cancelled = await queued.ExecuteUpdateAsync(
-                s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled),
-                cancellationToken
-            );
+            var cancelled = await queued
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
             if (cancelled > 0)
                 return true;
 
-            return await running.ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.CancellationRequested, true),
-                    cancellationToken
-                ) > 0;
+            return await running
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false) > 0;
         }
 
         // A provider without set updates (InMemory) loads the rows and saves them.
-        var entries = await queued.ToListAsync(cancellationToken);
+        var entries = await queued.ToListAsync(cancellationToken).ConfigureAwait(false);
         foreach (var entry in entries)
             entry.Status = WorkQueueStatus.Cancelled;
-        var runs = entries.Count > 0 ? [] : await running.ToListAsync(cancellationToken);
+        var runs =
+            entries.Count > 0
+                ? []
+                : await running.ToListAsync(cancellationToken).ConfigureAwait(false);
         foreach (var run in runs)
             run.CancellationRequested = true;
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
         return entries.Count + runs.Count > 0;
     }
 
@@ -93,13 +101,15 @@ internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRun
 
         var waitingOn = await context
             .SnapshotDrafts.Where(d => d.SpawnedBy == invokeToken && d.InvokeToken != null)
-            .Select(d => d.InvokeToken!)
-            .ToListAsync(cancellationToken);
+            .Select(d => d.InvokeToken.NotNull())
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         foreach (var token in waitingOn)
-            await CancelIn(context, token, cancellationToken);
+            await CancelIn(context, token, cancellationToken).ConfigureAwait(false);
 
         return await context
                 .SnapshotDrafts.Where(d => d.SpawnedBy == invokeToken)
-                .ExecuteDeleteAsync(cancellationToken) > 0;
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false) > 0;
     }
 }

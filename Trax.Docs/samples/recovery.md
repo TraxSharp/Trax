@@ -343,11 +343,11 @@ from the state alone, so the same state always gets the same answer:
         CancellationToken cancellationToken
     )
     {
-        await Task.Delay(Latency(), cancellationToken);
+        await Task.Delay(Latency(), cancellationToken).ConfigureAwait(false);
         return Answer(request);
     }
 // ...
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
         foreach (var question in request.Questions)
             answers[question.Key] = (request.State, question) switch
             {
@@ -416,7 +416,8 @@ Its junction, for a refund:
             new RefundInput { RunId = runId, OrderId = orderId },
             TimeSpan.Zero,
             // Every run of the manifest, each retry included, is the caller's to follow.
-            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId())
+            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId()),
+            CancellationToken
         );
 ```
 
@@ -433,7 +434,7 @@ already carries. `startRun` arms it, and the crashing junction fires it once. In
 ```csharp from=Trax.Samples/samples/Recovery/Trax.Samples.Recovery/Trains/Refund/Junctions/IssuePayment.cs
         if (faults.TryFire(refund.RunId, CrashPoint.RefundTrack))
         {
-            await Task.Delay(pace.StepDelay);
+            await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
             throw new TimeoutException(
                 "The payment provider did not answer in time (timeout injected by the demo)."
             );

@@ -12,7 +12,9 @@ public class FlagContentJunction(ILogger<FlagContentJunction> logger)
     public override async Task<ReviewContentOutput> Run(ReviewContentInput input)
     {
         // Simulate threat scoring — video content scores high, text scores low
-        var threatScore = input.ContentType == "video" ? 0.85 : 0.25;
+        var threatScore = string.Equals(input.ContentType, "video", StringComparison.Ordinal)
+            ? 0.85
+            : 0.25;
         var classification = threatScore > 0.7 ? "violence" : "safe";
         var isFlagged = threatScore > 0.7;
         string? flagReason = isFlagged ? "Threat score exceeds moderation threshold" : null;

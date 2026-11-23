@@ -2,15 +2,10 @@ using System.Data.Common;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.StateMachine.Persistence.Integration.Fixtures;
-
-/// <summary>A draft row's timer columns as the database holds them, read by raw SQL.</summary>
-/// <param name="State">The state column.</param>
-/// <param name="DueAt">The <c>due_at</c> column, in UTC.</param>
-/// <param name="Revision">The <c>revision</c> column.</param>
-public sealed record TimerRow(string State, DateTimeOffset? DueAt, long Revision);
 
 /// <summary>
 /// Raw SQL over a host's own database, on Postgres and SQLite alike, for the columns a test reads that the data
@@ -26,15 +21,16 @@ internal static class RawSql
     public static async Task<TimerRow?> Timer(InstanceHost host, Guid id)
     {
         var rows = await Query(
-            host,
-            $"SELECT state, due_at, revision FROM {Table(host)} WHERE id = @id",
-            ("@id", Id(host, id))
-        );
+                host,
+                $"SELECT state, due_at, revision FROM {Table(host)} WHERE id = @id",
+                ("@id", Id(host, id))
+            )
+            .ConfigureAwait(false);
         return rows.Count switch
         {
             0 => null,
             1 => new TimerRow(
-                (string)rows[0][0]!,
+                (string)rows[0][0].NotNull(),
                 AsInstant(rows[0][1]),
                 Convert.ToInt64(rows[0][2], CultureInfo.InvariantCulture)
             ),
@@ -46,11 +42,12 @@ internal static class RawSql
     public static async Task<DateTimeOffset> Now(InstanceHost host)
     {
         var rows = await Query(
-            host,
-            host.Provider == StoreProvider.Postgres
-                ? "SELECT now()"
-                : "SELECT strftime('%Y-%m-%d %H:%M:%f', 'now')"
-        );
+                host,
+                host.Provider == StoreProvider.Postgres
+                    ? "SELECT now()"
+                    : "SELECT strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            )
+            .ConfigureAwait(false);
         return AsInstant(rows[0][0])
             ?? throw new InvalidOperationException("The database returned no time.");
     }
@@ -77,10 +74,11 @@ internal static class RawSql
     )
     {
         var rows = await Query(
-            host,
-            $"SELECT effect_token, effect_lease_until FROM {Table(host)} WHERE id = @id",
-            ("@id", Id(host, id))
-        );
+                host,
+                $"SELECT effect_token, effect_lease_until FROM {Table(host)} WHERE id = @id",
+                ("@id", Id(host, id))
+            )
+            .ConfigureAwait(false);
         var row = rows.Single();
         return (
             row[0] switch
@@ -132,10 +130,11 @@ internal static class RawSql
     {
         var value = (
             await Query(
-                host,
-                $"SELECT server_record FROM {Table(host)} WHERE id = @id",
-                ("@id", Id(host, id))
-            )
+                    host,
+                    $"SELECT server_record FROM {Table(host)} WHERE id = @id",
+                    ("@id", Id(host, id))
+                )
+                .ConfigureAwait(false)
         ).Single()[0];
         return value is null ? null : Convert.ToBoolean(value, CultureInfo.InvariantCulture);
     }
@@ -161,9 +160,10 @@ internal static class RawSql
     {
         using var scope = host.Scope();
         var db = (DbContext)scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await db.Database.OpenConnectionAsync();
-        await using var command = Command(db.Database.GetDbConnection(), sql, parameters);
-        return await command.ExecuteNonQueryAsync();
+        await db.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var command = Command(db.Database.GetDbConnection(), sql, parameters);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     /// <summary>Runs <paramref name="sql"/> and returns each row's values in column order.</summary>
@@ -175,15 +175,19 @@ internal static class RawSql
     {
         using var scope = host.Scope();
         var db = (DbContext)scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await db.Database.OpenConnectionAsync();
-        await using var command = Command(db.Database.GetDbConnection(), sql, parameters);
-        await using var reader = await command.ExecuteReaderAsync();
+        await db.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var command = Command(db.Database.GetDbConnection(), sql, parameters);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
         var rows = new List<object?[]>();
-        while (await reader.ReadAsync())
+        while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var values = new object?[reader.FieldCount];
             for (var i = 0; i < reader.FieldCount; i++)
-                values[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                values[i] = await reader.IsDBNullAsync(i).ConfigureAwait(false)
+                    ? null
+                    : reader.GetValue(i);
             rows.Add(values);
         }
         return rows;

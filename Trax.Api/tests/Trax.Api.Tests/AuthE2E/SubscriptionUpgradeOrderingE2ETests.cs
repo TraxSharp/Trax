@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -36,7 +38,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     [Test]
     public async Task DashboardShapePipeline_UpgradesTo101()
     {
-        await using var app = await StartHostAsync(dashboardShape: true);
+        var app = await StartHostAsync(dashboardShape: true);
+        await using var appDisposal = app.ConfigureAwait(false);
         var status = await RawHandshakeStatusAsync(app);
         status.Should().Be("HTTP/1.1 101 Switching Protocols");
     }
@@ -44,7 +47,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     [Test]
     public async Task DashboardShapePipeline_ConnectionAck()
     {
-        await using var app = await StartHostAsync(dashboardShape: true);
+        var app = await StartHostAsync(dashboardShape: true);
+        await using var appDisposal = app.ConfigureAwait(false);
         var type = await ConnectionInitTypeAsync(app);
         type.Should().Be("connection_ack");
     }
@@ -52,7 +56,8 @@ public class SubscriptionUpgradeOrderingE2ETests
     [Test]
     public async Task NoExplicitUseWebSockets_StillUpgrades()
     {
-        await using var app = await StartHostAsync(dashboardShape: false);
+        var app = await StartHostAsync(dashboardShape: false);
+        await using var appDisposal = app.ConfigureAwait(false);
         var status = await RawHandshakeStatusAsync(app);
         status.Should().Be("HTTP/1.1 101 Switching Protocols");
     }
@@ -88,14 +93,15 @@ public class SubscriptionUpgradeOrderingE2ETests
             app.UseEndpoints(_ => { });
         app.UseTraxGraphQL();
 
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
     private static Uri BaseUri(WebApplication app) =>
         new(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.First()
         );
 
@@ -103,49 +109,64 @@ public class SubscriptionUpgradeOrderingE2ETests
     {
         var uri = BaseUri(app);
         using var tcp = new TcpClient();
-        await tcp.ConnectAsync(uri.Host, uri.Port);
-        using var stream = tcp.GetStream();
+        await tcp.ConnectAsync(uri.Host, uri.Port, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        var stream = tcp.GetStream();
+        await using var streamDisposal = stream.ConfigureAwait(false);
         var handshake =
             "GET /trax/graphql HTTP/1.1\r\n"
-            + $"Host: {uri.Host}:{uri.Port}\r\n"
+            + string.Create(CultureInfo.InvariantCulture, $"Host: {uri.Host}:{uri.Port}\r\n")
             + "Upgrade: websocket\r\n"
             + "Connection: Upgrade\r\n"
             + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
             + "Sec-WebSocket-Version: 13\r\n"
             + "Sec-WebSocket-Protocol: graphql-transport-ws\r\n\r\n";
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(handshake));
+        await stream
+            .WriteAsync(
+                Encoding.ASCII.GetBytes(handshake),
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
         var buffer = new byte[1024];
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var read = await stream.ReadAsync(buffer, cts.Token);
+        var read = await stream.ReadAsync(buffer, cts.Token).ConfigureAwait(false);
         return Encoding.ASCII.GetString(buffer, 0, read).Split("\r\n")[0];
     }
 
     private static async Task<string?> ConnectionInitTypeAsync(WebApplication app)
     {
         var baseUri = BaseUri(app);
-        var wsUri = new Uri($"ws://{baseUri.Host}:{baseUri.Port}/trax/graphql");
+        var wsUri = new Uri(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"ws://{baseUri.Host}:{baseUri.Port}/trax/graphql"
+            )
+        );
         using var client = new ClientWebSocket();
         client.Options.AddSubProtocol("graphql-transport-ws");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await client.ConnectAsync(wsUri, cts.Token);
+        await client.ConnectAsync(wsUri, cts.Token).ConfigureAwait(false);
 
         var init = JsonSerializer.Serialize(new { type = "connection_init", payload = new { } });
-        await client.SendAsync(
-            Encoding.UTF8.GetBytes(init),
-            WebSocketMessageType.Text,
-            true,
-            cts.Token
-        );
+        await client
+            .SendAsync(
+                Encoding.UTF8.GetBytes(init),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cts.Token
+            )
+            .ConfigureAwait(false);
 
         var buffer = new byte[4096];
         using var ms = new MemoryStream();
         while (true)
         {
-            var r = await client.ReceiveAsync(buffer, cts.Token);
+            var r = await client.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (r.MessageType == WebSocketMessageType.Close)
                 return "(closed)";
             if (r.Count > 0)
-                ms.Write(buffer, 0, r.Count);
+                await ms.WriteAsync(buffer, 0, r.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             if (r.EndOfMessage && ms.Length > 0)
                 break;
         }

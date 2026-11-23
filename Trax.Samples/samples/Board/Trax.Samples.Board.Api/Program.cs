@@ -121,7 +121,7 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 // requests, in Development only.
 var requirePersisted =
     !builder.Environment.IsDevelopment()
-    || builder.Configuration.GetValue("Board:RequirePersistedOperations", true);
+    || builder.Configuration.GetValue("Board:RequirePersistedOperations", defaultValue: true);
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .ExposeOperationQueries()
@@ -164,9 +164,16 @@ if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 // Serves, or writes the client manifest and exits when started with --trax-export-client <path>.
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.Board.Api
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

@@ -13,6 +13,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -101,12 +102,13 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
         await using var provider = services.BuildServiceProvider();
 
-        var validatorType = typeof(GraphQLConfiguration).Assembly.GetType(
-            "Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator"
-        )!;
+        var validatorType = typeof(GraphQLConfiguration)
+            .Assembly.GetType("Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator")
+            .NotNull();
         var validator = (IHostedService)ActivatorUtilities.CreateInstance(provider, validatorType);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
         recorder.Messages.Should().BeEmpty();
@@ -170,11 +172,17 @@ public class QueryModelScalarCollectionIndexValidatorTests
         await using var provider = services.BuildServiceProvider();
         var validator = provider
             .GetServices<IHostedService>()
-            .Single(h => h.GetType().Name == "QueryModelScalarCollectionIndexValidator");
+            .Single(h =>
+                string.Equals(
+                    h.GetType().Name,
+                    "QueryModelScalarCollectionIndexValidator",
+                    StringComparison.Ordinal
+                )
+            );
         await validator.StartAsync(CancellationToken.None);
 
         recorder
-            .Messages.Any(w => w.Contains("Loose"))
+            .Messages.Exists(w => w.Contains("Loose", StringComparison.Ordinal))
             .Should()
             .Be(
                 reported,
@@ -217,12 +225,14 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
         services.AddHostedService<QueryModelScalarCollectionIndexValidatorAccessor<TContext>>();
 
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            foreach (var hosted in provider.GetServices<IHostedService>())
+                await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
-        foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(CancellationToken.None);
-
-        return recorder.Messages;
+            return recorder.Messages;
+        }
     }
 
     /// <summary>
@@ -237,9 +247,11 @@ public class QueryModelScalarCollectionIndexValidatorTests
     {
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            var validatorType = typeof(GraphQLConfiguration).Assembly.GetType(
-                "Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator"
-            )!;
+            var validatorType = typeof(GraphQLConfiguration)
+                .Assembly.GetType(
+                    "Trax.Api.GraphQL.Startup.QueryModelScalarCollectionIndexValidator"
+                )
+                .NotNull();
 
             var validator = (IHostedService)
                 ActivatorUtilities.CreateInstance(serviceProvider, validatorType);
@@ -291,67 +303,3 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
     #endregion
 }
-
-#region Probe entities and contexts
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "indexedRows")]
-public class IndexedRow
-{
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-    public string[] Tight { get; set; } = [];
-    public string[] Btree { get; set; } = [];
-    public List<ChapterRow> Chapters { get; set; } = [];
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "unindexedRows")]
-public class UnindexedRow
-{
-    public int Id { get; set; }
-    public string[] Loose { get; set; } = [];
-}
-
-public class UnindexedRowFilterInputType : FilterInputType<UnindexedRow>
-{
-    protected override void Configure(IFilterInputTypeDescriptor<UnindexedRow> descriptor)
-    {
-        descriptor.Ignore(x => x.Loose);
-    }
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "chapterRows")]
-public class ChapterRow
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}
-
-public class IndexProbeDbContext : DbContext
-{
-    public DbSet<IndexedRow> Indexed => Set<IndexedRow>();
-    public DbSet<UnindexedRow> Unindexed => Set<UnindexedRow>();
-    public DbSet<ChapterRow> Chapters => Set<ChapterRow>();
-
-    protected override void OnConfiguring(DbContextOptionsBuilder options) =>
-        options.UseNpgsql("Host=localhost;Database=probe;Username=probe;Password=probe");
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<IndexedRow>().HasIndex(r => r.Tight).HasMethod("gin");
-        // Indexed, but not with a method that can serve array containment.
-        modelBuilder.Entity<IndexedRow>().HasIndex(r => r.Btree);
-    }
-}
-
-public class InMemoryProbeDbContext : DbContext
-{
-    public DbSet<UnindexedRow> Unindexed => Set<UnindexedRow>();
-
-    protected override void OnConfiguring(DbContextOptionsBuilder options) =>
-        options.UseInMemoryDatabase("IndexProbe_" + Guid.NewGuid());
-}
-
-#endregion

@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -22,8 +23,8 @@ namespace Trax.Cli.Tests.UnitTests;
 public class MachineGeneratorTests
 {
     private const string Adr = "see cli/0005 (docs/adr/0005-a-machine-id-is-kebab-case.md)";
-    private string _root = null!;
-    private string _tools = null!;
+    private string _root = "";
+    private string _tools = "";
     private static readonly IMachine Turnstile = new DeclarativeTurnstileMachine();
 
     [SetUp]
@@ -74,7 +75,7 @@ public class MachineGeneratorTests
     [TestCase("")]
     [TestCase("Checkout")]
     [TestCase("ship_to_store")]
-    public void An_id_that_is_not_kebab_case_is_refused_and_nothing_is_written(string id)
+    public async Task An_id_that_is_not_kebab_case_is_refused_and_nothing_is_written(string id)
     {
         var node = new FakeNodeRunner();
         var irOut = Dir("ir");
@@ -84,11 +85,12 @@ public class MachineGeneratorTests
             Machine = MachineIr.Of(new MachineWithId(id)),
         };
 
-        var act = () => new MachineGenerator(node).Generate(options);
+        var act = async () =>
+            await new MachineGenerator(node).GenerateAsync(options).ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*kebab-case*", "the id becomes the artifacts' file names; " + Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*kebab-case*", "the id becomes the artifacts' file names; " + Adr);
         node.Calls.Should().BeEmpty();
         Directory
             .EnumerateFileSystemEntries(_root, "*", SearchOption.AllDirectories)
@@ -115,23 +117,28 @@ public class MachineGeneratorTests
     }
 
     [Test]
-    public void Generate_ir_only_writes_the_canonical_ir_and_never_touches_node()
+    public async Task Generate_ir_only_writes_the_canonical_ir_and_never_touches_node()
     {
         var node = new FakeNodeRunner();
         var irOut = Dir("ir");
 
-        var result = new MachineGenerator(node).Generate(Options(irOut: irOut));
+        var result = await new MachineGenerator(node)
+            .GenerateAsync(Options(irOut: irOut))
+            .ConfigureAwait(false);
 
         node.Calls.Should().BeEmpty("IR export is in-process; no node step is needed");
         var irFile = Path.Combine(irOut, "turnstile.ir.json");
         File.Exists(irFile).Should().BeTrue();
-        // Canonical single-line IR plus a trailing newline, exactly what the exporter produces.
-        File.ReadAllText(irFile).Should().Be(Turnstile.ExportIr() + "\n");
+        (
+            await
+            // Canonical single-line IR plus a trailing newline, exactly what the exporter produces.
+            File.ReadAllTextAsync(irFile).ConfigureAwait(false)
+        ).Should().Be(Turnstile.ExportIr() + "\n");
         result.Written.Should().ContainSingle().Which.Kind.Should().Be("ir");
     }
 
     [Test]
-    public void Generate_places_twin_and_corpus_and_passes_the_import_style_through()
+    public async Task Generate_places_twin_and_corpus_and_passes_the_import_style_through()
     {
         var node = new FakeNodeRunner
         {
@@ -142,80 +149,110 @@ public class MachineGeneratorTests
         var twinOut = Dir("twin");
         var corpusOut = Dir("corpus");
 
-        var result = new MachineGenerator(node).Generate(
-            Options(twinOut: twinOut, corpusOut: corpusOut, importStyle: "specifier")
-        );
-
-        File.ReadAllText(Path.Combine(twinOut, "turnstile.contexts.g.ts")).Should().Be("// ctx\n");
-        File.ReadAllText(Path.Combine(twinOut, "turnstile.machine.g.ts")).Should().Be("// mac\n");
-        File.ReadAllText(Path.Combine(corpusOut, "differential.json")).Should().Be("[]\n");
+        var result = await new MachineGenerator(node)
+            .GenerateAsync(
+                Options(twinOut: twinOut, corpusOut: corpusOut, importStyle: "specifier")
+            )
+            .ConfigureAwait(false);
+        (
+            await File.ReadAllTextAsync(Path.Combine(twinOut, "turnstile.contexts.g.ts"))
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be("// ctx\n");
+        (
+            await File.ReadAllTextAsync(Path.Combine(twinOut, "turnstile.machine.g.ts"))
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be("// mac\n");
+        (
+            await File.ReadAllTextAsync(Path.Combine(corpusOut, "differential.json"))
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be("[]\n");
         result
             .Written.Select(w => w.Kind)
             .Should()
             .BeEquivalentTo(["contexts", "machine", "corpus"]);
 
         // The twin call forwarded --import-style specifier to the entrypoint.
-        var twinCall = node.Calls.Single(c => c.Script.Contains("twin"));
+        var twinCall = node.Calls.Single(c => c.Script.Contains("twin", StringComparison.Ordinal));
         twinCall.Args.Should().ContainInOrder("--import-style", "specifier");
     }
 
     [Test]
-    public void Generate_with_lang_csharp_places_one_view_named_after_the_machine()
+    public async Task Generate_with_lang_csharp_places_one_view_named_after_the_machine()
     {
         var node = new FakeNodeRunner { ViewContent = "// view\n" };
         var twinOut = Dir("twin");
 
-        var result = new MachineGenerator(node).Generate(
-            Options(twinOut: twinOut) with
-            {
-                ImportStyle = null,
-                Lang = "csharp",
-                Namespace = "Shop.Machines",
-            }
-        );
-
-        File.ReadAllText(Path.Combine(twinOut, "Turnstile.g.cs")).Should().Be("// view\n");
+        var result = await new MachineGenerator(node)
+            .GenerateAsync(
+                Options(twinOut: twinOut) with
+                {
+                    ImportStyle = null,
+                    Lang = "csharp",
+                    Namespace = "Shop.Machines",
+                }
+            )
+            .ConfigureAwait(false);
+        (await File.ReadAllTextAsync(Path.Combine(twinOut, "Turnstile.g.cs")).ConfigureAwait(false))
+            .Should()
+            .Be("// view\n");
         Directory.EnumerateFiles(twinOut).Should().ContainSingle();
         result.Written.Select(w => w.Kind).Should().BeEquivalentTo(["view"]);
-        var twinCall = node.Calls.Single(c => c.Script.Contains("twin"));
+        var twinCall = node.Calls.Single(c => c.Script.Contains("twin", StringComparison.Ordinal));
         twinCall.Args.Should().ContainInOrder("--lang", "csharp", "--namespace", "Shop.Machines");
         twinCall.Args.Should().NotContain("--import-style");
     }
 
     [Test]
-    public void Generate_from_a_manifest_writes_the_view_and_the_ir_the_manifest_hashes()
+    public async Task Generate_from_a_manifest_writes_the_view_and_the_ir_the_manifest_hashes()
     {
         var manifest = ClientManifests.Sample();
         var path = Path.Combine(_root, "trax-client-manifest.json");
-        File.WriteAllText(path, ClientManifest.Write(manifest));
+        await File.WriteAllTextAsync(path, ClientManifest.Write(manifest));
         var node = new FakeNodeRunner();
         var irOut = Dir("ir");
         var twinOut = Dir("twin");
 
-        new MachineGenerator(node).Generate(
-            new MachineGenerateOptions(
-                MachineCommand.Source(null, path, "checkout"),
-                IrOut: irOut,
-                TwinOut: twinOut,
-                ToolsDir: _tools,
-                EngineSrc: Dir("src"),
-                Lang: "csharp"
+        await new MachineGenerator(node)
+            .GenerateAsync(
+                new MachineGenerateOptions(
+                    await MachineCommand
+                        .SourceAsync(assemblyPath: null, path, "checkout")
+                        .ConfigureAwait(false),
+                    IrOut: irOut,
+                    TwinOut: twinOut,
+                    ToolsDir: _tools,
+                    EngineSrc: Dir("src"),
+                    Lang: "csharp"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         File.Exists(Path.Combine(twinOut, "Checkout.g.cs")).Should().BeTrue();
-        var ir = File.ReadAllText(Path.Combine(irOut, "checkout.ir.json")).TrimEnd('\n');
+        var ir = (
+            await File.ReadAllTextAsync(Path.Combine(irOut, "checkout.ir.json"))
+                .ConfigureAwait(false)
+        ).TrimEnd('\n');
         Convert
             .ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ir)))
             .Should()
-            .Be(manifest.Machines.Single(m => m.Id == "checkout").IrHash);
+            .Be(
+                manifest
+                    .Machines.Single(m => string.Equals(m.Id, "checkout", StringComparison.Ordinal))
+                    .IrHash
+            );
     }
 
     [TestCase(true, true, null, "*pass one of them*")]
     [TestCase(false, false, null, "*Pass --assembly*or --manifest*")]
     [TestCase(false, true, null, "*2 machines; pick one with --machine: checkout, reminder*")]
     [TestCase(false, true, "turnstile", "*has no machine 'turnstile'. It has: checkout, reminder*")]
-    public void A_manifest_source_is_refused_when_it_names_no_one_machine(
+    public async Task A_manifest_source_is_refused_when_it_names_no_one_machine(
         bool assembly,
         bool manifest,
         string? machine,
@@ -223,20 +260,24 @@ public class MachineGeneratorTests
     )
     {
         var path = Path.Combine(_root, "trax-client-manifest.json");
-        File.WriteAllText(path, ClientManifest.Write(ClientManifests.Sample()));
+        await File.WriteAllTextAsync(path, ClientManifest.Write(ClientManifests.Sample()));
 
-        var act = () =>
-            MachineCommand.Source(
-                assembly ? typeof(DeclarativeTurnstileMachine).Assembly.Location : null,
-                manifest ? path : null,
-                machine
-            );
+        var act = async () =>
+            await MachineCommand
+                .SourceAsync(
+                    assembly ? typeof(DeclarativeTurnstileMachine).Assembly.Location : null,
+                    manifest ? path : null,
+                    machine
+                )
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
     }
 
     [Test]
-    public void A_manifest_machine_whose_ir_does_not_hash_to_its_ir_hash_is_refused()
+    public async Task A_manifest_machine_whose_ir_does_not_hash_to_its_ir_hash_is_refused()
     {
         var sample = ClientManifests.Sample(new DeclarativeCheckoutMachine());
         var tampered = sample with
@@ -244,64 +285,73 @@ public class MachineGeneratorTests
             Machines = [sample.Machines[0] with { IrHash = new string('0', 64) }],
         };
         var path = Path.Combine(_root, "trax-client-manifest.json");
-        File.WriteAllText(path, ClientManifest.Write(tampered));
+        await File.WriteAllTextAsync(path, ClientManifest.Write(tampered));
 
-        var act = () => MachineCommand.Source(null, path, null);
+        var act = async () =>
+            await MachineCommand
+                .SourceAsync(assemblyPath: null, path, machineName: null)
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*hashes to*documents were registered*");
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*hashes to*documents were registered*");
     }
 
     [TestCase("checkout")]
     [TestCase(null)]
-    public void A_manifest_that_lists_a_machine_twice_is_refused(string? machine)
+    public async Task A_manifest_that_lists_a_machine_twice_is_refused(string? machine)
     {
         var sample = ClientManifests.Sample();
-        var checkout = sample.Machines.Single(m => m.Id == "checkout");
+        var checkout = sample.Machines.Single(m =>
+            string.Equals(m.Id, "checkout", StringComparison.Ordinal)
+        );
         var twice = sample with { Machines = [checkout, checkout] };
         var path = Path.Combine(_root, "trax-client-manifest.json");
-        File.WriteAllText(path, ClientManifest.Write(twice));
+        await File.WriteAllTextAsync(path, ClientManifest.Write(twice));
 
-        var act = () => MachineCommand.Source(null, path, machine);
+        var act = async () =>
+            await MachineCommand
+                .SourceAsync(assemblyPath: null, path, machine)
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*malformed at $.machines: 'checkout' is listed more than once*");
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*malformed at $.machines: 'checkout' is listed more than once*");
     }
 
     [Test]
-    public void Generate_places_the_view_of_every_language_lang_takes()
+    public async Task Generate_places_the_view_of_every_language_lang_takes()
     {
-        foreach (var lang in TwinLanguages.All.Select(l => l.Lang))
+        foreach (
+            var lang in (await TwinLanguages.AllAsync().ConfigureAwait(false)).Select(l => l.Lang)
+        )
         {
             var node = new FakeNodeRunner();
             var twinOut = Dir($"twin-{lang}");
 
-            var result = new MachineGenerator(node).Generate(
-                Options(twinOut: twinOut) with
-                {
-                    ImportStyle = null,
-                    Lang = lang,
-                }
-            );
+            var result = await new MachineGenerator(node)
+                .GenerateAsync(Options(twinOut: twinOut) with { ImportStyle = null, Lang = lang })
+                .ConfigureAwait(false);
 
             result.Written.Should().NotBeEmpty(lang);
         }
     }
 
     [Test]
-    public void Generate_refuses_a_language_lang_does_not_take_naming_the_ones_it_does()
+    public async Task Generate_refuses_a_language_lang_does_not_take_naming_the_ones_it_does()
     {
         var options = Options(twinOut: Dir("twin")) with { Lang = "rust" };
 
-        var act = () => new MachineGenerator(new FakeNodeRunner()).Generate(options);
+        var act = async () =>
+            await new MachineGenerator(new FakeNodeRunner())
+                .GenerateAsync(options)
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage(
-                $"--lang must be {TwinLanguages.OneOf([.. TwinLanguages.All.Select(l => l.Lang)])}, got 'rust'."
-            );
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(
+            $"--lang must be {TwinLanguages.OneOf([.. (await TwinLanguages.AllAsync().ConfigureAwait(false)).Select(l => l.Lang)])}, got 'rust'."
+        );
     }
 
     [TestCase("rust", null, null, "*--lang must be*")]
@@ -314,7 +364,7 @@ public class MachineGeneratorTests
         "Shop.Machines-1",
         "*--namespace 'Shop.Machines-1' is not a C# namespace*"
     )]
-    public void Generate_refuses_options_that_do_not_fit_the_language(
+    public async Task Generate_refuses_options_that_do_not_fit_the_language(
         string? lang,
         string? importStyle,
         string? @namespace,
@@ -329,35 +379,44 @@ public class MachineGeneratorTests
             Namespace = @namespace,
         };
 
-        var act = () => new MachineGenerator(node).Generate(options);
+        var act = async () =>
+            await new MachineGenerator(node).GenerateAsync(options).ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
         node.Calls.Should().BeEmpty();
     }
 
     [Test]
-    public void Generate_forwards_a_custom_specifier()
+    public async Task Generate_forwards_a_custom_specifier()
     {
         var node = new FakeNodeRunner();
-        var result = new MachineGenerator(node).Generate(
-            Options(twinOut: Dir("twin"), importStyle: "specifier", specifier: "@acme/x")
-        );
+        var result = await new MachineGenerator(node)
+            .GenerateAsync(
+                Options(twinOut: Dir("twin"), importStyle: "specifier", specifier: "@acme/x")
+            )
+            .ConfigureAwait(false);
 
         result.Written.Should().NotBeEmpty();
         node.Calls.Single().Args.Should().ContainInOrder("--specifier", "@acme/x");
     }
 
     [Test]
-    public void Generate_is_atomic_a_failed_node_step_leaves_no_output_including_the_ir()
+    public async Task Generate_is_atomic_a_failed_node_step_leaves_no_output_including_the_ir()
     {
         var node = new FakeNodeRunner { ExitCode = 1, StdErr = "boom" };
         var irOut = Dir("ir");
         var twinOut = Dir("twin");
 
-        var generate = () =>
-            new MachineGenerator(node).Generate(Options(irOut: irOut, twinOut: twinOut));
+        var generate = async () =>
+            await new MachineGenerator(node)
+                .GenerateAsync(Options(irOut: irOut, twinOut: twinOut))
+                .ConfigureAwait(false);
 
-        generate.Should().Throw<InvalidOperationException>().WithMessage("*boom*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*boom*");
         // The IR is produced before the twin, but placement happens only after ALL steps succeed, so a twin
         // failure must leave every output root untouched.
         Directory.GetFiles(irOut).Should().BeEmpty();
@@ -365,15 +424,20 @@ public class MachineGeneratorTests
     }
 
     [Test]
-    public void Generate_with_no_output_root_throws()
+    public async Task Generate_with_no_output_root_throws()
     {
-        var generate = () => new MachineGenerator(new FakeNodeRunner()).Generate(Options());
+        var generate = async () =>
+            await new MachineGenerator(new FakeNodeRunner())
+                .GenerateAsync(Options())
+                .ConfigureAwait(false);
 
-        generate.Should().Throw<InvalidOperationException>().WithMessage("*at least one*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*at least one*");
     }
 
     [Test]
-    public void Generate_without_engine_src_runs_the_bundled_generators_and_passes_them_no_engine_src()
+    public async Task Generate_without_engine_src_runs_the_bundled_generators_and_passes_them_no_engine_src()
     {
         var node = new FakeNodeRunner();
         var options = new MachineGenerateOptions(
@@ -383,7 +447,9 @@ public class MachineGeneratorTests
             EngineSrc: null
         );
 
-        new MachineGenerator(node, new PlacementFiles(), _tools).Generate(options);
+        await new MachineGenerator(node, new PlacementFiles(), _tools)
+            .GenerateAsync(options)
+            .ConfigureAwait(false);
 
         node.Calls.Select(c => c.Script)
             .Should()
@@ -397,7 +463,7 @@ public class MachineGeneratorTests
     }
 
     [Test]
-    public void Generate_twin_without_engine_src_or_a_bundled_engine_says_to_pass_engine_src()
+    public async Task Generate_twin_without_engine_src_or_a_bundled_engine_says_to_pass_engine_src()
     {
         var options = new MachineGenerateOptions(
             MachineIr.Of(Turnstile),
@@ -405,49 +471,62 @@ public class MachineGeneratorTests
             EngineSrc: null
         );
 
-        var generate = () =>
-            new MachineGenerator(
+        var generate = async () =>
+            await new MachineGenerator(
                 new FakeNodeRunner(),
                 new PlacementFiles(),
                 Dir("not-bundled")
-            ).Generate(options);
+            )
+                .GenerateAsync(options)
+                .ConfigureAwait(false);
 
-        generate
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*none bundled*Pass --engine-src*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*none bundled*Pass --engine-src*");
     }
 
     [Test]
-    public void Generate_twin_without_node_available_throws()
+    public async Task Generate_twin_without_node_available_throws()
     {
         var node = new FakeNodeRunner { Available = false };
 
-        var generate = () => new MachineGenerator(node).Generate(Options(twinOut: Dir("twin")));
+        var generate = async () =>
+            await new MachineGenerator(node)
+                .GenerateAsync(Options(twinOut: Dir("twin")))
+                .ConfigureAwait(false);
 
-        generate
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*node was not found on PATH*--node*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*node was not found on PATH*--node*");
     }
 
     [Test]
-    public void Generate_twin_with_a_missing_entrypoint_throws()
+    public async Task Generate_twin_with_a_missing_entrypoint_throws()
     {
         var options = Options(twinOut: Dir("twin")) with { ToolsDir = Dir("empty-tools") };
 
-        var generate = () => new MachineGenerator(new FakeNodeRunner()).Generate(options);
+        var generate = async () =>
+            await new MachineGenerator(new FakeNodeRunner())
+                .GenerateAsync(options)
+                .ConfigureAwait(false);
 
-        generate.Should().Throw<InvalidOperationException>().WithMessage("*entrypoint not found*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*entrypoint not found*");
     }
 
     [Test]
-    public void Check_reports_up_to_date_when_the_committed_ir_matches()
+    public async Task Check_reports_up_to_date_when_the_committed_ir_matches()
     {
         var irOut = Dir("ir");
-        File.WriteAllText(Path.Combine(irOut, "turnstile.ir.json"), Turnstile.ExportIr() + "\n");
+        await File.WriteAllTextAsync(
+            Path.Combine(irOut, "turnstile.ir.json"),
+            Turnstile.ExportIr() + "\n"
+        );
 
-        var result = new MachineGenerator(new FakeNodeRunner()).Check(Options(irOut: irOut));
+        var result = await new MachineGenerator(new FakeNodeRunner())
+            .CheckAsync(Options(irOut: irOut))
+            .ConfigureAwait(false);
 
         result.IsClean.Should().BeTrue();
         result.Checks.Should().ContainSingle().Which.Status.Should().Be(DriftStatus.UpToDate);
@@ -455,57 +534,71 @@ public class MachineGeneratorTests
 
     // A checkout with core.autocrlf holds the committed artifacts with CRLF; the generators write LF.
     [Test]
-    public void Check_reports_up_to_date_when_the_committed_artifacts_differ_only_in_line_endings()
+    public async Task Check_reports_up_to_date_when_the_committed_artifacts_differ_only_in_line_endings()
     {
         var irOut = Dir("ir");
         var twinOut = Dir("twin");
-        File.WriteAllText(Path.Combine(irOut, "turnstile.ir.json"), Turnstile.ExportIr() + "\r\n");
+        await File.WriteAllTextAsync(
+            Path.Combine(irOut, "turnstile.ir.json"),
+            Turnstile.ExportIr() + "\r\n"
+        );
         var node = new FakeNodeRunner
         {
             ContextsContent = "// generated\ncontexts\n",
             MachineContent = "// generated\nmachine\n",
         };
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(twinOut, "turnstile.contexts.g.ts"),
             "// generated\r\ncontexts\r\n"
         );
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(twinOut, "turnstile.machine.g.ts"),
             "// generated\r\nmachine\r\n"
         );
 
-        var result = new MachineGenerator(node).Check(Options(irOut: irOut, twinOut: twinOut));
+        var result = await new MachineGenerator(node)
+            .CheckAsync(Options(irOut: irOut, twinOut: twinOut))
+            .ConfigureAwait(false);
 
         result.Checks.Select(c => c.Status).Should().AllBeEquivalentTo(DriftStatus.UpToDate);
     }
 
     [Test]
-    public void Check_reports_drift_when_the_committed_ir_differs()
+    public async Task Check_reports_drift_when_the_committed_ir_differs()
     {
         var irOut = Dir("ir");
-        File.WriteAllText(Path.Combine(irOut, "turnstile.ir.json"), "{ \"stale\": true }\n");
+        await File.WriteAllTextAsync(
+            Path.Combine(irOut, "turnstile.ir.json"),
+            "{ \"stale\": true }\n"
+        );
 
-        var result = new MachineGenerator(new FakeNodeRunner()).Check(Options(irOut: irOut));
+        var result = await new MachineGenerator(new FakeNodeRunner())
+            .CheckAsync(Options(irOut: irOut))
+            .ConfigureAwait(false);
 
         result.IsClean.Should().BeFalse();
         result.Checks.Single().Status.Should().Be(DriftStatus.Drifted);
     }
 
     [Test]
-    public void Check_reports_missing_when_no_committed_artifact_exists()
+    public async Task Check_reports_missing_when_no_committed_artifact_exists()
     {
-        var result = new MachineGenerator(new FakeNodeRunner()).Check(Options(irOut: Dir("ir")));
+        var result = await new MachineGenerator(new FakeNodeRunner())
+            .CheckAsync(Options(irOut: Dir("ir")))
+            .ConfigureAwait(false);
 
         result.IsClean.Should().BeFalse();
         result.Checks.Single().Status.Should().Be(DriftStatus.Missing);
     }
 
     [Test]
-    public void Check_never_writes_to_the_output_root()
+    public async Task Check_never_writes_to_the_output_root()
     {
         var irOut = Dir("ir");
 
-        new MachineGenerator(new FakeNodeRunner()).Check(Options(irOut: irOut));
+        await new MachineGenerator(new FakeNodeRunner())
+            .CheckAsync(Options(irOut: irOut))
+            .ConfigureAwait(false);
 
         Directory
             .GetFiles(irOut)
@@ -532,7 +625,7 @@ public class MachineGeneratorTests
     [Test]
     public void DefaultToolsDir_of_a_filesystem_root_is_refused()
     {
-        var root = Path.GetPathRoot(Path.GetFullPath("."))!;
+        var root = Path.GetPathRoot(Path.GetFullPath(".")).NotNull();
 
         var lookup = () => MachineGenerator.DefaultToolsDir(root);
 
@@ -551,7 +644,7 @@ public class MachineGeneratorTests
     [TestCase(true, true, "custom-tools")]
     [TestCase(false, true, "engine/tools")]
     [TestCase(false, false, "bundled")]
-    public void The_generators_run_from_the_first_place_that_names_them(
+    public async Task The_generators_run_from_the_first_place_that_names_them(
         bool toolsDir,
         bool engineSrc,
         string expected
@@ -561,16 +654,18 @@ public class MachineGeneratorTests
         var bundled = Dir("bundled");
         var custom = Dir("custom-tools");
         foreach (var dir in new[] { bundled, custom })
-            File.WriteAllText(Path.Combine(dir, "generate-twin.mjs"), "// placeholder");
+            await File.WriteAllTextAsync(Path.Combine(dir, "generate-twin.mjs"), "// placeholder");
 
-        new MachineGenerator(node, new PlacementFiles(), bundled).Generate(
-            new MachineGenerateOptions(
-                MachineIr.Of(Turnstile),
-                TwinOut: Dir("twin"),
-                EngineSrc: engineSrc ? Path.Combine(_root, "engine", "src") : null,
-                ToolsDir: toolsDir ? custom : null
+        await new MachineGenerator(node, new PlacementFiles(), bundled)
+            .GenerateAsync(
+                new MachineGenerateOptions(
+                    MachineIr.Of(Turnstile),
+                    TwinOut: Dir("twin"),
+                    EngineSrc: engineSrc ? Path.Combine(_root, "engine", "src") : null,
+                    ToolsDir: toolsDir ? custom : null
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         node.Calls.Single()
             .Script.Should()

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -55,7 +56,10 @@ public class LocalWorkerServiceTests : TestSetup
     {
         // Arrange - Create a metadata record and a background job
         var metadata = await CreateMetadataForTestTrain();
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -99,24 +103,7 @@ public class LocalWorkerServiceTests : TestSetup
         var manifest = await CreateAndSaveManifest(group);
         var metadata = await CreateMetadataForManifest(manifest);
 
-        var input = new SchedulerTestInput { Value = "worker-test" };
-        var inputJson = JsonSerializer.Serialize(
-            input,
-            input.GetType(),
-            TraxJsonSerializationOptions.ManifestProperties
-        );
-
-        var job = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = metadata.Id,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(job);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        await QueueWorkerTestJob(metadata.Id);
 
         // Act - Start worker
         var options = new LocalWorkerOptions
@@ -137,10 +124,9 @@ public class LocalWorkerServiceTests : TestSetup
         var advanced = await WaitUntilAsync(
             async ct =>
             {
-                var m = await DataContext.Metadatas.FirstOrDefaultAsync(
-                    x => x.Id == metadata.Id,
-                    ct
-                );
+                var m = await DataContext
+                    .Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id, ct)
+                    .ConfigureAwait(false);
                 return m is not null && m.TrainState != TrainState.Pending;
             },
             WorkerCompletionTimeout
@@ -156,7 +142,7 @@ public class LocalWorkerServiceTests : TestSetup
 
         updatedMetadata.Should().NotBeNull();
         // The JobRunnerTrain should have run the train
-        updatedMetadata!.TrainState.Should().NotBe(TrainState.Pending);
+        updatedMetadata.NotNull().TrainState.Should().NotBe(TrainState.Pending);
     }
 
     #endregion
@@ -168,7 +154,10 @@ public class LocalWorkerServiceTests : TestSetup
     {
         // Arrange
         var metadata = await CreateMetadataForTestTrain();
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
         var jobId = job.Id;
@@ -208,7 +197,10 @@ public class LocalWorkerServiceTests : TestSetup
         var manifest = await CreateAndSaveFailingManifest(group);
         var metadata = await CreateMetadataForManifest(manifest);
 
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
         var jobId = job.Id;
@@ -250,7 +242,10 @@ public class LocalWorkerServiceTests : TestSetup
         // Arrange - a job whose train blocks until the test releases it, so it is still
         // running when the host asks the worker to stop.
         var metadata = await CreateMetadataForTestTrain();
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
         var jobId = job.Id;
@@ -264,7 +259,7 @@ public class LocalWorkerServiceTests : TestSetup
             .Returns(async _ =>
             {
                 started.TrySetResult();
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 return Unit.Default;
             });
 
@@ -285,13 +280,13 @@ public class LocalWorkerServiceTests : TestSetup
         );
 
         await workerService.StartAsync(CancellationToken.None);
-        await started.Task.WaitAsync(WorkerCompletionTimeout);
+        await started.Task.WaitAsync(WorkerCompletionTimeout, TimeProvider.System);
 
         // Act - the host stops (the worker's stopping token fires), then the in-flight job
         // finishes inside its shutdown grace period.
         var stopping = workerService.StopAsync(CancellationToken.None);
         release.SetResult();
-        await stopping.WaitAsync(WorkerCompletionTimeout);
+        await stopping.WaitAsync(WorkerCompletionTimeout, TimeProvider.System);
 
         // Assert - the row is deleted, so no worker re-claims it once the visibility
         // timeout passes.
@@ -307,16 +302,7 @@ public class LocalWorkerServiceTests : TestSetup
     public async Task Worker_StoppingMidBatch_ReleasesTheJobsItHadNotStarted()
     {
         // Arrange - three jobs claimed in one batch; the first blocks until released.
-        var jobIds = new List<long>();
-        for (var i = 0; i < 3; i++)
-        {
-            var metadata = await CreateMetadataForTestTrain();
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
-            await DataContext.Track(job);
-            await DataContext.SaveChanges(CancellationToken.None);
-            jobIds.Add(job.Id);
-            DataContext.Reset();
-        }
+        var jobIds = await QueueTestTrainJobs(3);
 
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -326,7 +312,7 @@ public class LocalWorkerServiceTests : TestSetup
             .Returns(async _ =>
             {
                 started.TrySetResult();
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 return Unit.Default;
             });
 
@@ -348,12 +334,12 @@ public class LocalWorkerServiceTests : TestSetup
         );
 
         await workerService.StartAsync(CancellationToken.None);
-        await started.Task.WaitAsync(WorkerCompletionTimeout);
+        await started.Task.WaitAsync(WorkerCompletionTimeout, TimeProvider.System);
 
         // Act - the host stops while the first job runs, then that job finishes.
         var stopping = workerService.StopAsync(CancellationToken.None);
         release.SetResult();
-        await stopping.WaitAsync(WorkerCompletionTimeout);
+        await stopping.WaitAsync(WorkerCompletionTimeout, TimeProvider.System);
 
         // Assert - only the started job ran; the other two are back in the queue, claimable now
         // rather than after the visibility timeout.
@@ -487,8 +473,9 @@ public class LocalWorkerServiceTests : TestSetup
         );
 
         await workerService.StartAsync(CancellationToken.None);
-        await polls.WhenReached(3).WaitAsync(WorkerCompletionTimeout);
-        var stop = async () => await workerService.StopAsync(CancellationToken.None);
+        await polls.WhenReached(3).WaitAsync(WorkerCompletionTimeout, TimeProvider.System);
+        var stop = async () =>
+            await workerService.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         // Assert - it polled the empty queue more than once, without errors, and stops cleanly
         await stop.Should().NotThrowAsync();
@@ -504,9 +491,12 @@ public class LocalWorkerServiceTests : TestSetup
     {
         // Arrange - Create a job that was claimed but never completed (simulates crash)
         var metadata = await CreateMetadataForTestTrain();
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
         // Set FetchedAt to simulate a worker that crashed 2 seconds ago
-        job.FetchedAt = DateTime.UtcNow.AddSeconds(-2);
+        job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-2);
 
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -545,9 +535,12 @@ public class LocalWorkerServiceTests : TestSetup
     {
         // Arrange - Create a job that was claimed just now (simulates in-progress by another worker)
         var metadata = await CreateMetadataForTestTrain();
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
         // Set FetchedAt to now (within visibility timeout of 30m)
-        job.FetchedAt = DateTime.UtcNow;
+        job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -558,7 +551,8 @@ public class LocalWorkerServiceTests : TestSetup
         // at the recently claimed job and passed it by.
         var sentinelMetadata = await CreateMetadataForTestTrain();
         var sentinel = BackgroundJob.Create(
-            new CreateBackgroundJob { MetadataId = sentinelMetadata.Id }
+            new CreateBackgroundJob { MetadataId = sentinelMetadata.Id },
+            TimeProvider.System
         );
         await DataContext.Track(sentinel);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -590,7 +584,7 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
         var remainingJob = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId);
         remainingJob.Should().NotBeNull("recently claimed job should not be reclaimed");
-        remainingJob!.FetchedAt.Should().NotBeNull();
+        remainingJob.NotNull().FetchedAt.Should().NotBeNull();
     }
 
     #endregion
@@ -607,7 +601,10 @@ public class LocalWorkerServiceTests : TestSetup
             var metadata = await CreateMetadataForTestTrain();
             metadataIds.Add(metadata.Id);
 
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
             await DataContext.Track(job);
         }
 
@@ -651,7 +648,10 @@ public class LocalWorkerServiceTests : TestSetup
         for (var i = 0; i < 5; i++)
         {
             var metadata = await CreateMetadataForTestTrain();
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
             await DataContext.Track(job);
         }
         await DataContext.SaveChanges(CancellationToken.None);
@@ -712,29 +712,32 @@ public class LocalWorkerServiceTests : TestSetup
         // twice the budget here, and would otherwise surface as a poll that
         // simply never saw the state change.
         using var cts = new CancellationTokenSource(timeout);
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             DataContext.Reset();
-            if (await predicate(cts.Token))
+            if (await predicate(cts.Token).ConfigureAwait(false))
                 return true;
             // allowed-delay: poll interval while awaiting the completion signal, bounded by the
             // timeout above. Not a fixed wait for the work to finish.
-            await Task.Delay(50, cts.Token);
+            await Task.Delay(50, cts.Token).ConfigureAwait(false);
         }
         return false;
     }
 
     private Task<bool> WaitForJobCount(int expected, TimeSpan timeout) =>
         WaitUntilAsync(
-            async ct => await DataContext.BackgroundJobs.CountAsync(ct) == expected,
+            async ct =>
+                await DataContext.BackgroundJobs.CountAsync(ct).ConfigureAwait(false) == expected,
             timeout
         );
 
     private Task<bool> WaitForJobAbsent(long jobId, TimeSpan timeout) =>
         WaitUntilAsync(
             async ct =>
-                await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct)
+                await DataContext
+                    .BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct)
+                    .ConfigureAwait(false)
                     is null,
             timeout
         );
@@ -748,7 +751,10 @@ public class LocalWorkerServiceTests : TestSetup
         for (var i = 0; i < 10; i++)
         {
             var metadata = await CreateMetadataForTestTrain();
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
             await DataContext.Track(job);
         }
         await DataContext.SaveChanges(CancellationToken.None);
@@ -788,7 +794,10 @@ public class LocalWorkerServiceTests : TestSetup
         for (var i = 0; i < 3; i++)
         {
             var metadata = await CreateMetadataForTestTrain();
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
             await DataContext.Track(job);
         }
         await DataContext.SaveChanges(CancellationToken.None);
@@ -850,7 +859,8 @@ public class LocalWorkerServiceTests : TestSetup
                 MetadataId = metadata.Id,
                 Input = inputJson,
                 InputType = typeof(SchedulerTestInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -902,74 +912,21 @@ public class LocalWorkerServiceTests : TestSetup
             TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var metaLow = await CreateMetadataForManifest(manifest);
-        var jobLow = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = metaLow.Id,
-                Priority = 0,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(jobLow);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var metaLow = await QueuePriorityJob(manifest, 0, inputJson);
 
         // determinism: spaces the created_at timestamps so the FIFO tiebreak cannot hide a
         // priority-ordering bug. Nothing here waits for work to finish.
         await Task.Delay(50);
 
-        var metaMed = await CreateMetadataForManifest(manifest);
-        var jobMed = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = metaMed.Id,
-                Priority = 15,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(jobMed);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var metaMed = await QueuePriorityJob(manifest, 15, inputJson);
 
         // determinism: spaces the created_at timestamps so the claim order is defined.
         await Task.Delay(50);
 
-        var metaHigh = await CreateMetadataForManifest(manifest);
-        var jobHigh = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = metaHigh.Id,
-                Priority = 31,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(jobHigh);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var metaHigh = await QueuePriorityJob(manifest, 31, inputJson);
 
         // Act - Single worker with BatchSize=3 claims all at once
-        var options = new LocalWorkerOptions
-        {
-            WorkerCount = 1,
-            PollingInterval = TimeSpan.FromMilliseconds(100),
-            BatchSize = 3,
-        };
-
-        var workerService = new LocalWorkerService(
-            Scope.ServiceProvider,
-            options,
-            new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
-            Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
-        );
-
-        await workerService.StartAsync(CancellationToken.None);
-        var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        await workerService.StopAsync(CancellationToken.None);
+        var drained = await RunOneWorkerUntilDrained(batchSize: 3);
 
         // Assert - All jobs processed; high-priority should complete first (sequential in batch)
         drained.Should().BeTrue("all jobs should be processed");
@@ -991,12 +948,15 @@ public class LocalWorkerServiceTests : TestSetup
             .EndTime.Should()
             .NotBeNull("high-priority job should have completed")
             .And.BeBefore(
-                medMeta.EndTime!.Value,
+                medMeta.EndTime.NotNull().Value,
                 "high-priority job should complete before medium"
             );
         medMeta
             .EndTime.Should()
-            .BeBefore(lowMeta.EndTime!.Value, "medium-priority job should complete before low");
+            .BeBefore(
+                lowMeta.EndTime.NotNull().Value,
+                "medium-priority job should complete before low"
+            );
     }
 
     [Test]
@@ -1013,73 +973,20 @@ public class LocalWorkerServiceTests : TestSetup
             TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var meta1 = await CreateMetadataForManifest(manifest);
-        var job1 = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = meta1.Id,
-                Priority = 10,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(job1);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var meta1 = await QueuePriorityJob(manifest, 10, inputJson);
 
         // determinism: spaces the created_at timestamps so the claim order is defined.
         await Task.Delay(50);
 
-        var meta2 = await CreateMetadataForManifest(manifest);
-        var job2 = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = meta2.Id,
-                Priority = 10,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(job2);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var meta2 = await QueuePriorityJob(manifest, 10, inputJson);
 
         // determinism: spaces the created_at timestamps so the claim order is defined.
         await Task.Delay(50);
 
-        var meta3 = await CreateMetadataForManifest(manifest);
-        var job3 = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = meta3.Id,
-                Priority = 10,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(job3);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var meta3 = await QueuePriorityJob(manifest, 10, inputJson);
 
         // Act
-        var options = new LocalWorkerOptions
-        {
-            WorkerCount = 1,
-            PollingInterval = TimeSpan.FromMilliseconds(100),
-            BatchSize = 3,
-        };
-
-        var workerService = new LocalWorkerService(
-            Scope.ServiceProvider,
-            options,
-            new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
-            Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
-        );
-
-        await workerService.StartAsync(CancellationToken.None);
-        var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        await workerService.StopAsync(CancellationToken.None);
+        var drained = await RunOneWorkerUntilDrained(batchSize: 3);
 
         // Assert - FIFO within same priority: job1 completes before job2 before job3
         drained.Should().BeTrue("all jobs should be processed");
@@ -1094,9 +1001,9 @@ public class LocalWorkerServiceTests : TestSetup
 
         m1.EndTime.Should()
             .NotBeNull()
-            .And.BeOnOrBefore(m2.EndTime!.Value, "FIFO: job1 should complete before job2");
+            .And.BeOnOrBefore(m2.EndTime.NotNull().Value, "FIFO: job1 should complete before job2");
         m2.EndTime.Should()
-            .BeOnOrBefore(m3.EndTime!.Value, "FIFO: job2 should complete before job3");
+            .BeOnOrBefore(m3.EndTime.NotNull().Value, "FIFO: job2 should complete before job3");
     }
 
     [Test]
@@ -1104,7 +1011,10 @@ public class LocalWorkerServiceTests : TestSetup
     {
         // Arrange - Create a background job without explicit priority
         var metadata = await CreateMetadataForTestTrain();
-        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = metadata.Id },
+            TimeProvider.System
+        );
 
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -1130,56 +1040,15 @@ public class LocalWorkerServiceTests : TestSetup
             TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var metaLow = await CreateMetadataForManifest(manifest);
-        var jobLow = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = metaLow.Id,
-                Priority = 0,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(jobLow);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var metaLow = await QueuePriorityJob(manifest, 0, inputJson);
 
         // determinism: the high-priority job is created later, so priority alone must decide.
         await Task.Delay(100);
 
-        var metaHigh = await CreateMetadataForManifest(manifest);
-        var jobHigh = BackgroundJob.Create(
-            new CreateBackgroundJob
-            {
-                MetadataId = metaHigh.Id,
-                Priority = 31,
-                Input = inputJson,
-                InputType = typeof(SchedulerTestInput).FullName,
-            }
-        );
-        await DataContext.Track(jobHigh);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var metaHigh = await QueuePriorityJob(manifest, 31, inputJson);
 
         // Act
-        var options = new LocalWorkerOptions
-        {
-            WorkerCount = 1,
-            PollingInterval = TimeSpan.FromMilliseconds(100),
-            BatchSize = 2,
-        };
-
-        var workerService = new LocalWorkerService(
-            Scope.ServiceProvider,
-            options,
-            new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
-            Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
-        );
-
-        await workerService.StartAsync(CancellationToken.None);
-        var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        await workerService.StopAsync(CancellationToken.None);
+        var drained = await RunOneWorkerUntilDrained(batchSize: 2);
 
         // Assert - High priority job should complete first despite being created later
         drained.Should().BeTrue("all jobs should be processed");
@@ -1190,9 +1059,10 @@ public class LocalWorkerServiceTests : TestSetup
         highMeta.EndTime.Should().NotBeNull("high-priority job should have completed");
         lowMeta.EndTime.Should().NotBeNull("low-priority job should have completed");
         highMeta
-            .EndTime!.Value.Should()
+            .EndTime.NotNull()
+            .Value.Should()
             .BeBefore(
-                lowMeta.EndTime!.Value,
+                lowMeta.EndTime.NotNull().Value,
                 "high-priority job should execute before low-priority despite being created later"
             );
     }
@@ -1201,19 +1071,103 @@ public class LocalWorkerServiceTests : TestSetup
 
     #region Helper Methods
 
+    private async Task QueueWorkerTestJob(long metadataId)
+    {
+        var input = new SchedulerTestInput { Value = "worker-test" };
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metadataId,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            },
+            TimeProvider.System
+        );
+        await DataContext.Track(job).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+    }
+
+    private async Task<List<long>> QueueTestTrainJobs(int count)
+    {
+        var jobIds = new List<long>();
+        for (var i = 0; i < count; i++)
+        {
+            var metadata = await CreateMetadataForTestTrain().ConfigureAwait(false);
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
+            await DataContext.Track(job).ConfigureAwait(false);
+            await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            jobIds.Add(job.Id);
+            DataContext.Reset();
+        }
+        return jobIds;
+    }
+
+    private async Task<Metadata> QueuePriorityJob(Manifest manifest, int priority, string inputJson)
+    {
+        var metadata = await CreateMetadataForManifest(manifest).ConfigureAwait(false);
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metadata.Id,
+                Priority = priority,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            },
+            TimeProvider.System
+        );
+        await DataContext.Track(job).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+        return metadata;
+    }
+
+    private async Task<bool> RunOneWorkerUntilDrained(int batchSize)
+    {
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = batchSize,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
+            Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
+        );
+
+        await workerService.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        var drained = await WaitForJobCount(0, WorkerCompletionTimeout).ConfigureAwait(false);
+        await workerService.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        return drained;
+    }
+
     private async Task<Metadata> CreateMetadataForTestTrain()
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "worker-test" },
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -1233,8 +1187,8 @@ public class LocalWorkerServiceTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -1257,8 +1211,8 @@ public class LocalWorkerServiceTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -1273,11 +1227,12 @@ public class LocalWorkerServiceTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "worker-test" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

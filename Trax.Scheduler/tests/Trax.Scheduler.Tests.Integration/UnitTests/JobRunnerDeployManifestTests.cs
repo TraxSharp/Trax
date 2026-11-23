@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [NonParallelizable]
 public class JobRunnerDeployManifestTests
 {
-    private string _path = null!;
+    private string _path = "";
 
     [SetUp]
     public void NewPath() =>
@@ -28,8 +28,8 @@ public class JobRunnerDeployManifestTests
     [TearDown]
     public void RemovePath()
     {
-        if (Directory.Exists(Path.GetDirectoryName(_path)))
-            Directory.Delete(Path.GetDirectoryName(_path)!, recursive: true);
+        if (Path.GetDirectoryName(_path) is { } dir && Directory.Exists(dir))
+            Directory.Delete(dir, recursive: true);
     }
 
     [Test]
@@ -37,7 +37,10 @@ public class JobRunnerDeployManifestTests
     {
         await using var app = Build(app => app.UseTraxJobRunner());
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path],
+            cancellationToken: CancellationToken.None
+        );
 
         (await Manifest()).Roles.Should().Equal("job-runner");
     }
@@ -47,7 +50,10 @@ public class JobRunnerDeployManifestTests
     {
         await using var app = Build(app => app.UseTraxRunEndpoint());
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path],
+            cancellationToken: CancellationToken.None
+        );
 
         (await Manifest()).Roles.Should().Equal("job-runner");
     }
@@ -57,13 +63,16 @@ public class JobRunnerDeployManifestTests
     {
         await using var app = Build(_ => { });
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path],
+            cancellationToken: CancellationToken.None
+        );
 
         (await Manifest()).Roles.Should().BeEmpty();
     }
 
     private async Task<DeployManifest> Manifest() =>
-        DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        DeployManifest.Read(await File.ReadAllTextAsync(_path).ConfigureAwait(false));
 
     private static WebApplication Build(Action<WebApplication> map)
     {

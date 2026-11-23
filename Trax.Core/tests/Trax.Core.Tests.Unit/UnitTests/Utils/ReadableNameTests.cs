@@ -18,17 +18,17 @@ public class ReadableNameTests : TestSetup
     public void ReadableName_WritesTheTypeAsCSharpDoes(Type type, string expected) =>
         type.ReadableName().Should().Be(expected);
 
-    public class Plain;
+    public static class Plain;
 
-    public class Outer<T>
+    public static class Outer<T>
     {
-        public class Inner;
+        public static class Inner;
 
-        public class Pair<TOther>;
+        public static class Pair<TOther>;
     }
 
-    public class Wrapper
+    public static class Wrapper
     {
-        public class Box<T>;
+        public static class Box<T>;
     }
 }

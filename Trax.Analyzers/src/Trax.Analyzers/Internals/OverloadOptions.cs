@@ -1,0 +1,16 @@
+namespace Trax.Analyzers.Internals;
+
+internal record struct OverloadOptions(
+    bool IncludeObsoleteMembers = false,
+    bool IncludeExperimentalMembers = false,
+    bool AllowOptionalParameters = false,
+    bool IncludeExtensionsMethods = false,
+    SyntaxNode? SyntaxNode = null,
+    bool AllowNumericConversion = true,
+    bool AllowParamsToNonParamsCompatibility = true,
+    bool AllowInModifierCompatibility = true,
+    bool AllowInterfaceConversions = true,
+    bool AllowBaseTypeConversions = true,
+    Func<IMethodSymbol, bool>? ShouldCheckMethod = null,
+    bool IncludeExtensionMethodsFromNotImportedNamespaces = false,
+    OverloadLookupCache? LookupCache = null);

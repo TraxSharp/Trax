@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate.AspNetCore;
@@ -10,6 +11,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -38,7 +40,7 @@ public class OperatorMachineInstancesE2ETests
     private const string OperatorKey = "sm-operator-key-0123456789abcdefghijklmn";
     private const string ShopperKey = "sm-shopper-key-0123456789abcdefghijklmno";
 
-    private IHost _host = null!;
+    private IHost? _host;
     private Guid _draftId;
 
     private const string List = """
@@ -60,32 +62,36 @@ public class OperatorMachineInstancesE2ETests
         // The shopper's own draft, advanced into a state whose context holds what it paid with. The
         // turnstile guards its coin, so the generic save does not serve it: the host writes the draft.
         _draftId = Guid.NewGuid();
-        await _host.SeedDraftAsync("TraxApiKey:shopper", _draftId, TurnstileMachine.InitialJson);
-        using var advance = await _host.PostAsync(
-            """
-            mutation Advance($input: AdvanceSnapshotInput!) {
-              dispatch { stateMachine { advanceSnapshot(input: $input) { output { snapshot } } } }
-            }
-            """,
-            new
-            {
-                input = new
+        await _host
+            .NotNull()
+            .SeedDraftAsync("TraxApiKey:shopper", _draftId, TurnstileMachine.InitialJson);
+        using var advance = await _host
+            .NotNull()
+            .PostAsync(
+                """
+                mutation Advance($input: AdvanceSnapshotInput!) {
+                  dispatch { stateMachine { advanceSnapshot(input: $input) { output { snapshot } } } }
+                }
+                """,
+                new
                 {
-                    machine = "turnstile",
-                    id = _draftId.ToString(),
-                    trigger = "Coin",
-                    input = "{\"coin\":\"dollar\"}",
+                    input = new
+                    {
+                        machine = "turnstile",
+                        id = _draftId.ToString(),
+                        trigger = "Coin",
+                        input = "{\"coin\":\"dollar\"}",
+                    },
                 },
-            },
-            ShopperKey
-        );
+                ShopperKey
+            );
         advance.RootElement.GetRawText().Should().Contain("Unlocked");
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -93,7 +99,7 @@ public class OperatorMachineInstancesE2ETests
     [TestCase(Counts)]
     public async Task An_anonymous_caller_is_not_shown_the_draft(string document)
     {
-        using var doc = await _host.PostAsync(document);
+        using var doc = await _host.NotNull().PostAsync(document);
 
         doc.RootElement.TryGetProperty("errors", out _).Should().BeTrue();
         NoOperationsData(doc).Should().BeTrue(doc.RootElement.GetRawText());
@@ -105,7 +111,7 @@ public class OperatorMachineInstancesE2ETests
         string document
     )
     {
-        using var doc = await _host.PostAsync(document, apiKey: ShopperKey);
+        using var doc = await _host.NotNull().PostAsync(document, apiKey: ShopperKey);
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION");
         NoOperationsData(doc).Should().BeTrue(doc.RootElement.GetRawText());
@@ -115,7 +121,7 @@ public class OperatorMachineInstancesE2ETests
     [Test]
     public async Task An_operator_sees_the_drafts_state_and_never_its_context()
     {
-        using var doc = await _host.PostAsync(List, apiKey: OperatorKey);
+        using var doc = await _host.NotNull().PostAsync(List, apiKey: OperatorKey);
 
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -138,14 +144,19 @@ public class OperatorMachineInstancesE2ETests
             .And.NotContain("dollar", "the context is never returned to an operator")
             .And.NotContain("shopper", "no operator view names the user behind a draft");
 
-        using var one = await _host.PostAsync(
-            $$"""
+        using var one = await _host
+            .NotNull()
+            .PostAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
             { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{item.GetProperty(
                 "rowId"
             ).GetInt64()}}) { id state ownerKind } } }
-            """,
-            apiKey: OperatorKey
-        );
+            """
+                ),
+                apiKey: OperatorKey
+            );
         one.RootElement.GetProperty("data")
             .GetProperty("operations")
             .GetProperty("machineInstance")
@@ -154,12 +165,14 @@ public class OperatorMachineInstancesE2ETests
             .Should()
             .Be("Unlocked");
 
-        using var asSystem = await _host.PostAsync(
-            $$"""
-            { operations { machineInstance(machine: "turnstile", ownerKind: SYSTEM, id: "{{_draftId}}") { id } } }
-            """,
-            apiKey: OperatorKey
-        );
+        using var asSystem = await _host
+            .NotNull()
+            .PostAsync(
+                $$"""
+                { operations { machineInstance(machine: "turnstile", ownerKind: SYSTEM, id: "{{_draftId}}") { id } } }
+                """,
+                apiKey: OperatorKey
+            );
         asSystem
             .RootElement.GetProperty("data")
             .GetProperty("operations")
@@ -171,7 +184,7 @@ public class OperatorMachineInstancesE2ETests
     [Test]
     public async Task An_operator_reads_the_drafts_history_as_the_service_lists_it_and_nobody_else_does()
     {
-        using var list = await _host.PostAsync(List, apiKey: OperatorKey);
+        using var list = await _host.NotNull().PostAsync(List, apiKey: OperatorKey);
         var rowId = list
             .RootElement.GetProperty("data")
             .GetProperty("operations")
@@ -179,17 +192,9 @@ public class OperatorMachineInstancesE2ETests
             .GetProperty("items")[0]
             .GetProperty("rowId")
             .GetInt64();
-        var history = $$"""
-            { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{rowId}}) {
-                transitions(first: 10) {
-                  nextCursor
-                  items { revision kind trigger actor fromState toState at previousAt
-                    startedRun { executionId } startedChild { id } }
-                }
-            } } }
-            """;
+        var history = HistoryQuery(rowId);
 
-        using var asOperator = await _host.PostAsync(history, apiKey: OperatorKey);
+        using var asOperator = await _host.NotNull().PostAsync(history, apiKey: OperatorKey);
         asOperator
             .RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -212,31 +217,7 @@ public class OperatorMachineInstancesE2ETests
             );
         page.GetProperty("nextCursor").ValueKind.Should().Be(JsonValueKind.Null);
 
-        // The console reads the field; the field reads the service. Both list the same rows.
-        using (var scope = _host.Services.CreateScope())
-        {
-            var served = await scope
-                .ServiceProvider.GetRequiredService<IOperationsService>()
-                .GetMachineInstanceTransitionsAsync(
-                    new MachineInstanceKey(
-                        "turnstile",
-                        Trax.Effect.Enums.SnapshotOwnerKind.User,
-                        _draftId,
-                        rowId
-                    ),
-                    null,
-                    10,
-                    CancellationToken.None
-                );
-            served!
-                .Items.Select(t => t.Revision)
-                .Should()
-                .Equal(items.Select(i => i.GetProperty("revision").GetInt64()));
-            served
-                .Items.Select(t => t.At)
-                .Should()
-                .Equal(items.Select(i => i.GetProperty("at").GetDateTimeOffset()));
-        }
+        await AssertTheServiceListsTheSameRowsAsync(rowId, items);
 
         asOperator
             .RootElement.GetRawText()
@@ -245,10 +226,10 @@ public class OperatorMachineInstancesE2ETests
             .And.NotContain("dollar", "no transition carries the context")
             .And.NotContain("shopper", "no transition names the user");
 
-        using var asShopper = await _host.PostAsync(history, apiKey: ShopperKey);
+        using var asShopper = await _host.NotNull().PostAsync(history, apiKey: ShopperKey);
         ErrorCodes(asShopper).Should().Contain("TRAX_AUTHORIZATION");
         NoOperationsData(asShopper).Should().BeTrue(asShopper.RootElement.GetRawText());
-        using var anonymous = await _host.PostAsync(history);
+        using var anonymous = await _host.NotNull().PostAsync(history);
         NoOperationsData(anonymous).Should().BeTrue(anonymous.RootElement.GetRawText());
     }
 
@@ -277,13 +258,13 @@ public class OperatorMachineInstancesE2ETests
             } } }
             """;
 
-        using var asShopper = await _host.PostAsync(cancel, apiKey: ShopperKey);
+        using var asShopper = await _host.NotNull().PostAsync(cancel, apiKey: ShopperKey);
         ErrorCodes(asShopper)
             .Should()
             .Contain("TRAX_AUTHORIZATION", "the owner of a draft is not an operator");
         NoOperationsData(asShopper).Should().BeTrue(asShopper.RootElement.GetRawText());
 
-        using var asOperator = await _host.PostAsync(cancel, apiKey: OperatorKey);
+        using var asOperator = await _host.NotNull().PostAsync(cancel, apiKey: OperatorKey);
         asOperator
             .RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -304,7 +285,7 @@ public class OperatorMachineInstancesE2ETests
             .Should()
             .Be(OperationsService.UserOwnedCancelRefusal);
 
-        using var list = await _host.PostAsync(List, apiKey: OperatorKey);
+        using var list = await _host.NotNull().PostAsync(List, apiKey: OperatorKey);
         list.RootElement.GetRawText().Should().Contain("Unlocked", "the draft did not move");
     }
 
@@ -313,75 +294,122 @@ public class OperatorMachineInstancesE2ETests
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
-                    .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        services.AddTraxApiKeyAuth(keys =>
-                            keys.Add(OperatorKey, id: "operator", "Operator")
-                                .Add(ShopperKey, id: "shopper", "Shopper")
-                        );
-                        E2EHostOptions.AddGenericPolicy(services);
-                        services.AddTrax(trax =>
-                            // The wizard machine in this assembly invokes a train, so the host checks a
-                            // run's cancel flag between junctions.
-                            trax.AddEffects(effects =>
-                                    effects
-                                        .UsePostgres(connectionString)
-                                        .AddJson()
-                                        .AddJunctionProgress()
-                                )
-                                .AddStateMachines(E2EHostOptions.OptInToGeneric)
-                                .AddMediator(typeof(E2EHost).Assembly)
-                        );
-                        E2EMachines.Register(services, []);
-                        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
-                        services.AddSingleton<IOrderCharge>(new CountingCharge());
-
-                        // The operations service the dashboard and the API share, without the
-                        // scheduler's workers: this host only reads.
-                        services.AddScoped<IOperationsService>(sp => new OperationsService(
-                            sp.GetRequiredService<ITrainDiscoveryService>(),
-                            sp.GetRequiredService<IDataContextProviderFactory>(),
-                            new SchedulerConfiguration(),
-                            sp.GetRequiredService<ITrainExecutionService>()
-                        ));
-
-                        // The operations mutations need a job submitter and the scheduler's
-                        // facade; this host runs neither, and no test here calls them.
-                        services.AddScoped<
-                            Trax.Scheduler.Services.JobSubmitter.IJobSubmitter,
-                            NoJobSubmitter
-                        >();
-                        services.AddScoped(_ =>
-                            System.Reflection.DispatchProxy.Create<
-                                Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,
-                                NoScheduler
-                            >()
-                        );
-
-                        services.AddTraxApi();
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Operator")
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                            endpoints.MapGraphQL("/trax/graphql", "trax")
-                        );
-                    })
+                    .ConfigureServices(services => ConfigureServices(services, connectionString))
+                    .Configure(ConfigureApp)
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private string HistoryQuery(long rowId) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
+            { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{rowId}}) {
+                transitions(first: 10) {
+                  nextCursor
+                  items { revision kind trigger actor fromState toState at previousAt
+                    startedRun { executionId } startedChild { id } }
+                }
+            } } }
+            """
+        );
+
+    private async Task AssertTheServiceListsTheSameRowsAsync(long rowId, List<JsonElement> items)
+    {
+        // The console reads the field; the field reads the service. Both list the same rows.
+        var scope = _host.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var served = await scope
+                .ServiceProvider.GetRequiredService<IOperationsService>()
+                .GetMachineInstanceTransitionsAsync(
+                    new MachineInstanceKey(
+                        "turnstile",
+                        Trax.Effect.Enums.SnapshotOwnerKind.User,
+                        _draftId,
+                        rowId
+                    ),
+                    beforeRevision: null,
+                    10,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            served
+                .NotNull()
+                .Items.Select(t => t.Revision)
+                .Should()
+                .Equal(items.Select(i => i.GetProperty("revision").GetInt64()));
+            served
+                .Items.Select(t => t.At)
+                .Should()
+                .Equal(items.Select(i => i.GetProperty("at").GetDateTimeOffset()));
+        }
+    }
+
+    private static void ConfigureServices(IServiceCollection services, string connectionString)
+    {
+        services.AddLogging();
+        services.AddRouting();
+        services.AddTraxApiKeyAuth(keys =>
+            keys.Add(OperatorKey, id: "operator", "Operator")
+                .Add(ShopperKey, id: "shopper", "Shopper")
+        );
+        E2EHostOptions.AddGenericPolicy(services);
+        services.AddTrax(trax =>
+            // The wizard machine in this assembly invokes a train, so the host checks a
+            // run's cancel flag between junctions.
+            trax.AddEffects(effects =>
+                    effects.UsePostgres(connectionString).AddJson().AddJunctionProgress()
+                )
+                .AddStateMachines(E2EHostOptions.OptInToGeneric)
+                .AddMediator(typeof(E2EHost).Assembly)
+        );
+        E2EMachines.Register(services, []);
+        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
+        services.AddSingleton<IOrderCharge>(new CountingCharge());
+
+        AddReadOnlyOperations(services);
+
+        services.AddTraxApi();
+        services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: "Operator")
+        );
+    }
+
+    private static void AddReadOnlyOperations(IServiceCollection services)
+    {
+        // The operations service the dashboard and the API share, without the
+        // scheduler's workers: this host only reads.
+        services.AddScoped<IOperationsService>(sp => new OperationsService(
+            sp.GetRequiredService<ITrainDiscoveryService>(),
+            sp.GetRequiredService<IDataContextProviderFactory>(),
+            new SchedulerConfiguration(),
+            sp.GetRequiredService<ITrainExecutionService>()
+        ));
+
+        // The operations mutations need a job submitter and the scheduler's
+        // facade; this host runs neither, and no test here calls them.
+        services.AddScoped<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter, NoJobSubmitter>();
+        services.AddScoped(_ =>
+            System.Reflection.DispatchProxy.Create<
+                Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,
+                NoScheduler
+            >()
+        );
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints => endpoints.MapGraphQL("/trax/graphql", "trax"));
     }
 
     private static bool NoOperationsData(JsonDocument doc) =>

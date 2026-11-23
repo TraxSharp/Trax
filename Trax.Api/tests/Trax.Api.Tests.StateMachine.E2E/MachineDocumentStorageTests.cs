@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -45,11 +46,11 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task A_newer_shape_no_node_registers_turns_client_outdated_after_grace()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "rb_v1"));
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "rb_v2"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the newer deploy registered its documents");
 
         // The deploy is rolled back: only nodes of the first shape run from here on.
@@ -67,7 +68,7 @@ public class MachineDocumentStorageTests
                 );
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "no node has registered the newer shape for the grace period, so it is collected, per "
@@ -76,13 +77,12 @@ public class MachineDocumentStorageTests
         (
             await E2EWait.UntilAsync(async () =>
             {
-                using var after = await rolledBack.PostPersistedAsync(
-                    get,
-                    new { id = Guid.NewGuid() }
-                );
+                using var after = await rolledBack
+                    .PostPersistedAsync(get, new { id = Guid.NewGuid() })
+                    .ConfigureAwait(false);
                 return MachineDocumentOps
                     .Codes(after)
-                    .Contains(RefusalCode.ClientOutdated.ToWire());
+                    .Contains(RefusalCode.ClientOutdated.ToWire(), StringComparer.Ordinal);
             })
         ).Should().BeTrue("a collected newer version is served by no node, so its clients reload instead of retrying " + "forever, per " + Adr);
         (await ActiveAsync(v1)).Should().Be(v1.Count, "the rolled-back shape stays");
@@ -91,7 +91,7 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task Two_hosts_registering_one_slot_keep_both_documents_runnable()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var first = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "two_v1", Collecting(clock))
         );
@@ -99,7 +99,7 @@ public class MachineDocumentStorageTests
         var second = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V2, "two_v2", Collecting(clock))
         );
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the second host registered its own version of the slot");
 
         await MachineDocumentOps.PassTheGracePeriodRegisteringAsync(
@@ -132,7 +132,7 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task A_preexisting_row_under_a_new_prefix_is_not_collected()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "pre_v1"));
         var v1 = await ShelfIdsAsync();
 
@@ -150,22 +150,17 @@ public class MachineDocumentStorageTests
                 + new string('c', 64)
                 + new string('d', 16),
         ];
-        foreach (var (id, version) in uploaded.Zip(new[] { 1, 1, int.MaxValue }))
-            await E2ESql.ExecuteAsync(
-                Database,
-                "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
-                    + "shape_fingerprint, is_active, created_at, updated_at) VALUES ('', @id, 'Legacy', @version, "
-                    + "'query Legacy { __typename }', 'x', true, now() - interval '30 days', now() - interval '30 days')",
-                ("id", id),
-                ("version", version)
-            );
+        await InsertUploadedRowsAsync(uploaded);
 
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "pre_v2", Collecting(clock)));
-        var v2 = (await ShelfIdsAsync()).Except(v1).Except(uploaded).ToList();
+        var v2 = (await ShelfIdsAsync())
+            .Except(v1, StringComparer.Ordinal)
+            .Except(uploaded, StringComparer.Ordinal)
+            .ToList();
         v2.Should().NotBeEmpty();
         clock.Advance(TimeSpan.FromDays(400));
         // negative-wait: the host registers several times past the grace period, and leaves the uploaded rows alone.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
 
         foreach (var id in uploaded)
             (
@@ -195,41 +190,26 @@ public class MachineDocumentStorageTests
     [Test]
     public async Task A_redeployed_version_still_gives_a_node_that_does_not_restamp_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "re_v1"));
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v2.Should().NotBeEmpty("the newer deploy registered its documents");
 
-        // Long ago the newer shape was deployed and rolled back, and its documents were collected. The older shape
-        // still runs on nodes built before a registration wrote updated_at again, so its rows carry their first one.
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation SET created_at = now() - interval '400 days', "
-                + "updated_at = now() - interval '400 days' WHERE starts_with(id, @prefix)",
-            ("prefix", MachineDocuments.ReservedIdPrefix)
-        );
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation_history SET changed_at = now() - interval '400 days' "
-                + "WHERE starts_with(id, @prefix)",
-            ("prefix", MachineDocuments.ReservedIdPrefix)
-        );
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation SET is_active = false, deprecation_reason = 'collected', "
-                + "updated_at = now() - interval '300 days' WHERE id = ANY(@ids)",
-            ("ids", v2.ToArray())
-        );
+        await BackdateAndCollectAsync(v2);
 
         // The newer shape is deployed again, on two nodes one after the other.
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_a", Collecting(clock)));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2) == v2.Count))
+        (
+            await E2EWait.UntilAsync(async () =>
+                await ActiveAsync(v2).ConfigureAwait(false) == v2.Count
+            )
+        )
             .Should()
             .BeTrue("the redeployed node restores its documents");
         // negative-wait: the node registers several times, and must leave the older shape's documents alone.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(
@@ -241,17 +221,62 @@ public class MachineDocumentStorageTests
 
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_b", Collecting(clock)));
         // negative-wait: a second node of the redeployed version finds its documents already restored.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "a second node counts from the restore too, per " + Adr);
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "once the grace period has passed, the older shape nobody re-stamps is collected"
             );
+    }
+
+    private static async Task InsertUploadedRowsAsync(string[] uploaded)
+    {
+        foreach (var (id, version) in uploaded.Zip(new[] { 1, 1, int.MaxValue }))
+            await E2ESql
+                .ExecuteAsync(
+                    Database,
+                    "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
+                        + "shape_fingerprint, is_active, created_at, updated_at) VALUES ('', @id, 'Legacy', @version, "
+                        + "'query Legacy { __typename }', 'x', true, now() - interval '30 days', now() - interval '30 days')",
+                    ("id", id),
+                    ("version", version)
+                )
+                .ConfigureAwait(false);
+    }
+
+    private static async Task BackdateAndCollectAsync(List<string> v2)
+    {
+        // Long ago the newer shape was deployed and rolled back, and its documents were collected. The older shape
+        // still runs on nodes built before a registration wrote updated_at again, so its rows carry their first one.
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation SET created_at = now() - interval '400 days', "
+                    + "updated_at = now() - interval '400 days' WHERE starts_with(id, @prefix)",
+                ("prefix", MachineDocuments.ReservedIdPrefix)
+            )
+            .ConfigureAwait(false);
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation_history SET changed_at = now() - interval '400 days' "
+                    + "WHERE starts_with(id, @prefix)",
+                ("prefix", MachineDocuments.ReservedIdPrefix)
+            )
+            .ConfigureAwait(false);
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation SET is_active = false, deprecation_reason = 'collected', "
+                    + "updated_at = now() - interval '300 days' WHERE id = ANY(@ids)",
+                ("ids", v2.ToArray())
+            )
+            .ConfigureAwait(false);
     }
 
     // A host on the shared clock that registers its documents again every 200 ms.
@@ -264,7 +289,7 @@ public class MachineDocumentStorageTests
                 var options = (PersistedOperationsOptions)
                     services
                         .Last(d => d.ServiceType == typeof(PersistedOperationsOptions))
-                        .ImplementationInstance!;
+                        .ImplementationInstance.NotNull();
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };
@@ -276,19 +301,36 @@ public class MachineDocumentStorageTests
     }
 
     private static async Task<IReadOnlyList<string>> ShelfIdsAsync() =>
-        (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId))
-            .Where(d => d.Operation(ShelfMachine.MachineId) != MachineDocumentOps.MachineChanged)
+        (
+            await MachineDocumentOps
+                .MachineDocumentsAsync(Database, ShelfMachine.MachineId)
+                .ConfigureAwait(false)
+        )
+            .Where(d =>
+                !string.Equals(
+                    d.Operation(ShelfMachine.MachineId),
+                    MachineDocumentOps.MachineChanged,
+                    StringComparison.Ordinal
+                )
+            )
             .Select(d => d.Id)
             .ToList();
 
     private static async Task<int> ActiveAsync(IReadOnlyList<string> ids) =>
-        (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId)).Count(
-            d => d.IsActive && ids.Contains(d.Id)
-        );
+        (
+            await MachineDocumentOps
+                .MachineDocumentsAsync(Database, ShelfMachine.MachineId)
+                .ConfigureAwait(false)
+        ).Count(d => d.IsActive && ids.Contains(d.Id, StringComparer.Ordinal));
 
     private static string Pick(IReadOnlyList<string> ids, string operation) =>
         ids.Single(i =>
-            new MachineDocumentOps.StoredDocument("", i, "", true).Operation(ShelfMachine.MachineId)
-            == operation
+            string.Equals(
+                new MachineDocumentOps.StoredDocument("", i, "", IsActive: true).Operation(
+                    ShelfMachine.MachineId
+                ),
+                operation,
+                StringComparison.Ordinal
+            )
         );
 }

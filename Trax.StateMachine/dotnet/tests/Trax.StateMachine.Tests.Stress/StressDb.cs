@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -24,13 +25,17 @@ namespace Trax.StateMachine.Tests.Stress;
 public class StressDb
 {
     // The always-present `postgres` maintenance database (see PostgresSetup for why).
-    private static readonly string Maintenance =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true"
+    );
     private const string Database = "trax_statemachine_stress";
 
     public static string ConnectionString { get; } =
-        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};"
-        + "Include Error Detail=true;Maximum Pool Size=64;Timeout=30";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};"
+        ) + "Include Error Detail=true;Maximum Pool Size=64;Timeout=30";
 
     private static readonly Lazy<ServiceProvider> Provider = new(() =>
     {
@@ -56,7 +61,8 @@ public class StressDb
         if (!StressProfile.Enabled)
             return;
 
-        await using (var admin = new NpgsqlConnection(Maintenance))
+        var admin = new NpgsqlConnection(Maintenance);
+        await using (admin.ConfigureAwait(false))
         {
             await admin.OpenAsync();
             await Exec(admin, $"DROP DATABASE IF EXISTS {Database} WITH (FORCE)");
@@ -74,15 +80,17 @@ public class StressDb
             return;
 
         NpgsqlConnection.ClearAllPools();
-        await using var admin = new NpgsqlConnection(Maintenance);
+        var admin = new NpgsqlConnection(Maintenance);
+        await using var adminDisposal = admin.ConfigureAwait(false);
         await admin.OpenAsync();
         await Exec(admin, $"DROP DATABASE IF EXISTS {Database} WITH (FORCE)");
     }
 
     private static async Task Exec(NpgsqlConnection connection, string sql)
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

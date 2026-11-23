@@ -21,7 +21,7 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class PublicApiIsDocumentedTests
+public partial class PublicApiIsDocumentedTests
 {
     /// <summary>
     /// The undocumented public API that predates this guard, one <c>Assembly T:Type</c> or
@@ -48,26 +48,39 @@ public class PublicApiIsDocumentedTests
         "CompareTo",
     };
 
-    private static readonly Regex TypeDeclaration = new(
+    [GeneratedRegex(@"^(?:\[[^\]]*\]\s*)+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex LeadingAttributes { get; }
+
+    [GeneratedRegex("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex WordBoundary { get; }
+
+    [GeneratedRegex(
         @"^(?:\[.*\]\s*)*(?:public|protected) (?:(?:static|sealed|abstract|readonly|partial|ref|unsafe|new)\s+)*"
             + @"(?<kind>record struct|record class|record|class|struct|interface|enum|delegate)\s+(?<decl>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TypeDeclaration { get; }
 
-    private static readonly Regex LeadingIdentifier = new(
+    [GeneratedRegex(
         @"^(?<name>[A-Za-z_]\w*)(?<rest>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LeadingIdentifier { get; }
 
-    private static readonly Regex LastIdentifier = new(
+    [GeneratedRegex(
         @"(?<name>[A-Za-z_]\w*)\s*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LastIdentifier { get; }
 
-    private static readonly Regex Word = new(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+    [GeneratedRegex(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Word { get; }
 
     [Test]
-    public void Every_PublicApi_IsNamed_OnAPublishedPage()
+    public async Task Every_PublicApi_IsNamed_OnAPublishedPage()
     {
         var baselines = Baselines().ToList();
         baselines
@@ -76,20 +89,26 @@ public class PublicApiIsDocumentedTests
                 "the guard reads the public API baselines; finding none means it checks nothing"
             );
 
-        var words = PublishedWords();
-        var known = KnownUndocumented();
+        var words = await PublishedWordsAsync().ConfigureAwait(false);
+        var known = await KnownUndocumentedAsync().ConfigureAwait(false);
 
-        var undocumented = baselines
-            .SelectMany(b => Undocumented(b.Assembly, File.ReadAllText(b.Path), words))
-            .ToHashSet(StringComparer.Ordinal);
+        var undocumented = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (assembly, path) in baselines)
+            undocumented.UnionWith(
+                Undocumented(
+                    assembly,
+                    await File.ReadAllTextAsync(path).ConfigureAwait(false),
+                    words
+                )
+            );
 
         var offenders = undocumented
             .Where(k => !known.Contains(k))
-            .OrderBy(k => k, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
         var stale = known
             .Where(k => !undocumented.Contains(k))
-            .OrderBy(k => k, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         offenders
@@ -214,7 +233,7 @@ public class PublicApiIsDocumentedTests
         {
             if (entry.IsType)
             {
-                if (entry.Name == "_Imports")
+                if (string.Equals(entry.Name, "_Imports", StringComparison.Ordinal))
                 {
                     exemptTypes.Add(entry.Path);
                     continue;
@@ -255,7 +274,7 @@ public class PublicApiIsDocumentedTests
     {
         var stack = new List<(int Indent, string Name, string Kind)>();
 
-        foreach (var raw in baseline.Replace("\r\n", "\n").Split('\n'))
+        foreach (var raw in baseline.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
             var line = raw.TrimEnd();
             var text = line.Trim();
@@ -274,17 +293,17 @@ public class PublicApiIsDocumentedTests
             if (text.StartsWith('[') && text.EndsWith(']'))
                 continue;
 
-            var owner = string.Join(".", stack.Select(s => s.Name));
+            var owner = string.Join('.', stack.Select(s => s.Name));
 
             var type = TypeDeclaration.Match(text);
             if (type.Success)
             {
                 var kind = type.Groups["kind"].Value;
                 var decl = type.Groups["decl"].Value;
-                if (kind == "delegate")
+                if (string.Equals(kind, "delegate", StringComparison.Ordinal))
                 {
                     if (NameBeforeParameters(decl) is { } delegateName)
-                        yield return new Entry(true, owner, delegateName, "");
+                        yield return new Entry(IsType: true, owner, delegateName, "");
                     continue;
                 }
 
@@ -293,7 +312,7 @@ public class PublicApiIsDocumentedTests
                     continue;
 
                 var name = declared.Groups["name"].Value;
-                yield return new Entry(true, owner, name, declared.Groups["rest"].Value);
+                yield return new Entry(IsType: true, owner, name, declared.Groups["rest"].Value);
                 stack.Add((indent, name, kind));
                 continue;
             }
@@ -303,22 +322,22 @@ public class PublicApiIsDocumentedTests
 
             var member = MemberName(text, stack[^1].Kind, stack[^1].Name);
             if (member is not null)
-                yield return new Entry(false, owner, member, "");
+                yield return new Entry(IsType: false, owner, member, "");
         }
     }
 
     private static string? MemberName(string text, string ownerKind, string ownerName)
     {
-        if (ownerKind == "enum")
+        if (string.Equals(ownerKind, "enum", StringComparison.Ordinal))
             return
                 LastIdentifier.Match(text.Split('=')[0].TrimEnd(',')).Groups["name"].Value
                     is { Length: > 0 } v
                 ? v
                 : null;
 
-        text = Regex.Replace(text, @"^(?:\[[^\]]*\]\s*)+", "");
+        text = LeadingAttributes.Replace(text, "");
 
-        var isInterface = ownerKind == "interface";
+        var isInterface = string.Equals(ownerKind, "interface", StringComparison.Ordinal);
         if (
             !isInterface
             && !text.StartsWith("public ", StringComparison.Ordinal)
@@ -342,7 +361,7 @@ public class PublicApiIsDocumentedTests
         var equals = text.IndexOf(" = ", StringComparison.Ordinal);
         var head = equals >= 0 ? text[..equals] : text;
 
-        var brace = head.IndexOf('{');
+        var brace = head.IndexOf('{', StringComparison.Ordinal);
         var name =
             NameBeforeParameters(brace >= 0 ? head[..brace] : head)
             ?? LastIdentifier
@@ -425,7 +444,7 @@ public class PublicApiIsDocumentedTests
             [
                 n,
                 char.ToLowerInvariant(n[0]) + n[1..],
-                Regex.Replace(n, "(?<=[a-z0-9])(?=[A-Z])", "_").ToUpperInvariant(),
+                WordBoundary.Replace(n, "_").ToUpperInvariant(),
             ];
 
         var bases = new List<string> { name };
@@ -444,14 +463,16 @@ public class PublicApiIsDocumentedTests
     }
 
     /// <summary>Every word on a page traxsharp.net publishes.</summary>
-    private static HashSet<string> PublishedWords()
+    private static async Task<HashSet<string>> PublishedWordsAsync()
     {
         var words = new HashSet<string>(StringComparer.Ordinal);
         foreach (var file in RepoRoot.MarkdownFiles())
         {
             if (!RepoRoot.IsPublished(RepoRoot.Relative(file).Replace('\\', '/')))
                 continue;
-            foreach (Match word in Word.Matches(File.ReadAllText(file)))
+            foreach (
+                Match word in Word.Matches(await File.ReadAllTextAsync(file).ConfigureAwait(false))
+            )
                 words.Add(word.Value);
         }
 
@@ -461,7 +482,7 @@ public class PublicApiIsDocumentedTests
     /// <summary>Each folder's public API baselines, with the assembly each one describes.</summary>
     private static IEnumerable<(string Assembly, string Path)> Baselines()
     {
-        var monorepo = Directory.GetParent(RepoRoot.Path)!.FullName;
+        var monorepo = RepoRoot.Monorepo;
         foreach (
             var folder in Directory
                 .EnumerateDirectories(monorepo, "Trax.*")
@@ -484,8 +505,11 @@ public class PublicApiIsDocumentedTests
         }
     }
 
-    private static HashSet<string> KnownUndocumented() =>
-        File.ReadAllLines(RepoRoot.Combine(KnownUndocumentedFile.Split('/')))
+    private static async Task<HashSet<string>> KnownUndocumentedAsync() =>
+        (
+            await File.ReadAllLinesAsync(RepoRoot.Combine(KnownUndocumentedFile.Split('/')))
+                .ConfigureAwait(false)
+        )
             .Select(l => l.Trim())
             .Where(l => l.Length > 0 && !l.StartsWith('#'))
             .ToHashSet(StringComparer.Ordinal);

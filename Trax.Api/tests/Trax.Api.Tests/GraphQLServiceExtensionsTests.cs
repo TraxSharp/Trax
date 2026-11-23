@@ -158,7 +158,7 @@ public class GraphQLServiceExtensionsTests
                     .Configure(app =>
                     {
                         app.UseRouting();
-                        ((WebApplication)null!)?.UseTraxGraphQL();
+                        ((WebApplication)Null.Of<object>())?.UseTraxGraphQL();
                         // WebApplication-only extension; emulate the surface area
                         // by mapping the endpoint directly via the same route the
                         // extension uses, then assert the generated path.
@@ -253,7 +253,7 @@ public class GraphQLServiceExtensionsTests
         await using var app = builder.Build();
         var configuratorRan = 0;
         app.UseTraxGraphQL("/api/gql", endpoint => configuratorRan++);
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None);
 
         var response = await app.GetTestClient()
             .PostAsync(
@@ -262,11 +262,12 @@ public class GraphQLServiceExtensionsTests
                     """{"query":"{ __typename }"}""",
                     System.Text.Encoding.UTF8,
                     "application/json"
-                )
+                ),
+                cancellationToken: CancellationToken.None
             );
         response.IsSuccessStatusCode.Should().BeTrue();
         configuratorRan.Should().Be(1);
-        await app.StopAsync();
+        await app.StopAsync(cancellationToken: CancellationToken.None);
     }
 
     [Test]

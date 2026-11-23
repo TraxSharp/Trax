@@ -26,7 +26,9 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 
     public ActionTargets Targets => ActionTargets.Test;
 
-    public void BeforeTest(ITest test) => _before = Find();
+    // ITestAction is synchronous, and the check runs between tests, never inside one, so it
+    // waits here. Every await below is ConfigureAwait(false).
+    public void BeforeTest(ITest test) => _before = FindAsync().GetAwaiter().GetResult();
 
     public void AfterTest(ITest test)
     {
@@ -36,29 +38,38 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         )
             return;
 
-        // The host is still running when the check runs, and its scheduler records a run of its own every
-        // second (the manifest manager), so a run can be caught in progress that finishes a moment later. A run
-        // still in progress once the host had time to finish it is stuck, and fails the test like any violation.
-        var added = Added();
-        if (added.Count > 0 && added.All(v => v.Invariant == TraxInvariants.RunInProgress))
-            Polling
-                .WaitUntilAsync(
-                    () => Task.FromResult((added = Added()).Count == 0),
-                    BrowserTimeouts.Server,
-                    TimeSpan.FromMilliseconds(250)
-                )
-                .GetAwaiter()
-                .GetResult();
+        var added = AddedAsync().GetAwaiter().GetResult();
         if (added.Count > 0)
             Assert.Fail(TraxInvariants.Describe(added));
     }
 
-    private List<TraxInvariantViolation> Added() => Find().Except(_before).ToList();
+    // The host is still running when the check runs, and its scheduler records a run of its own every
+    // second (the manifest manager), so a run can be caught in progress that finishes a moment later. A run
+    // still in progress once the host had time to finish it is stuck, and fails the test like any violation.
+    private async Task<List<TraxInvariantViolation>> AddedAsync()
+    {
+        var added = (await FindAsync().ConfigureAwait(false)).Except(_before).ToList();
+        if (
+            added.Count > 0
+            && added.TrueForAll(v =>
+                string.Equals(v.Invariant, TraxInvariants.RunInProgress, StringComparison.Ordinal)
+            )
+        )
+            await Polling
+                .WaitUntilAsync(
+                    async () =>
+                        (
+                            added = (await FindAsync().ConfigureAwait(false))
+                                .Except(_before)
+                                .ToList()
+                        ).Count == 0,
+                    BrowserTimeouts.Server,
+                    TimeSpan.FromMilliseconds(250)
+                )
+                .ConfigureAwait(false);
+        return added;
+    }
 
-    // ITestAction is synchronous, and the check runs between tests, never inside one.
-    private static IReadOnlyList<TraxInvariantViolation> Find() =>
-        TraxInvariants
-            .FindViolationsAsync(RecoveryBrowserHost.ConnectionString, InvokingStates)
-            .GetAwaiter()
-            .GetResult();
+    private static Task<IReadOnlyList<TraxInvariantViolation>> FindAsync() =>
+        TraxInvariants.FindViolationsAsync(RecoveryBrowserHost.ConnectionString, InvokingStates);
 }

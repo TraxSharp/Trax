@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 
 /// <summary>
@@ -46,7 +48,10 @@ public sealed class PersistedOperationParseException : PersistedOperationExcepti
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(originalMessage);
         if (line.HasValue && column.HasValue)
-            return $"Persisted operation document failed to parse at line {line}, column {column}: {originalMessage}";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Persisted operation document failed to parse at line {line}, column {column}: {originalMessage}"
+            );
         return $"Persisted operation document failed to parse: {originalMessage}";
     }
 }

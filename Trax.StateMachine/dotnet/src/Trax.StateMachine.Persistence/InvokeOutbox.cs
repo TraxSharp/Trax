@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,87 +12,6 @@ using Trax.Effect.Models;
 using Trax.Effect.Models.WorkQueue.DTOs;
 
 namespace Trax.StateMachine.Persistence;
-
-/// <summary>The invoking state a write enters: its train, how the run's input is built, and the owner's cap.</summary>
-/// <param name="TrainType">The train's interface.</param>
-/// <param name="CreateInput">
-/// Builds the run's input from the context the state is entered with and the owner's user key (null for the system).
-/// </param>
-/// <param name="Limit">
-/// The most live invoked runs the entering user may already hold, across every machine, for the entry to be allowed;
-/// system owners are not capped.
-/// </param>
-internal sealed record EnteringInvoke(
-    Type TrainType,
-    Func<JsonObject, string?, object?> CreateInput,
-    int Limit
-)
-{
-    /// <summary>
-    /// The child machine the state starts instead of a train, or null when it invokes one. A spawn is not counted
-    /// against the owner's live-run cap.
-    /// </summary>
-    public SpawnDefinition? Spawn { get; init; }
-}
-
-/// <summary>How a write through the <see cref="InvokeOutbox"/> ended.</summary>
-internal abstract record InvokeWrite
-{
-    /// <summary>The snapshot, the token change and any queued run committed together.</summary>
-    /// <param name="InvokeToken">The token the row holds now: the new run's external id, or null.</param>
-    public sealed record Written(string? InvokeToken) : InvokeWrite
-    {
-        /// <summary>
-        /// The due time the write left on the row, where the writer reads it: when the timer of its state fires, or
-        /// null when that state has none.
-        /// </summary>
-        public DateTimeOffset? DueAt { get; init; }
-    }
-
-    /// <summary>The row changed since it was read, or (on insert) already exists; nothing was written.</summary>
-    public sealed record Conflict : InvokeWrite;
-
-    /// <summary>The write was refused; nothing was written.</summary>
-    public sealed record Refused(RefusalCode Code, string Message, Exception? Exception = null)
-        : InvokeWrite;
-
-    private InvokeWrite() { }
-}
-
-/// <summary>The most drafts one user may hold, and the idle time after which one no longer counts.</summary>
-/// <param name="Max">The cap.</param>
-/// <param name="Ttl">The draft TTL, or null when drafts never expire.</param>
-/// <param name="Kept">
-/// For a row that does not record whether the server put it in its state, the states that make it a record rather than
-/// a draft, as <see cref="DraftExpiry.Key"/> writes them; null names none.
-/// </param>
-internal readonly record struct DraftCap(
-    int Max,
-    TimeSpan? Ttl,
-    IReadOnlyCollection<string>? Kept = null
-);
-
-/// <summary>How a create through <see cref="InvokeOutbox.Create"/> ended.</summary>
-internal abstract record CreateWrite
-{
-    /// <summary>The row was inserted, with its run when its state invokes one.</summary>
-    public sealed record Created(Guid Id, WrittenRow Row) : CreateWrite;
-
-    /// <summary>The user's start with the same request id and input created this row earlier.</summary>
-    public sealed record Existing(Guid Id, StoredSnapshot Stored) : CreateWrite;
-
-    /// <summary>The user's start with the same request id was started with a different input.</summary>
-    public sealed record Reused : CreateWrite;
-
-    /// <summary>The row already exists (a save racing another create of the same id); nothing was written.</summary>
-    public sealed record Conflict : CreateWrite;
-
-    /// <summary>The create was refused; nothing was written.</summary>
-    public sealed record Refused(RefusalCode Code, string Message, Exception? Exception = null)
-        : CreateWrite;
-
-    private CreateWrite() { }
-}
 
 /// <summary>
 /// Writes a snapshot that enters or leaves an invoking state in one transaction with everything that goes with it:
@@ -140,54 +60,63 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         string? trigger = null
     ) =>
         await InTransaction(
-            async (context, store) =>
-            {
-                if (
-                    entering is { Spawn: null }
-                    && await OverLimit(
-                        context,
-                        owner,
-                        leavingToken,
-                        entering.Limit,
-                        cancellationToken
+                async (context, store) =>
+                {
+                    if (
+                        entering is { Spawn: null }
+                        && await OverLimit(
+                                context,
+                                owner,
+                                leavingToken,
+                                entering.Limit,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false)
+                            is { } refused
                     )
-                        is { } refused
-                )
-                    return refused;
+                        return refused;
 
-                // Built before anything is written: the input mapping is the author's code and may throw.
-                var launch = entering is null ? null : Prepare(entering, owner, next, id);
-                if (launch is InvokeWrite.Refused bad)
-                    return bad;
-                var run = launch as Prepared;
+                    // Built before anything is written: the input mapping is the author's code and may throw.
+                    var launch = entering is null ? null : Prepare(entering, owner, next, id);
+                    if (launch is InvokeWrite.Refused bad)
+                        return bad;
+                    var run = launch as Prepared;
 
-                // The snapshot first: it is the one write that can lose a race, and losing it writes nothing else.
-                // The store is always StoreOver's, which records the command in the instance's history.
-                var wrote = await ((EfSnapshotStore)store).Update(
-                    owner,
-                    id,
-                    next,
-                    expectedToken,
-                    request,
-                    new InvokeTokenWrite(run?.Token),
-                    TransitionNote.Command(owner, trigger ?? request?.Trigger),
-                    cancellationToken
-                );
-                if (!wrote)
-                    return new InvokeWrite.Conflict();
+                    // The snapshot first: it is the one write that can lose a race, and losing it writes nothing else.
+                    // The store is always StoreOver's, which records the command in the instance's history.
+                    var wrote = await ((EfSnapshotStore)store)
+                        .Update(
+                            owner,
+                            id,
+                            next,
+                            expectedToken,
+                            request,
+                            new InvokeTokenWrite(run?.Token),
+                            TransitionNote.Command(owner, trigger ?? request?.Trigger),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    if (!wrote)
+                        return new InvokeWrite.Conflict();
 
-                if (leavingToken is not null)
-                    await InvokedRunCancellation.CancelIn(context, leavingToken, cancellationToken);
+                    if (leavingToken is not null)
+                        await InvokedRunCancellation
+                            .CancelIn(context, leavingToken, cancellationToken)
+                            .ConfigureAwait(false);
 
-                if (run is not null)
-                    await LaunchIn(run, context, store, owner, cancellationToken);
+                    if (run is not null)
+                        await LaunchIn(run, context, store, owner, cancellationToken)
+                            .ConfigureAwait(false);
 
-                // The update holds the row until the transaction commits, so this reads the due time it wrote.
-                var written = await store.Get(owner, next.Machine, id, cancellationToken);
-                return new InvokeWrite.Written(run?.Token) { DueAt = written?.DueAt };
-            },
-            cancellationToken
-        );
+                    // The update holds the row until the transaction commits, so this reads the due time it wrote.
+                    var written = await store
+                        .Get(owner, next.Machine, id, cancellationToken)
+                        .ConfigureAwait(false);
+                    return new InvokeWrite.Written(run?.Token) { DueAt = written?.DueAt };
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Creates <paramref name="owner"/>'s row for <paramref name="snapshot"/> and, when its state invokes a train,
@@ -202,36 +131,43 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         CancellationToken cancellationToken
     ) =>
         await InTransaction(
-            async (context, store) =>
-            {
-                if (
-                    entering is { Spawn: null }
-                    && await OverLimit(
-                        context,
-                        owner,
-                        leavingToken: null,
-                        entering.Limit,
-                        cancellationToken
+                async (context, store) =>
+                {
+                    if (
+                        entering is { Spawn: null }
+                        && await OverLimit(
+                                context,
+                                owner,
+                                leavingToken: null,
+                                entering.Limit,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false)
+                            is { } refused
                     )
-                        is { } refused
-                )
-                    return refused;
+                        return refused;
 
-                var launch = entering is null ? null : Prepare(entering, owner, snapshot, id);
-                if (launch is InvokeWrite.Refused bad)
-                    return bad;
-                var run = launch as Prepared;
+                    var launch = entering is null ? null : Prepare(entering, owner, snapshot, id);
+                    if (launch is InvokeWrite.Refused bad)
+                        return bad;
+                    var run = launch as Prepared;
 
-                if (!await store.Insert(owner, id, snapshot, run?.Token, cancellationToken))
-                    return new InvokeWrite.Conflict();
+                    if (
+                        !await store
+                            .Insert(owner, id, snapshot, run?.Token, cancellationToken)
+                            .ConfigureAwait(false)
+                    )
+                        return new InvokeWrite.Conflict();
 
-                if (run is not null)
-                    await LaunchIn(run, context, store, owner, cancellationToken);
+                    if (run is not null)
+                        await LaunchIn(run, context, store, owner, cancellationToken)
+                            .ConfigureAwait(false);
 
-                return new InvokeWrite.Written(run?.Token);
-            },
-            cancellationToken
-        );
+                    return new InvokeWrite.Written(run?.Token);
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Applies a finished run's outcome: writes <paramref name="next"/> over the row that still holds
@@ -252,65 +188,94 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         string? trigger = null
     ) =>
         await InTransaction(
-            async (context, store) =>
-            {
-                // No user is present for a run an outcome queues, so only a system-owned instance may chain one;
-                // the startup check refuses a user-owned machine that declares such an edge, and this refuses the
-                // write again rather than authorize it in the trusted scope.
-                if (entering is not null && owner.Kind != SnapshotOwnerKind.System)
-                    return new InvokeWrite.Refused(
-                        ChainRefused,
-                        "The step's work could not be started.",
-                        new InvalidOperationException(
-                            $"An outcome of '{next.Machine}' entered {next.State}, which invokes a train, but the "
-                                + "instance is user-owned: a run an outcome queues has no user to authorize it. "
-                                + "The startup check refuses such a machine."
-                        )
-                    );
-
-                if (
-                    entering is { Spawn: null }
-                    && await OverLimit(
-                        context,
-                        owner,
-                        leavingToken: invokeToken,
-                        entering.Limit,
-                        cancellationToken
+                async (context, store) =>
+                {
+                    if (
+                        await RefuseDelivery(
+                                context,
+                                owner,
+                                invokeToken,
+                                next,
+                                entering,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false) is
+                        { } refusal
                     )
-                        is { } refused
-                )
-                    return refused;
+                        return refusal;
 
-                var launch = entering is null
-                    ? null
-                    : Prepare(entering, owner, next, id, fromOutcome: true);
-                if (launch is InvokeWrite.Refused bad)
-                    return bad;
-                var run = launch as Prepared;
+                    var launch = entering is null
+                        ? null
+                        : Prepare(entering, owner, next, id, fromOutcome: true);
+                    if (launch is InvokeWrite.Refused bad)
+                        return bad;
+                    var run = launch as Prepared;
 
-                // The conditional update is the one write that can lose, to another host applying the same
-                // outcome or to the state being left; losing it writes nothing else.
-                if (
-                    !await ((EfSnapshotStore)store).ApplyOutcome(
-                        invokeToken,
-                        next,
-                        run?.Token,
-                        expectedToken,
-                        trigger,
-                        cancellationToken
+                    // The conditional update is the one write that can lose, to another host applying the same
+                    // outcome or to the state being left; losing it writes nothing else.
+                    if (
+                        !await ((EfSnapshotStore)store)
+                            .ApplyOutcome(
+                                invokeToken,
+                                next,
+                                run?.Token,
+                                expectedToken,
+                                trigger,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false)
                     )
+                        return new InvokeWrite.Conflict();
+
+                    if (run is not null)
+                        await LaunchIn(run, context, store, owner, cancellationToken)
+                            .ConfigureAwait(false);
+
+                    // The update holds the row until the transaction commits, so this reads the due time it wrote.
+                    var written = await store
+                        .Get(owner, next.Machine, id, cancellationToken)
+                        .ConfigureAwait(false);
+                    return new InvokeWrite.Written(run?.Token) { DueAt = written?.DueAt };
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+    // Why an outcome may not be applied as it stands; null when it may.
+    private async Task<InvokeWrite.Refused?> RefuseDelivery(
+        IDataContext context,
+        DraftOwner owner,
+        string invokeToken,
+        Snapshot next,
+        EnteringInvoke? entering,
+        CancellationToken cancellationToken
+    )
+    {
+        // No user is present for a run an outcome queues, so only a system-owned instance may chain one;
+        // the startup check refuses a user-owned machine that declares such an edge, and this refuses the
+        // write again rather than authorize it in the trusted scope.
+        if (entering is not null && owner.Kind != SnapshotOwnerKind.System)
+            return new InvokeWrite.Refused(
+                ChainRefused,
+                "The step's work could not be started.",
+                new InvalidOperationException(
+                    $"An outcome of '{next.Machine}' entered {next.State}, which invokes a train, but the "
+                        + "instance is user-owned: a run an outcome queues has no user to authorize it. "
+                        + "The startup check refuses such a machine."
                 )
-                    return new InvokeWrite.Conflict();
+            );
 
-                if (run is not null)
-                    await LaunchIn(run, context, store, owner, cancellationToken);
-
-                // The update holds the row until the transaction commits, so this reads the due time it wrote.
-                var written = await store.Get(owner, next.Machine, id, cancellationToken);
-                return new InvokeWrite.Written(run?.Token) { DueAt = written?.DueAt };
-            },
-            cancellationToken
-        );
+        if (entering is { Spawn: null })
+            return await OverLimit(
+                    context,
+                    owner,
+                    leavingToken: invokeToken,
+                    entering.Limit,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        return null;
+    }
 
     /// <summary>
     /// Creates <paramref name="owner"/>'s row for <paramref name="snapshot"/> in one transaction, under a lock on the
@@ -336,27 +301,31 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         CancellationToken cancellationToken
     )
     {
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var dialect = services.GetService<ISqlDialect>();
         var store = StoreOver(context, dialect);
-        IDataContextTransaction? transaction = await context.BeginTransaction(cancellationToken);
+        IDataContextTransaction? transaction = await context
+            .BeginTransaction(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             CreateWrite result;
             try
             {
                 result = await CreateIn(
-                    context,
-                    store,
-                    dialect,
-                    owner,
-                    id,
-                    snapshot,
-                    start,
-                    entering,
-                    cap,
-                    cancellationToken
-                );
+                        context,
+                        store,
+                        dialect,
+                        owner,
+                        id,
+                        snapshot,
+                        start,
+                        entering,
+                        cap,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
             }
             catch (UnauthorizedAccessException)
             {
@@ -368,19 +337,19 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
 
             if (result is CreateWrite.Created or CreateWrite.Existing)
             {
-                await transaction.Commit();
+                await transaction.Commit().ConfigureAwait(false);
                 transaction.Dispose();
                 services.GetService<SnapshotWriteSignal>()?.Written();
             }
             else
-                await RollbackQuietly(transaction);
+                await RollbackQuietly(transaction).ConfigureAwait(false);
             transaction = null;
             return result;
         }
         catch
         {
             if (transaction is not null)
-                await RollbackQuietly(transaction);
+                await RollbackQuietly(transaction).ConfigureAwait(false);
             throw;
         }
     }
@@ -402,87 +371,33 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             owner.UserKey
             ?? throw new ArgumentException("Only a user's draft is created here.", nameof(owner));
 
-        // One user's creates take turns, on every host, so a count and the insert after it cannot interleave with
-        // another create of theirs. SQLite serializes writing transactions already (BEGIN IMMEDIATE).
-        if (dialect is not null && context is DbContext db)
-            await db.Database.ExecuteSqlRawAsync(
-                dialect.LockSubject(),
-                [$"trax:drafts:{userKey}"],
-                cancellationToken
-            );
+        await LockUserDrafts(context, dialect, userKey, cancellationToken).ConfigureAwait(false);
 
-        if (start is not null)
-        {
-            var existing = await store.FindStarted(
-                owner,
-                snapshot.Machine,
-                start.RequestId,
-                cancellationToken
-            );
-            if (existing is not null)
-            {
-                if (
-                    !string.Equals(
-                        existing.Fingerprint,
-                        start.Fingerprint,
-                        StringComparison.Ordinal
-                    )
-                )
-                    return new CreateWrite.Reused();
+        if (
+            start is not null
+            && await ExistingStart(store, owner, snapshot, start, cancellationToken)
+                .ConfigureAwait(false)
+                is { } answered
+        )
+            return answered;
 
-                // A retry is activity: marking the row active moves its revision, so a sweep that read it as expired
-                // deletes nothing, and the id answered here is never one it deletes. A row written since it was read
-                // is active already.
-                var touched = await store.Touch(
-                    owner,
-                    snapshot.Machine,
-                    existing.Id,
-                    existing.Stored.Token,
-                    cancellationToken
-                );
-                var current = touched
-                    ? existing.Stored with
-                    {
-                        Revision = existing.Stored.Revision + 1,
-                    }
-                    : (
-                        await store.FindStarted(
-                            owner,
-                            snapshot.Machine,
-                            start.RequestId,
-                            cancellationToken
-                        )
-                    )?.Stored;
-                return current is null
-                    ? new CreateWrite.Conflict()
-                    : new CreateWrite.Existing(existing.Id, current);
-            }
-        }
-
-        if (cap is { } limit)
-        {
-            var held = await store.CountDrafts(
-                userKey,
-                limit.Ttl is { } ttl ? DateTimeOffset.UtcNow - ttl : null,
-                limit.Kept,
-                cancellationToken
-            );
-            if (held >= limit.Max)
-                return new CreateWrite.Refused(
-                    RefusalCode.TooManyDrafts,
-                    $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
-                );
-        }
+        if (
+            cap is { } limit
+            && await CapRefusal(store, userKey, limit, cancellationToken).ConfigureAwait(false)
+                is { } full
+        )
+            return full;
 
         if (
             entering is { Spawn: null }
             && await OverLimit(
-                context,
-                owner,
-                leavingToken: null,
-                entering.Limit,
-                cancellationToken
-            )
+                    context,
+                    owner,
+                    leavingToken: null,
+                    entering.Limit,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
                 is { } refused
         )
             return new CreateWrite.Refused(refused.Code, refused.Message, refused.Exception);
@@ -493,20 +408,105 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         var run = launch as Prepared;
 
         var row = start is null
-            ? await ((IRowReportingSnapshotStore)store).Insert(
-                userKey,
-                id,
-                snapshot,
-                cancellationToken
-            )
-            : await store.InsertStarted(owner, id, snapshot, run?.Token, start, cancellationToken);
+            ? await ((IRowReportingSnapshotStore)store)
+                .Insert(userKey, id, snapshot, cancellationToken)
+                .ConfigureAwait(false)
+            : await store
+                .InsertStarted(owner, id, snapshot, run?.Token, start, cancellationToken)
+                .ConfigureAwait(false);
         if (row is not { } written)
             return new CreateWrite.Conflict();
 
         if (run is not null)
-            await LaunchIn(run, context, store, owner, cancellationToken);
+            await LaunchIn(run, context, store, owner, cancellationToken).ConfigureAwait(false);
 
         return new CreateWrite.Created(id, written);
+    }
+
+    // One user's creates take turns, on every host, so a count and the insert after it cannot interleave with
+    // another create of theirs. SQLite serializes writing transactions already (BEGIN IMMEDIATE).
+    private static async Task LockUserDrafts(
+        IDataContext context,
+        ISqlDialect? dialect,
+        string userKey,
+        CancellationToken cancellationToken
+    )
+    {
+        if (dialect is not null && context is DbContext db)
+            await db
+                .Database.ExecuteSqlRawAsync(
+                    dialect.LockSubject(),
+                    [$"trax:drafts:{userKey}"],
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+    }
+
+    // The instance a start with this request id created already, answered instead of creating another; null when
+    // there is none.
+    private static async Task<CreateWrite?> ExistingStart(
+        EfSnapshotStore store,
+        DraftOwner owner,
+        Snapshot snapshot,
+        StartRequest start,
+        CancellationToken cancellationToken
+    )
+    {
+        var existing = await store
+            .FindStarted(owner, snapshot.Machine, start.RequestId, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is null)
+            return null;
+        if (!string.Equals(existing.Fingerprint, start.Fingerprint, StringComparison.Ordinal))
+            return new CreateWrite.Reused();
+
+        // A retry is activity: marking the row active moves its revision, so a sweep that read it as expired
+        // deletes nothing, and the id answered here is never one it deletes. A row written since it was read
+        // is active already.
+        var touched = await store
+            .Touch(owner, snapshot.Machine, existing.Id, existing.Stored.Token, cancellationToken)
+            .ConfigureAwait(false);
+        var current = touched
+            ? existing.Stored with
+            {
+                Revision = existing.Stored.Revision + 1,
+            }
+            : (
+                await store
+                    .FindStarted(owner, snapshot.Machine, start.RequestId, cancellationToken)
+                    .ConfigureAwait(false)
+            )?.Stored;
+        return current is null
+            ? new CreateWrite.Conflict()
+            : new CreateWrite.Existing(existing.Id, current);
+    }
+
+    private async Task<CreateWrite.Refused?> CapRefusal(
+        EfSnapshotStore store,
+        string userKey,
+        DraftCap limit,
+        CancellationToken cancellationToken
+    )
+    {
+        var held = await store
+            .CountDrafts(
+                userKey,
+                limit.Ttl is { } ttl
+                    ? services.GetRequiredService<TimeProvider>().GetUtcNow() - ttl
+                    : null,
+                limit.Kept,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (held >= limit.Max)
+            return new CreateWrite.Refused(
+                RefusalCode.TooManyDrafts,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
+                )
+            );
+        return null;
     }
 
     // What entering a state starts, prepared before anything is written, with the token the row will hold.
@@ -601,56 +601,81 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             );
 
         if (services.GetService<ISqlDialect>() is { } dialect && context is DbContext db)
-            await db.Database.ExecuteSqlRawAsync(
-                dialect.LockSubject(),
-                [$"trax:invoke-limit:{userKey}"],
-                cancellationToken
-            );
+            await db
+                .Database.ExecuteSqlRawAsync(
+                    dialect.LockSubject(),
+                    [$"trax:invoke-limit:{userKey}"],
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
 
+        var live = await CountLiveRuns(context, userKey, starter, leavingToken, cancellationToken)
+            .ConfigureAwait(false);
+        return live >= limit
+            ? new InvokeWrite.Refused(
+                LimitReached,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"You already have {live} steps running, the most allowed at once. "
+                ) + "Wait for one to finish, then try again."
+            )
+            : null;
+    }
+
+    // The user's runs that have not ended: queued, other than the one leavingToken names, and running.
+    private static async Task<int> CountLiveRuns(
+        IDataContext context,
+        string userKey,
+        string starter,
+        string? leavingToken,
+        CancellationToken cancellationToken
+    )
+    {
         // A run records its starter, the instance's owner, so it is counted even after a draft lifetime deleted the
         // instance. A run written before the starter was recorded is joined to the user's instances, as it was.
         var instances = context.SnapshotDrafts.Where(x =>
             x.OwnerKind == SnapshotOwnerKind.User && x.UserKey == userKey
         );
-        var queued = await context.WorkQueues.CountAsync(
-            w =>
-                w.InvokingOwnerKind == SnapshotOwnerKind.User
-                && w.Status == WorkQueueStatus.Queued
-                && w.ExternalId != leavingToken
-                && (
-                    w.StarterHash == starter
-                    || (
-                        w.StarterHash == null
-                        && instances.Any(x =>
-                            x.Id == w.InvokingInstanceId && x.Machine == w.InvokingMachine
+        var queued = await context
+            .WorkQueues.CountAsync(
+                w =>
+                    w.InvokingOwnerKind == SnapshotOwnerKind.User
+                    && w.Status == WorkQueueStatus.Queued
+                    && w.ExternalId != leavingToken
+                    && (
+                        w.StarterHash == starter
+                        || (
+                            w.StarterHash == null
+                            && instances.Any(x =>
+                                x.Id == w.InvokingInstanceId && x.Machine == w.InvokingMachine
+                            )
                         )
-                    )
-                ),
-            cancellationToken
-        );
+                    ),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         // Two counts, so the one by starter reads ix_metadata_live_invoked_starter (083): an OR with the legacy branch
         // does not imply that index's predicate, and the planner would fall back to the older ones.
         var running =
-            await LiveRunsStartedBy(context, starter).CountAsync(cancellationToken)
-            + await context.Metadatas.CountAsync(
-                m =>
-                    m.StarterHash == null
-                    && m.InvokingOwnerKind == SnapshotOwnerKind.User
-                    && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
-                    && instances.Any(x =>
-                        x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
-                    ),
-                cancellationToken
-            );
-
-        var live = queued + running;
-        return live >= limit
-            ? new InvokeWrite.Refused(
-                LimitReached,
-                $"You already have {live} steps running, the most allowed at once. "
-                    + "Wait for one to finish, then try again."
-            )
-            : null;
+            await LiveRunsStartedBy(context, starter)
+                .CountAsync(cancellationToken)
+                .ConfigureAwait(false)
+            + await context
+                .Metadatas.CountAsync(
+                    m =>
+                        m.StarterHash == null
+                        && m.InvokingOwnerKind == SnapshotOwnerKind.User
+                        && (
+                            m.TrainState == TrainState.Pending
+                            || m.TrainState == TrainState.InProgress
+                        )
+                        && instances.Any(x =>
+                            x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        return queued + running;
     }
 
     // The runs a user's instances invoked that have not ended, by the starter they recorded. Shaped to match the
@@ -717,22 +742,26 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         var run = launch as Prepared;
 
         if (
-            !await store.FireTimer(
-                due,
-                next,
-                leaving || run is not null ? new InvokeTokenWrite(run?.Token) : null,
-                cancellationToken,
-                trigger,
-                note
-            )
+            !await store
+                .FireTimer(
+                    due,
+                    next,
+                    leaving || run is not null ? new InvokeTokenWrite(run?.Token) : null,
+                    cancellationToken,
+                    trigger,
+                    note
+                )
+                .ConfigureAwait(false)
         )
             return new InvokeWrite.Conflict();
 
         if (leaving && due.InvokeToken is { } leavingToken)
-            await InvokedRunCancellation.CancelIn(context, leavingToken, cancellationToken);
+            await InvokedRunCancellation
+                .CancelIn(context, leavingToken, cancellationToken)
+                .ConfigureAwait(false);
 
         if (run is not null)
-            await LaunchIn(run, context, store, owner, cancellationToken);
+            await LaunchIn(run, context, store, owner, cancellationToken).ConfigureAwait(false);
 
         return new InvokeWrite.Written(run?.Token);
     }
@@ -791,17 +820,21 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         switch (prepared)
         {
             case PreparedLaunch launch:
-                await Launcher().Launch(launch.Launch, context, cancellationToken);
+                await Launcher()
+                    .Launch(launch.Launch, context, cancellationToken)
+                    .ConfigureAwait(false);
                 break;
             case PreparedSpawn spawn:
                 if (
-                    !await ((EfSnapshotStore)store).InsertSpawned(
-                        owner,
-                        spawn.ChildId,
-                        spawn.Child,
-                        spawn.Token,
-                        cancellationToken
-                    )
+                    !await ((EfSnapshotStore)store)
+                        .InsertSpawned(
+                            owner,
+                            spawn.ChildId,
+                            spawn.Child,
+                            spawn.Token,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false)
                 )
                     throw new InvalidOperationException(
                         $"The child {spawn.ChildId} of '{spawn.Child.Machine}' could not be inserted: its owner already "
@@ -826,15 +859,18 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         CancellationToken cancellationToken
     )
     {
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var store = StoreOver(context, services.GetService<ISqlDialect>());
-        IDataContextTransaction? transaction = await context.BeginTransaction(cancellationToken);
+        IDataContextTransaction? transaction = await context
+            .BeginTransaction(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             InvokeWrite result;
             try
             {
-                result = await write(context, store);
+                result = await write(context, store).ConfigureAwait(false);
             }
             catch (UnauthorizedAccessException)
             {
@@ -847,19 +883,19 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
 
             if (result is InvokeWrite.Written)
             {
-                await transaction.Commit();
+                await transaction.Commit().ConfigureAwait(false);
                 transaction.Dispose();
                 services.GetService<SnapshotWriteSignal>()?.Written();
             }
             else
-                await RollbackQuietly(transaction);
+                await RollbackQuietly(transaction).ConfigureAwait(false);
             transaction = null;
             return result;
         }
         catch
         {
             if (transaction is not null)
-                await RollbackQuietly(transaction);
+                await RollbackQuietly(transaction).ConfigureAwait(false);
             throw;
         }
     }
@@ -868,7 +904,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
     {
         try
         {
-            await transaction.Rollback();
+            await transaction.Rollback().ConfigureAwait(false);
         }
         catch (Exception)
         {

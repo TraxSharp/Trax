@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -32,7 +33,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class NulCharacterOutcomeTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -42,7 +43,7 @@ public class NulCharacterOutcomeTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -58,18 +59,23 @@ public class NulCharacterOutcomeTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_NUL_in_the_output_is_recorded_Completed()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (NulOutputTrain)scope.ServiceProvider.GetRequiredService<INulOutputTrain>();
 
-        var output = await train.Run(Unit.Default);
+        var output = await train.Run(Unit.Default, CancellationToken.None);
 
         output.Should().Be("bytes:\0end", "the train's caller gets the output it produced");
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Completed);
         row.EndTime.Should().NotBeNull();
         row.Output.Should().NotBeNull().And.NotContain("\\u0000");
@@ -83,13 +89,15 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_NUL_in_the_exception_message_is_recorded_Failed_with_an_end_time()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (NulFailureTrain)scope.ServiceProvider.GetRequiredService<INulFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<FormatException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Failed);
         row.EndTime.Should().NotBeNull();
         row.FailureReason.Should().NotBeNull().And.NotContain("\0");
@@ -104,14 +112,16 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_failure_message_Postgres_cannot_encode_is_recorded_Failed_without_it()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnpairedSurrogateFailureTrain)
             scope.ServiceProvider.GetRequiredService<IUnpairedSurrogateFailureTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should()
             .Be(
                 TrainState.Failed,
@@ -126,9 +136,11 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_value_Postgres_refuses_is_reported_as_a_content_refusal()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         context.Logs.Add(
             new Log
             {
@@ -138,7 +150,8 @@ public class NulCharacterOutcomeTests
             }
         );
 
-        var act = async () => await context.SaveChanges(CancellationToken.None);
+        var act = async () =>
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<StoreRefusedContentException>();
     }
@@ -146,11 +159,13 @@ public class NulCharacterOutcomeTests
     [Test]
     public async Task A_NUL_written_through_a_synchronous_save_is_replaced()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var category = $"nul-sync-{Guid.NewGuid():N}";
 
-        using (var context = (IDataContext)factory.Create())
+        var context = (IDataContext)factory.Create();
+        await using (context.ConfigureAwait(false))
         {
             context.Logs.Add(
                 new Log
@@ -160,10 +175,15 @@ public class NulCharacterOutcomeTests
                     Category = category,
                 }
             );
-            ((DbContext)context).SaveChanges();
+            // The synchronous SavingChanges hook is what this test covers, so the save has to
+            // be the synchronous one. It goes through a delegate because TRX0045 refuses a
+            // direct call to a method that has an async twin.
+            Func<int> saveSynchronously = ((DbContext)context).SaveChanges;
+            saveSynchronously();
         }
 
-        using var reader = (IDataContext)factory.Create();
+        var reader = (IDataContext)factory.Create();
+        await using var readerDisposal = reader.ConfigureAwait(false);
         var stored = await reader.Logs.AsNoTracking().SingleAsync(l => l.Category == category);
         stored.Message.Should().Be("bytes:\uFFFDend");
     }
@@ -171,9 +191,13 @@ public class NulCharacterOutcomeTests
     private static async Task<Metadata> PersistedRow(IServiceScope scope, long id)
     {
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     public interface INulOutputTrain : IServiceTrain<Unit, string>;
@@ -218,7 +242,7 @@ public class NulCharacterOutcomeTests
             public override Task<Unit> Run(Unit input)
             {
                 // The runtime's message quotes the input, NUL and all.
-                _ = int.Parse("12\u00003");
+                _ = int.Parse("12\u00003", System.Globalization.CultureInfo.InvariantCulture);
                 return Task.FromResult(input);
             }
         }

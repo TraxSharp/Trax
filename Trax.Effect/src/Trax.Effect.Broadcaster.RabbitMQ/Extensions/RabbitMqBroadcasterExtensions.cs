@@ -106,7 +106,13 @@ public static class RabbitMqBroadcasterExtensions
             );
         }
 
-        if (options.EffectiveJunctionExchangeName == options.ExchangeName)
+        if (
+            string.Equals(
+                options.EffectiveJunctionExchangeName,
+                options.ExchangeName,
+                StringComparison.Ordinal
+            )
+        )
         {
             throw new ArgumentException(
                 "UseRabbitMq() requires RabbitMqBroadcasterOptions.JunctionExchangeName to differ "

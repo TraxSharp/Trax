@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -36,12 +38,12 @@ public class TrainChainOperationsTests
 {
     private const string Key = "train-chain-admin-key-0123456789abcdefgh";
 
-    private IHost _host = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private IHost? _host;
+    private IDataContextProviderFactory? _factory;
 
-    private static readonly string Gated = typeof(IGatedChainTrain).FullName!;
-    private static readonly string Plain = typeof(IPlainChainTrain).FullName!;
-    private static readonly string Unread = typeof(IUnreadChainTrain).FullName!;
+    private static readonly string Gated = typeof(IGatedChainTrain).FullName.NotNull();
+    private static readonly string Plain = typeof(IPlainChainTrain).FullName.NotNull();
+    private static readonly string Unread = typeof(IUnreadChainTrain).FullName.NotNull();
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -76,7 +78,7 @@ public class TrainChainOperationsTests
                         graphs.Find(Plain).Returns(PlainGraph());
                         graphs.Find(Unread).Returns((ChainGraph?)null);
                         services.AddSingleton(graphs);
-                        services.AddSingleton(_factory);
+                        services.AddSingleton(_factory.NotNull());
                         services.AddScoped(_ => Substitute.For<IOperationsService>());
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                         services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
@@ -91,14 +93,14 @@ public class TrainChainOperationsTests
             )
             .Build();
 
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -121,7 +123,10 @@ public class TrainChainOperationsTests
         var run = await SeedRunAsync(Gated);
         var drawn = Operations(
             await PostAsync(
-                $"{{ operations {{ runGraph(metadataId: {run}) {{ allNodes {{ id kind parentId track depth }} }} }} }}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{{ operations {{ runGraph(metadataId: {run}) {{ allNodes {{ id kind parentId track depth }} }} }} }}"
+                )
             ),
             "runGraph"
         );
@@ -163,15 +168,22 @@ public class TrainChainOperationsTests
     {
         var trains = Operations(
             await PostAsync(
-                "{ operations { trains { fullName asksDecisions chain { metadataId train hasGraph "
-                    + "unmatchedSteps { position } allNodes { id kind state parentId track depth "
-                    + "steps { position } } } } } }"
-            ),
+                    "{ operations { trains { fullName asksDecisions chain { metadataId train hasGraph "
+                        + "unmatchedSteps { position } allNodes { id kind state parentId track depth "
+                        + "steps { position } } } } } }"
+                )
+                .ConfigureAwait(false),
             "trains"
         );
         var train = trains
             .EnumerateArray()
-            .Single(t => t.GetProperty("fullName").GetString() == fullName);
+            .Single(t =>
+                string.Equals(
+                    t.GetProperty("fullName").GetString(),
+                    fullName,
+                    StringComparison.Ordinal
+                )
+            );
         train.GetProperty("chain").GetProperty("train").GetString().Should().Be(fullName);
         return train;
     }
@@ -180,7 +192,10 @@ public class TrainChainOperationsTests
         nodes
             .Select(n =>
                 $"{n.GetProperty("id").GetString()}|{n.GetProperty("kind").GetString()}|"
-                + $"{Str(n, "parentId")}|{Str(n, "track")}|{n.GetProperty("depth").GetInt32()}"
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Str(n, "parentId")}|{Str(n, "track")}|{n.GetProperty("depth").GetInt32()}"
+                )
             )
             .ToList();
 
@@ -200,21 +215,21 @@ public class TrainChainOperationsTests
                 new ChainGraphNode(
                     "Gate<IsLarge>#0",
                     ChainStepKind.Gate,
-                    null,
+                    Junction: null,
                     "YesNoDecision<IsLarge>",
-                    null,
-                    false,
+                    Out: null,
+                    Opaque: false,
                     [
                         new ChainGraphTrack(
                             "Yes",
                             "It is large",
-                            false,
+                            IsFallback: false,
                             [Node("Gate<IsLarge>#0/Yes/Review#0", ChainStepKind.Chain, "Review")]
                         ),
                         new ChainGraphTrack(
                             "No",
-                            null,
-                            false,
+                            Description: null,
+                            IsFallback: false,
                             [Node("Gate<IsLarge>#0/No/Ship#0", ChainStepKind.Chain, "Ship")]
                         ),
                     ]
@@ -230,13 +245,13 @@ public class TrainChainOperationsTests
             "Order",
             [
                 Node("Fetch#0", ChainStepKind.Chain, "Fetch"),
-                Node("Resolve#0", ChainStepKind.Resolve, null),
+                Node("Resolve#0", ChainStepKind.Resolve, junction: null),
             ],
             []
         );
 
     private static ChainGraphNode Node(string id, ChainStepKind kind, string? junction) =>
-        new(id, kind, junction, "Order", "Order", false, []);
+        new(id, kind, junction, "Order", "Order", Opaque: false, []);
 
     private static TrainRegistration Registration(Type service) =>
         new()
@@ -261,20 +276,24 @@ public class TrainChainOperationsTests
 
     private async Task<long> SeedRunAsync(string train)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = train,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = TrainState.Completed;
-        run.EndTime = DateTime.UtcNow;
-        await db.Track(run);
-        await db.SaveChanges(default);
-        return run.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = train,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
+            );
+            run.TrainState = TrainState.Completed;
+            run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return run.Id;
+        }
     }
 
     private static JsonElement Operations(JsonDocument doc, string field)
@@ -287,21 +306,13 @@ public class TrainChainOperationsTests
 
     private async Task<JsonDocument> PostAsync(string query)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),
         };
         request.Headers.Add("X-Api-Key", Key);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }
-
-public interface IGatedChainTrain;
-
-public interface IPlainChainTrain;
-
-public interface IUnreadChainTrain;
-
-public sealed record ChainInput(string Id);

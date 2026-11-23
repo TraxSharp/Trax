@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -19,7 +20,7 @@ public class ClientPredictionTests
     {
         Id = "turnstile",
         IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+        Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
     };
 
     private static ServerSnapshot At(long? revision, string state, JsonObject? context = null) =>
@@ -39,23 +40,38 @@ public class ClientPredictionTests
         await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
 
         var send = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.ClientResult.Should()
             .Be(
                 "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
             );
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.Context["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        controller
+            .View.Snapshot.NotNull()
+            .Context["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("quarter");
 
         sent.Answer.SetResult(
             ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
         );
-        var outcome = await send.WaitAsync(Wait);
+        var outcome = await send.WaitAsync(Wait, TimeProvider.System);
 
         outcome.Should().BeOfType<SendOutcome.Confirmed>();
         controller.View.Pending.Should().BeFalse();
-        controller.View.Snapshot!.Context["paidWith"]!.GetValue<string>().Should().Be("dollar");
+        controller
+            .View.Snapshot.NotNull()
+            .Context["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("dollar");
         controller.View.Confirmed.Should().Be(controller.View.Snapshot);
     }
 
@@ -74,8 +90,14 @@ public class ClientPredictionTests
 
         _ = irController.SendAsync("Coin", new JsonObject { ["coin"] = "dollar" });
         _ = compiledController.SendAsync("Coin", new JsonObject { ["coin"] = "dollar" });
-        var fromIrSent = await fromIr.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
-        var compiledSent = await compiled.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var fromIrSent = await fromIr
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
+        var compiledSent = await compiled
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         fromIrSent.ClientResult.Should().NotBeNull().And.Be(compiledSent.ClientResult);
     }
@@ -88,17 +110,22 @@ public class ClientPredictionTests
         await server.Answer(controller, ServerAnswer.Of(At(1, "Locked")));
 
         var send = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Locked");
+        controller.View.Snapshot.NotNull().State.Should().Be("Locked");
         controller.CanSend("Coin").Should().BeTrue();
         controller.AvailableTriggers().Should().Equal("Coin");
 
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Unlocked")));
-        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        controller.View.Snapshot!.State.Should().Be("Unlocked");
+        (await send.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
+        controller.View.Snapshot.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -112,21 +139,27 @@ public class ClientPredictionTests
         );
 
         var push = controller.SendAsync("Push");
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
-            ServerAnswer.Of(At(null, "Locked"))
-        );
-        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetResult(ServerAnswer.Of(At(revision: null, "Locked")));
+        (await push.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
         controller.View.Revision.Should().BeNull();
-        controller.View.Confirmed!.State.Should().Be("Locked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Locked");
 
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetResult(
             ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
         );
-        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await coin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
 
         controller.View.Revision.Should().Be(2);
-        controller.View.Confirmed!.State.Should().Be("Unlocked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -140,11 +173,11 @@ public class ClientPredictionTests
         );
 
         var send = controller.SendAsync("Push");
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetException(
-            new HttpRequestException("connection refused")
-        );
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetException(new HttpRequestException("connection refused"));
 
-        var outcome = await send.WaitAsync(Wait);
+        var outcome = await send.WaitAsync(Wait, TimeProvider.System);
         outcome
             .Should()
             .BeOfType<SendOutcome.Failed>()
@@ -156,7 +189,7 @@ public class ClientPredictionTests
                     "connection refused"
                 )
             );
-        controller.View.Snapshot!.State.Should().Be("Unlocked");
+        controller.View.Snapshot.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -176,18 +209,28 @@ public class ClientPredictionTests
 
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
         var push = controller.SendAsync("Push");
-        var first = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         Volatile.Write(ref throwing, true);
         var before = Volatile.Read(ref heard);
         first.Answer.SetResult(
             ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
         );
 
-        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        var second = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        (await coin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
+        var second = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         second.Trigger.Should().Be("Push");
         second.Answer.SetResult(ServerAnswer.Of(At(3, "Locked")));
-        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await push.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
         Volatile.Read(ref heard).Should().BeGreaterThan(before);
     }
 
@@ -200,12 +243,16 @@ public class ClientPredictionTests
         controller.Changed += (_, _) => throw new InvalidOperationException("handler bug");
 
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetResult(
             ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
         );
 
-        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        controller.View.Confirmed!.State.Should().Be("Unlocked");
+        (await coin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
+        controller.View.Confirmed.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -218,21 +265,26 @@ public class ClientPredictionTests
 
         var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
         var push = controller.SendAsync("Push");
-        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
-            ServerAnswer.Refused("CLIENT_DIVERGENCE", "The prediction differs.")
-        );
-        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Refused>();
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(At(5, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
-        );
+        (
+            await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).Answer.SetResult(ServerAnswer.Refused("CLIENT_DIVERGENCE", "The prediction differs."));
+        (await coin.WaitAsync(Wait, TimeProvider.System)).Should().BeOfType<SendOutcome.Refused>();
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(At(5, "Unlocked", new JsonObject { ["paidWith"] = "dollar" })));
 
-        var second = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var second = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         second.Trigger.Should().Be("Push");
         second
             .ClientResult.Should()
             .Be("{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}");
         second.Answer.SetResult(ServerAnswer.Of(At(6, "Locked")));
-        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await push.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
     }
 
     [Test]
@@ -242,22 +294,25 @@ public class ClientPredictionTests
         using var controller = Open(server, MachinePredictor.For(DeclarativeTurnstile.Built));
         await server.Answer(controller, ServerAnswer.Of(At(10, "Locked")));
         server.Push(new StreamMessage.Changed(At(11, "Locked") with { RowId = "row-a" }));
-        await Until(controller, v => v.RowId == "row-a");
+        await Until(controller, v => string.Equals(v.RowId, "row-a", StringComparison.Ordinal));
 
         // The instance is deleted and created again while a reload's read is pending. A read's answer carries no
         // incarnation, so the pending one cannot say which it read.
         server.Push(new StreamMessage.Reload());
-        var first = await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var first = await server
+            .Reads.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
         var recreated = At(1, "Unlocked", new JsonObject { ["paidWith"] = "dollar" });
         server.Push(new StreamMessage.Changed(recreated with { RowId = "row-b" }));
         first.SetResult(ServerAnswer.Of(recreated));
-        (await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait)).SetResult(
-            ServerAnswer.Of(recreated)
-        );
+        (
+            await server.Reads.Reader.ReadAsync().AsTask().WaitAsync(Wait, TimeProvider.System)
+        ).SetResult(ServerAnswer.Of(recreated));
 
-        await Until(controller, v => v.RowId == "row-b");
+        await Until(controller, v => string.Equals(v.RowId, "row-b", StringComparison.Ordinal));
         controller.View.Revision.Should().Be(1);
-        controller.View.Confirmed!.State.Should().Be("Unlocked");
+        controller.View.Confirmed.NotNull().State.Should().Be("Unlocked");
     }
 
     [Test]
@@ -286,24 +341,26 @@ public class ClientPredictionTests
             Id = "review",
             IrHash = "",
             Ir = (JsonObject)
-                JsonNode.Parse(
-                    """
-                    {"committedStates":[],"context":{"Approved":{"fields":[]},"Closed":{"fields":[]},
-                     "Draft":{"fields":[{"constraints":[],"name":"edits","nullable":false,"type":"integer"}]},
-                     "Escalated":{"fields":[]},"Held":{"fields":[]},"Rejected":{"fields":[]}},
-                     "id":"review","initialContext":{"edits":0},"initialState":"Draft","inputs":{},
-                     "invariants":{"Closed":{"name":"review:closable","rule":"custom"}},
-                     "states":["Approved","Closed","Draft","Escalated","Held","Rejected"],
-                     "transitions":[
-                      {"from":"Draft","reduce":{"name":"review:count-edit","reduce":"custom"},"to":"Draft","trigger":"Edit"},
-                      {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Approved","trigger":"Approve"},
-                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Escalated","trigger":"Approve"},
-                      {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Rejected","trigger":"Reject"},
-                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Closed","trigger":"Close"},
-                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Held","trigger":"Hold"}],
-                     "triggers":["Approve","Close","Edit","Hold","Reject"],"version":1}
-                    """
-                )!,
+                JsonNode
+                    .Parse(
+                        """
+                        {"committedStates":[],"context":{"Approved":{"fields":[]},"Closed":{"fields":[]},
+                         "Draft":{"fields":[{"constraints":[],"name":"edits","nullable":false,"type":"integer"}]},
+                         "Escalated":{"fields":[]},"Held":{"fields":[]},"Rejected":{"fields":[]}},
+                         "id":"review","initialContext":{"edits":0},"initialState":"Draft","inputs":{},
+                         "invariants":{"Closed":{"name":"review:closable","rule":"custom"}},
+                         "states":["Approved","Closed","Draft","Escalated","Held","Rejected"],
+                         "transitions":[
+                          {"from":"Draft","reduce":{"name":"review:count-edit","reduce":"custom"},"to":"Draft","trigger":"Edit"},
+                          {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Approved","trigger":"Approve"},
+                          {"from":"Draft","reduce":{"reduce":"clear"},"to":"Escalated","trigger":"Approve"},
+                          {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Rejected","trigger":"Reject"},
+                          {"from":"Draft","reduce":{"reduce":"clear"},"to":"Closed","trigger":"Close"},
+                          {"from":"Draft","reduce":{"reduce":"clear"},"to":"Held","trigger":"Hold"}],
+                         "triggers":["Approve","Close","Edit","Hold","Reject"],"version":1}
+                        """
+                    )
+                    .NotNull(),
         }
     );
 
@@ -326,12 +383,23 @@ public class ClientPredictionTests
         );
 
         var send = controller.SendAsync("Edit");
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.ClientResult.Should().BeNull();
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Draft", new JsonObject { ["edits"] = 1 })));
-        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
-        controller.View.Snapshot!.Context["edits"]!.GetValue<int>().Should().Be(1);
+        (await send.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
+        controller
+            .View.Snapshot.NotNull()
+            .Context["edits"]
+            .NotNull()
+            .GetValue<int>()
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -346,11 +414,14 @@ public class ClientPredictionTests
 
         controller.CanSend("Approve").Should().BeTrue();
         _ = controller.SendAsync("Approve");
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Draft");
+        controller.View.Snapshot.NotNull().State.Should().Be("Draft");
     }
 
     [Test]
@@ -366,12 +437,15 @@ public class ClientPredictionTests
         controller.CanSend("Reject").Should().BeTrue();
         _ = controller.SendAsync("Reject");
         _ = controller.SendAsync("Hold");
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.Trigger.Should().Be("Reject");
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Draft");
+        controller.View.Snapshot.NotNull().State.Should().Be("Draft");
     }
 
     [Test]
@@ -386,11 +460,14 @@ public class ClientPredictionTests
 
         _ = controller.SendAsync("Close");
         _ = controller.SendAsync("Hold");
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System);
 
         sent.ClientResult.Should().BeNull();
         await Until(controller, v => v.Pending);
-        controller.View.Snapshot!.State.Should().Be("Draft");
+        controller.View.Snapshot.NotNull().State.Should().Be("Draft");
     }
 
     private static ServerMachineController OpenReview(HandServer server) =>
@@ -430,8 +507,8 @@ public class ClientPredictionTests
         controller.Changed += Check;
         try
         {
-            Check(null, EventArgs.Empty);
-            await reached.Task.WaitAsync(Wait);
+            Check(sender: null, EventArgs.Empty);
+            await reached.Task.WaitAsync(Wait, TimeProvider.System).ConfigureAwait(false);
         }
         finally
         {

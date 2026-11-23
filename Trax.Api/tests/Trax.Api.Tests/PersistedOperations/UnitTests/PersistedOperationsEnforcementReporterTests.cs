@@ -24,7 +24,7 @@ public class PersistedOperationsEnforcementReporterTests
         // Enforcement off with no shadow logging is refused by Build(), so the shadow flag comes
         // along whenever the caller asks for enforcement off without it.
         if (!requirePersisted)
-            builder.LogNonPersistedRequests(true);
+            builder.LogNonPersistedRequests(log: true);
 
         var options = builder.Build();
         options.LogNonPersistedRequests = shadowLogging || !requirePersisted;
@@ -34,9 +34,9 @@ public class PersistedOperationsEnforcementReporterTests
             b.AddProvider(recorder).SetMinimumLevel(LogLevel.Trace)
         );
 
-        await new PersistedOperationsEnforcementReporter(options, factory).StartAsync(
-            CancellationToken.None
-        );
+        await new PersistedOperationsEnforcementReporter(options, factory)
+            .StartAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
         return recorder.Entries;
     }

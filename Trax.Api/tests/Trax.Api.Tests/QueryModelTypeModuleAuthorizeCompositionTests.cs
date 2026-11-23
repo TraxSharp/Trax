@@ -34,7 +34,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
     [TraxAllowAnonymous]
     [TraxQueryModel(DeprecationReason = "use NewThing instead")]
     [Table("legacy_things", Schema = "test_tm")]
-    private class LegacyThing
+    private sealed class LegacyThing
     {
         [Column("id")]
         public long Id { get; set; }
@@ -43,9 +43,10 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         public string Name { get; set; } = "";
     }
 
-    private class LegacyDbContext(DbContextOptions<LegacyDbContext> options) : DbContext(options)
+    private sealed class LegacyDbContext(DbContextOptions<LegacyDbContext> options)
+        : DbContext(options)
     {
-        public DbSet<LegacyThing> Things { get; set; } = null!;
+        public DbSet<LegacyThing> Things => Set<LegacyThing>();
     }
 
     [Test]
@@ -53,9 +54,13 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
     {
         var schema = await BuildSchemaAsync<LegacyDbContext>();
 
-        var discoverField = schema.QueryType.Fields.Single(f => f.Name == "discover");
+        var discoverField = schema.QueryType.Fields.Single(f =>
+            string.Equals(f.Name, "discover", StringComparison.Ordinal)
+        );
         var discoverType = (IObjectTypeDefinition)discoverField.Type.NamedType();
-        var entry = discoverType.Fields.Single(f => f.Name == "legacyThings");
+        var entry = discoverType.Fields.Single(f =>
+            string.Equals(f.Name, "legacyThings", StringComparison.Ordinal)
+        );
 
         entry.IsDeprecated.Should().BeTrue();
         entry.DeprecationReason.Should().Be("use NewThing instead");
@@ -66,7 +71,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
     [TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
     [TraxAuthorize(Roles = "Admin")]
     [Table("audit_rows", Schema = "test_tm")]
-    private class AuditRow
+    private sealed class AuditRow
     {
         [Column("id")]
         public long Id { get; set; }
@@ -81,9 +86,10 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         public string InternalSecret { get; set; } = "";
     }
 
-    private class AuditDbContext(DbContextOptions<AuditDbContext> options) : DbContext(options)
+    private sealed class AuditDbContext(DbContextOptions<AuditDbContext> options)
+        : DbContext(options)
     {
-        public DbSet<AuditRow> Rows { get; set; } = null!;
+        public DbSet<AuditRow> Rows => Set<AuditRow>();
     }
 
     [Test]
@@ -102,7 +108,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         var fieldNames = auditType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToArray();
         fieldNames.Should().BeEquivalentTo(new[] { "id", "publicName" });
 
@@ -111,7 +117,12 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         // one — a regression that called .Authorize() only in the implicit
         // factory would silently un-gate every entity that uses explicit
         // binding.
-        auditType.Directives.Any(d => d.Definition.Name == "authorize").Should().BeTrue();
+        auditType
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
+            .Should()
+            .BeTrue();
     }
 
     // ── Schema-build helper ─────────────────────────────────────────────
@@ -147,7 +158,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
 
         var provider = services.BuildServiceProvider();
         var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
-        var executor = await resolver.GetExecutorAsync();
+        var executor = await resolver.GetExecutorAsync().ConfigureAwait(false);
         return executor.Schema;
     }
 

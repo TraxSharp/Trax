@@ -77,16 +77,3 @@ public interface IRefreshTokenStore
     /// </summary>
     Task RevokeAllAsync(Guid sub, string clientId, CancellationToken ct);
 }
-
-/// <summary>
-/// Handle returned by <see cref="IRefreshTokenStore.IssueAsync"/> and
-/// <see cref="IRefreshTokenStore.RotateAsync"/>. The token is opaque to the
-/// caller and only meaningful to the store that produced it.
-/// </summary>
-public sealed record RefreshTokenHandle(string Token, DateTimeOffset ExpiresAt);
-
-/// <summary>
-/// Claims bound to a refresh token. Returned by
-/// <see cref="IRefreshTokenStore.ValidateAsync"/> when the token is active.
-/// </summary>
-public sealed record RefreshTokenClaims(Guid Sub, string ClientId, DateTimeOffset ExpiresAt);

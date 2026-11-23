@@ -1,0 +1,170 @@
+using AnalyzerTest = Trax.Analyzers.Tests.Harness.CSharpAnalyzerTest<
+    Trax.Analyzers.Rules.InheritdocShouldHaveSourceOnTypesAnalyzer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class InheritdocShouldHaveSourceOnTypesAnalyzerTests
+{
+    private static AnalyzerTest CreateTest() => new();
+
+    [Fact]
+    public Task ReportDiagnostic_MA0199_WhenNoBaseTypeAndNoDeclaredInterface()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            /// {|TRX0199:<inheritdoc />|}
+            class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_MA0199_WhenInterfaceHasNoBaseInterface()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            /// {|TRX0199:<inheritdoc />|}
+            interface ITest
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReportDiagnostic_ForEachPartialDeclaration()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            /// {|TRX0199:<inheritdoc />|}
+            partial class Sample
+            {
+            }
+
+            /// {|TRX0199:<inheritdoc />|}
+            partial class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenBaseTypeIsPresent()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            class BaseClass
+            {
+            }
+
+            /// <inheritdoc />
+            class Sample : BaseClass
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenCrefIsPresent()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            /// <inheritdoc cref="object" />
+            class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenInterfaceInheritsAnotherInterface()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            interface IBase
+            {
+            }
+
+            /// <inheritdoc />
+            interface IChild : IBase
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenRecordInheritsBaseRecord()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            record BaseRecord;
+
+            /// <inheritdoc />
+            record Sample : BaseRecord;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenStructImplementsInterface()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            interface ITest
+            {
+            }
+
+            /// <inheritdoc />
+            struct Sample : ITest
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenRecordStructImplementsInterface()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            interface ITest
+            {
+            }
+
+            /// <inheritdoc />
+            record struct Sample : ITest;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NoDiagnostic_WhenRecordHasNoDeclaredInterface()
+    {
+        // The compiler implements IEquatable<T> on the records, which is a source of the documentation
+        var test = CreateTest();
+        test.TestCode = """
+            /// <inheritdoc />
+            record Sample;
+
+            /// <inheritdoc />
+            record struct SampleStruct;
+            """;
+
+        return test.RunAsync();
+    }
+}

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -43,7 +44,7 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
             }
         )
         {
-            yield return type.FullName!;
+            yield return type.FullName.NotNull();
             yield return type.Name;
         }
     }
@@ -76,9 +77,9 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
     {
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(Fakes.Trains.ISchedulerTestTrain).FullName!,
+                typeof(Fakes.Trains.ISchedulerTestTrain).FullName.NotNull(),
                 """{"value":"runs"}""",
-                typeof(Fakes.Trains.SchedulerTestInput).FullName!
+                typeof(Fakes.Trains.SchedulerTestInput).FullName.NotNull()
             )
         );
 
@@ -91,10 +92,11 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IMetadataCleanupTrain).FullName!,
+                Name = typeof(IMetadataCleanupTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new MetadataCleanupRequest(),
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
         await DataContext.Track(metadata);
@@ -102,7 +104,9 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         DataContext.Reset();
 
         var act = async () =>
-            await JobRunner.Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()));
+            await JobRunner
+                .Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()))
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*scheduler's own*");
 
@@ -127,7 +131,8 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new MetadataCleanupRequest(),
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
         await DataContext.Track(metadata);
@@ -135,7 +140,9 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         DataContext.Reset();
 
         var act = async () =>
-            await JobRunner.Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()));
+            await JobRunner
+                .Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()))
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainException>()
@@ -155,17 +162,19 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IManifestManagerTrain).FullName!,
+                Name = typeof(IManifestManagerTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.Pending;
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, Unit.Default));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, Unit.Default)).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*scheduler's own*");
 

@@ -1,16 +1,18 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 
 [TestFixture]
 public class TrainBusErrorTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -42,10 +44,10 @@ public class TrainBusErrorTests
     public void InitializeTrain_NullInput_ThrowsTrainException()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act & Assert
-        var act = () => trainBus.InitializeTrain(null!);
+        var act = () => trainBus.InitializeTrain(Null.Of<object>());
         act.Should().Throw<TrainException>();
     }
 
@@ -53,7 +55,7 @@ public class TrainBusErrorTests
     public void InitializeTrain_UnregisteredType_ThrowsNoTrainForInputException()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act & Assert — pass an input type that has no registered train
         var act = () => trainBus.InitializeTrain("not a registered input type");
@@ -64,10 +66,10 @@ public class TrainBusErrorTests
     public async Task RunAsync_WithNullInput_ThrowsTrainException()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act & Assert
-        var act = async () => await trainBus.RunAsync(null!);
+        var act = async () => await trainBus.RunAsync(Null.Of<object>()).ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
     }
 
@@ -75,10 +77,13 @@ public class TrainBusErrorTests
     public async Task RunAsync_WithCancellationToken_NullInput_ThrowsTrainException()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act & Assert
-        var act = async () => await trainBus.RunAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await trainBus
+                .RunAsync(Null.Of<object>(), CancellationToken.None)
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<TrainException>();
     }
 }

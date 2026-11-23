@@ -16,7 +16,7 @@ public interface IGraphQLClientExecutor
     /// <typeparam name="TReturn">The response type.</typeparam>
     /// <param name="request">The request to run.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
-    /// <returns>The extracted response; <c>default</c> when the unwrapped value is JSON <c>null</c>.</returns>
+    /// <returns>The extracted response; <see langword="default"/> when the unwrapped value is JSON <see langword="null"/>.</returns>
     /// <exception cref="GraphQLValidationException">The query is not valid against the schema.</exception>
     /// <exception cref="GraphQLExecutionException">The server returned errors or no data, or the data could not be extracted.</exception>
     /// <exception cref="GraphQLResponseShapeException">The response shape drifted under <see cref="ResponseStrictness.ThrowOnDrift"/>.</exception>

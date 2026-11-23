@@ -1034,6 +1034,7 @@ namespace Trax.Api.Services.Metrics
     public sealed class ProcessCpuSampler
     {
         public ProcessCpuSampler() { }
+        public ProcessCpuSampler(System.TimeProvider clock) { }
         public double? SamplePercent() { }
     }
 }

@@ -1,5 +1,6 @@
 using System.Reflection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
@@ -15,7 +16,7 @@ public partial class Monad<TInput, TReturn>
     {
         if (Recorder is not null)
         {
-            Recorder.Record(ChainStepKind.Extract, null, typeof(TIn), typeof(TOut));
+            Recorder.Record(ChainStepKind.Extract, junction: null, typeof(TIn), typeof(TOut));
             return this;
         }
 
@@ -46,7 +47,7 @@ public partial class Monad<TInput, TReturn>
     {
         if (Recorder is not null)
         {
-            Recorder.Record(ChainStepKind.Seed, null, null, typeof(TOut));
+            Recorder.Record(ChainStepKind.Seed, junction: null, tIn: null, typeof(TOut));
             return this;
         }
 
@@ -76,11 +77,12 @@ public partial class Monad<TInput, TReturn>
 
     private const BindingFlags InstanceMembers = BindingFlags.Public | BindingFlags.Instance;
 
-    private object? GetPropertyValue<TIn, TOut>(TIn input)
+    private static object? GetPropertyValue<TIn, TOut>(TIn input)
     {
         // Instance properties only: a static member of the same type is not this object's value,
         // and an indexer cannot be read without arguments.
-        var propertyInfo = input!
+        var propertyInfo = input
+            .NotNull()
             .GetType()
             .GetProperties(InstanceMembers)
             .FirstOrDefault(x =>
@@ -90,9 +92,10 @@ public partial class Monad<TInput, TReturn>
         return propertyInfo?.GetValue(input);
     }
 
-    private object? GetFieldValue<TIn, TOut>(TIn input)
+    private static object? GetFieldValue<TIn, TOut>(TIn input)
     {
-        var fieldInfo = input!
+        var fieldInfo = input
+            .NotNull()
             .GetType()
             .GetFields(InstanceMembers)
             .FirstOrDefault(x => x.FieldType == typeof(TOut));

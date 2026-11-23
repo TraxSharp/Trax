@@ -160,3 +160,6 @@ tsconfig.tsbuildinfo
 
 # A sample train graph that differs from its golden, written for review (Trax.Samples.Tests.Chains)
 *.chain.json.received
+
+# Reqnroll code-behind, written beside a linked feature file by design-time builds (dotnet format)
+*.feature.cs

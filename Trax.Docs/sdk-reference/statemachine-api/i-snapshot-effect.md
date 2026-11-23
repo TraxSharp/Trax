@@ -9,8 +9,18 @@ nav_order: 7
 package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Ports.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StoredSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/PendingEffect.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/AppliedRequest.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/WrittenRow.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IRowReportingSnapshotStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IConditionalDraftDelete.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotPrincipal.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotEffect.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotEffectRunner.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotEffectRunner.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IActorEffectRunner.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/effects
 ---
@@ -123,7 +133,7 @@ second irreversible action, run by a machine of its own: see
 
 The transition binds the effect, from the State Machine sample:
 
-```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/CheckoutMachine.cs
 .On(CheckoutTrigger.Pay)
 .AnyAuthenticated()
 .WithInput<PayInput>()

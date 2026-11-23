@@ -34,7 +34,7 @@ public static class AssemblyExtensions
     public static string GetAssemblyProject(this Assembly assembly)
     {
         if (assembly.FullName is null)
-            throw new NullReferenceException("Could not get FullName of Entry Assembly");
+            throw new InvalidOperationException("Could not get FullName of Entry Assembly");
 
         var assemblyNameArray = assembly.FullName.Split(",");
 

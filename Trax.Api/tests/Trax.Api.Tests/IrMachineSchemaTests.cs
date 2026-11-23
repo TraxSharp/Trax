@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -20,12 +21,15 @@ public class IrMachineSchemaTests
 {
     private const string Approver = "Approver";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task SetUp()
     {
-        var ir = JsonNode.Parse(File.ReadAllText(IrFile("turnstile")))!.AsObject();
+        var ir = JsonNode
+            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))
+            .NotNull()
+            .AsObject();
         ir["id"] = "ir-turnstile";
         var approvers = new AccessRule([
             [Approver],
@@ -35,27 +39,29 @@ public class IrMachineSchemaTests
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
+            SystemKey: null,
             approvers,
             approvers,
-            new Dictionary<string, TriggerAccess>
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(approvers),
                 ["Push"] = new(AccessRule.AnyAuthenticated),
             },
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, host)], []);
-        _host = await MachineSchemaHost.StartAsync([], services: s => s.AddIrMachines(machines));
+        _host = await MachineSchemaHost
+            .StartAsync([], services: s => s.AddIrMachines(machines))
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Its_operations_are_in_the_schema_typed_from_the_emitted_records()
     {
-        var executor = await MachineSchemaHost.ExecutorAsync(_host);
+        var executor = await MachineSchemaHost.ExecutorAsync(_host.NotNull());
 
         var mutations = MachineSchemaHost.MachineType(
             executor,
@@ -63,7 +69,7 @@ public class IrMachineSchemaTests
             "irTurnstile"
         );
         mutations.Should().NotBeNull("a user's machine from its IR is served");
-        mutations!.Fields.Select(f => f.Name).Should().Contain(["start", "coin", "push"]);
+        mutations.NotNull().Fields.Select(f => f.Name).Should().Contain(["start", "coin", "push"]);
         var coin = mutations.Fields["coin"].Arguments["input"].Type.NamedType();
         ((InputObjectType)coin).Fields.Select(f => f.Name).Should().Contain("coin");
     }

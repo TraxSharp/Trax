@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Sqlite.Extensions;
@@ -26,7 +27,7 @@ public class MetadataCleanupDefaultTests
 {
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [SetUp]
     public void SetUp() =>
@@ -36,8 +37,8 @@ public class MetadataCleanupDefaultTests
     public void TearDown()
     {
         foreach (var suffix in new[] { "", "-wal", "-shm" })
-            if (File.Exists(_dbPath + suffix))
-                File.Delete(_dbPath + suffix);
+            if (File.Exists(_dbPath.NotNull() + suffix))
+                File.Delete(_dbPath.NotNull() + suffix);
     }
 
     [Test]
@@ -46,20 +47,21 @@ public class MetadataCleanupDefaultTests
         var services = new ServiceCollection();
         services.AddLogging(x => x.SetMinimumLevel(LogLevel.Warning));
         services.AddTrax(trax =>
-            trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath}"))
+            trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath.NotNull()}"))
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler => scheduler)
         );
         await using var provider = services.BuildServiceProvider();
 
-        var old = DateTime.UtcNow.AddHours(-2);
+        var old = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2);
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IJobDispatcherTrain).FullName!,
+                Name = typeof(IJobDispatcherTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Completed;
         run.StartTime = old;
@@ -76,10 +78,10 @@ public class MetadataCleanupDefaultTests
             .SingleOrDefault();
         cleanup.Should().NotBeNull("a scheduler on a database cleans up its own runs by default");
 
-        await cleanup!.StartAsync(CancellationToken.None);
+        await cleanup.NotNull().StartAsync(CancellationToken.None);
         try
         {
-            await Gone(provider, run.Id).WaitAsync(Bound);
+            await Gone(provider, run.Id).WaitAsync(Bound, TimeProvider.System);
         }
         finally
         {
@@ -94,10 +96,16 @@ public class MetadataCleanupDefaultTests
     {
         while (true)
         {
-            await using (var context = Context(provider))
-                if (!await context.Metadatas.AsNoTracking().AnyAsync(m => m.Id == id))
+            var context = Context(provider);
+            await using (context.ConfigureAwait(false))
+                if (
+                    !await context
+                        .Metadatas.AsNoTracking()
+                        .AnyAsync(m => m.Id == id)
+                        .ConfigureAwait(false)
+                )
                     return;
-            await Task.Delay(100); // determinism: polling interval, bounded by the caller's WaitAsync
+            await Task.Delay(100).ConfigureAwait(false); // determinism: polling interval, bounded by the caller's WaitAsync
         }
     }
 }

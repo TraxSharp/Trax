@@ -32,14 +32,28 @@ public sealed class TraxAuditChannel : IDisposable
     private readonly ILogger<TraxAuditChannel> _logger;
     private readonly Meter _meter;
     private readonly Counter<long> _droppedCounter;
+    private readonly TimeProvider _clock;
     private long _totalDropped;
     private long _lastWarnedAt;
 
-    /// <summary>Creates the channel using the configured capacity.</summary>
+    /// <summary>Creates the channel using the configured capacity, on the system clock.</summary>
     public TraxAuditChannel(IOptions<TraxAuditOptions> options, ILogger<TraxAuditChannel> logger)
+        : this(options, logger, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates the channel using the configured capacity. <paramref name="clock"/> times the
+    /// throttle on the dropped-entry warning.
+    /// </summary>
+    public TraxAuditChannel(
+        IOptions<TraxAuditOptions> options,
+        ILogger<TraxAuditChannel> logger,
+        TimeProvider clock
+    )
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(clock);
         _logger = logger;
+        _clock = clock;
         _channel = Channel.CreateBounded<TraxAuditEntry>(
             new BoundedChannelOptions(options.Value.ChannelCapacity)
             {
@@ -60,8 +74,8 @@ public sealed class TraxAuditChannel : IDisposable
     }
 
     /// <summary>
-    /// Attempts to enqueue an audit entry without blocking. Returns <c>true</c>
-    /// when accepted, <c>false</c> when dropped (the channel is full, or the writer has
+    /// Attempts to enqueue an audit entry without blocking. Returns <see langword="true"/>
+    /// when accepted, <see langword="false"/> when dropped (the channel is full, or the writer has
     /// stopped accepting entries for shutdown). A drop is counted like every other one.
     /// </summary>
     internal bool TryEnqueue(TraxAuditEntry entry)
@@ -86,7 +100,7 @@ public sealed class TraxAuditChannel : IDisposable
 
         _droppedCounter.Add(count);
         var total = Interlocked.Add(ref _totalDropped, count);
-        var now = Environment.TickCount64;
+        var now = (long)_clock.GetElapsedTime(0).TotalMilliseconds;
         var lastWarn = Interlocked.Read(ref _lastWarnedAt);
         if (now - lastWarn >= 5_000)
         {

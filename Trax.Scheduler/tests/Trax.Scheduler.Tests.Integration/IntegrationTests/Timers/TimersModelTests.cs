@@ -1,7 +1,9 @@
+using System.Globalization;
 using AwesomeAssertions;
 using CsCheck;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Scheduler.Tests.Integration.Fakes.Timers;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -66,48 +68,60 @@ public class TimersModelTests(ClusterStore store)
 
     private readonly PauseGate _gate = new();
 
-    private InvokeCluster _cluster = null!;
-    private TimerDb _db = null!;
-    private ClusterHost _api = null!;
-    private ClusterHost _api2 = null!;
-    private ClusterHost _pausing = null!;
-    private ClusterHost _expiring = null!;
-    private ClusterHost _v2 = null!;
+    private InvokeCluster? _cluster;
+    private TimerDb? _db;
+    private ClusterHost? _api;
+    private ClusterHost? _api2;
+    private ClusterHost? _pausing;
+    private ClusterHost? _expiring;
+    private ClusterHost? _v2;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
     {
         _cluster = await InvokeCluster.Create(store);
-        _db = new TimerDb(_cluster);
-        _api = _cluster.Host(machines: true, scheduler: false, TimerHosts.Publishing);
-        _api2 = _cluster.Host(machines: true, scheduler: false, TimerHosts.Publishing);
-        _pausing = _cluster.Host(
-            machines: true,
-            scheduler: false,
-            TimerHosts.All(TimerHosts.Publishing, TimerHosts.Pausing(_gate))
-        );
-        _expiring = _cluster.Host(
-            machines: true,
-            scheduler: false,
-            TimerHosts.Publishing,
-            options: o => o.DraftTtl = TimeSpan.FromHours(1)
-        );
-        _v2 = _cluster.Host(
-            machines: true,
-            scheduler: false,
-            TimerHosts.All(TimerHosts.Publishing, TimerHosts.Deploy(ReminderShape.V2SameTimer))
-        );
+        _db = new TimerDb(_cluster.NotNull());
+        _api = _cluster.NotNull().Host(machines: true, scheduler: false, TimerHosts.Publishing);
+        _api2 = _cluster.NotNull().Host(machines: true, scheduler: false, TimerHosts.Publishing);
+        _pausing = _cluster
+            .NotNull()
+            .Host(
+                machines: true,
+                scheduler: false,
+                TimerHosts.All(TimerHosts.Publishing, TimerHosts.Pausing(_gate))
+            );
+        _expiring = _cluster
+            .NotNull()
+            .Host(
+                machines: true,
+                scheduler: false,
+                TimerHosts.Publishing,
+                options: o => o.DraftTtl = TimeSpan.FromHours(1)
+            );
+        _v2 = _cluster
+            .NotNull()
+            .Host(
+                machines: true,
+                scheduler: false,
+                TimerHosts.All(TimerHosts.Publishing, TimerHosts.Deploy(ReminderShape.V2SameTimer))
+            );
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _api.DisposeAsync();
-        await _api2.DisposeAsync();
-        await _pausing.DisposeAsync();
-        await _expiring.DisposeAsync();
-        await _v2.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_api is not null)
+            await _api.DisposeAsync();
+        if (_api2 is not null)
+            await _api2.DisposeAsync();
+        if (_pausing is not null)
+            await _pausing.DisposeAsync();
+        if (_expiring is not null)
+            await _expiring.DisposeAsync();
+        if (_v2 is not null)
+            await _v2.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [TearDown]
@@ -124,10 +138,10 @@ public class TimersModelTests(ClusterStore store)
             .SampleAsync(
                 async ops =>
                 {
-                    await _cluster.Reset();
+                    await _cluster.NotNull().Reset().ConfigureAwait(false);
                     _gate.Reset();
                     ReminderPublishGate.Reset();
-                    await new World(this).Run(ops);
+                    await new World(this).Run(ops).ConfigureAwait(false);
                 },
                 iter: Iterations,
                 threads: 1,
@@ -155,6 +169,7 @@ public class TimersModelTests(ClusterStore store)
     }
 
     /// <summary>One generated step on the draft of user <c>u{A % 2}</c>; <see cref="B"/> picks a variant.</summary>
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Auto)]
     private readonly record struct Op(Kind Kind, int A, int B)
     {
         public override string ToString() => $"{Kind}(u{A % 2}, {B})";
@@ -182,7 +197,10 @@ public class TimersModelTests(ClusterStore store)
     );
 
     private static string Describe(Op[] ops) =>
-        string.Join(Environment.NewLine, ops.Select((op, i) => $"  {i}: {op}"));
+        string.Join(
+            Environment.NewLine,
+            ops.Select((op, i) => string.Create(CultureInfo.InvariantCulture, $"  {i}: {op}"))
+        );
 
     #endregion
 
@@ -203,7 +221,8 @@ public class TimersModelTests(ClusterStore store)
         public long? RowId { get; set; }
 
         /// <summary>Whether a timer is armed: the draft is in <c>Review</c> and the timer has not fired or been left.</summary>
-        public bool Armed => State == nameof(ReminderState.Review);
+        public bool Armed =>
+            string.Equals(State, nameof(ReminderState.Review), StringComparison.Ordinal);
 
         /// <summary>Whether the armed timer's due time has been moved into the past.</summary>
         public bool Due { get; set; }
@@ -230,12 +249,18 @@ public class TimersModelTests(ClusterStore store)
             {
                 try
                 {
-                    await Apply(ops[i]);
-                    await Check();
+                    await Apply(ops[i]).ConfigureAwait(false);
+                    await Check().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    throw new StepFailed($"Step {i} ({ops[i]}) broke the model: {ex.Message}", ex);
+                    throw new StepFailedException(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Step {i} ({ops[i]}) broke the model: {ex.Message}"
+                        ),
+                        ex
+                    );
                 }
             }
         }
@@ -246,120 +271,174 @@ public class TimersModelTests(ClusterStore store)
             switch (op.Kind)
             {
                 case Kind.Open:
-                    await Open(draft);
+                    await Open(draft).ConfigureAwait(false);
                     break;
                 case Kind.Approve:
-                    await Event(draft, ReminderTrigger.Approve, nameof(ReminderState.Done));
+                    await Event(draft, ReminderTrigger.Approve, nameof(ReminderState.Done))
+                        .ConfigureAwait(false);
                     break;
                 case Kind.Extend:
-                    await Event(draft, ReminderTrigger.Extend, nameof(ReminderState.Review));
+                    await Event(draft, ReminderTrigger.Extend, nameof(ReminderState.Review))
+                        .ConfigureAwait(false);
                     break;
                 case Kind.MakeDue:
-                    if (draft.Armed)
-                    {
-                        await test._db.MakeDue(draft.RowId!.Value);
-                        draft.Revision++;
-                        draft.Due = true;
-                    }
+                    await MakeDue(draft).ConfigureAwait(false);
                     break;
                 case Kind.FireTimers:
                     Fired(
-                        await (op.B == 0 ? test._api : test._api2).FireTimers(),
+                        await (op.B == 0 ? test._api.NotNull() : test._api2.NotNull())
+                            .FireTimers()
+                            .ConfigureAwait(false),
                         readsVersion2: false
                     );
                     break;
                 case Kind.FireTimersConcurrently:
-                    var both = await Task.WhenAll(test._api.FireTimers(), test._api2.FireTimers())
-                        .WaitAsync(Bound);
-                    Fired(both.SelectMany(b => b).ToList(), readsVersion2: false);
+                    await FireTimersConcurrently().ConfigureAwait(false);
                     break;
                 case Kind.ClientEventRacingFire:
-                    await RaceFire(draft, ReminderTrigger.Approve);
+                    await RaceFire(draft, ReminderTrigger.Approve).ConfigureAwait(false);
                     break;
                 case Kind.ExtendRacingFire:
-                    await RaceFire(draft, ReminderTrigger.Extend);
+                    await RaceFire(draft, ReminderTrigger.Extend).ConfigureAwait(false);
                     break;
                 case Kind.ForgeTimerTrigger:
-                    if (draft.State is not null)
-                        await Forged(
-                            draft,
-                            () => Advance(test._api, draft, TimerTrigger),
-                            RefusalCode.TimerBound
-                        );
+                    await ForgeTimerTrigger(draft).ConfigureAwait(false);
                     break;
                 case Kind.AutosaveTimedState:
-                    if (draft.State is not null)
-                    {
-                        var target =
-                            op.B == 0
-                                ? nameof(ReminderState.Expired)
-                                : nameof(ReminderState.Review);
-                        var saved = await test._api.Save(
-                            draft.User,
-                            draft.Id,
-                            ReminderMachine.Json(
-                                target,
-                                ReminderMachine.Context("rewritten"),
-                                draft.Version
-                            )
-                        );
-                        if (draft.Armed)
-                            saved
-                                .Should()
-                                .NotBeOfType<AutosaveResult.Saved>(
-                                    $"autosave never leaves or rewrites a timed state. See {Adr}"
-                                );
-                        else if (saved is AutosaveResult.Saved)
-                        {
-                            draft.State = target;
-                            draft.Revision++;
-                            draft.Due = false;
-                            draft.FiredThisArming = 0;
-                        }
-                    }
+                    await AutosaveTimedState(draft, op.B).ConfigureAwait(false);
                     break;
                 case Kind.ExpireDraft:
-                    if (draft.State is not null)
-                    {
-                        await test._api.IdleDraft(draft.RowId!.Value, TimeSpan.FromHours(2));
-                        draft.Revision++;
-                        await test._expiring.ExpireDrafts();
-                        var loaded = await Load(test._expiring, draft);
-                        if (draft.Armed)
-                            loaded
-                                .Should()
-                                .BeOfType<LoadResult.Loaded>("a pending timer keeps the draft");
-                        else if (draft.State == nameof(ReminderState.Published))
-                            loaded
-                                .Should()
-                                .BeOfType<LoadResult.Loaded>(
-                                    "the effect's target is the record of what the server did, which the TTL keeps"
-                                );
-                        else
-                        {
-                            loaded.Should().BeOfType<LoadResult.NotFound>("idle past its TTL");
-                            Forget(draft);
-                        }
-                    }
+                    await ExpireDraft(draft).ConfigureAwait(false);
                     break;
                 case Kind.DeleteAndRecreate:
-                    // Published is the effect's target, which discard refuses (discard-not-allowed): only the server
-                    // puts a draft there, so its owner cannot erase it.
-                    if (draft.State is not null and not nameof(ReminderState.Published))
-                    {
-                        await test._api.Delete(draft.User, draft.Id);
-                        var oldRow = draft.RowId;
-                        Forget(draft);
-                        await Open(draft);
-                        draft.RowId.Should().NotBe(oldRow, "a re-created draft has a new row id");
-                    }
+                    await DeleteAndRecreate(draft).ConfigureAwait(false);
                     break;
                 case Kind.ClaimEffect:
-                    await Claim(draft);
+                    await Claim(draft).ConfigureAwait(false);
                     break;
                 case Kind.DeployV2:
-                    Fired(await test._v2.FireTimers(), readsVersion2: true);
+                    Fired(
+                        await test._v2.NotNull().FireTimers().ConfigureAwait(false),
+                        readsVersion2: true
+                    );
                     break;
+            }
+        }
+
+        private async Task MakeDue(Draft draft)
+        {
+            if (draft.Armed)
+            {
+                await test._db.NotNull().MakeDue(draft.RowId.NotNull().Value).ConfigureAwait(false);
+                draft.Revision++;
+                draft.Due = true;
+            }
+        }
+
+        private async Task FireTimersConcurrently()
+        {
+            var both = await Task.WhenAll(
+                    test._api.NotNull().FireTimers(),
+                    test._api2.NotNull().FireTimers()
+                )
+                .WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
+            Fired(both.SelectMany(b => b).ToList(), readsVersion2: false);
+        }
+
+        private async Task ForgeTimerTrigger(Draft draft)
+        {
+            if (draft.State is not null)
+                await Forged(
+                        draft,
+                        () => Advance(test._api.NotNull(), draft, TimerTrigger),
+                        RefusalCode.TimerBound
+                    )
+                    .ConfigureAwait(false);
+        }
+
+        private async Task AutosaveTimedState(Draft draft, int b)
+        {
+            if (draft.State is not null)
+            {
+                var target = b == 0 ? nameof(ReminderState.Expired) : nameof(ReminderState.Review);
+                var saved = await test
+                    ._api.NotNull()
+                    .NotNull()
+                    .Save(
+                        draft.User,
+                        draft.Id,
+                        ReminderMachine.Json(
+                            target,
+                            ReminderMachine.Context("rewritten"),
+                            draft.Version
+                        )
+                    )
+                    .ConfigureAwait(false);
+                if (draft.Armed)
+                    saved
+                        .Should()
+                        .NotBeOfType<AutosaveResult.Saved>(
+                            $"autosave never leaves or rewrites a timed state. See {Adr}"
+                        );
+                else if (saved is AutosaveResult.Saved)
+                {
+                    draft.State = target;
+                    draft.Revision++;
+                    draft.Due = false;
+                    draft.FiredThisArming = 0;
+                }
+            }
+        }
+
+        private async Task ExpireDraft(Draft draft)
+        {
+            if (draft.State is not null)
+            {
+                await test
+                    ._api.NotNull()
+                    .IdleDraft(draft.RowId.NotNull().Value, TimeSpan.FromHours(2))
+                    .ConfigureAwait(false);
+                draft.Revision++;
+                await test._expiring.NotNull().ExpireDrafts().ConfigureAwait(false);
+                var loaded = await Load(test._expiring.NotNull(), draft).ConfigureAwait(false);
+                if (draft.Armed)
+                    loaded.Should().BeOfType<LoadResult.Loaded>("a pending timer keeps the draft");
+                else if (
+                    string.Equals(
+                        draft.State,
+                        nameof(ReminderState.Published),
+                        StringComparison.Ordinal
+                    )
+                )
+                    loaded
+                        .Should()
+                        .BeOfType<LoadResult.Loaded>(
+                            "the effect's target is the record of what the server did, which the TTL keeps"
+                        );
+                else
+                {
+                    loaded.Should().BeOfType<LoadResult.NotFound>("idle past its TTL");
+                    Forget(draft);
+                }
+            }
+        }
+
+        private async Task DeleteAndRecreate(Draft draft)
+        {
+            // Published is the effect's target, which discard refuses (discard-not-allowed): only the server
+            // puts a draft there, so its owner cannot erase it.
+            if (draft.State is not null and not nameof(ReminderState.Published))
+            {
+                await test
+                    ._api.NotNull()
+                    .NotNull()
+                    .Delete(draft.User, draft.Id)
+                    .ConfigureAwait(false);
+                var oldRow = draft.RowId;
+                Forget(draft);
+                await Open(draft).ConfigureAwait(false);
+                draft.RowId.Should().NotBe(oldRow, "a re-created draft has a new row id");
             }
         }
 
@@ -367,17 +446,28 @@ public class TimersModelTests(ClusterStore store)
         {
             if (draft.State is not null)
             {
-                (await Advance(test._api, draft, nameof(ReminderTrigger.Open)))
+                (
+                    await Advance(test._api.NotNull(), draft, nameof(ReminderTrigger.Open))
+                        .ConfigureAwait(false)
+                )
                     .Should()
                     .NotBeOfType<AdvanceOutcome.Advanced>("Open has no edge out of " + draft.State);
                 return;
             }
 
-            (await test._api.OpenReview(draft.User, draft.Id))
+            (await test._api.NotNull().OpenReview(draft.User, draft.Id).ConfigureAwait(false))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
             draft.State = nameof(ReminderState.Review);
-            draft.RowId = (await test._api.Row(draft.Id, ReminderMachine.MachineId))!.RowId;
+            draft.RowId = (
+                await test
+                    ._api.NotNull()
+                    .NotNull()
+                    .Row(draft.Id, ReminderMachine.MachineId)
+                    .ConfigureAwait(false)
+            )
+                .NotNull()
+                .RowId;
             draft.Revision = 2;
             draft.Due = false;
             draft.Version = 1;
@@ -388,8 +478,9 @@ public class TimersModelTests(ClusterStore store)
         {
             if (draft.State is null)
                 return;
-            var result = await Advance(test._api, draft, trigger.ToString());
-            if (draft.State != nameof(ReminderState.Review))
+            var result = await Advance(test._api.NotNull(), draft, trigger.ToString())
+                .ConfigureAwait(false);
+            if (!string.Equals(draft.State, nameof(ReminderState.Review), StringComparison.Ordinal))
             {
                 result.Should().NotBeOfType<AdvanceOutcome.Advanced>();
                 return;
@@ -408,12 +499,15 @@ public class TimersModelTests(ClusterStore store)
                 return;
 
             test._gate.Arm();
-            var held = Advance(test._pausing, draft, trigger.ToString());
-            await test._gate.Reached.WaitAsync(Bound);
-            Fired(await test._api.FireTimers(), readsVersion2: false);
+            var held = Advance(test._pausing.NotNull(), draft, trigger.ToString());
+            await test._gate.Reached.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false);
+            Fired(
+                await test._api.NotNull().FireTimers().ConfigureAwait(false),
+                readsVersion2: false
+            );
             test._gate.Release();
 
-            (await held.WaitAsync(Bound))
+            (await held.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false))
                 .Should()
                 .NotBeOfType<AdvanceOutcome.Advanced>(
                     $"the fire won, and the client's event meets Expired. See {Adr}"
@@ -422,14 +516,19 @@ public class TimersModelTests(ClusterStore store)
 
         private async Task Claim(Draft draft)
         {
-            if (draft.State != nameof(ReminderState.Review) || draft.Version != 1)
+            if (
+                !string.Equals(draft.State, nameof(ReminderState.Review), StringComparison.Ordinal)
+                || draft.Version != 1
+            )
                 return;
 
             ReminderPublishGate.Reset();
             ReminderPublishGate.Armed = true;
-            var publish = test._api.Publish(draft.User, draft.Id, NextRequest());
-            await ReminderPublishGate.Entered.WaitAsync(Bound);
-            var underClaim = await test._api2.FireTimers();
+            var publish = test._api.NotNull().Publish(draft.User, draft.Id, NextRequest());
+            await ReminderPublishGate
+                .Entered.WaitAsync(Bound, TimeProvider.System)
+                .ConfigureAwait(false);
+            var underClaim = await test._api2.NotNull().FireTimers().ConfigureAwait(false);
             underClaim
                 .Should()
                 .NotContain(
@@ -439,7 +538,9 @@ public class TimersModelTests(ClusterStore store)
             // The sweep fires every other draft that is due, which the model applies as any sweep's.
             Fired(underClaim, readsVersion2: false, waiting: draft);
             ReminderPublishGate.Release();
-            (await publish.WaitAsync(Bound)).Should().BeOfType<AdvanceOutcome.Advanced>();
+            (await publish.WaitAsync(Bound, TimeProvider.System).ConfigureAwait(false))
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
             ReminderPublishGate.Reset();
 
             // The send marks the row, then records the effect: two writes.
@@ -459,7 +560,8 @@ public class TimersModelTests(ClusterStore store)
             foreach (var draft in _drafts.Where(d => d.State is not null && d != waiting))
             {
                 var fired = results.Count(r =>
-                    r.InstanceId == draft.Id && r.Outcome == TimerFireResult.Fired
+                    r.InstanceId == draft.Id
+                    && string.Equals(r.Outcome, TimerFireResult.Fired, StringComparison.Ordinal)
                 );
                 var expected = draft.Armed && draft.Due && (readsVersion2 || draft.Version == 1);
                 fired.Should().Be(expected ? 1 : 0, $"{draft.User}'s timer fires once when due");
@@ -479,7 +581,7 @@ public class TimersModelTests(ClusterStore store)
         private async Task Forged(Draft draft, Func<Task<AdvanceOutcome>> forge, RefusalCode reason)
         {
             var revision = draft.Revision;
-            (await forge())
+            (await forge().ConfigureAwait(false))
                 .Should()
                 .BeOfType<AdvanceOutcome.Rejected>(
                     $"a client can never fire a timer trigger. See {Adr}"
@@ -491,11 +593,14 @@ public class TimersModelTests(ClusterStore store)
 
         private async Task<AdvanceOutcome> Advance(ClusterHost host, Draft draft, string trigger)
         {
-            using var scope = host.Services.CreateScope();
+            var scope = host.Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             return await scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                .Service(ReminderMachine.MachineId)!
-                .Advance(draft.User, draft.Id, trigger, requestId: NextRequest());
+                .Service(ReminderMachine.MachineId)
+                .NotNull()
+                .Advance(draft.User, draft.Id, trigger, requestId: NextRequest())
+                .ConfigureAwait(false);
         }
 
         private static Task<LoadResult> Load(ClusterHost host, Draft draft) =>
@@ -511,7 +616,11 @@ public class TimersModelTests(ClusterStore store)
             draft.FiredThisArming = 0;
         }
 
-        private string NextRequest() => "req-" + Interlocked.Increment(ref _requests);
+        private string NextRequest() =>
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"req-{Interlocked.Increment(ref _requests)}"
+            );
 
         #region Checks
 
@@ -519,7 +628,11 @@ public class TimersModelTests(ClusterStore store)
         {
             foreach (var draft in _drafts)
             {
-                var rows = await test._api.Rows(draft.Id, ReminderMachine.MachineId);
+                var rows = await test
+                    ._api.NotNull()
+                    .NotNull()
+                    .Rows(draft.Id, ReminderMachine.MachineId)
+                    .ConfigureAwait(false);
                 if (draft.State is null)
                 {
                     rows.Should().BeEmpty($"{draft.User} has no draft");
@@ -528,33 +641,37 @@ public class TimersModelTests(ClusterStore store)
 
                 var row = rows.Should().ContainSingle().Subject;
                 row.State.Should().Be(draft.State);
-                row.RowId.Should().Be(draft.RowId!.Value, "the row id changes only on re-create");
+                row.RowId.Should()
+                    .Be(draft.RowId.NotNull().Value, "the row id changes only on re-create");
 
-                (await test._db.DueAt(row.RowId) is not null)
+                (await test._db.NotNull().DueAt(row.RowId).ConfigureAwait(false) is not null)
                     .Should()
                     .Be(draft.Armed, $"due_at is set exactly when a timer is armed. See {Adr}");
-                (await test._db.Revision(row.RowId))
+                (await test._db.NotNull().Revision(row.RowId).ConfigureAwait(false))
                     .Should()
                     .Be(draft.Revision, "every write bumps the revision by one");
             }
 
-            await CheckInvariants();
+            await CheckInvariants().ConfigureAwait(false);
         }
 
         private async Task CheckInvariants()
         {
             IReadOnlyList<TraxInvariantViolation> found;
-            if (test._cluster.Store == ClusterStore.Postgres)
-                found = await TraxInvariants.FindViolationsAsync(
-                    test._cluster.ConnectionString,
-                    [],
-                    TimedStates
-                );
+            if (test._cluster.NotNull().Store == ClusterStore.Postgres)
+                found = await TraxInvariants
+                    .FindViolationsAsync(test._cluster.NotNull().ConnectionString, [], TimedStates)
+                    .ConfigureAwait(false);
             else
             {
-                await using var connection = new SqliteConnection(test._cluster.ConnectionString);
-                await connection.OpenAsync();
-                found = await TraxInvariants.FindViolationsAsync(connection, [], TimedStates);
+                var connection = new SqliteConnection(test._cluster.NotNull().ConnectionString);
+                await using (connection.ConfigureAwait(false))
+                {
+                    await connection.OpenAsync().ConfigureAwait(false);
+                    found = await TraxInvariants
+                        .FindViolationsAsync(connection, [], TimedStates)
+                        .ConfigureAwait(false);
+                }
             }
 
             var violations = found.Where(v => AlwaysHold.Contains(v.Invariant)).ToList();
@@ -565,7 +682,8 @@ public class TimersModelTests(ClusterStore store)
     }
 
     /// <summary>A step that broke the model, naming the step.</summary>
-    private sealed class StepFailed(string message, Exception inner) : Exception(message, inner);
+    private sealed class StepFailedException(string message, Exception inner)
+        : Exception(message, inner);
 
     #endregion
 }

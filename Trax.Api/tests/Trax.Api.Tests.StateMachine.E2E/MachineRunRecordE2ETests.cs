@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -27,15 +29,15 @@ public class MachineRunRecordE2ETests
 
     private static readonly string[] MachineTrains =
     [
-        typeof(IStartSnapshot).FullName!,
-        typeof(IAdvanceSnapshot).FullName!,
-        typeof(ISendSnapshot).FullName!,
-        typeof(ISaveSnapshot).FullName!,
-        typeof(ILoadSnapshot).FullName!,
-        typeof(IDiscardSnapshot).FullName!,
+        typeof(IStartSnapshot).FullName.NotNull(),
+        typeof(IAdvanceSnapshot).FullName.NotNull(),
+        typeof(ISendSnapshot).FullName.NotNull(),
+        typeof(ISaveSnapshot).FullName.NotNull(),
+        typeof(ILoadSnapshot).FullName.NotNull(),
+        typeof(IDiscardSnapshot).FullName.NotNull(),
     ];
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -58,22 +60,24 @@ public class MachineRunRecordE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     [Test]
     public async Task A_machine_event_run_row_stores_no_output_and_a_plain_train_still_does()
     {
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey, title: "Atlas");
-        await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            started.Id,
-            WizardOps.DetailsInput(title: "Atlas", pages: 4)
-        );
-        var paid = await _host.AdvanceWizardAsync(E2EHost.AliceKey, "pay", started.Id);
-        var receipt = paid.Context.GetProperty("receipt").GetString()!;
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey, title: "Atlas");
+        await _host
+            .NotNull()
+            .AdvanceWizardAsync(
+                E2EHost.AliceKey,
+                "describe",
+                started.Id,
+                WizardOps.DetailsInput(title: "Atlas", pages: 4)
+            );
+        var paid = await _host.NotNull().AdvanceWizardAsync(E2EHost.AliceKey, "pay", started.Id);
+        var receipt = paid.Context.GetProperty("receipt").GetString().NotNull();
         receipt.Should().StartWith("receipt-");
 
         (await MachineRuns())
@@ -90,16 +94,18 @@ public class MachineRunRecordE2ETests
             .Should()
             .Be(0, "the receipt lives only in the context, so no run row may carry it");
 
-        using var ping = await _host.PostAsync(
-            """{ discover { ping(input: { value: "plain-output" }) { value } } }""",
-            apiKey: E2EHost.AliceKey
-        );
+        using var ping = await _host
+            .NotNull()
+            .PostAsync(
+                """{ discover { ping(input: { value: "plain-output" }) { value } } }""",
+                apiKey: E2EHost.AliceKey
+            );
         WizardOps.ErrorCodes(ping).Should().BeEmpty(ping.RootElement.GetRawText());
         (
             await E2ESql.ScalarAsync<string>(
                 Database,
                 "SELECT output::text FROM trax.metadata WHERE name = @name ORDER BY id DESC LIMIT 1",
-                ("name", typeof(IPing).FullName!)
+                ("name", typeof(IPing).FullName.NotNull())
             )
         )
             .Should()
@@ -112,26 +118,28 @@ public class MachineRunRecordE2ETests
         const string marker = "saved-context-marker";
         var id = Guid.NewGuid();
 
-        using var saved = await _host.PostAsync(
-            """
-            mutation Save($input: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot problem { code } } } } }
-            }
-            """,
-            new
-            {
-                input = new
+        using var saved = await _host
+            .NotNull()
+            .PostAsync(
+                """
+                mutation Save($input: SaveSnapshotInput!) {
+                  dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot problem { code } } } } }
+                }
+                """,
+                new
                 {
-                    machine = PlainHatchMachine.MachineId,
-                    id = id.ToString(),
-                    snapshot = PlainHatchMachine.Json(
-                        HatchState.Open,
-                        new System.Text.Json.Nodes.JsonObject { ["note"] = marker }
-                    ),
+                    input = new
+                    {
+                        machine = PlainHatchMachine.MachineId,
+                        id = id.ToString(),
+                        snapshot = PlainHatchMachine.Json(
+                            HatchState.Open,
+                            new System.Text.Json.Nodes.JsonObject { ["note"] = marker }
+                        ),
+                    },
                 },
-            },
-            E2EHost.AliceKey
-        );
+                E2EHost.AliceKey
+            );
         var output = saved
             .RootElement.GetProperty("data")
             .GetProperty("dispatch")
@@ -152,7 +160,7 @@ public class MachineRunRecordE2ETests
             await E2ESql.ScalarAsync<long>(
                 Database,
                 "SELECT count(*) FROM trax.metadata WHERE name = @name AND input::text LIKE @id",
-                ("name", typeof(ISaveSnapshot).FullName!),
+                ("name", typeof(ISaveSnapshot).FullName.NotNull()),
                 ("id", $"%{id}%")
             )
         )
@@ -176,26 +184,29 @@ public class MachineRunRecordE2ETests
         var snapshot =
             """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"MARKER"}}""".Replace(
                 "MARKER",
-                marker
+                marker,
+                StringComparison.Ordinal
             );
 
-        using var saved = await _host.PostAsync(
-            """
-            mutation Save($input: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot problem { code } } } } }
-            }
-            """,
-            new
-            {
-                input = new
+        using var saved = await _host
+            .NotNull()
+            .PostAsync(
+                """
+                mutation Save($input: SaveSnapshotInput!) {
+                  dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot problem { code } } } } }
+                }
+                """,
+                new
                 {
-                    machine = "turnstile",
-                    id = id.ToString(),
-                    snapshot,
+                    input = new
+                    {
+                        machine = "turnstile",
+                        id = id.ToString(),
+                        snapshot,
+                    },
                 },
-            },
-            E2EHost.AliceKey
-        );
+                E2EHost.AliceKey
+            );
         var output = saved
             .RootElement.GetProperty("data")
             .GetProperty("dispatch")
@@ -213,7 +224,7 @@ public class MachineRunRecordE2ETests
         var input = await E2ESql.ScalarAsync<string>(
             Database,
             "SELECT input::text FROM trax.metadata WHERE name = @name AND input::text LIKE @id ORDER BY id DESC LIMIT 1",
-            ("name", typeof(ISaveSnapshot).FullName!),
+            ("name", typeof(ISaveSnapshot).FullName.NotNull()),
             ("id", $"%{id}%")
         );
         input.Should().NotBeNull("the save's run row records its input");
@@ -229,17 +240,22 @@ public class MachineRunRecordE2ETests
     [Test]
     public async Task The_operators_execution_detail_reads_a_machine_run_with_no_output()
     {
-        await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
         var run = await E2ESql.ScalarAsync<long>(
             Database,
             "SELECT id FROM trax.metadata WHERE name = @name ORDER BY id DESC LIMIT 1",
-            ("name", typeof(IAdvanceSnapshot).FullName!)
+            ("name", typeof(IAdvanceSnapshot).FullName.NotNull())
         );
 
-        using var detail = await _host.PostAsync(
-            $$"""{ operations { executionDetail(id: {{run}}) { id name input output } } }""",
-            apiKey: E2EHost.OperatorKey
-        );
+        using var detail = await _host
+            .NotNull()
+            .PostAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{run}}) { id name input output } } }"""
+                ),
+                apiKey: E2EHost.OperatorKey
+            );
 
         WizardOps.ErrorCodes(detail).Should().BeEmpty(detail.RootElement.GetRawText());
         var execution = detail

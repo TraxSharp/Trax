@@ -26,16 +26,16 @@ public abstract class StressFixture
             .Range(0, count)
             .Select(async i =>
             {
-                await gate.WaitAsync();
+                await gate.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    return await body(i);
+                    return await body(i).ConfigureAwait(false);
                 }
                 finally
                 {
                     gate.Release();
                 }
             });
-        return await Task.WhenAll(tasks);
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 }

@@ -1,0 +1,44 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class ExceptionNameShouldEndWithExceptionAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.ExceptionNameShouldEndWithException,
+        title: "Class name should end with 'Exception'",
+        messageFormat: "Class name should end with 'Exception'",
+        RuleCategories.Naming,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.ExceptionNameShouldEndWithException));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var exceptionType = compilationContext.Compilation.GetTypeByMetadataName("System.Exception");
+            if (exceptionType is null)
+                return;
+
+            compilationContext.RegisterSymbolAction(context => AnalyzeSymbol(context, exceptionType), SymbolKind.NamedType);
+        });
+    }
+
+    private static void AnalyzeSymbol(SymbolAnalysisContext context, ITypeSymbol exceptionType)
+    {
+        var symbol = (INamedTypeSymbol)context.Symbol;
+        if (symbol.Name is null)
+            return;
+
+        if (!symbol.Name.EndsWith("Exception", System.StringComparison.Ordinal) && symbol.InheritsFrom(exceptionType))
+        {
+            context.ReportDiagnostic(Rule, symbol);
+        }
+    }
+}

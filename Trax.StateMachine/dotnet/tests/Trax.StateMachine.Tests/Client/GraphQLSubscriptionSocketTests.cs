@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -6,6 +7,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -59,7 +61,7 @@ public class GraphQLSubscriptionSocketTests
             using var timeout = new CancellationTokenSource(Wait);
             var taken = new List<string>();
             for (var i = 0; i < count; i++)
-                taken.Add(await _calls.Reader.ReadAsync(timeout.Token));
+                taken.Add(await _calls.Reader.ReadAsync(timeout.Token).ConfigureAwait(false));
             return taken;
         }
     }
@@ -70,20 +72,26 @@ public class GraphQLSubscriptionSocketTests
         var completed = new TaskCompletionSource<string>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            var first = await peer.SubscribedAsync();
-            var second = await peer.SubscribedAsync();
-            await peer.NextAsync(first, Frame("A"));
-            await peer.NextAsync(second, Frame("B"));
-            completed.TrySetResult((await peer.ExpectAsync("complete"))["id"]!.GetValue<string>());
-            await peer.NextAsync(second, Frame("C"));
-            await peer.GoneAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            var first = await peer.SubscribedAsync().ConfigureAwait(false);
+            var second = await peer.SubscribedAsync().ConfigureAwait(false);
+            await peer.NextAsync(first, Frame("A")).ConfigureAwait(false);
+            await peer.NextAsync(second, Frame("B")).ConfigureAwait(false);
+            completed.TrySetResult(
+                (await peer.ExpectAsync("complete").ConfigureAwait(false))["id"]
+                    .NotNull()
+                    .GetValue<string>()
+            );
+            await peer.NextAsync(second, Frame("C")).ConfigureAwait(false);
+            await peer.GoneAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var throwing = new Sink(_ => throw new InvalidOperationException("handler bug"));
         var healthy = new Sink();
 
@@ -96,7 +104,7 @@ public class GraphQLSubscriptionSocketTests
 
         (await throwing.Take(2)).Should().Equal("next", "error");
         (await throwing.Failed.Task).Message.Should().Be("handler bug");
-        (await completed.Task.WaitAsync(Wait)).Should().Be("1");
+        (await completed.Task.WaitAsync(Wait, TimeProvider.System)).Should().Be("1");
         (await healthy.Take(3)).Should().Equal("started", "next", "next");
     }
 
@@ -110,39 +118,49 @@ public class GraphQLSubscriptionSocketTests
         host.Start();
         var redirected = Task.Run(async () =>
         {
-            using var client = await host.AcceptTcpClientAsync();
+            using var client = await host.AcceptTcpClientAsync().ConfigureAwait(false);
             var stream = client.GetStream();
             var buffer = new byte[4096];
             var head = new StringBuilder();
-            while (!head.ToString().Contains("\r\n\r\n"))
+            while (!head.ToString().Contains("\r\n\r\n", StringComparison.Ordinal))
             {
-                var read = await stream.ReadAsync(buffer);
+                var read = await stream.ReadAsync(buffer).ConfigureAwait(false);
                 if (read == 0)
                     break;
                 head.Append(Encoding.ASCII.GetString(buffer, 0, read));
             }
             var port = ((IPEndPoint)elsewhere.LocalEndpoint).Port;
-            await stream.WriteAsync(
-                Encoding.ASCII.GetBytes(
-                    $"HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:{port}/graphql\r\n"
-                        + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+            await stream
+                .WriteAsync(
+                    Encoding.ASCII.GetBytes(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:{port}/graphql\r\n"
+                        ) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
                 )
-            );
+                .ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions
             {
                 Endpoint = new Uri(
-                    $"ws://127.0.0.1:{((IPEndPoint)host.LocalEndpoint).Port}/graphql"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"ws://127.0.0.1:{((IPEndPoint)host.LocalEndpoint).Port}/graphql"
+                    )
                 ),
             }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
-        await redirected.WaitAsync(Wait);
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeAssignableTo<WebSocketException>();
+        await redirected.WaitAsync(Wait, TimeProvider.System);
         // negative-wait: a followed redirect would connect to elsewhere within this window.
         await Task.Delay(200);
         elsewhere.Pending().Should().BeFalse();
@@ -152,16 +170,19 @@ public class GraphQLSubscriptionSocketTests
     public async Task Started_comes_before_the_first_event_however_fast_the_host_sends_it()
     {
         // The host answers the subscribe at once, racing the socket's own Started.
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
+            await peer.AckAsync().ConfigureAwait(false);
             for (var i = 0; i < 20; i++)
-                await peer.NextAsync(await peer.SubscribedAsync(), Frame("X"));
-            await peer.GoneAsync();
+                await peer.NextAsync(await peer.SubscribedAsync().ConfigureAwait(false), Frame("X"))
+                    .ConfigureAwait(false);
+            await peer.GoneAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
 
         for (var i = 0; i < 20; i++)
         {
@@ -174,12 +195,13 @@ public class GraphQLSubscriptionSocketTests
     [Test]
     public async Task A_host_that_stops_answering_pings_fails_the_connection()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            await peer.StallAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            await peer.StallAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions
             {
                 Endpoint = host.Endpoint,
@@ -187,24 +209,28 @@ public class GraphQLSubscriptionSocketTests
                 KeepAliveTimeout = TimeSpan.FromMilliseconds(300),
             }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().NotBeOfType<SocketClosedException>();
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .NotBeOfType<SocketClosedException>();
     }
 
     [Test]
     public async Task A_connection_init_the_host_never_reads_fails_within_the_connect_timeout()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.UpgradeAsync();
-            await peer.StallAsync();
+            await peer.UpgradeAsync().ConfigureAwait(false);
+            await peer.StallAsync().ConfigureAwait(false);
         });
+        await using var hostDisposal = host.ConfigureAwait(false);
         // Larger than the loopback buffers hold, so the send stalls until the host reads it.
         var large = new string('x', 32 * 1024 * 1024);
-        await using var socket = new GraphQLSubscriptionSocket(
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions
             {
                 Endpoint = host.Endpoint,
@@ -213,38 +239,41 @@ public class GraphQLSubscriptionSocketTests
                     ValueTask.FromResult<JsonObject?>(new JsonObject { ["token"] = large }),
             }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().NotBeNull();
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System)).Should().NotBeNull();
     }
 
     [Test]
     public async Task A_close_the_host_never_answers_drops_the_connection_within_the_connect_timeout()
     {
         var dropped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            await peer.SubscribedAsync();
-            await peer.LeaveCloseUnansweredAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            await peer.SubscribedAsync().ConfigureAwait(false);
+            await peer.LeaveCloseUnansweredAsync().ConfigureAwait(false);
             dropped.TrySetResult();
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions
             {
                 Endpoint = host.Endpoint,
                 ConnectTimeout = TimeSpan.FromMilliseconds(500),
             }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
         var subscription = socket.Subscribe(Payload, sink);
         (await sink.Take(1)).Should().Equal("started");
 
         subscription.Dispose();
 
-        await dropped.Task.WaitAsync(Wait);
+        await dropped.Task.WaitAsync(Wait, TimeProvider.System);
     }
 
     [Test]
@@ -272,42 +301,51 @@ public class GraphQLSubscriptionSocketTests
         var closed = new TaskCompletionSource<WebSocketCloseStatus?>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            await peer.SubscribedAsync();
-            await peer.SendAsync(message);
-            closed.TrySetResult(await peer.ClosedWithAsync());
+            await peer.AckAsync().ConfigureAwait(false);
+            await peer.SubscribedAsync().ConfigureAwait(false);
+            await peer.SendAsync(message).ConfigureAwait(false);
+            closed.TrySetResult(await peer.ClosedWithAsync().ConfigureAwait(false));
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
-        (await closed.Task.WaitAsync(Wait)).Should().Be((WebSocketCloseStatus)4400);
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeAssignableTo<WebSocketException>();
+        (await closed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .Be((WebSocketCloseStatus)4400);
     }
 
     [Test]
     public async Task An_error_with_no_errors_in_it_reaches_the_sink()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            var id = await peer.SubscribedAsync();
-            await peer.SendAsync($$"""{"type":"error","id":"{{id}}","payload":[]}""");
-            await peer.GoneAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            var id = await peer.SubscribedAsync().ConfigureAwait(false);
+            await peer.SendAsync($$"""{"type":"error","id":"{{id}}","payload":[]}""")
+                .ConfigureAwait(false);
+            await peer.GoneAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        var error = await sink.Failed.Task.WaitAsync(Wait);
+        var error = await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System);
         error.Should().BeOfType<SubscriptionErrorException>().Which.Errors.Should().BeEmpty();
         error.Message.Should().Contain("ended the subscription with an error");
     }
@@ -327,15 +365,17 @@ public class GraphQLSubscriptionSocketTests
     [TestCase(403)]
     public async Task An_upgrade_the_host_refuses_is_a_refused_close(int status)
     {
-        await using var host = new WireHost(peer => peer.RefuseAsync(status, "No"));
-        await using var socket = new GraphQLSubscriptionSocket(
+        var host = new WireHost(peer => peer.RefuseAsync(status, "No"));
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        var closed = (await sink.Failed.Task.WaitAsync(Wait))
+        var closed = (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SocketClosedException>()
             .Subject;
@@ -346,15 +386,17 @@ public class GraphQLSubscriptionSocketTests
     [Test]
     public async Task An_upgrade_answered_with_another_status_is_not_refused()
     {
-        await using var host = new WireHost(peer => peer.RefuseAsync(502, "Bad Gateway"));
-        await using var socket = new GraphQLSubscriptionSocket(
+        var host = new WireHost(peer => peer.RefuseAsync(502, "Bad Gateway"));
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var sink = new Sink();
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait))
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .NotBeOfType<SocketClosedException>("a 502 is a host that may be back soon");
     }
@@ -383,16 +425,16 @@ public class GraphQLSubscriptionSocketTests
         var received = new TaskCompletionSource<IReadOnlyList<JsonObject>>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.UpgradeAsync();
-            await peer.ReceiveAsync();
-            await acknowledge.Task.WaitAsync(peer.Stopping);
-            await peer.SendAsync("""{"type":"connection_ack"}""");
+            await peer.UpgradeAsync().ConfigureAwait(false);
+            await peer.ReceiveAsync().ConfigureAwait(false);
+            await acknowledge.Task.WaitAsync(peer.Stopping).ConfigureAwait(false);
+            await peer.SendAsync("""{"type":"connection_ack"}""").ConfigureAwait(false);
             var messages = new List<JsonObject>();
             try
             {
-                while (await peer.ReceiveAsync() is { } message)
+                while (await peer.ReceiveAsync().ConfigureAwait(false) is { } message)
                     messages.Add(message);
             }
             catch (Exception ex) when (ex is WebSocketException or IOException)
@@ -401,9 +443,11 @@ public class GraphQLSubscriptionSocketTests
             }
             received.TrySetResult(messages);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var gone = new Sink();
         var kept = new Sink();
 
@@ -414,10 +458,16 @@ public class GraphQLSubscriptionSocketTests
         (await kept.Take(1)).Should().Equal("started");
         held.Dispose();
 
-        var messages = await received.Task.WaitAsync(Wait);
+        var messages = await received.Task.WaitAsync(Wait, TimeProvider.System);
         messages
-            .Where(m => m["type"]!.GetValue<string>() == "subscribe")
-            .Select(m => m["id"]!.GetValue<string>())
+            .Where(m =>
+                string.Equals(
+                    m["type"].NotNull().GetValue<string>(),
+                    "subscribe",
+                    StringComparison.Ordinal
+                )
+            )
+            .Select(m => m["id"].NotNull().GetValue<string>())
             .Should()
             .Equal("2");
     }
@@ -428,12 +478,13 @@ public class GraphQLSubscriptionSocketTests
         var closed = new TaskCompletionSource<WebSocketCloseStatus?>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            await peer.SubscribedAsync();
-            closed.TrySetResult(await peer.ClosedWithAsync());
+            await peer.AckAsync().ConfigureAwait(false);
+            await peer.SubscribedAsync().ConfigureAwait(false);
+            closed.TrySetResult(await peer.ClosedWithAsync().ConfigureAwait(false));
         });
+        await using var hostDisposal = host.ConfigureAwait(false);
         var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
@@ -443,19 +494,24 @@ public class GraphQLSubscriptionSocketTests
 
         await socket.DisposeAsync();
 
-        (await closed.Task.WaitAsync(Wait)).Should().Be(WebSocketCloseStatus.NormalClosure);
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+        (await closed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .Be(WebSocketCloseStatus.NormalClosure);
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SocketUnavailableException>();
     }
 
     [Test]
     public async Task Disposing_the_socket_lets_go_of_the_connections_stop_and_send_lock()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            await peer.SubscribedAsync();
-            await peer.ClosedWithAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            await peer.SubscribedAsync().ConfigureAwait(false);
+            await peer.ClosedWithAsync().ConfigureAwait(false);
         });
+        await using var hostDisposal = host.ConfigureAwait(false);
         var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
@@ -464,15 +520,19 @@ public class GraphQLSubscriptionSocketTests
         (await sink.Take(1)).Should().Equal("started");
         // The connection, and what it holds, read from the socket's private fields.
         var connection = typeof(GraphQLSubscriptionSocket)
-            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(socket)!;
+            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)
+            .NotNull()
+            .GetValue(socket)
+            .NotNull();
         var stop = (CancellationTokenSource)
             connection
                 .GetType()
-                .GetField("_stop", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .GetValue(connection)!;
+                .GetField("_stop", BindingFlags.NonPublic | BindingFlags.Instance)
+                .NotNull()
+                .GetValue(connection)
+                .NotNull();
         var sending = (SemaphoreSlim)
-            connection.GetType().GetProperty("Sending")!.GetValue(connection)!;
+            connection.GetType().GetProperty("Sending").NotNull().GetValue(connection).NotNull();
 
         await socket.DisposeAsync();
 
@@ -491,6 +551,8 @@ public class GraphQLSubscriptionSocketTests
 
         using var subscription = socket.Subscribe(Payload, sink);
 
-        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeOfType<SocketUnavailableException>();
+        (await sink.Failed.Task.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SocketUnavailableException>();
     }
 }

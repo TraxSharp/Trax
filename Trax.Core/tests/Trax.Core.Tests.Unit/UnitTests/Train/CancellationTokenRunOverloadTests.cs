@@ -71,7 +71,7 @@ public class CancellationTokenRunOverloadTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var junction = new CountingJunction();
         var train = new JunctionTrain(junction);
 
@@ -80,7 +80,7 @@ public class CancellationTokenRunOverloadTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("hello", cts.Token);
+            await train.Run("hello", cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -93,19 +93,19 @@ public class CancellationTokenRunOverloadTests : TestSetup
 
     #region Test Helpers
 
-    private class SimpleTrain : Train<string, string>
+    private sealed class SimpleTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain(new ProcessJunction()).Resolve();
     }
 
-    private class FailingTrain : Train<string, string>
+    private sealed class FailingTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain(new FailJunction()).Resolve();
     }
 
-    private class TokenCapturingTrain : Train<string, string>
+    private sealed class TokenCapturingTrain : Train<string, string>
     {
         public CancellationToken TokenDuringExecution { get; private set; }
 
@@ -116,7 +116,7 @@ public class CancellationTokenRunOverloadTests : TestSetup
         }
     }
 
-    private class JunctionTrain : Train<string, string>
+    private sealed class JunctionTrain : Train<string, string>
     {
         private readonly Junction<string, string> _junction;
 
@@ -126,18 +126,18 @@ public class CancellationTokenRunOverloadTests : TestSetup
             Chain(_junction).Resolve();
     }
 
-    private class ProcessJunction : Junction<string, string>
+    private sealed class ProcessJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "_processed");
     }
 
-    private class FailJunction : Junction<string, string>
+    private sealed class FailJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("test failure");
     }
 
-    private class CountingJunction : Junction<string, string>
+    private sealed class CountingJunction : Junction<string, string>
     {
         public int ExecutionCount { get; private set; }
 

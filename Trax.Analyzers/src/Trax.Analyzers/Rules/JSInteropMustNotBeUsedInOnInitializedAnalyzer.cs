@@ -1,0 +1,108 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class JSInteropMustNotBeUsedInOnInitializedAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.JSRuntimeMustNotBeUsedInOnInitialized,
+        title: "JSRuntime must not be used in OnInitialized or OnInitializedAsync",
+        messageFormat: "{0} must not be used in OnInitialized or OnInitializedAsync",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.JSRuntimeMustNotBeUsedInOnInitialized),
+        customTags: [GeneratedCodeReporting.ReportInGeneratedCodeTag]);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics);
+        context.RegisterCompilationStartAction(ctx =>
+        {
+            var analyzerContext = new AnalyzerContext(ctx.Compilation);
+            if (analyzerContext.IsValid)
+            {
+                ctx.RegisterOperationBlockStartAction(analyzerContext.OperationBlockStart);
+            }
+        });
+    }
+
+    private sealed class AnalyzerContext
+    {
+        public AnalyzerContext(Compilation compilation)
+        {
+            IJSRuntimeSymbol = compilation.GetTypeByMetadataName("Microsoft.JSInterop.IJSRuntime");
+            JSRuntimeSymbol = compilation.GetTypeByMetadataName("Microsoft.JSInterop.JSRuntime");
+            ProtectedBrowserStorageSymbol = compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedBrowserStorage");
+            WebAssemblyJSRuntimeSymbol = compilation.GetTypeByMetadataName("Microsoft.JSInterop.WebAssembly.WebAssemblyJSRuntime");
+            WebViewJSRuntimeSymbol = compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Components.WebView.Services.WebViewJSRuntime");
+            var componentBase = compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Components.ComponentBase");
+            if (componentBase is not null)
+            {
+                OnInitializedMethodSymbol = componentBase.GetMembers("OnInitialized").SingleOrDefaultIfMultiple();
+                OnInitializedAsyncMethodSymbol = componentBase.GetMembers("OnInitializedAsync").SingleOrDefaultIfMultiple();
+            }
+        }
+
+        public INamedTypeSymbol? IJSRuntimeSymbol { get; }
+        public INamedTypeSymbol? JSRuntimeSymbol { get; }
+        public INamedTypeSymbol? ProtectedBrowserStorageSymbol { get; }
+        public INamedTypeSymbol? WebAssemblyJSRuntimeSymbol { get; }
+        public INamedTypeSymbol? WebViewJSRuntimeSymbol { get; }
+        public ISymbol? OnInitializedMethodSymbol { get; }
+        public ISymbol? OnInitializedAsyncMethodSymbol { get; }
+
+        public bool IsValid
+        {
+            get
+            {
+                if (WebAssemblyJSRuntimeSymbol is not null)
+                    return false; // There is no issue in WebAssembly
+
+                if (WebViewJSRuntimeSymbol is not null)
+                    return false; // There is no issue in WebView
+
+                return (IJSRuntimeSymbol is not null || JSRuntimeSymbol is not null || ProtectedBrowserStorageSymbol is not null) && (OnInitializedMethodSymbol is not null || OnInitializedAsyncMethodSymbol is not null);
+            }
+        }
+
+        internal void OperationBlockStart(OperationBlockStartAnalysisContext context)
+        {
+            if (context.OwningSymbol is not IMethodSymbol methodSymbol)
+                return;
+
+            if (methodSymbol.Overrides(OnInitializedMethodSymbol) || methodSymbol.Overrides(OnInitializedAsyncMethodSymbol))
+            {
+                context.RegisterOperationAction(AnalyzeInvocation, OperationKind.Invocation);
+            }
+        }
+
+        private void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+            var instance = operation.Instance;
+            if (instance is null)
+            {
+                if (operation.TargetMethod.IsExtensionMethod && operation.Arguments.Length > 0)
+                {
+                    instance = operation.Arguments[0].Value;
+                }
+
+                if (instance is null)
+                    return;
+            }
+
+            var type = instance.GetActualType(context.CancellationToken);
+            if (type is null)
+                return;
+
+            if (type.IsEqualTo(IJSRuntimeSymbol) || type.IsEqualTo(JSRuntimeSymbol) || type.IsOrInheritsFrom(ProtectedBrowserStorageSymbol))
+            {
+                context.ReportDiagnostic(Rule, operation, type.Name);
+            }
+        }
+    }
+}

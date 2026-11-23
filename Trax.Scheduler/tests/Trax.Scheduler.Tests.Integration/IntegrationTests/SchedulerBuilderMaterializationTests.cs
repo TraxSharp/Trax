@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
@@ -40,7 +41,7 @@ public class SchedulerBuilderMaterializationTests
             .DataContext.Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == "ext-schedule");
         manifest.Should().NotBeNull();
-        manifest!.IsEnabled.Should().BeTrue();
+        manifest.NotNull().IsEnabled.Should().BeTrue();
         manifest.ScheduleType.Should().Be(ScheduleType.Interval);
         manifest.IntervalSeconds.Should().Be(300);
     }
@@ -62,13 +63,13 @@ public class SchedulerBuilderMaterializationTests
             .DataContext.Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == "ext-explicit");
         manifest.Should().NotBeNull();
-        manifest!.IntervalSeconds.Should().Be(600);
+        manifest.NotNull().IntervalSeconds.Should().Be(600);
     }
 
     [Test]
     public async Task ScheduleOnce_Inferred_MaterialisesAsOnceManifestWithScheduledAt()
     {
-        var before = DateTime.UtcNow;
+        var before = TimeProvider.System.GetUtcNow().UtcDateTime;
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
             s.ScheduleOnce<ISchedulerTestTrain>(
                 "ext-once",
@@ -83,9 +84,9 @@ public class SchedulerBuilderMaterializationTests
             .DataContext.Manifests.AsNoTracking()
             .FirstOrDefaultAsync(m => m.ExternalId == "ext-once");
         manifest.Should().NotBeNull();
-        manifest!.ScheduleType.Should().Be(ScheduleType.Once);
+        manifest.NotNull().ScheduleType.Should().Be(ScheduleType.Once);
         manifest.ScheduledAt.Should().NotBeNull();
-        manifest.ScheduledAt!.Value.Should().BeAfter(before);
+        manifest.ScheduledAt.NotNull().Value.Should().BeAfter(before);
     }
 
     [Test]
@@ -123,9 +124,15 @@ public class SchedulerBuilderMaterializationTests
             .Where(m => new[] { "root", "child", "grandchild" }.Contains(m.ExternalId))
             .ToListAsync();
         manifests.Should().HaveCount(3);
-        var root = manifests.First(m => m.ExternalId == "root");
-        var child = manifests.First(m => m.ExternalId == "child");
-        var grand = manifests.First(m => m.ExternalId == "grandchild");
+        var root = manifests.First(m =>
+            string.Equals(m.ExternalId, "root", StringComparison.Ordinal)
+        );
+        var child = manifests.First(m =>
+            string.Equals(m.ExternalId, "child", StringComparison.Ordinal)
+        );
+        var grand = manifests.First(m =>
+            string.Equals(m.ExternalId, "grandchild", StringComparison.Ordinal)
+        );
         child.DependsOnManifestId.Should().Be(root.Id);
         grand.DependsOnManifestId.Should().Be(child.Id);
     }
@@ -233,9 +240,15 @@ public class SchedulerBuilderMaterializationTests
         await fx.MaterializePendingManifestsAsync();
 
         var manifests = await fx.DataContext.Manifests.AsNoTracking().ToListAsync();
-        var root = manifests.First(m => m.ExternalId == "root");
-        var ca = manifests.First(m => m.ExternalId == "child-a");
-        var cb = manifests.First(m => m.ExternalId == "child-b");
+        var root = manifests.First(m =>
+            string.Equals(m.ExternalId, "root", StringComparison.Ordinal)
+        );
+        var ca = manifests.First(m =>
+            string.Equals(m.ExternalId, "child-a", StringComparison.Ordinal)
+        );
+        var cb = manifests.First(m =>
+            string.Equals(m.ExternalId, "child-b", StringComparison.Ordinal)
+        );
 
         ca.DependsOnManifestId.Should().Be(root.Id);
         cb.DependsOnManifestId.Should().Be(root.Id);
@@ -260,7 +273,7 @@ public class SchedulerBuilderMaterializationTests
             .Include(m => m.ManifestGroup)
             .FirstAsync(m => m.ExternalId == "ext-grouped");
 
-        manifest.ManifestGroup.Name.Should().Be("my-group");
+        manifest.ManifestGroup.NotNull().Name.Should().Be("my-group");
         manifest.ManifestGroup.MaxActiveJobs.Should().Be(7);
         manifest.ManifestGroup.Priority.Should().Be(3);
     }
@@ -272,7 +285,7 @@ public class SchedulerBuilderMaterializationTests
             s.Schedule<ISchedulerTestTrain>(
                 "ext-cron",
                 new SchedulerTestInput(),
-                Schedule.FromCron("0 3 * * *")
+                Schedule.FromCron("0 3 * * *", TimeProvider.System)
             )
         );
 

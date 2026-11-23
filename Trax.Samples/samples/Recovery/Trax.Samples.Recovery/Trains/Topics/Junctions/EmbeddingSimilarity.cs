@@ -43,9 +43,13 @@ public partial class EmbeddingSimilarity(DemoPace pace)
 
     public override async Task<EmbeddingSignal> Run(CorpusSlice slice)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
-        var vectors = slice.Papers.ToDictionary(p => p.Id, p => Vector($"{p.Title} {p.Abstract}"));
+        var vectors = slice.Papers.ToDictionary(
+            p => p.Id,
+            p => Vector($"{p.Title} {p.Abstract}"),
+            StringComparer.Ordinal
+        );
 
         return new EmbeddingSignal(
             PaperPairs
@@ -53,19 +57,26 @@ public partial class EmbeddingSimilarity(DemoPace pace)
                 .Select(pair => new PairSignal(
                     pair.A.Id,
                     pair.B.Id,
-                    Math.Round(Cosine(vectors[pair.A.Id], vectors[pair.B.Id]), 3)
+                    Math.Round(
+                        Cosine(vectors[pair.A.Id], vectors[pair.B.Id]),
+                        3,
+                        MidpointRounding.ToEven
+                    )
                 ))
                 .ToList()
         );
     }
 
     /// <summary>The paper's word counts: lower case, four letters or more, a plural's "s" dropped.</summary>
-    public static Dictionary<string, int> Vector(string text)
+    public static IReadOnlyDictionary<string, int> Vector(string text)
     {
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var raw in NotALetter().Split(text.ToLowerInvariant()))
+        foreach (var raw in NotALetter.Split(text.ToLowerInvariant()))
         {
-            var word = raw.Length > 4 && raw.EndsWith('s') && !raw.EndsWith("ss") ? raw[..^1] : raw;
+            var word =
+                raw.Length > 4 && raw.EndsWith('s') && !raw.EndsWith("ss", StringComparison.Ordinal)
+                    ? raw[..^1]
+                    : raw;
             if (word.Length < 4 || Stopwords.Contains(word))
                 continue;
             counts[word] = counts.GetValueOrDefault(word) + 1;
@@ -73,10 +84,13 @@ public partial class EmbeddingSimilarity(DemoPace pace)
         return counts;
     }
 
-    [GeneratedRegex("[^a-z]+")]
-    private static partial Regex NotALetter();
+    [GeneratedRegex("[^a-z]+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NotALetter { get; }
 
-    private static double Cosine(Dictionary<string, int> a, Dictionary<string, int> b)
+    private static double Cosine(
+        IReadOnlyDictionary<string, int> a,
+        IReadOnlyDictionary<string, int> b
+    )
     {
         double dot = 0;
         foreach (var (word, count) in a)

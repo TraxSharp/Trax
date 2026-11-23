@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Machines;
@@ -54,7 +55,7 @@ public class GeneratedViewDriftTests
                 }
             )
                 start.ArgumentList.Add(arg);
-            using var process = Process.Start(start)!;
+            using var process = Process.Start(start).NotNull();
             var stderr = process.StandardError.ReadToEndAsync();
             // The test owns its wait (ADR 0014): the generator answers well within it, or the test fails.
             if (!process.WaitForExit(NodeTimeout))

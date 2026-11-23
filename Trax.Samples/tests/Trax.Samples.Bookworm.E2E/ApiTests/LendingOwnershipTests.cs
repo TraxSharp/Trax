@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Trax.Samples.Bookworm.Auth;
 using Trax.Samples.Bookworm.E2E.Fixtures;
@@ -85,8 +86,16 @@ public class LendingOwnershipTests : ApiTestFixture
         );
 
         GraphQLClient.HasErrors(asAda).Should().BeFalse(asAda.RootElement.GetRawText());
-        Names(asAda, "loans").Should().NotContain(l => l.Contains($"\"id\":{gracesLoan},"));
-        Names(asGrace, "loans").Should().Contain(l => l.Contains($"\"id\":{gracesLoan},"));
+        Names(asAda, "loans")
+            .Should()
+            .NotContain(l =>
+                l.Contains("\"id\":" + gracesLoan.ToString(CultureInfo.InvariantCulture) + ",")
+            );
+        Names(asGrace, "loans")
+            .Should()
+            .Contain(l =>
+                l.Contains("\"id\":" + gracesLoan.ToString(CultureInfo.InvariantCulture) + ",")
+            );
     }
 
     [Test]
@@ -95,7 +104,10 @@ public class LendingOwnershipTests : ApiTestFixture
         var gracesLoan = await BorrowAsync(await NewBookAsync(), ApiKeyDefaults.OtherMemberKey);
 
         var doc = await GraphQL.PostAsync(
-            $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {gracesLoan} }}) {{ output {{ loanId }} }} }} }} }}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {gracesLoan} }}) {{ output {{ loanId }} }} }} }} }}"
+            ),
             ApiKeyDefaults.MemberKey
         );
 
@@ -104,7 +116,7 @@ public class LendingOwnershipTests : ApiTestFixture
             .GetProperty("message")
             .GetString()
             .Should()
-            .Be($"Loan {gracesLoan} not found.");
+            .Be(string.Create(CultureInfo.InvariantCulture, $"Loan {gracesLoan} not found."));
     }
 
     [Test]
@@ -113,7 +125,10 @@ public class LendingOwnershipTests : ApiTestFixture
         var gracesLoan = await BorrowAsync(await NewBookAsync(), ApiKeyDefaults.OtherMemberKey);
 
         var doc = await GraphQL.PostAsync(
-            $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {gracesLoan} }}) {{ output {{ loanId }} }} }} }} }}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {gracesLoan} }}) {{ output {{ loanId }} }} }} }} }}"
+            ),
             ApiKeyDefaults.LibrarianKey
         );
 

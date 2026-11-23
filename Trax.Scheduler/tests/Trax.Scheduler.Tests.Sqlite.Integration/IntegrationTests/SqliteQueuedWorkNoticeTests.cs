@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -30,7 +31,9 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
 
         await QueueAsync();
 
-        await subscription.WaitAsync(CancellationToken.None).WaitAsync(Timeout);
+        await subscription
+            .WaitAsync(CancellationToken.None)
+            .WaitAsync(Timeout, TimeProvider.System);
     }
 
     [Test]
@@ -45,10 +48,11 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
                 WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(ISchedulerTestTrain).FullName!,
+                        TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).FullName,
-                    }
+                    },
+                    TimeProvider.System
                 )
             );
             await DataContext.SaveChanges(CancellationToken.None);
@@ -61,16 +65,18 @@ public class SqliteQueuedWorkNoticeTests : TestSetup
 
         await QueueAsync();
 
-        await next.WaitAsync(Timeout);
+        await next.WaitAsync(Timeout, TimeProvider.System);
     }
 
     private async Task QueueAsync()
     {
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
-        await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
-            "{}",
-            ct: CancellationToken.None
-        );
+        await execution
+            .QueueAsync(
+                typeof(ISchedulerTestTrain).FullName.NotNull(),
+                "{}",
+                ct: CancellationToken.None
+            )
+            .ConfigureAwait(false);
     }
 }

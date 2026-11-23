@@ -11,7 +11,9 @@ namespace: Trax.StateMachine.Persistence
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotSelfCheck.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotMachineRegistry.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotMachineRegistry.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Machine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IMachine.cs
 ---
 
 # Runtime integrity

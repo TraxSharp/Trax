@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -10,6 +12,9 @@ namespace Trax.StateMachine.Features;
 /// read them, only when the host file and the IRs list the same machines, every name the host file gives is in its
 /// IR, and each IR is the one its host entry was derived from.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class MachineFiles
 {
     internal const string HostFileName = "host.json";
@@ -52,64 +57,12 @@ internal static class MachineFiles
             StringComparer.Ordinal
         );
 
-        foreach (var (id, machine) in host.Machines)
-        {
-            var names = machines[id];
-            foreach (var trigger in machine.Triggers.Keys.Where(t => !names.Triggers.Contains(t)))
-                problems.Add(
-                    $"{HostFileName} gives '{id}' a rule for '{trigger}', which is not one of its triggers."
-                );
-            foreach (var (state, invoke) in machine.Invokes)
-            {
-                if (!names.States.Contains(state))
-                    problems.Add(
-                        $"{HostFileName} names a train for '{id}' in '{state}', which is not one of its states."
-                    );
-                foreach (
-                    var from in invoke.Input.Values.Where(f =>
-                        f != HostInvoke.Owner && !names.Fields.Contains(f)
-                    )
-                )
-                    problems.Add(
-                        $"{HostFileName} maps '{id}''s train input from '{from}', which no context of '{id}' has."
-                    );
-                // $owner is the server's value; a context field under that name would be one a client writes.
-                if (
-                    invoke.Input.Values.Contains(HostInvoke.Owner)
-                    && names.Fields.Contains(HostInvoke.Owner)
-                )
-                    problems.Add(
-                        $"{id}{IrSuffix} has a context field named '{HostInvoke.Owner}', which {HostFileName} "
-                            + "reads as the instance's owner."
-                    );
-            }
-        }
+        AddTriggerAndInvokeProblems(problems, host, machines);
 
         foreach (var (id, machine) in host.Machines)
             problems.AddRange(HandlerProblems(machine, irs[id]));
 
-        for (var i = 0; i < host.Policies.Count; i++)
-        {
-            var policy = host.Policies[i];
-            var at = $"{HostFileName} policy {i} ({policy.Shape})";
-            if (!machines[policy.When].States.Contains(policy.Enters))
-                problems.Add(
-                    $"{at} waits for '{policy.When}' to enter '{policy.Enters}', which is not one of its states."
-                );
-            var target = machines[policy.Target];
-            if (!target.Triggers.Contains(policy.Trigger))
-                problems.Add(
-                    $"{at} fires '{policy.Trigger}', which is not one of '{policy.Target}''s triggers."
-                );
-            if (policy.Shape == "broadcast" && !target.States.Contains(policy.By))
-                problems.Add(
-                    $"{at} reaches '{policy.Target}' in '{policy.By}', which is not one of its states."
-                );
-            if (policy.Shape == "linked" && !target.Fields.Contains(policy.By))
-                problems.Add(
-                    $"{at} links by '{policy.By}', which no context of '{policy.Target}' has."
-                );
-        }
+        AddPolicyProblems(problems, host, machines);
 
         foreach (var view in host.Views.Values)
         foreach (var field in view.Fields)
@@ -131,6 +84,86 @@ internal static class MachineFiles
         return problems;
     }
 
+    private static void AddTriggerAndInvokeProblems(
+        List<string> problems,
+        HostFile host,
+        Dictionary<string, IrNames> machines
+    )
+    {
+        foreach (var (id, machine) in host.Machines)
+        {
+            var names = machines[id];
+            foreach (var trigger in machine.Triggers.Keys.Where(t => !names.Triggers.Contains(t)))
+                problems.Add(
+                    $"{HostFileName} gives '{id}' a rule for '{trigger}', which is not one of its triggers."
+                );
+            foreach (var (state, invoke) in machine.Invokes)
+            {
+                if (!names.States.Contains(state))
+                    problems.Add(
+                        $"{HostFileName} names a train for '{id}' in '{state}', which is not one of its states."
+                    );
+                foreach (
+                    var from in invoke.Input.Values.Where(f =>
+                        !string.Equals(f, HostInvoke.Owner, StringComparison.Ordinal)
+                        && !names.Fields.Contains(f)
+                    )
+                )
+                    problems.Add(
+                        $"{HostFileName} maps '{id}''s train input from '{from}', which no context of '{id}' has."
+                    );
+                // $owner is the server's value; a context field under that name would be one a client writes.
+                if (
+                    invoke.Input.Values.Contains(HostInvoke.Owner, StringComparer.Ordinal)
+                    && names.Fields.Contains(HostInvoke.Owner)
+                )
+                    problems.Add(
+                        $"{id}{IrSuffix} has a context field named '{HostInvoke.Owner}', which {HostFileName} "
+                            + "reads as the instance's owner."
+                    );
+            }
+        }
+    }
+
+    private static void AddPolicyProblems(
+        List<string> problems,
+        HostFile host,
+        Dictionary<string, IrNames> machines
+    )
+    {
+        for (var i = 0; i < host.Policies.Count; i++)
+        {
+            var policy = host.Policies[i];
+            var at = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{HostFileName} policy {i} ({policy.Shape})"
+            );
+            if (!machines[policy.When].States.Contains(policy.Enters))
+                problems.Add(
+                    $"{at} waits for '{policy.When}' to enter '{policy.Enters}', which is not one of its states."
+                );
+            var target = machines[policy.Target];
+            if (!target.Triggers.Contains(policy.Trigger))
+                problems.Add(
+                    $"{at} fires '{policy.Trigger}', which is not one of '{policy.Target}''s triggers."
+                );
+            if (
+                string.Equals(policy.Shape, "broadcast", StringComparison.Ordinal)
+                && !target.States.Contains(policy.By)
+            )
+                problems.Add(
+                    $"{at} reaches '{policy.Target}' in '{policy.By}', which is not one of its states."
+                );
+            if (
+                string.Equals(policy.Shape, "linked", StringComparison.Ordinal)
+                && !target.Fields.Contains(policy.By)
+            )
+                problems.Add(
+                    $"{at} links by '{policy.By}', which no context of '{policy.Target}' has."
+                );
+        }
+    }
+
     /// <summary>
     /// What keeps a host entry's handlers from pairing with its IR, one for one: every trigger whose edge runs an effect
     /// has its effect's type and nothing else does, every custom rule and reduction the IR names has its type and nothing
@@ -142,7 +175,7 @@ internal static class MachineFiles
         var id = machine.Id;
         var effects = (ir["transitions"] as JsonArray ?? [])
             .Where(t => t?["effect"] is JsonObject)
-            .Select(t => t!["trigger"]?.GetValue<string>())
+            .Select(t => t.NotNull()["trigger"]?.GetValue<string>())
             .OfType<string>()
             .ToHashSet(StringComparer.Ordinal);
         Pair(problems, $"'{id}' runs an effect on", "effect", effects, machine.Effects.Keys);
@@ -150,7 +183,7 @@ internal static class MachineFiles
         var rules = new SortedSet<string>(StringComparer.Ordinal);
         var reductions = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var (key, value) in ir)
-            if (key != "differential")
+            if (!string.Equals(key, "differential", StringComparison.Ordinal))
                 Glossary.CustomNames(value, rules, reductions);
         Pair(problems, $"'{id}' names the custom rule", "rule", rules, machine.Rules.Keys);
         Pair(
@@ -168,7 +201,10 @@ internal static class MachineFiles
             .ToHashSet(StringComparer.Ordinal);
         Pair(
             problems,
-            $"'{id}' is version {version}, and steps from version",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"'{id}' is version {version}, and steps from version"
+            ),
             "migration",
             steps,
             machine.Migrations.Keys.Select(k =>
@@ -188,9 +224,9 @@ internal static class MachineFiles
     )
     {
         var have = given.ToHashSet(StringComparer.Ordinal);
-        foreach (var name in needed.Order(StringComparer.Ordinal).Where(n => !have.Contains(n)))
+        foreach (var name in needed.Where(n => !have.Contains(n)).Order(StringComparer.Ordinal))
             problems.Add($"{what} '{name}', and {HostFileName} names no {kind} type for it.");
-        foreach (var name in have.Order(StringComparer.Ordinal).Where(n => !needed.Contains(n)))
+        foreach (var name in have.Where(n => !needed.Contains(n)).Order(StringComparer.Ordinal))
             problems.Add(
                 $"{HostFileName} names a {kind} type for '{name}', which {what.Split(' ')[0]}'s IR does not have."
             );
@@ -198,7 +234,7 @@ internal static class MachineFiles
 
     /// <summary>Why an IR is not the one its host entry was derived from, or null when it is.</summary>
     internal static string? Mismatch(HostFile host, string id, JsonObject ir) =>
-        host.Machines[id].SchemaHash == Hash(ir)
+        string.Equals(host.Machines[id].SchemaHash, Hash(ir), StringComparison.Ordinal)
             ? null
             : $"{HostFileName} was derived from another IR of '{id}'. Derive them again together.";
 

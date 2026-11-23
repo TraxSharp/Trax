@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -24,44 +26,52 @@ public class RequestIdRingSizeTests(StoreProvider provider)
     // A context near the snapshot cap, so every result the ring records is large.
     private static readonly string Source = new('x', 50 * 1024);
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider, launcher: new RecordingLauncher());
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private async Task<AdvanceOutcome> Edit(Guid id, string requestId)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return await _host
+            .NotNull()
             .Service(scope, BuildMachine.Id)
-            .Advance(User, id, nameof(BuildTrigger.Edit), null, requestId);
+            .Advance(User, id, nameof(BuildTrigger.Edit), input: null, requestId)
+            .ConfigureAwait(false);
     }
 
     [Test]
     public async Task A_row_after_sixteen_large_advances_keeps_its_ring_within_the_byte_bound()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(
-            User,
-            id,
-            BuildMachine.Json(nameof(BuildState.Draft), new JsonObject { ["source"] = Source })
-        );
+        await _host
+            .NotNull()
+            .SeedDraft(
+                User,
+                id,
+                BuildMachine.Json(nameof(BuildState.Draft), new JsonObject { ["source"] = Source })
+            );
 
         for (var i = 1; i <= RequestIdRing.Capacity; i++)
-            (await Edit(id, $"edit-{i}")).Should().BeOfType<AdvanceOutcome.Advanced>();
+            (await Edit(id, string.Create(CultureInfo.InvariantCulture, $"edit-{i}")))
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
 
         var column = (string?)
-            await _host.Scalar(
-                provider == StoreProvider.Postgres
-                    ? $"SELECT recent_requests::text FROM {_host.DraftTable} WHERE row_id = @p0"
-                    : $"SELECT recent_requests FROM {_host.DraftTable} WHERE row_id = @p0",
-                await _host.RowId(id)
-            );
+            await _host
+                .NotNull()
+                .Scalar(
+                    provider == StoreProvider.Postgres
+                        ? $"SELECT recent_requests::text FROM {_host.NotNull().DraftTable} WHERE row_id = @p0"
+                        : $"SELECT recent_requests FROM {_host.NotNull().DraftTable} WHERE row_id = @p0",
+                    await _host.NotNull().RowId(id)
+                );
         column.Should().NotBeNull();
-        var ring = RequestIdRing.Parse(column)!;
+        var ring = RequestIdRing.Parse(column).NotNull();
         Encoding
             .UTF8.GetByteCount(RequestIdRing.Serialize(ring))
             .Should()
@@ -71,20 +81,20 @@ public class RequestIdRingSizeTests(StoreProvider provider)
             );
         // jsonb prints a space after each separator between the ring's own fields; the results are strings.
         Encoding
-            .UTF8.GetByteCount(column!)
+            .UTF8.GetByteCount(column.NotNull())
             .Should()
             .BeLessThanOrEqualTo(RequestIdRing.MaxBytes + 1024);
         ring.Select(r => r.RequestId).Should().Contain($"edit-{RequestIdRing.Capacity}");
         ring.Should()
             .HaveCountLessThan(RequestIdRing.Capacity, "the oldest large results were evicted");
 
-        var revision = await _host.Revision(id);
+        var revision = await _host.NotNull().Revision(id);
         (await Edit(id, $"edit-{RequestIdRing.Capacity}"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Revision.Should()
             .Be(revision, "the newest request is always kept, so its retry replays");
-        (await _host.Revision(id)).Should().Be(revision);
+        (await _host.NotNull().Revision(id)).Should().Be(revision);
     }
 
     // About 20 KiB of canonical wire each: a quote in every four characters, and three-byte characters.
@@ -101,17 +111,19 @@ public class RequestIdRingSizeTests(StoreProvider provider)
     )
     {
         var id = Guid.NewGuid();
-        var value = kind == "quoted" ? Quoted : Cjk;
+        var value = string.Equals(kind, "quoted", StringComparison.Ordinal) ? Quoted : Cjk;
         var snapshot = BuildMachine.Json(
             nameof(BuildState.Draft),
             new JsonObject { ["source"] = value }
         );
-        await _host.SeedDraft(User, id, snapshot);
+        await _host.NotNull().SeedDraft(User, id, snapshot);
 
         for (var i = 1; i <= RequestIdRing.Capacity; i++)
-            (await Edit(id, $"edit-{i}")).Should().BeOfType<AdvanceOutcome.Advanced>();
+            (await Edit(id, string.Create(CultureInfo.InvariantCulture, $"edit-{i}")))
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
 
-        var ring = RequestIdRing.Parse(await StoredText(id))!;
+        var ring = RequestIdRing.Parse(await StoredText(id)).NotNull();
         var result = ring[^1].ResultSnapshot;
         Encoding.UTF8.GetByteCount(result).Should().BeInRange(19 * 1024, 21 * 1024);
 
@@ -124,7 +136,10 @@ public class RequestIdRingSizeTests(StoreProvider provider)
             .Should()
             .BeGreaterThan(
                 RequestIdRing.MaxBytes,
-                $"each entry takes about {sizes[^1]} bytes as stored, and the ring keeps as many as fit; see {Adr}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"each entry takes about {sizes[^1]} bytes as stored, and the ring keeps as many as fit; see {Adr}"
+                )
             );
         var expected = ring.Count;
         expected.Should().Be(fits, "a result is counted as the column's text stores it");
@@ -133,17 +148,25 @@ public class RequestIdRingSizeTests(StoreProvider provider)
             .Equal(
                 Enumerable
                     .Range(RequestIdRing.Capacity - expected + 1, expected)
-                    .Select(i => $"edit-{i}")
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"edit-{i}"))
             );
 
+        await AssertStoredNoLargerThanCounted(id, ring);
+    }
+
+    private async Task AssertStoredNoLargerThanCounted(Guid id, IReadOnlyList<RecordedRequest> ring)
+    {
         // What the column holds is no larger than what was counted.
         var storedBytes = Convert.ToInt64(
-            await _host.Scalar(
-                provider == StoreProvider.Postgres
-                    ? $"SELECT sum(octet_length(e->>'result')) FROM {_host.DraftTable}, jsonb_array_elements(recent_requests) e WHERE row_id = @p0"
-                    : $"SELECT length(CAST(recent_requests AS BLOB)) FROM {_host.DraftTable} WHERE row_id = @p0",
-                await _host.RowId(id)
-            ),
+            await _host
+                .NotNull()
+                .Scalar(
+                    provider == StoreProvider.Postgres
+                        ? $"SELECT sum(octet_length(e->>'result')) FROM {_host.NotNull().DraftTable}, jsonb_array_elements(recent_requests) e WHERE row_id = @p0"
+                        : $"SELECT length(CAST(recent_requests AS BLOB)) FROM {_host.NotNull().DraftTable} WHERE row_id = @p0",
+                    await _host.NotNull().RowId(id).ConfigureAwait(false)
+                )
+                .ConfigureAwait(false),
             System.Globalization.CultureInfo.InvariantCulture
         );
         storedBytes.Should().BeLessThanOrEqualTo(RequestIdRing.MaxBytes);
@@ -160,18 +183,20 @@ public class RequestIdRingSizeTests(StoreProvider provider)
     public async Task A_ring_written_with_every_character_escaped_still_replays()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(
-            User,
-            id,
-            BuildMachine.Json(nameof(BuildState.Draft), new JsonObject { ["source"] = Cjk })
-        );
+        await _host
+            .NotNull()
+            .SeedDraft(
+                User,
+                id,
+                BuildMachine.Json(nameof(BuildState.Draft), new JsonObject { ["source"] = Cjk })
+            );
         var revision = (await Edit(id, "edit-1"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Revision;
 
         // The ring as an earlier version wrote it: the default encoder escapes every quote and non-ASCII character.
-        var ring = RequestIdRing.Parse(await StoredText(id))!;
+        var ring = RequestIdRing.Parse(await StoredText(id)).NotNull();
         var escaped = System.Text.Json.JsonSerializer.Serialize(
             ring.Select(r => new
                 {
@@ -185,32 +210,37 @@ public class RequestIdRingSizeTests(StoreProvider provider)
                 .ToList()
         );
         escaped.Should().Contain("\\u0022");
-        await _host.Execute(
-            provider == StoreProvider.Postgres
-                ? $"UPDATE {_host.DraftTable} SET recent_requests = CAST(@p0 AS jsonb) WHERE row_id = @p1"
-                : $"UPDATE {_host.DraftTable} SET recent_requests = @p0 WHERE row_id = @p1",
-            escaped,
-            await _host.RowId(id)
-        );
+        await _host
+            .NotNull()
+            .Execute(
+                provider == StoreProvider.Postgres
+                    ? $"UPDATE {_host.NotNull().DraftTable} SET recent_requests = CAST(@p0 AS jsonb) WHERE row_id = @p1"
+                    : $"UPDATE {_host.NotNull().DraftTable} SET recent_requests = @p0 WHERE row_id = @p1",
+                escaped,
+                await _host.NotNull().RowId(id)
+            );
 
         // The raw write moved the row's revision; a replay leaves it where it is.
-        var written = await _host.Revision(id);
+        var written = await _host.NotNull().Revision(id);
         (await Edit(id, "edit-1"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Revision.Should()
             .Be(revision, "the recorded request replays from a ring in the earlier form");
-        (await _host.Revision(id)).Should().Be(written);
+        (await _host.NotNull().Revision(id)).Should().Be(written);
     }
 
     private async Task<string> StoredText(Guid id) =>
         (string)
             (
-                await _host.Scalar(
-                    provider == StoreProvider.Postgres
-                        ? $"SELECT recent_requests::text FROM {_host.DraftTable} WHERE row_id = @p0"
-                        : $"SELECT recent_requests FROM {_host.DraftTable} WHERE row_id = @p0",
-                    await _host.RowId(id)
-                )
-            )!;
+                await _host
+                    .NotNull()
+                    .Scalar(
+                        provider == StoreProvider.Postgres
+                            ? $"SELECT recent_requests::text FROM {_host.NotNull().DraftTable} WHERE row_id = @p0"
+                            : $"SELECT recent_requests FROM {_host.NotNull().DraftTable} WHERE row_id = @p0",
+                        await _host.NotNull().RowId(id).ConfigureAwait(false)
+                    )
+                    .ConfigureAwait(false)
+            ).NotNull();
 }

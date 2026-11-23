@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Models.Metadata;
@@ -59,38 +60,43 @@ internal static class RunQueueHook
                 Name = trainName,
                 ExternalId = externalId,
                 Input = input,
-            }
+            },
+            services.GetService<TimeProvider>() ?? TimeProvider.System
         );
 
-        await using var scope = services.CreateAsyncScope();
-        var train = scope.ServiceProvider.GetRequiredService(registration.ServiceType);
-
-        using var enqueueContext = services
-            .GetService<IEnqueueContextAccessor>()
-            ?.Enter(runContext);
-
-        var limit =
-            services.GetService<MediatorConfiguration>()?.MaxQueueHookDuration
-            ?? new MediatorConfiguration().MaxQueueHookDuration;
-
-        if (limit == Timeout.InfiniteTimeSpan)
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            await InvokeHookAsync(onQueue, train, hookMetadata, ct);
-            return;
-        }
+            var train = scope.ServiceProvider.GetRequiredService(registration.ServiceType);
 
-        using var limited = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        limited.CancelAfter(limit);
+            using var enqueueContext = services
+                .GetService<IEnqueueContextAccessor>()
+                ?.Enter(runContext);
 
-        try
-        {
-            await InvokeHookAsync(onQueue, train, hookMetadata, limited.Token)
-                .WaitAsync(limited.Token);
-        }
-        catch (OperationCanceledException)
-            when (limited.IsCancellationRequested && !ct.IsCancellationRequested)
-        {
-            throw new QueueHookTimeoutException(trainName, limit);
+            var limit =
+                services.GetService<MediatorConfiguration>()?.MaxQueueHookDuration
+                ?? new MediatorConfiguration().MaxQueueHookDuration;
+
+            if (limit == Timeout.InfiniteTimeSpan)
+            {
+                await InvokeHookAsync(onQueue, train, hookMetadata, ct).ConfigureAwait(false);
+                return;
+            }
+
+            using var limited = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limited.CancelAfter(limit);
+
+            try
+            {
+                await InvokeHookAsync(onQueue, train, hookMetadata, limited.Token)
+                    .WaitAsync(limited.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+                when (limited.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                throw new QueueHookTimeoutException(trainName, limit);
+            }
         }
     }
 
@@ -116,8 +122,8 @@ internal static class RunQueueHook
 
         try
         {
-            using var hookInput = (IDisposable)enter.Invoke(train, [hookMetadata])!;
-            await (Task)onQueue.Invoke(train, [hookMetadata, ct])!;
+            using var hookInput = (IDisposable)enter.Invoke(train, [hookMetadata]).NotNull();
+            await ((Task)onQueue.Invoke(train, [hookMetadata, ct]).NotNull()).ConfigureAwait(false);
         }
         catch (TargetInvocationException ex)
         {

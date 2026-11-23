@@ -94,7 +94,7 @@ internal static class SettingText
             TimeSpan ts => ts.ToString("c", Invariant),
             double d => d.ToString("R", Invariant),
             float f => f.ToString("R", Invariant),
-            IFormattable formattable => formattable.ToString(null, Invariant),
+            IFormattable formattable => formattable.ToString(format: null, Invariant),
             _ => value.ToString() ?? "",
         };
 

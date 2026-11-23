@@ -31,11 +31,13 @@ internal sealed class TopicEventSenderChangeSink : IChangeSignalSink
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         foreach (var domain in domains)
         {
-            await _eventSender.SendAsync(
-                nameof(LifecycleSubscriptions.OnDataChanged),
-                new DataChangedEvent(domain, now),
-                ct
-            );
+            await _eventSender
+                .SendAsync(
+                    nameof(LifecycleSubscriptions.OnDataChanged),
+                    new DataChangedEvent(domain, now),
+                    ct
+                )
+                .ConfigureAwait(false);
         }
     }
 }

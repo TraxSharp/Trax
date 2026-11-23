@@ -202,7 +202,9 @@ public class QueryModelAuthorizeE2ETests
             .EnumerateArray()
             .ToList();
         owners.Should().HaveCount(2);
-        var alice = owners.Single(o => o.GetProperty("name").GetString() == "Alice");
+        var alice = owners.Single(o =>
+            string.Equals(o.GetProperty("name").GetString(), "Alice", StringComparison.Ordinal)
+        );
         alice.GetProperty("books").GetArrayLength().Should().Be(2);
     }
 

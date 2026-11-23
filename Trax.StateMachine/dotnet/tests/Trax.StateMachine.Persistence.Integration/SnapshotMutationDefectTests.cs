@@ -1,34 +1,12 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.StateMachine.Persistence.Integration;
-
-public enum NoteState
-{
-    Draft,
-}
-
-public enum NoteTrigger
-{
-    Write,
-}
-
-/// <summary>A one-state machine whose only edge copies <c>input.text</c> into the context.</summary>
-public sealed class NoteMachine : Machine<NoteState, NoteTrigger>
-{
-    protected override void Configure(IMachineBuilder<NoteState, NoteTrigger> m)
-    {
-        m.Id("note").Version(1).StartsAt(NoteState.Draft, () => new JsonObject());
-        m.In(NoteState.Draft)
-            .On(NoteTrigger.Write)
-            .Reduce((_, input) => new JsonObject { ["text"] = input?["text"]?.DeepClone() })
-            .To(NoteState.Draft);
-    }
-}
 
 /// <summary>
 /// Defects in the generic snapshot mutations, driven the way <see cref="RegistryJunctionTests"/> drives
@@ -91,7 +69,7 @@ public class SnapshotMutationDefectTests
                     "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}",
             }
         );
-        advance.Problem!.Code.Should().Be(RefusalCode.ClientDivergence);
+        advance.Problem.NotNull().Code.Should().Be(RefusalCode.ClientDivergence);
 
         // "the advance is refused" (runtime-integrity docs): the stored draft must still be Locked.
         (await Load("turnstile", id))
@@ -137,7 +115,7 @@ public class SnapshotMutationDefectTests
         var snapshot =
             "{\"machine\":\"plain-hatch\",\"version\":1,\"state\":\"Open\",\"context\":{\"paidWith\":\"a\\u0000b\"}}";
 
-        var save = async () => await Save(PlainHatchMachine.Id, id, snapshot);
+        var save = async () => await Save(PlainHatchMachine.Id, id, snapshot).ConfigureAwait(false);
 
         (await save.Should().NotThrowAsync()).Subject.Problem.Should().NotBeNull();
     }
@@ -156,7 +134,7 @@ public class SnapshotMutationDefectTests
         }
         catch (ArgumentException) { }
 
-        var load = async () => await Load(PlainHatchMachine.Id, id);
+        var load = async () => await Load(PlainHatchMachine.Id, id).ConfigureAwait(false);
         await load.Should()
             .NotThrowAsync("every later load of the draft must not fail on the stored value");
     }

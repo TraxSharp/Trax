@@ -10,7 +10,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster;
 /// Lifecycle hook that publishes train state transitions to an <see cref="ITrainEventBroadcaster"/>
 /// for cross-process delivery. Registered automatically by <c>UseBroadcaster()</c>.
 /// </summary>
-internal class BroadcastLifecycleHook : ITrainLifecycleHook
+internal sealed class BroadcastLifecycleHook : ITrainLifecycleHook
 {
     private static readonly string? LocalExecutor = Assembly
         .GetEntryAssembly()
@@ -19,6 +19,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     private readonly ITrainEventBroadcaster _broadcaster;
     private readonly BroadcastInstance _instance;
     private readonly ILogger<BroadcastLifecycleHook>? _logger;
+    private readonly TimeProvider _clock;
 
     /// <summary>
     /// Creates the hook. Registered by <c>UseBroadcaster()</c>; not intended to be constructed directly.
@@ -26,12 +27,15 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="broadcaster">The transport each event is published through.</param>
     /// <param name="logger">Optional debug logging of each published event.</param>
     /// <param name="instance">This host's broadcast identity, stamped on every message.</param>
+    /// <param name="timeProvider">The clock an event without an end time is stamped from; the system's when null.</param>
     public BroadcastLifecycleHook(
         ITrainEventBroadcaster broadcaster,
         ILogger<BroadcastLifecycleHook>? logger = null,
-        BroadcastInstance? instance = null
+        BroadcastInstance? instance = null,
+        TimeProvider? timeProvider = null
     )
     {
+        _clock = timeProvider ?? TimeProvider.System;
         _broadcaster = broadcaster;
         _logger = logger;
         _instance = instance ?? BroadcastInstance.Unregistered;
@@ -46,7 +50,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnStarted(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Started", ct);
+        await PublishAsync(metadata, "Started", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -58,7 +62,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Completed", ct);
+        await PublishAsync(metadata, "Completed", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -72,7 +76,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Failed", ct);
+        await PublishAsync(metadata, "Failed", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -84,7 +88,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "Cancelled", ct);
+        await PublishAsync(metadata, "Cancelled", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -96,7 +100,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
     /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
     {
-        await PublishAsync(metadata, "StateChanged", ct);
+        await PublishAsync(metadata, "StateChanged", ct).ConfigureAwait(false);
     }
 
     private async Task PublishAsync(Metadata metadata, string eventType, CancellationToken ct)
@@ -106,7 +110,7 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
             TrainState: metadata.TrainState.ToString(),
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? _clock.GetUtcNow().UtcDateTime,
             FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             EventType: eventType,
@@ -127,6 +131,6 @@ internal class BroadcastLifecycleHook : ITrainLifecycleHook
             metadata.ExternalId
         );
 
-        await _broadcaster.PublishAsync(message, ct);
+        await _broadcaster.PublishAsync(message, ct).ConfigureAwait(false);
     }
 }

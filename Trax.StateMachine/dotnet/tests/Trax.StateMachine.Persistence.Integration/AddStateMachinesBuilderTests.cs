@@ -39,8 +39,10 @@ public class AddStateMachinesBuilderTests
 
         contributed.Should().Contain(StateMachineMutations.Assembly);
 
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var sp = scope.ServiceProvider;
 
         // The whole subsystem resolves: the registry discovered the machines, and the store is wired.
@@ -81,15 +83,17 @@ public class AddStateMachinesBuilderTests
                 .AddStateMachines(typeof(OrderMachine).Assembly)
         );
 
-        await using var provider = services.BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var advance = scope.ServiceProvider.GetRequiredService<IAdvanceSnapshot>();
         var send = scope.ServiceProvider.GetRequiredService<ISendSnapshot>();
 
         // The per-machine surface dispatches these two trains, so they stay routable; nothing serves them to a
         // client unless the host opts in to the generic mutations.
         new[] { advance.GetType(), send.GetType() }
-            .Where(type => type.GetCustomAttribute<TraxMutationAttribute>() is not null)
+            .Where(type => Attribute.IsDefined(type, typeof(TraxMutationAttribute)))
             .Should()
             .BeEmpty(
                 "without the opt-in a route carries no GraphQL exposure. See "

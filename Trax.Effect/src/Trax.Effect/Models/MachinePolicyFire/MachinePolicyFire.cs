@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.MachinePolicyFire;
 
@@ -17,7 +18,11 @@ public class MachinePolicyFire
 
     /// <summary>The policy, by the identity its host file gives it.</summary>
     [Column("policy")]
-    public string Policy { get; set; } = null!;
+    public string Policy
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>The row of the instance whose transition set the policy off.</summary>
     [Column("source_row_id")]

@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -37,13 +39,13 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ParallelDispatchTests
 {
-    private static readonly string TestTrainName = typeof(SchedulerTestTrain).FullName!;
+    private static readonly string TestTrainName = typeof(SchedulerTestTrain).FullName.NotNull();
 
-    private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
-    private IDataContext _dataContext = null!;
-    private DelayingJobSubmitter _submitter = null!;
-    private SchedulerConfiguration _schedulerConfiguration = null!;
+    private ServiceProvider? _serviceProvider;
+    private AsyncServiceScope _scope;
+    private IDataContext? _dataContext;
+    private DelayingJobSubmitter? _submitter;
+    private SchedulerConfiguration? _schedulerConfiguration;
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -57,7 +59,7 @@ public class ParallelDispatchTests
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddSingleton(_submitter)
+            .AddSingleton(_submitter.NotNull())
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
                         effects
@@ -87,33 +89,36 @@ public class ParallelDispatchTests
             })
             .BuildServiceProvider();
 
-        _schedulerConfiguration = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        _schedulerConfiguration = _serviceProvider
+            .NotNull()
+            .GetRequiredService<SchedulerConfiguration>();
     }
 
     [OneTimeTearDown]
     public async Task RunAfterAnyTests()
     {
-        await _serviceProvider.DisposeAsync();
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
     }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
-        _submitter.Reset();
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
+        _submitter.NotNull().Reset();
     }
 
     [TearDown]
     public async Task TestTearDown()
     {
         // Reset to default after each test
-        _schedulerConfiguration.MaxConcurrentDispatch = 1;
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 1;
 
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     #region Sequential Default
@@ -124,21 +129,23 @@ public class ParallelDispatchTests
         // Arrange — default MaxConcurrentDispatch = 1
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
-        var sw = Stopwatch.StartNew();
+        var swStarted = TimeProvider.System.GetTimestamp();
         await train.Run(Unit.Default);
-        sw.Stop();
+        var swElapsed = TimeProvider.System.GetElapsedTime(swStarted);
 
         if (train is IDisposable d)
             d.Dispose();
 
         // Assert — sequential: 3 entries at 200ms each = ~600ms minimum
-        sw.ElapsedMilliseconds.Should()
+        swElapsed
+            .TotalMilliseconds.Should()
             .BeGreaterThanOrEqualTo(500, "sequential dispatch should take at least 3 * delay");
         _submitter
+            .NotNull()
             .MaxObservedConcurrency.Should()
             .Be(1, "sequential dispatch should never have more than 1 concurrent call");
     }
@@ -151,30 +158,32 @@ public class ParallelDispatchTests
     public async Task Dispatch_WithMaxConcurrentDispatch3_DispatchesConcurrently()
     {
         // Arrange
-        _schedulerConfiguration.MaxConcurrentDispatch = 3;
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 3;
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
-        var sw = Stopwatch.StartNew();
+        var swStarted = TimeProvider.System.GetTimestamp();
         await train.Run(Unit.Default);
-        sw.Stop();
+        var swElapsed = TimeProvider.System.GetElapsedTime(swStarted);
 
         if (train is IDisposable d)
             d.Dispose();
 
         // Assert — parallel: 3 entries with concurrency 3 should complete in ~1 delay period
-        sw.ElapsedMilliseconds.Should()
+        swElapsed
+            .TotalMilliseconds.Should()
             .BeLessThan(
                 500,
                 "parallel dispatch of 3 entries with concurrency 3 should be faster than sequential"
             );
 
         // Verify all entries were dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadataCount = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TestTrainName)
             .CountAsync();
@@ -189,10 +198,10 @@ public class ParallelDispatchTests
     public async Task Dispatch_WithMaxConcurrentDispatch2_RespectsLimit()
     {
         // Arrange
-        _schedulerConfiguration.MaxConcurrentDispatch = 2;
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 2;
         var entries = await CreateWorkQueueEntries(5);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -203,12 +212,14 @@ public class ParallelDispatchTests
 
         // Assert — concurrency should never exceed the configured limit
         _submitter
+            .NotNull()
             .MaxObservedConcurrency.Should()
             .BeLessThanOrEqualTo(2, "dispatch concurrency should respect MaxConcurrentDispatch");
 
         // All entries should still be dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadataCount = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TestTrainName)
             .CountAsync();
@@ -223,12 +234,12 @@ public class ParallelDispatchTests
     public async Task Dispatch_Parallel_PartialFailure_OtherEntriesSucceed()
     {
         // Arrange — configure submitter to fail on specific calls
-        _schedulerConfiguration.MaxConcurrentDispatch = 3;
-        _submitter.FailOnCallNumbers(2); // Fail only the 2nd call
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 3;
+        _submitter.NotNull().FailOnCallNumbers(2); // Fail only the 2nd call
 
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -238,8 +249,9 @@ public class ParallelDispatchTests
             d.Dispose();
 
         // Assert — 3 metadata records should exist (all created before enqueue)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var allMetadata = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TestTrainName)
             .ToListAsync();
@@ -261,24 +273,25 @@ public class ParallelDispatchTests
     public async Task Dispatch_Parallel_AllFail_AllMetadataMarkedFailed()
     {
         // Arrange
-        _schedulerConfiguration.MaxConcurrentDispatch = 3;
-        _submitter.FailAll();
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 3;
+        _submitter.NotNull().FailAll();
 
         var entries = await CreateWorkQueueEntries(3);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act — should not throw
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
 
         if (train is IDisposable d)
             d.Dispose();
 
         // Assert — all metadata should be Failed
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var allMetadata = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TestTrainName)
             .ToListAsync();
@@ -294,10 +307,10 @@ public class ParallelDispatchTests
     public async Task Dispatch_Parallel_NoDuplicateMetadata()
     {
         // Arrange — high concurrency to stress FOR UPDATE SKIP LOCKED
-        _schedulerConfiguration.MaxConcurrentDispatch = 5;
+        _schedulerConfiguration.NotNull().MaxConcurrentDispatch = 5;
         var entries = await CreateWorkQueueEntries(5);
 
-        using var trainScope = _serviceProvider.CreateScope();
+        await using var trainScope = _serviceProvider.NotNull().CreateAsyncScope();
         var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         // Act
@@ -307,8 +320,9 @@ public class ParallelDispatchTests
             d.Dispose();
 
         // Assert — exactly one Metadata per work queue entry
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var metadataCount = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TestTrainName)
             .CountAsync();
@@ -316,6 +330,7 @@ public class ParallelDispatchTests
 
         // Verify each work queue entry has a unique MetadataId
         var workQueues = await _dataContext
+            .NotNull()
             .WorkQueues.AsNoTracking()
             .Where(q => q.Status == WorkQueueStatus.Dispatched)
             .ToListAsync();
@@ -338,10 +353,12 @@ public class ParallelDispatchTests
 
         for (var i = 0; i < count; i++)
         {
-            var group = await TestSetup.CreateAndSaveManifestGroup(
-                _dataContext,
-                name: $"group-{Guid.NewGuid():N}"
-            );
+            var group = await TestSetup
+                .CreateAndSaveManifestGroup(
+                    _dataContext.NotNull(),
+                    name: $"group-{Guid.NewGuid():N}"
+                )
+                .ConfigureAwait(false);
 
             var manifest = Manifest.Create(
                 new CreateManifest
@@ -350,28 +367,32 @@ public class ParallelDispatchTests
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"Entry-{i}" },
+                    Properties = new SchedulerTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"Entry-{i}"),
+                    },
                 }
             );
             manifest.ManifestGroupId = group.Id;
 
-            await _dataContext.Track(manifest);
-            await _dataContext.SaveChanges(CancellationToken.None);
-            _dataContext.Reset();
+            await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+            await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            _dataContext.NotNull().Reset();
 
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    TrainName = typeof(SchedulerTestTrain).FullName!,
+                    TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
-                }
+                },
+                TimeProvider.System
             );
 
-            await _dataContext.Track(entry);
-            await _dataContext.SaveChanges(CancellationToken.None);
-            _dataContext.Reset();
+            await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+            await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            _dataContext.NotNull().Reset();
 
             entries.Add(entry);
         }
@@ -387,7 +408,7 @@ public class ParallelDispatchTests
     /// A job submitter that introduces a configurable delay to simulate slow remote workers.
     /// Tracks maximum observed concurrency for assertions.
     /// </summary>
-    internal class DelayingJobSubmitter(TimeSpan delay) : IJobSubmitter
+    internal sealed class DelayingJobSubmitter(TimeSpan delay) : IJobSubmitter
     {
         private int _currentConcurrency;
         private int _maxObservedConcurrency;
@@ -438,7 +459,7 @@ public class ParallelDispatchTests
 
             try
             {
-                await Task.Delay(delay, cancellationToken);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
 
                 if (_failAll || _failOnCallNumbers.Contains(callNumber))
                     throw new HttpRequestException(

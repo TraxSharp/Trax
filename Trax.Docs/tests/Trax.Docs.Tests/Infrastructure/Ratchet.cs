@@ -9,8 +9,8 @@ namespace Trax.Docs.Tests.Infrastructure;
 internal static class Ratchet
 {
     /// <summary>The entries of the list at <paramref name="file"/> (docs-relative), as written.</summary>
-    public static List<string> Entries(string file) =>
-        File.ReadAllLines(RepoRoot.Combine(file.Split('/')))
+    public static async Task<List<string>> EntriesAsync(string file) =>
+        (await File.ReadAllLinesAsync(RepoRoot.Combine(file.Split('/'))).ConfigureAwait(false))
             .Select(l => l.Trim())
             .Where(l => l.Length > 0 && !l.StartsWith('#'))
             .ToList();

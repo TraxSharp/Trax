@@ -5,7 +5,7 @@ using Trax.Effect.Data.Sqlite.Utils;
 namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 
 [TestFixture]
-public class SqliteMigrationTests
+public partial class SqliteMigrationTests
 {
     private static readonly string[] ExpectedTables =
     [
@@ -109,16 +109,18 @@ public class SqliteMigrationTests
     }
 
     [Test]
-    public void Migrate_RunTwice_IsIdempotent()
+    public async Task Migrate_RunTwice_IsIdempotent()
     {
         var dbPath = CreateTempDbPath();
         try
         {
-            DatabaseMigrator.Migrate($"Data Source={dbPath}").Wait();
+            await DatabaseMigrator.Migrate($"Data Source={dbPath}").ConfigureAwait(false);
 
-            var act = () => DatabaseMigrator.Migrate($"Data Source={dbPath}").Wait();
+            var act = () => DatabaseMigrator.Migrate($"Data Source={dbPath}");
 
-            act.Should().NotThrow("running migrations twice should be idempotent");
+            await act.Should()
+                .NotThrowAsync("running migrations twice should be idempotent")
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -168,10 +170,8 @@ public class SqliteMigrationTests
                     typeof(DatabaseMigrator).Assembly,
                     name =>
                         int.Parse(
-                            System
-                                .Text.RegularExpressions.Regex.Match(name, @"\.(\d{3})_")
-                                .Groups[1]
-                                .Value
+                            ScriptNumber.Match(name).Groups["number"].Value,
+                            System.Globalization.CultureInfo.InvariantCulture
                         ) <= 13
                 )
                 .LogToNowhere()
@@ -238,10 +238,8 @@ public class SqliteMigrationTests
                     typeof(DatabaseMigrator).Assembly,
                     name =>
                         int.Parse(
-                            System
-                                .Text.RegularExpressions.Regex.Match(name, @"\.(\d{3})_")
-                                .Groups[1]
-                                .Value
+                            ScriptNumber.Match(name).Groups["number"].Value,
+                            System.Globalization.CultureInfo.InvariantCulture
                         ) <= 28
                 )
                 .LogToNowhere()
@@ -290,6 +288,13 @@ public class SqliteMigrationTests
                 File.Delete(dbPath);
         }
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\.(?<number>\d{3})_",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex ScriptNumber { get; }
 
     #endregion
 }

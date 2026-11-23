@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
 
 namespace Trax.Api.Tests.AuthE2E;
@@ -33,7 +34,7 @@ public class ClientDocumentsQueryModelE2ETests
         "query AdminBooks { discover { vault { ownedBooks { totalCount } } } }";
 
     private readonly List<string> _files = [];
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -46,7 +47,7 @@ public class ClientDocumentsQueryModelE2ETests
     [OneTimeTearDown]
     public void Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         foreach (var file in _files)
             File.Delete(file);
     }
@@ -117,13 +118,14 @@ public class ClientDocumentsQueryModelE2ETests
         var act = async () =>
         {
             using var host = await StartWithAsync(
-                database,
-                (
-                    "AnyFilter",
-                    "query AnyFilter($where: BookRecordFilterInput) { discover { library { "
-                        + "bookRecords(where: $where) { totalCount } } } }"
+                    database,
+                    (
+                        "AnyFilter",
+                        "query AnyFilter($where: BookRecordFilterInput) { discover { library { "
+                            + "bookRecords(where: $where) { totalCount } } } }"
+                    )
                 )
-            );
+                .ConfigureAwait(false);
         };
 
         await act.Should()
@@ -138,40 +140,42 @@ public class ClientDocumentsQueryModelE2ETests
     {
         var file = Path.Combine(Path.GetTempPath(), $"trax-documents-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(
-            file,
-            JsonSerializer.Serialize(
-                new
-                {
-                    format = 1,
-                    documents = documents.Select(d => new
+                file,
+                JsonSerializer.Serialize(
+                    new
                     {
-                        name = d.Name,
-                        source = $"src/{d.Name}.graphql",
-                        text = d.Text,
-                    }),
-                }
+                        format = 1,
+                        documents = documents.Select(d => new
+                        {
+                            name = d.Name,
+                            source = $"src/{d.Name}.graphql",
+                            text = d.Text,
+                        }),
+                    }
+                )
             )
-        );
+            .ConfigureAwait(false);
         _files.Add(file);
         return await StartAsync(
-            Schemes.ApiKey,
-            database,
-            graphql =>
-                graphql.UsePersistedOperations(po =>
-                    po.SingleNode().RequirePersisted(true).ClientDocuments(file)
-                )
-        );
+                Schemes.ApiKey,
+                database,
+                graphql =>
+                    graphql.UsePersistedOperations(po =>
+                        po.SingleNode().RequirePersisted(require: true).ClientDocuments(file)
+                    )
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<JsonDocument> PostIdAsync(string id, object variables, string apiKey)
     {
-        var client = _host.GetTestServer().CreateClient();
+        var client = _host.NotNull().GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { id, variables }),
         };
         request.Headers.Add("X-Api-Key", apiKey);
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 }

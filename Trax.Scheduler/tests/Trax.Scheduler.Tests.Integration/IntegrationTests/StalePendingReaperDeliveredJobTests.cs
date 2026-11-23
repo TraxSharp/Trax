@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.BackgroundJob;
@@ -37,8 +38,14 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
 
             // Dispatched 25 minutes ago, and its job is sitting unclaimed in the local worker
             // queue because every worker is busy with earlier jobs.
-            var metadata = await CreatePendingMetadata(manifest, DateTime.UtcNow.AddMinutes(-25));
-            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            var metadata = await CreatePendingMetadata(
+                manifest,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-25)
+            );
+            var job = BackgroundJob.Create(
+                new CreateBackgroundJob { MetadataId = metadata.Id },
+                TimeProvider.System
+            );
             await DataContext.Track(job);
             await DataContext.SaveChanges(CancellationToken.None);
             DataContext.Reset();
@@ -67,10 +74,8 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
 
     private async Task<Manifest> CreateManifest()
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -85,8 +90,8 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -96,19 +101,21 @@ public class StalePendingReaperDeliveredJobTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startTime));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startTime))
+            .ConfigureAwait(false);
 
         DataContext.Reset();
         return metadata;

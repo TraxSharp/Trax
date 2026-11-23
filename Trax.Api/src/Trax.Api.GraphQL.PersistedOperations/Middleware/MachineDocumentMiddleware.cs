@@ -137,7 +137,7 @@ internal static class MachineDocumentMiddleware
             ImmutableList.Create(
                 ErrorBuilder.New().SetMessage(message).SetCode(code.ToWire()).Build()
             ),
-            null
+            extensions: null
         )
         {
             ContextData = ImmutableDictionary<string, object?>.Empty.Add(

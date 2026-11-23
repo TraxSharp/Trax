@@ -17,10 +17,10 @@ public class NoOpBroadcasterTests
         var b = new NoOpPersistedOperationBroadcaster();
         var task = b.PublishAsync(
             new PersistedOperationChangedMessage(
-                null,
+                TenantKey: null,
                 "id1",
                 PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             ),
             CancellationToken.None
         );
@@ -38,7 +38,10 @@ public class NoOpBroadcasterTests
         // that storage's broadcaster-error suppression is never invoked for
         // the default path.
         var b = new NoOpPersistedOperationBroadcaster();
-        var task = b.PublishAsync(null!, CancellationToken.None);
+        var task = b.PublishAsync(
+            Null.Of<Trax.Api.GraphQL.PersistedOperations.Broadcasting.PersistedOperationChangedMessage>(),
+            CancellationToken.None
+        );
         task.IsCompletedSuccessfully.Should().BeTrue();
         await task;
     }
@@ -50,19 +53,19 @@ public class NoOpBroadcasterTests
         // broadcaster-error path expects this so that publish failures are
         // never user-visible.
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var b = new NoOpPersistedOperationBroadcaster();
         var task = b.PublishAsync(
             new PersistedOperationChangedMessage(
-                null,
+                TenantKey: null,
                 "id",
                 PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
+                TimeProvider.System.GetUtcNow().UtcDateTime
             ),
             cts.Token
         );
         task.IsCompletedSuccessfully.Should().BeTrue();
-        await task;
+        await task.ConfigureAwait(false);
     }
 
     [Test]

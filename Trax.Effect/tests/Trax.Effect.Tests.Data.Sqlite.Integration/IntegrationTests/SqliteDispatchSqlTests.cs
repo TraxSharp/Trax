@@ -24,9 +24,11 @@ public class SqliteDispatchSqlTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
 
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "Sqlite.Claim", InputTypeName = "Sqlite.Input" }
+            new CreateWorkQueue { TrainName = "Sqlite.Claim", InputTypeName = "Sqlite.Input" },
+            TestTime.Clock
         );
         await context.Track(entry);
         await context.SaveChanges(CancellationToken.None);
@@ -36,7 +38,7 @@ public class SqliteDispatchSqlTests : TestSetup
                 "SELECT CAST(status AS TEXT) AS \"Value\" FROM work_queue"
             )
             .ToListAsync();
-        TestContext.Out.WriteLine($"stored status: {string.Join(",", raw)}");
+        await TestContext.Out.WriteLineAsync($"stored status: {string.Join(',', raw)}");
 
         var claimed = await context
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), entry.Id)
@@ -46,7 +48,7 @@ public class SqliteDispatchSqlTests : TestSetup
         claimed
             .Should()
             .NotBeNull(
-                $"the claim must find the entry; status is stored as {string.Join(",", raw)}"
+                $"the claim must find the entry; status is stored as {string.Join(',', raw)}"
             );
     }
 
@@ -55,7 +57,8 @@ public class SqliteDispatchSqlTests : TestSetup
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // One entry for the subject is dispatched with its run still pending.
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
@@ -64,37 +67,17 @@ public class SqliteDispatchSqlTests : TestSetup
                 Name = "Sqlite.Subject",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata);
         await context.SaveChanges(CancellationToken.None);
 
-        var running = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Sqlite.Subject",
-                InputTypeName = "Sqlite.Input",
-                SubjectKey = "customer-1",
-            }
-        );
+        var running = SubjectEntry("customer-1");
         running.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         running.MetadataId = metadata.Id;
-        var sibling = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Sqlite.Subject",
-                InputTypeName = "Sqlite.Input",
-                SubjectKey = "customer-1",
-            }
-        );
-        var other = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Sqlite.Subject",
-                InputTypeName = "Sqlite.Input",
-                SubjectKey = "customer-2",
-            }
-        );
+        var sibling = SubjectEntry("customer-1");
+        var other = SubjectEntry("customer-2");
         await context.Track(running);
         await context.Track(sibling);
         await context.Track(other);
@@ -118,6 +101,17 @@ public class SqliteDispatchSqlTests : TestSetup
         candidates.Should().Contain(other.Id).And.NotContain(sibling.Id);
     }
 
+    private static WorkQueue SubjectEntry(string subjectKey) =>
+        WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.Subject",
+                InputTypeName = "Sqlite.Input",
+                SubjectKey = subjectKey,
+            },
+            TestTime.Clock
+        );
+
     /// <summary>
     /// A dispatched run carrying no subject must not block subjects it has nothing to do with.
     /// </summary>
@@ -133,7 +127,8 @@ public class SqliteDispatchSqlTests : TestSetup
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
@@ -141,14 +136,20 @@ public class SqliteDispatchSqlTests : TestSetup
                 Name = "Sqlite.NullSubject",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         await context.Track(metadata);
         await context.SaveChanges(CancellationToken.None);
 
         // In flight, and carrying no subject: a manifest entry looks exactly like this.
         var subjectless = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "Sqlite.NullSubject", InputTypeName = "Sqlite.Input" }
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.NullSubject",
+                InputTypeName = "Sqlite.Input",
+            },
+            TestTime.Clock
         );
         subjectless.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         subjectless.MetadataId = metadata.Id;
@@ -159,7 +160,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.NullSubject",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "unrelated-subject",
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(subjectless);
@@ -192,7 +194,8 @@ public class SqliteDispatchSqlTests : TestSetup
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var finished = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
@@ -200,7 +203,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 Name = "Sqlite.History",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         finished.TrainState = Trax.Effect.Enums.TrainState.Completed;
         await context.Track(finished);
@@ -212,7 +216,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.History",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-history",
-            }
+            },
+            TestTime.Clock
         );
         past.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         past.MetadataId = finished.Id;
@@ -223,7 +228,8 @@ public class SqliteDispatchSqlTests : TestSetup
                 TrainName = "Sqlite.History",
                 InputTypeName = "Sqlite.Input",
                 SubjectKey = "customer-history",
-            }
+            },
+            TestTime.Clock
         );
 
         await context.Track(past);
@@ -244,7 +250,8 @@ public class SqliteDispatchSqlTests : TestSetup
     public async Task A_row_written_without_a_failure_class_reads_and_filters_as_unclassified()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var externalId = Guid.NewGuid().ToString("N");
 
         // What a row written before the column existed looks like: the migration default.

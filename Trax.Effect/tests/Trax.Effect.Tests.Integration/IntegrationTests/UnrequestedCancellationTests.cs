@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using AwesomeAssertions;
@@ -5,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -30,7 +32,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [Property("adr", "Trax.Docs/adr/0020-a-failure-is-classified-where-it-happens-and-carried.md")]
 public class UnrequestedCancellationTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
     private static readonly ConfigurableClassifier Classifier = new();
 
     [OneTimeSetUp]
@@ -51,7 +53,11 @@ public class UnrequestedCancellationTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public void ResetClassifier() => Classifier.Result = null;
@@ -59,16 +65,17 @@ public class UnrequestedCancellationTests
     [Test]
     public async Task A_cancellation_the_trains_token_requested_is_recorded_cancelled()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (TokenCancelledTrain)
             scope.ServiceProvider.GetRequiredService<ITokenCancelledTrain>();
         using var cts = new CancellationTokenSource();
         TokenCancelledTrain.Source = cts;
 
-        var act = async () => await train.Run(Unit.Default, cts.Token);
+        var act = async () => await train.Run(Unit.Default, cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Cancelled);
         row.FailureClass.Should().Be(FailureClass.Unclassified);
         train.Hooks.Should().Equal("OnCancelled");
@@ -77,13 +84,15 @@ public class UnrequestedCancellationTests
     [Test]
     public async Task A_cancellation_the_trains_token_did_not_request_is_a_transient_failure()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnrequestedTrain)scope.ServiceProvider.GetRequiredService<IUnrequestedTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should()
             .Be(
                 TrainState.Failed,
@@ -102,16 +111,21 @@ public class UnrequestedCancellationTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
 
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (HttpTimeoutTrain)scope.ServiceProvider.GetRequiredService<IHttpTimeoutTrain>();
         HttpTimeoutTrain.Target = new Uri(
-            $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/"
+            )
         );
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<TaskCanceledException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Failed);
         row.FailureClass.Should().Be(FailureClass.Transient);
         row.FailureException.Should().Be(nameof(TaskCanceledException));
@@ -121,13 +135,15 @@ public class UnrequestedCancellationTests
     public async Task A_classifier_answer_for_an_unrequested_cancellation_wins()
     {
         Classifier.Result = FailureClass.Permanent;
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (UnrequestedTrain)scope.ServiceProvider.GetRequiredService<IUnrequestedTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should().Be(TrainState.Failed);
         row.FailureClass.Should()
             .Be(
@@ -139,14 +155,16 @@ public class UnrequestedCancellationTests
     [Test]
     public async Task A_cancellation_requested_through_the_persisted_flag_is_recorded_cancelled()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (FlagCancelledTrain)
             scope.ServiceProvider.GetRequiredService<IFlagCancelledTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        var act = async () =>
+            await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
-        var row = await PersistedRow(scope, train.Metadata!.Id);
+        var row = await PersistedRow(scope, train.Metadata.NotNull().Id);
         row.TrainState.Should()
             .Be(
                 TrainState.Cancelled,
@@ -159,9 +177,13 @@ public class UnrequestedCancellationTests
     private static async Task<Metadata> PersistedRow(IServiceScope scope, long id)
     {
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     // ── probes ──────────────────────────────────────────────────────
@@ -175,7 +197,7 @@ public class UnrequestedCancellationTests
 
     public abstract class HookRecordingTrain : ServiceTrain<Unit, Unit>
     {
-        public List<string> Hooks { get; } = [];
+        public IList<string> Hooks { get; } = [];
 
         protected override Task OnFailed(
             Metadata metadata,
@@ -206,11 +228,11 @@ public class UnrequestedCancellationTests
         /// <summary>Cancels the caller's source, then observes the train's token.</summary>
         public class CancelsTheCallerJunction : EffectJunction<Unit, Unit>
         {
-            public override Task<Unit> Run(Unit input)
+            public override async Task<Unit> Run(Unit input)
             {
-                Source!.Cancel();
+                await Source.NotNull().CancelAsync().ConfigureAwait(false);
                 CancellationToken.ThrowIfCancellationRequested();
-                return Task.FromResult(input);
+                return input;
             }
         }
     }
@@ -243,7 +265,7 @@ public class UnrequestedCancellationTests
             public override async Task<Unit> Run(Unit input)
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(200) };
-                await client.GetAsync(Target, CancellationToken);
+                await client.GetAsync(Target, CancellationToken).ConfigureAwait(false);
                 return input;
             }
         }
@@ -262,11 +284,17 @@ public class UnrequestedCancellationTests
         {
             public override async Task<Unit> Run(Unit input)
             {
-                var id = Metadata!.TrainMetadataId;
-                using var context = (IDataContext)factory.Create();
-                var row = await context.Metadatas.SingleAsync(m => m.Id == id);
+                var id = Metadata.NotNull().TrainMetadataId;
+                var context = (IDataContext)factory.Create();
+                await using var contextDisposal = context.ConfigureAwait(false);
+                var row = await context
+                    .Metadatas.SingleAsync(
+                        m => m.Id == id,
+                        cancellationToken: CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
                 row.CancellationRequested = true;
-                await context.SaveChanges(CancellationToken.None);
+                await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 return input;
             }
         }

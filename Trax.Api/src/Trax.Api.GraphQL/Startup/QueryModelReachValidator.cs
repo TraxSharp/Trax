@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Auth;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Startup;
 
@@ -41,10 +42,12 @@ internal sealed class QueryModelReachValidator(
 
     protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = await scope
             .ServiceProvider.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync(TraxSchemaName, cancellationToken);
+            .GetExecutorAsync(TraxSchemaName, cancellationToken)
+            .ConfigureAwait(false);
         var schema = executor.Schema;
 
         var models = configuration.ModelRegistrations.Select(r => r.EntityType).ToHashSet();
@@ -63,8 +66,37 @@ internal sealed class QueryModelReachValidator(
         WalkObjectTypes(schema, models, entities, Reach);
         WalkInputTypes(schema, models, entities, Reach);
 
+        var messages = PostureMessages(schema, reached);
+
+        if (messages.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"{messages.Count} entit{(messages.Count == 1 ? "y" : "ies")} reached from a "
+                + "[TraxQueryModel] declare no usable authorization posture (see "
+                + "docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md):"
+                + Environment.NewLine
+                + Environment.NewLine
+                + string.Join(Environment.NewLine + Environment.NewLine, messages)
+        );
+    }
+
+    /// <summary>
+    /// What is wrong with the posture of each entity a query model reaches, in the order of the
+    /// entities' names.
+    /// </summary>
+    private List<string> PostureMessages(
+        ISchemaDefinition schema,
+        Dictionary<Type, SortedSet<string>> reached
+    )
+    {
         var messages = new List<string>();
-        foreach (var (entity, coordinates) in reached.OrderBy(r => r.Key.FullName))
+        foreach (
+            var (entity, coordinates) in reached.OrderBy(
+                r => r.Key.FullName,
+                StringComparer.Ordinal
+            )
+        )
         {
             var posture = NavigationTargetPosture.Read(entity);
             var violation = ExposureAuthorizationRule.Evaluate(
@@ -82,18 +114,7 @@ internal sealed class QueryModelReachValidator(
             if (posture.IsGated)
                 VerifyGateEmitted(schema, entity, messages);
         }
-
-        if (messages.Count == 0)
-            return;
-
-        throw new InvalidOperationException(
-            $"{messages.Count} entit{(messages.Count == 1 ? "y" : "ies")} reached from a "
-                + "[TraxQueryModel] declare no usable authorization posture (see "
-                + "docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md):"
-                + Environment.NewLine
-                + Environment.NewLine
-                + string.Join(Environment.NewLine + Environment.NewLine, messages)
-        );
+        return messages;
     }
 
     /// <summary>
@@ -187,7 +208,11 @@ internal sealed class QueryModelReachValidator(
                 when filter.GetType().IsGenericType
                     && filter.GetType().GetGenericTypeDefinition() == typeof(ListFilterInputType<>):
                 return
-                    filter.Fields.FirstOrDefault(f => f.Name == "some")?.Type.NamedType()
+                    filter
+                        .Fields.FirstOrDefault(f =>
+                            string.Equals(f.Name, "some", StringComparison.Ordinal)
+                        )
+                        ?.Type.NamedType()
                         is IFilterInputType element
                     ? element.EntityType.Source
                     : null;
@@ -280,7 +305,7 @@ internal sealed class QueryModelReachValidator(
                     + "AddTraxGraphQL(graphql => graphql.RequireAuthorization(...)).",
             _ => ExposureAuthorizationRule.BuildMessage(
                 $"Entity reached from a query model through {through},",
-                entity.FullName!,
+                entity.FullName.NotNull(),
                 violation
             ),
         };

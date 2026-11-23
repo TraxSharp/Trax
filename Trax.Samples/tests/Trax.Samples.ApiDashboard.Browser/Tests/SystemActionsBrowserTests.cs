@@ -1,6 +1,8 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Factories;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Scheduler.Services.Effects;
@@ -14,7 +16,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// back from the host's own services and put back afterwards, since every test shares the host.
 /// </summary>
 [TestFixture]
-public class SystemActionsBrowserTests : ConsoleTest
+public partial class SystemActionsBrowserTests : ConsoleTest
 {
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
@@ -23,37 +25,52 @@ public class SystemActionsBrowserTests : ConsoleTest
     [Covers("mutation:SetEffectEnabled")]
     public async Task An_effect_switched_off_and_saved_stops_running_in_this_process()
     {
-        var effect = Effects()
+        var effect = (await EffectsAsync().ConfigureAwait(false))
             .Where(e => e.Toggleable && e.Enabled)
-            .OrderBy(e => e.FullName.Contains("Progress") ? 0 : 1)
+            .OrderBy(e => e.FullName.Contains("Progress", StringComparison.Ordinal) ? 0 : 1)
             .First();
         try
         {
-            await Console.OpenAsync("system/effects", Caller.Operator);
+            await Console.OpenAsync("system/effects", Caller.Operator).ConfigureAwait(false);
             await Assertions
                 .Expect(Console.Heading("Effects"))
-                .ToBeVisibleAsync(new() { Timeout = Render });
+                .ToBeVisibleAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
             var toggle = Page.GetByRole(
                 AriaRole.Switch,
                 new() { Name = $"{effect.Name} enabled", Exact = true }
             );
-            await Assertions.Expect(toggle).ToBeCheckedAsync(new() { Timeout = Render });
+            await Assertions
+                .Expect(toggle)
+                .ToBeCheckedAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
 
-            await toggle.ClickAsync();
-            await Assertions.Expect(Page.GetByText("1 unsaved change(s)")).ToBeVisibleAsync();
+            await toggle.ClickAsync().ConfigureAwait(false);
+            await Assertions
+                .Expect(Page.GetByText("1 unsaved change(s)"))
+                .ToBeVisibleAsync()
+                .ConfigureAwait(false);
             var sent = Console.SendsAsync("SetEffectEnabled");
-            await Console.Button("Save").ClickAsync();
-            await sent;
+            await Console.Button("Save").ClickAsync().ConfigureAwait(false);
+            await sent.ConfigureAwait(false);
 
             await Assertions
                 .Expect(Console.Toast("Effect settings updated."))
-                .ToBeVisibleAsync(new() { Timeout = Render });
-            await Assertions.Expect(toggle).Not.ToBeCheckedAsync(new() { Timeout = Render });
-            Effects().Single(e => e.FullName == effect.FullName).Enabled.Should().BeFalse();
+                .ToBeVisibleAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
+            await Assertions
+                .Expect(toggle)
+                .Not.ToBeCheckedAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
+            (await EffectsAsync().ConfigureAwait(false))
+                .Single(e => string.Equals(e.FullName, effect.FullName, StringComparison.Ordinal))
+                .Enabled.Should()
+                .BeFalse();
         }
         finally
         {
-            Settings(s => s.SetEffectEnabled(effect.FullName, true));
+            await SettingsAsync(s => s.SetEffectEnabled(effect.FullName, enabled: true))
+                .ConfigureAwait(false);
         }
     }
 
@@ -62,38 +79,55 @@ public class SystemActionsBrowserTests : ConsoleTest
     [Covers("mutation:ConfigureEffect")]
     public async Task Configure_writes_an_effects_setting()
     {
-        var (effect, field) = BooleanSetting();
+        var (effect, field) = await BooleanSettingAsync().ConfigureAwait(false);
         var label = Label(field.Name);
         try
         {
-            await OpenConfigureAsync(effect);
+            await OpenConfigureAsync(effect).ConfigureAwait(false);
             var dialog = Console.Dialog($"Configure {effect.Name}");
             var setting = dialog.GetByRole(AriaRole.Switch, new() { Name = label, Exact = true });
-            if (field.Value == "true")
-                await Assertions.Expect(setting).ToBeCheckedAsync(new() { Timeout = Render });
+            if (string.Equals(field.Value, "true", StringComparison.Ordinal))
+                await Assertions
+                    .Expect(setting)
+                    .ToBeCheckedAsync(new() { Timeout = Render })
+                    .ConfigureAwait(false);
             else
-                await Assertions.Expect(setting).Not.ToBeCheckedAsync(new() { Timeout = Render });
+                await Assertions
+                    .Expect(setting)
+                    .Not.ToBeCheckedAsync(new() { Timeout = Render })
+                    .ConfigureAwait(false);
 
-            await setting.ClickAsync();
+            await setting.ClickAsync().ConfigureAwait(false);
             var sent = Console.SendsAsync("ConfigureEffect");
             await dialog
                 .GetByRole(AriaRole.Button, new() { Name = "Save", Exact = true })
-                .ClickAsync();
-            await sent;
+                .ClickAsync()
+                .ConfigureAwait(false);
+            await sent.ConfigureAwait(false);
 
-            await Assertions.Expect(dialog).ToHaveCountAsync(0, new() { Timeout = Render });
-            Field(effect.FullName, field.Name)
+            await Assertions
+                .Expect(dialog)
+                .ToHaveCountAsync(0, new() { Timeout = Render })
+                .ConfigureAwait(false);
+            (await FieldAsync(effect.FullName, field.Name).ConfigureAwait(false))
                 .Value.Should()
-                .Be(field.Value == "true" ? "false" : "true", "the switch was flipped and saved");
+                .Be(
+                    string.Equals(field.Value, "true", StringComparison.Ordinal) ? "false" : "true",
+                    "the switch was flipped and saved"
+                );
         }
         finally
         {
-            Settings(s =>
-                s.ConfigureEffect(
-                    effect.FullName,
-                    new Dictionary<string, string?> { [field.Name] = field.Value }
+            await SettingsAsync(s =>
+                    s.ConfigureEffect(
+                        effect.FullName,
+                        new Dictionary<string, string?>(StringComparer.Ordinal)
+                        {
+                            [field.Name] = field.Value,
+                        }
+                    )
                 )
-            );
+                .ConfigureAwait(false);
         }
     }
 
@@ -102,30 +136,37 @@ public class SystemActionsBrowserTests : ConsoleTest
     [Covers("mutation:ConfigureEffect")]
     public async Task Configure_refuses_a_setting_that_does_not_read_as_its_type_and_keeps_the_dialog_open()
     {
-        var effect = Effects()
-            .First(e =>
-                e.Fields.Any(f =>
-                    f.Kind == EffectFieldKind.Text && f.TypeName is "Int32" or "Int64"
-                )
-            );
+        var effect = (await EffectsAsync().ConfigureAwait(false)).First(e =>
+            e.Fields.Any(f => f.Kind == EffectFieldKind.Text && f.TypeName is "Int32" or "Int64")
+        );
         var field = effect.Fields.First(f =>
             f.Kind == EffectFieldKind.Text && f.TypeName is "Int32" or "Int64"
         );
-        await OpenConfigureAsync(effect);
+        await OpenConfigureAsync(effect).ConfigureAwait(false);
         var dialog = Console.Dialog($"Configure {effect.Name}");
 
-        await dialog.GetByLabel(Label(field.Name), new() { Exact = true }).FillAsync("lots");
+        await dialog
+            .GetByLabel(Label(field.Name), new() { Exact = true })
+            .FillAsync("lots")
+            .ConfigureAwait(false);
         var sent = Console.SendsAsync("ConfigureEffect");
-        await dialog.GetByRole(AriaRole.Button, new() { Name = "Save", Exact = true }).ClickAsync();
-        await sent;
+        await dialog
+            .GetByRole(AriaRole.Button, new() { Name = "Save", Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await sent.ConfigureAwait(false);
 
         await Assertions
             .Expect(dialog.GetByRole(AriaRole.Alert))
-            .ToBeVisibleAsync(new() { Timeout = Render });
+            .ToBeVisibleAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
         await Assertions
             .Expect(dialog.GetByTestId($"setting-error-{field.Name}"))
-            .ToBeVisibleAsync(new() { Timeout = Render });
-        Field(effect.FullName, field.Name).Value.Should().Be(field.Value, "nothing was written");
+            .ToBeVisibleAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
+        (await FieldAsync(effect.FullName, field.Name).ConfigureAwait(false))
+            .Value.Should()
+            .Be(field.Value, "nothing was written");
     }
 
     [Test]
@@ -146,7 +187,8 @@ public class SystemActionsBrowserTests : ConsoleTest
             var sent = Console.SendsAsync("SetLogLevels");
             await Console.Button("Save log levels").ClickAsync();
             var levels = (await sent)
-                .PostDataJSON()!
+                .PostDataJSON()
+                .NotNull()
                 .Value.GetProperty("variables")
                 .GetProperty("levels");
             levels.GetArrayLength().Should().Be(1, "only the changed category is sent");
@@ -156,7 +198,9 @@ public class SystemActionsBrowserTests : ConsoleTest
                 .ToBeVisibleAsync(new() { Timeout = Render });
             Levels()
                 .GetLogLevels()
-                .Single(l => l.Category == ConsoleHost.LoggedCategory)
+                .Single(l =>
+                    string.Equals(l.Category, ConsoleHost.LoggedCategory, StringComparison.Ordinal)
+                )
                 .Level.Should()
                 .Be(LogLevel.Error);
         }
@@ -169,39 +213,50 @@ public class SystemActionsBrowserTests : ConsoleTest
 
     private async Task OpenConfigureAsync(EffectSettings effect)
     {
-        await Console.OpenAsync("system/effects", Caller.Operator);
+        await Console.OpenAsync("system/effects", Caller.Operator).ConfigureAwait(false);
         await Page.GetByRole(
                 AriaRole.Button,
                 new() { Name = $"Configure {effect.Name}", Exact = true }
             )
-            .ClickAsync(new() { Timeout = Render });
+            .ClickAsync(new() { Timeout = Render })
+            .ConfigureAwait(false);
     }
 
-    private static (EffectSettings Effect, EffectSettingField Field) BooleanSetting()
+    private static async Task<(
+        EffectSettings Effect,
+        EffectSettingField Field
+    )> BooleanSettingAsync()
     {
-        var effect = Effects()
-            .First(e => e.Fields.Any(f => f.Kind == EffectFieldKind.Boolean && !f.Sensitive));
+        var effect = (await EffectsAsync().ConfigureAwait(false)).First(e =>
+            e.Fields.Any(f => f.Kind == EffectFieldKind.Boolean && !f.Sensitive)
+        );
         return (
             effect,
             effect.Fields.First(f => f.Kind == EffectFieldKind.Boolean && !f.Sensitive)
         );
     }
 
-    private static string Label(string name) =>
-        System.Text.RegularExpressions.Regex.Replace(name, "(?<=[a-z0-9])(?=[A-Z])", " ");
+    private static string Label(string name) => WordBoundary.Replace(name, " ");
 
-    private static EffectSettingField Field(string effect, string name) =>
-        Effects().Single(e => e.FullName == effect).Fields.Single(f => f.Name == name);
+    private static async Task<EffectSettingField> FieldAsync(string effect, string name) =>
+        (await EffectsAsync().ConfigureAwait(false))
+            .Single(e => string.Equals(e.FullName, effect, StringComparison.Ordinal))
+            .Fields.Single(f => string.Equals(f.Name, name, StringComparison.Ordinal));
 
-    private static IReadOnlyList<EffectSettings> Effects() => Settings(s => s.GetEffects());
+    private static async Task<IReadOnlyList<EffectSettings>> EffectsAsync() =>
+        await SettingsAsync(s => s.GetEffects()).ConfigureAwait(false);
 
     // Scoped on the host, so each read or write takes a scope of its own.
-    private static T Settings<T>(Func<IEffectSettingsService, T> use)
+    private static async Task<T> SettingsAsync<T>(Func<IEffectSettingsService, T> use)
     {
-        using var scope = Host.Services.CreateScope();
-        return use(scope.ServiceProvider.GetRequiredService<IEffectSettingsService>());
+        var scope = Host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            return use(scope.ServiceProvider.GetRequiredService<IEffectSettingsService>());
     }
 
     private static ILogLevelService Levels() =>
         Host.Services.GetRequiredService<ILogLevelService>();
+
+    [GeneratedRegex("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex WordBoundary { get; }
 }

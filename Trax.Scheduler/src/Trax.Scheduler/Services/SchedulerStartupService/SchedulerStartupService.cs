@@ -28,12 +28,15 @@ namespace Trax.Scheduler.Services.SchedulerStartupService;
 /// JobDispatcherPollingService begin polling.
 /// </para>
 /// </remarks>
-internal class SchedulerStartupService(
+internal sealed class SchedulerStartupService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     ILogger<SchedulerStartupService> logger
 ) : IHostedService
 {
+    // The container's clock (AddTrax registers the system's), or the system's when it has none.
+    private TimeProvider Clock => serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         configuration.Owner ??= ResolveOwner(serviceProvider);
@@ -44,9 +47,9 @@ internal class SchedulerStartupService(
         // RecoverStuckJobs only makes sense with a real database — in-memory data is
         // lost on restart, so there are no stuck jobs to recover.
         if (configuration.RecoverStuckJobsOnStartup && configuration.HasDatabaseProvider)
-            await RecoverStuckJobs(cancellationToken);
+            await RecoverStuckJobs(cancellationToken).ConfigureAwait(false);
 
-        await SeedPendingManifests(cancellationToken);
+        await SeedPendingManifests(cancellationToken).ConfigureAwait(false);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -78,9 +81,10 @@ internal class SchedulerStartupService(
     /// </remarks>
     private async Task RecoverStuckJobs(CancellationToken cancellationToken)
     {
-        var serverStartTime = DateTime.UtcNow;
+        var serverStartTime = Clock.GetUtcNow().UtcDateTime;
 
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var totalRecovered = 0;
@@ -94,43 +98,23 @@ internal class SchedulerStartupService(
                 .OrderBy(m => m.Id)
                 .Select(m => m.Id)
                 .Take(PruneBatchSize)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             if (stuckIds.Count == 0)
                 break;
 
-            var now = DateTime.UtcNow;
+            var now = Clock.GetUtcNow().UtcDateTime;
 
             // One conditional write per run, so only the runs this recovery failed are published:
             // a run that finished meanwhile matches nothing.
-            var recovered = new List<long>(stuckIds.Count);
-
-            foreach (var id in stuckIds)
-            {
-                var failed = await dataContext
-                    .Metadatas.Where(m => m.Id == id && m.TrainState == TrainState.InProgress)
-                    .ExecuteUpdateAsync(
-                        s =>
-                            s.SetProperty(m => m.TrainState, TrainState.Failed)
-                                .SetProperty(m => m.EndTime, now)
-                                .SetProperty(
-                                    m => m.FailureReason,
-                                    "Server restarted while job was in progress"
-                                )
-                                .SetProperty(m => m.FailureException, "ServerRestart")
-                                .SetProperty(
-                                    m => m.FailureJunction,
-                                    nameof(SchedulerStartupService)
-                                ),
-                        cancellationToken
-                    );
-
-                if (failed > 0)
-                    recovered.Add(id);
-            }
+            var recovered = await FailStuckRunsAsync(dataContext, stuckIds, now, cancellationToken)
+                .ConfigureAwait(false);
 
             // Committed: no transaction is open. No train is left to publish these outcomes.
-            await OutOfTrainOutcomes.PublishFailedAsync(serviceProvider, recovered, logger);
+            await OutOfTrainOutcomes
+                .PublishFailedAsync(serviceProvider, recovered, logger)
+                .ConfigureAwait(false);
 
             totalRecovered += recovered.Count;
         }
@@ -147,10 +131,108 @@ internal class SchedulerStartupService(
             );
     }
 
+    private static async Task<List<long>> FailStuckRunsAsync(
+        IDataContext dataContext,
+        List<long> stuckIds,
+        DateTime now,
+        CancellationToken cancellationToken
+    )
+    {
+        var recovered = new List<long>(stuckIds.Count);
+
+        foreach (var id in stuckIds)
+        {
+            var failed = await dataContext
+                .Metadatas.Where(m => m.Id == id && m.TrainState == TrainState.InProgress)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.TrainState, TrainState.Failed)
+                            .SetProperty(m => m.EndTime, now)
+                            .SetProperty(
+                                m => m.FailureReason,
+                                "Server restarted while job was in progress"
+                            )
+                            .SetProperty(m => m.FailureException, "ServerRestart")
+                            .SetProperty(m => m.FailureJunction, nameof(SchedulerStartupService)),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+            if (failed > 0)
+                recovered.Add(id);
+        }
+
+        return recovered;
+    }
+
     private async Task SeedPendingManifests(CancellationToken cancellationToken)
     {
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
+        await SeedFromConfigurationAsync(scope.ServiceProvider, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Prune and cleanup use ExecuteDeleteAsync/ExecuteUpdateAsync which are not
+        // supported by the InMemory EF Core provider. They're also unnecessary with
+        // InMemory since the database starts empty on each restart.
+        if (configuration.HasDatabaseProvider)
+        {
+            await PruneAndCleanUpAsync(scope.ServiceProvider, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // Release closures and captured batch lists that are no longer needed
+        configuration.PendingManifests.Clear();
+    }
+
+    private async Task PruneAndCleanUpAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken
+    )
+    {
+        var dataContext = services.GetRequiredService<IDataContext>();
+
+        if (configuration.PruneOrphanedManifests)
+        {
+            var expectedExternalIds = configuration
+                .PendingManifests.SelectMany(p => p.ExpectedExternalIds)
+                .ToHashSet(StringComparer.Ordinal);
+
+            // Pruning is housekeeping: a failure is logged and the host still starts.
+            try
+            {
+                await PruneOrphanedManifestsAsync(
+                        dataContext,
+                        expectedExternalIds,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(
+                    ex,
+                    "Pruning orphaned manifests failed; the host starts anyway and the prune runs again at the next start"
+                );
+            }
+        }
+
+        // Clean up orphaned ManifestGroups (groups with no manifests remaining)
+        var orphanedCount = await dataContext
+            .ManifestGroups.Where(g => !g.Manifests.Any())
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (orphanedCount > 0)
+            logger.LogInformation("Cleaned up {Count} orphaned manifest group(s)", orphanedCount);
+    }
+
+    private async Task SeedFromConfigurationAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken
+    )
+    {
         // Seed manifests from startup configuration
         if (configuration.PendingManifests.Count > 0)
         {
@@ -159,15 +241,16 @@ internal class SchedulerStartupService(
                 configuration.PendingManifests.Count
             );
 
-            var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
+            var scheduler = services.GetRequiredService<ITraxScheduler>();
 
             foreach (var pending in configuration.PendingManifests)
             {
                 await SeedWithRetryAsync(
-                    async ct => await pending.ScheduleFunc(scheduler, ct),
-                    pending.ExternalId,
-                    cancellationToken
-                );
+                        async ct => await pending.ScheduleFunc(scheduler, ct).ConfigureAwait(false),
+                        pending.ExternalId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
             }
 
             logger.LogInformation(
@@ -175,52 +258,6 @@ internal class SchedulerStartupService(
                 configuration.PendingManifests.Count
             );
         }
-
-        // Prune and cleanup use ExecuteDeleteAsync/ExecuteUpdateAsync which are not
-        // supported by the InMemory EF Core provider. They're also unnecessary with
-        // InMemory since the database starts empty on each restart.
-        if (configuration.HasDatabaseProvider)
-        {
-            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-            if (configuration.PruneOrphanedManifests)
-            {
-                var expectedExternalIds = configuration
-                    .PendingManifests.SelectMany(p => p.ExpectedExternalIds)
-                    .ToHashSet();
-
-                // Pruning is housekeeping: a failure is logged and the host still starts.
-                try
-                {
-                    await PruneOrphanedManifestsAsync(
-                        dataContext,
-                        expectedExternalIds,
-                        cancellationToken
-                    );
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogError(
-                        ex,
-                        "Pruning orphaned manifests failed; the host starts anyway and the prune runs again at the next start"
-                    );
-                }
-            }
-
-            // Clean up orphaned ManifestGroups (groups with no manifests remaining)
-            var orphanedCount = await dataContext
-                .ManifestGroups.Where(g => !g.Manifests.Any())
-                .ExecuteDeleteAsync(cancellationToken);
-
-            if (orphanedCount > 0)
-                logger.LogInformation(
-                    "Cleaned up {Count} orphaned manifest group(s)",
-                    orphanedCount
-                );
-        }
-
-        // Release closures and captured batch lists that are no longer needed
-        configuration.PendingManifests.Clear();
     }
 
     internal const int DefaultMaxRetries = 5;
@@ -240,7 +277,7 @@ internal class SchedulerStartupService(
         {
             try
             {
-                await action(cancellationToken);
+                await action(cancellationToken).ConfigureAwait(false);
                 logger.LogDebug("Seeded manifest: {ExternalId}", externalId);
                 return;
             }
@@ -255,7 +292,7 @@ internal class SchedulerStartupService(
                     maxRetries,
                     retryDelay.TotalSeconds
                 );
-                await Task.Delay(retryDelay, cancellationToken);
+                await Task.Delay(retryDelay, Clock, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -320,6 +357,45 @@ internal class SchedulerStartupService(
             return;
         }
 
+        var (orphanedManifestIds, ownedCount) = await FindOrphanedManifestsAsync(
+                dataContext,
+                owner,
+                expectedExternalIds,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (orphanedManifestIds.Count == 0)
+        {
+            logger.LogDebug("No orphaned manifests found");
+            return;
+        }
+
+        logger.LogInformation(
+            "Found {OrphanCount} orphaned manifest(s) to prune (of {TotalCount} owned by {Owner})",
+            orphanedManifestIds.Count,
+            ownedCount,
+            owner
+        );
+
+        var (pruned, kept) = await ManifestPruner
+            .PruneAsync(dataContext, orphanedManifestIds, logger, cancellationToken)
+            .ConfigureAwait(false);
+
+        logger.LogInformation(
+            "Finished pruning {Count} orphaned manifest(s) from the database ({Kept} kept until their runs finish)",
+            pruned,
+            kept
+        );
+    }
+
+    private static async Task<(List<long> Orphaned, int Owned)> FindOrphanedManifestsAsync(
+        IDataContext dataContext,
+        string owner,
+        HashSet<string> expectedExternalIds,
+        CancellationToken cancellationToken
+    )
+    {
         // --- Server compute: load lightweight ID pairs, compute orphan set in C# ---
         //
         // Why not filter in the database?
@@ -335,37 +411,14 @@ internal class SchedulerStartupService(
         var allManifests = await dataContext
             .Manifests.Where(m => m.Owner == owner)
             .Select(m => new { m.Id, m.ExternalId })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var orphanedManifestIds = allManifests
             .Where(m => !expectedExternalIds.Contains(m.ExternalId))
             .Select(m => m.Id)
             .ToList();
 
-        if (orphanedManifestIds.Count == 0)
-        {
-            logger.LogDebug("No orphaned manifests found");
-            return;
-        }
-
-        logger.LogInformation(
-            "Found {OrphanCount} orphaned manifest(s) to prune (of {TotalCount} owned by {Owner})",
-            orphanedManifestIds.Count,
-            allManifests.Count,
-            owner
-        );
-
-        var (pruned, kept) = await ManifestPruner.PruneAsync(
-            dataContext,
-            orphanedManifestIds,
-            logger,
-            cancellationToken
-        );
-
-        logger.LogInformation(
-            "Finished pruning {Count} orphaned manifest(s) from the database ({Kept} kept until their runs finish)",
-            pruned,
-            kept
-        );
+        return (orphanedManifestIds, allManifests.Count);
     }
 }

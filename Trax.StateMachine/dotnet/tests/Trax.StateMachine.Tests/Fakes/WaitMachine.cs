@@ -1,23 +1,8 @@
 using System.Text.Json.Nodes;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Fakes;
-
-public enum WaitState
-{
-    Idle,
-    Fetching,
-    Fetched,
-    FetchFailed,
-    Cancelled,
-    TimedOut,
-}
-
-public enum WaitTrigger
-{
-    Start,
-    Retry,
-}
 
 /// <summary>
 /// A timed invoking state: <c>Idle -(Start)-> Fetching</c>, where Fetching invokes <see cref="IFetchTrain"/> and
@@ -54,7 +39,7 @@ public static class WaitMachine
             .After<WaitContext>(c => c.Patience, Min, Max)
             .GoTo(WaitState.TimedOut)
             .Invokes<IFetchTrain, FetchInput, FetchOutput>(ctx => new FetchInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(WaitState.Fetched)
             .OnFailed(WaitState.FetchFailed)

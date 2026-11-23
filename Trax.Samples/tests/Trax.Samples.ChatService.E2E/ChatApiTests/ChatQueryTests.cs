@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Fixtures;
 
 namespace Trax.Samples.ChatService.E2E.ChatApiTests;
@@ -8,43 +10,51 @@ public class ChatQueryTests : ChatApiTestFixture
 {
     private async Task<string> CreateRoomAndSendMessages(string roomName, int messageCount)
     {
-        var createResult = await GraphQL.SendAsync(
-            $$"""
-            mutation {
-                dispatch {
-                    createChatRoom(
-                        input: { name: "{{roomName}}" }
-                    ) {
-                        output { chatRoomId }
-                    }
-                }
-            }
-            """,
-            apiKey: AliceKey
-        );
-
-        createResult.HasErrors.Should().BeFalse();
-        var chatRoomId = createResult
-            .GetData("dispatch", "createChatRoom", "output")
-            .GetProperty("chatRoomId")
-            .GetString()!;
-
-        for (var i = 1; i <= messageCount; i++)
-        {
-            var sendResult = await GraphQL.SendAsync(
+        var createResult = await GraphQL
+            .SendAsync(
                 $$"""
                 mutation {
                     dispatch {
-                        sendMessage(
-                            input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
+                        createChatRoom(
+                            input: { name: "{{roomName}}" }
                         ) {
-                            externalId
+                            output { chatRoomId }
                         }
                     }
                 }
                 """,
                 apiKey: AliceKey
-            );
+            )
+            .ConfigureAwait(false);
+
+        createResult.HasErrors.Should().BeFalse();
+        var chatRoomId = createResult
+            .GetData("dispatch", "createChatRoom", "output")
+            .GetProperty("chatRoomId")
+            .GetString()
+            .NotNull();
+
+        for (var i = 1; i <= messageCount; i++)
+        {
+            var sendResult = await GraphQL
+                .SendAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $$"""
+                        mutation {
+                            dispatch {
+                                sendMessage(
+                                    input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
+                                ) {
+                                    externalId
+                                }
+                            }
+                        }
+                        """
+                    ),
+                    apiKey: AliceKey
+                )
+                .ConfigureAwait(false);
 
             sendResult.HasErrors.Should().BeFalse();
         }
@@ -188,7 +198,8 @@ public class ChatQueryTests : ChatApiTestFixture
         var chatRoomId = createResult
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 
         var result = await GraphQL.SendAsync(
             $$"""

@@ -4,6 +4,7 @@ using HotChocolate.Data.Filters;
 using HotChocolate.Data.Filters.Expressions;
 using HotChocolate.Language;
 using HotChocolate.Types;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Filtering.Operations;
 
@@ -15,10 +16,9 @@ namespace Trax.Api.GraphQL.Filtering.Operations;
 /// </summary>
 internal sealed class QueryableStringIContainsHandler : QueryableStringOperationHandler
 {
-    private static readonly MethodInfo ContainsMethod = typeof(string).GetMethod(
-        nameof(string.Contains),
-        [typeof(string)]
-    )!;
+    private static readonly MethodInfo ContainsMethod = typeof(string)
+        .GetMethod(nameof(string.Contains), [typeof(string)])
+        .NotNull();
 
     public QueryableStringIContainsHandler(InputParser inputParser)
         : base(inputParser)
@@ -39,7 +39,7 @@ internal sealed class QueryableStringIContainsHandler : QueryableStringOperation
     )
     {
         var property = context.GetInstance();
-        var term = (string)parsedValue!;
+        var term = (string)parsedValue.NotNull();
 
         var contains = Expression.Call(
             CaseInsensitiveExpression.Lower(property),

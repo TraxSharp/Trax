@@ -21,9 +21,12 @@ namespace Trax.Api.GraphQL.Hooks;
 internal sealed class GraphQLJunctionEventHandler(
     ITopicEventSender eventSender,
     LifecycleStreamRule rule,
-    ILogger<GraphQLJunctionEventHandler>? logger = null
+    ILogger<GraphQLJunctionEventHandler>? logger = null,
+    TimeProvider? clock = null
 ) : IJunctionEventHandler
 {
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
     /// <summary>How long a step may wait to be published before it is dropped as a loss.</summary>
     internal static readonly TimeSpan DefaultPublishBound = TimeSpan.FromMilliseconds(250);
 
@@ -59,6 +62,7 @@ internal sealed class GraphQLJunctionEventHandler(
                 nameof(LifecycleSubscriptions.OnJunctionEvent),
                 junctionEvent,
                 PublishBound,
+                _clock,
                 ct
             )
             .ConfigureAwait(false);

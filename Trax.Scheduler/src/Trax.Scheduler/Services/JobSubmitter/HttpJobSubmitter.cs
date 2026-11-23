@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -20,10 +21,11 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
 /// Configure retry behavior via <see cref="RemoteWorkerOptions.Retry"/>.
 /// </remarks>
-internal class HttpJobSubmitter(
+internal sealed class HttpJobSubmitter(
     HttpClient httpClient,
     RemoteWorkerOptions options,
-    ILogger<HttpJobSubmitter> logger
+    ILogger<HttpJobSubmitter> logger,
+    TimeProvider timeProvider
 ) : IJobSubmitter
 {
     private const int MaxErrorBodyLength = 2000;
@@ -40,7 +42,7 @@ internal class HttpJobSubmitter(
     public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
     {
         var request = new RemoteJobRequest(metadataId);
-        await PostAsync(request, cancellationToken);
+        await PostAsync(request, cancellationToken).ConfigureAwait(false);
         return $"http-{Guid.NewGuid():N}";
     }
 
@@ -58,27 +60,33 @@ internal class HttpJobSubmitter(
         );
 
         var request = new RemoteJobRequest(metadataId, inputJson, input.GetType().FullName);
-        await PostAsync(request, cancellationToken);
+        await PostAsync(request, cancellationToken).ConfigureAwait(false);
         return $"http-{Guid.NewGuid():N}";
     }
 
     private async Task PostAsync(RemoteJobRequest request, CancellationToken cancellationToken)
     {
-        using var httpResponse = await HttpRetryHelper.PostWithRetryAsync(
-            httpClient,
-            request,
-            options.Retry,
-            logger,
-            cancellationToken,
-            options.SigningKey,
-            RunnerRequestPurpose.Execute
-        );
+        using var httpResponse = await HttpRetryHelper
+            .PostWithRetryAsync(
+                httpClient,
+                request,
+                options.Retry,
+                logger,
+                timeProvider,
+                cancellationToken,
+                options.SigningKey,
+                RunnerRequestPurpose.Execute
+            )
+            .ConfigureAwait(false);
 
         if (!httpResponse.IsSuccessStatusCode)
         {
-            var body = await ReadErrorBodyAsync(httpResponse);
+            var body = await ReadErrorBodyAsync(httpResponse).ConfigureAwait(false);
             throw new TrainException(
-                $"Remote worker returned HTTP {(int)httpResponse.StatusCode}: {body}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Remote worker returned HTTP {(int)httpResponse.StatusCode}: {body}"
+                )
             );
         }
 
@@ -88,9 +96,9 @@ internal class HttpJobSubmitter(
         RemoteJobResponse? response;
         try
         {
-            response = await httpResponse.Content.ReadFromJsonAsync<RemoteJobResponse>(
-                cancellationToken
-            );
+            response = await httpResponse
+                .Content.ReadFromJsonAsync<RemoteJobResponse>(cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
@@ -118,15 +126,17 @@ internal class HttpJobSubmitter(
 
     private static TrainException NotARunnerResponse(long metadataId) =>
         new(
-            $"Remote worker did not return a runner response for Metadata {metadataId}; "
-                + "the endpoint answered with success but the job may not have reached a runner."
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Remote worker did not return a runner response for Metadata {metadataId}; "
+            ) + "the endpoint answered with success but the job may not have reached a runner."
         );
 
     private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
     {
         try
         {
-            var body = await response.Content.ReadAsStringAsync();
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(body))
                 return response.ReasonPhrase ?? "no response body";

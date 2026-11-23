@@ -19,8 +19,10 @@ public abstract class GraphQLResourceRequest<TResponse> : IGraphQLClientRequest<
     /// <see cref="InvalidOperationException"/> when the attribute is missing or no matching resource
     /// exists.
     /// </summary>
-    public virtual string Query => ResourceQueryCache.GetQuery(GetType());
+    // A property cannot wait asynchronously; the resource is read once per type and cached.
+    public virtual string Query =>
+        ResourceQueryCache.GetQueryAsync(GetType()).GetAwaiter().GetResult();
 
-    /// <summary>The operation's variables; <c>null</c> unless a subclass overrides it.</summary>
+    /// <summary>The operation's variables; <see langword="null"/> unless a subclass overrides it.</summary>
     public virtual object? Variables => null;
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -24,7 +25,9 @@ internal sealed class ListScreen : View
     private ListPage<ConsoleRow>? _page;
 
     // The filters the page shown was read with: its count is the count of these, not of a filter typed since.
-    private IReadOnlyDictionary<string, string> _pageFilters = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> _pageFilters = new Dictionary<string, string>(
+        StringComparer.Ordinal
+    );
     private int _loading;
 
     public ListScreen(ConsoleContext context, IConsoleList list, ListState? state = null)
@@ -77,7 +80,12 @@ internal sealed class ListScreen : View
     public IReadOnlyDictionary<string, string> Filters => _filters;
 
     /// <summary>Where it is, to open it again where it was after the editor ran.</summary>
-    public ListState State => new(new Dictionary<string, string>(_filters), _after, _back.ToList());
+    public ListState State =>
+        new(
+            new Dictionary<string, string>(_filters, StringComparer.Ordinal),
+            _after,
+            _back.ToList()
+        );
 
     /// <summary>The keys this screen takes, for the status line.</summary>
     public string Help =>
@@ -102,7 +110,11 @@ internal sealed class ListScreen : View
     public void Refresh()
     {
         var load = Interlocked.Increment(ref _loading);
-        var query = new ListQuery(PageSize, _after, new Dictionary<string, string>(_filters));
+        var query = new ListQuery(
+            PageSize,
+            _after,
+            new Dictionary<string, string>(_filters, StringComparer.Ordinal)
+        );
         Ui.Start(
             _context.App,
             () => List.LoadAsync(_context.Client, query, _context.Closed),
@@ -138,7 +150,7 @@ internal sealed class ListScreen : View
             _table.SetSelection(
                 0,
                 at >= 0 ? at : Math.Clamp(selected, 0, page.Rows.Count - 1),
-                false
+                extendExistingSelection: false
             );
         _table.Update();
         var filters =
@@ -146,8 +158,10 @@ internal sealed class ListScreen : View
                 ? "no filter"
                 : string.Join(", ", _filters.Select(f => $"{f.Key}={f.Value}"));
         _header.Text =
-            $"page {_back.Count + 1}  ·  {(page.Estimated ? "about " : "")}{page.TotalCount} in all  ·  {filters}"
-            + (_marked.Count > 0 ? $"  ·  {_marked.Count} marked" : "");
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"page {_back.Count + 1}  ·  {(page.Estimated ? "about " : "")}{page.TotalCount} in all  ·  {filters}"
+            ) + (_marked.Count > 0 ? $"  ·  {_marked.Count} marked" : "");
         SetNeedsDraw();
     }
 
@@ -204,7 +218,9 @@ internal sealed class ListScreen : View
                     break;
                 default:
                     if (
-                        List.ActionInfos.FirstOrDefault(a => a.Key.ToString() == typed) is
+                        List.ActionInfos.FirstOrDefault(a =>
+                            string.Equals(a.Key.ToString(), typed, StringComparison.Ordinal)
+                        ) is
                         { } action
                     )
                         Handle(key, () => Act(action));
@@ -222,22 +238,22 @@ internal sealed class ListScreen : View
     private bool Move(Key key)
     {
         if (key == Key.D.WithCtrl)
-            return _table.PageDown(false, null) || true;
+            return _table.PageDown(extend: false, ctx: null) || true;
         if (key == Key.U.WithCtrl)
-            return _table.PageUp(false, null) || true;
+            return _table.PageUp(extend: false, ctx: null) || true;
         switch (Ui.Typed(key))
         {
             case "j":
-                _table.MoveCursorByOffset(0, 1, false, null);
+                _table.MoveCursorByOffset(0, 1, extendExistingSelection: false, ctx: null);
                 return true;
             case "k":
-                _table.MoveCursorByOffset(0, -1, false, null);
+                _table.MoveCursorByOffset(0, -1, extendExistingSelection: false, ctx: null);
                 return true;
             case "g":
-                _table.MoveCursorToStartOfTable(false, null);
+                _table.MoveCursorToStartOfTable(extend: false, ctx: null);
                 return true;
             case "G":
-                _table.MoveCursorToEndOfTable(false, null);
+                _table.MoveCursorToEndOfTable(extend: false, ctx: null);
                 return true;
             default:
                 return false;
@@ -275,7 +291,7 @@ internal sealed class ListScreen : View
             _marked.Add(row.Id);
         if (_page is { } page)
             Show(page);
-        _table.MoveCursorByOffset(0, 1, false, null);
+        _table.MoveCursorByOffset(0, 1, extendExistingSelection: false, ctx: null);
     }
 
     private void Filter()
@@ -284,7 +300,7 @@ internal sealed class ListScreen : View
             $"Filter {List.Title.ToLowerInvariant()}",
             List.Filters.Select(f =>
                     (
-                        f.Choices is null ? f.Name : $"{f.Name} ({string.Join("|", f.Choices)})",
+                        f.Choices is null ? f.Name : $"{f.Name} ({string.Join('|', f.Choices)})",
                         _filters.GetValueOrDefault(f.Name, "")
                     )
                 )
@@ -320,9 +336,9 @@ internal sealed class ListScreen : View
                 }
                 var width = fields.Count == 0 ? 0 : fields.Max(f => f.Label.Length);
                 _context.Prompts.Show(
-                    $"{List.Title} {row.Id}",
+                    string.Create(CultureInfo.InvariantCulture, $"{List.Title} {row.Id}"),
                     fields.Select(f =>
-                        $"{f.Label.PadRight(width)}  {TerminalText.Block(f.Value.Replace("\r\n", "\n"))}"
+                        $"{f.Label.PadRight(width)}  {TerminalText.Block(f.Value.Replace("\r\n", "\n", StringComparison.Ordinal))}"
                     )
                 );
             },
@@ -412,7 +428,7 @@ internal sealed class ListScreen : View
             );
             return;
         }
-        var filterSnapshot = new Dictionary<string, string>(_pageFilters);
+        var filterSnapshot = new Dictionary<string, string>(_pageFilters, StringComparer.Ordinal);
         var actions = List.BulkActions;
         var filters =
             filterSnapshot.Count == 0
@@ -420,12 +436,23 @@ internal sealed class ListScreen : View
                 : string.Join(", ", filterSnapshot.Select(f => $"{f.Key}={f.Value}"));
         var chosen = _context.Prompts.Ask(
             "All matching",
-            $"Apply to all {page.TotalCount} {List.Title.ToLowerInvariant()} matching {filters}. The host refuses if the filter now matches another count.",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Apply to all {page.TotalCount} {List.Title.ToLowerInvariant()} matching {filters}. The host refuses if the filter now matches another count."
+            ),
             [.. actions.Select(a => Capital(a.Name))]
         );
         if (chosen is not { } index || index >= actions.Count)
             return;
         var bulk = actions[index];
+        if (BulkOptions(bulk) is not { } options)
+            return;
+        StartBulk(bulk, filterSnapshot, page, options);
+    }
+
+    // What the operator chooses for the bulk action, or null when they back out.
+    private ActionOptions? BulkOptions(BulkAction bulk)
+    {
         var options = new ActionOptions();
         if (bulk.AsksAfresh)
         {
@@ -436,7 +463,7 @@ internal sealed class ListScreen : View
                 "Ask afresh"
             );
             if (afresh is not (0 or 1))
-                return;
+                return null;
             options = options with { AskAfresh = afresh == 1 };
         }
         if (bulk.NeedsNote)
@@ -447,10 +474,25 @@ internal sealed class ListScreen : View
                 accept: Capital(bulk.Name)
             );
             if (note is not [var text] || text.Trim().Length == 0)
-                return;
+                return null;
             options = options with { Note = text.Trim() };
         }
-        _context.Status($"{Capital(bulk.Name)} all {page.TotalCount}: starting...");
+        return options;
+    }
+
+    private void StartBulk(
+        BulkAction bulk,
+        Dictionary<string, string> filterSnapshot,
+        ListPage<ConsoleRow> page,
+        ActionOptions options
+    )
+    {
+        _context.Status(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Capital(bulk.Name)} all {page.TotalCount}: starting..."
+            )
+        );
         Ui.Start(
             _context.App,
             () =>
@@ -466,7 +508,10 @@ internal sealed class ListScreen : View
             {
                 _context.Status(
                     started.Outcome.Succeeded
-                        ? $"{Capital(bulk.Name)} all {page.TotalCount}: {started.Outcome.Message}"
+                        ? string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{Capital(bulk.Name)} all {page.TotalCount}: {started.Outcome.Message}"
+                        )
                         : $"{Capital(bulk.Name)} refused: {started.Outcome.Message}"
                 );
                 if (started.Operation is { } operation)
@@ -482,11 +527,14 @@ internal sealed class ListScreen : View
     {
         var title = List.Title.ToLowerInvariant();
         if (ids.Count == 1)
-            return $"{title} {ids[0]}";
+            return string.Create(CultureInfo.InvariantCulture, $"{title} {ids[0]}");
         const int named = 10;
         var list = string.Join(", ", ids.Take(named));
         return ids.Count > named
-            ? $"{ids.Count} {title} ({list} and {ids.Count - named} more)"
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"{ids.Count} {title} ({list} and {ids.Count - named} more)"
+            )
             : $"{ids.Count} {title} ({list})";
     }
 
@@ -521,10 +569,3 @@ internal sealed class ListScreen : View
                 : TerminalText.Line(rows[row].Cells[col - 1]);
     }
 }
-
-/// <summary>Where a list screen is: its filters, the page it is on and the pages before it.</summary>
-internal sealed record ListState(
-    IReadOnlyDictionary<string, string> Filters,
-    long? After,
-    IReadOnlyList<long?> Back
-);

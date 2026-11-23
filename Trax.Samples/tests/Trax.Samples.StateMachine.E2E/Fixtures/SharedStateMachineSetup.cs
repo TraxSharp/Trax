@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Samples.StateMachine.E2E.Factories;
 
@@ -13,7 +14,11 @@ namespace Trax.Samples.StateMachine.E2E;
 [SetUpFixture]
 public class SharedStateMachineSetup
 {
-    public static StateMachineApiFactory Factory { get; private set; } = null!;
+    public static StateMachineApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -24,7 +29,8 @@ public class SharedStateMachineSetup
 
         // The database outlives a run, and the demo callers hold at most the host's per-user draft count, so each run
         // starts from no drafts and no claims rather than inheriting every earlier run's.
-        using var scope = Factory.Services.CreateScope();
+        var scope = Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
         await db.SnapshotDrafts.ExecuteDeleteAsync();
         await db.EffectClaims.ExecuteDeleteAsync();

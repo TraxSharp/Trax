@@ -21,7 +21,7 @@ internal sealed class InvalidationMessageVerifier(
     internal static readonly TimeSpan RefusalWarningInterval = TimeSpan.FromMinutes(1);
 
     private readonly TimeProvider _time = time ?? TimeProvider.System;
-    private readonly object _refusalLog = new();
+    private readonly Lock _refusalLog = new();
     private DateTimeOffset _lastRefusalWarning = DateTimeOffset.MinValue;
     private int _refusalsSinceWarning;
     private long _refused;

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Trax's own tests of what the package promises: the profile, the switches, the bans. The
+       rules themselves are tested by Trax.Analyzers.Tests. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Trax.Analyzers.Package.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="coverlet.collector" />
+    <!-- Loaded by the tests as an analyzer assembly, never run on this project's own code. -->
+    <PackageReference
+      Include="Microsoft.CodeAnalysis.BannedApiAnalyzers"
+      GeneratePathProperty="true"
+      ExcludeAssets="analyzers"
+    />
+    <ProjectReference Include="../../src/Trax.Analyzers/Trax.Analyzers.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>BannedApiAnalyzers</_Parameter1>
+      <_Parameter2>$(PkgMicrosoft_CodeAnalysis_BannedApiAnalyzers)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

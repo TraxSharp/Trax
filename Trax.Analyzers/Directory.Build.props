@@ -1,0 +1,57 @@
+<Project>
+  <PropertyGroup>
+    <Version>1.99.99</Version>
+    <!-- Audit direct + transitive dependencies and fail the build on any known
+         vulnerability (low through critical). -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Package metadata for everything that ships from src/. -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>trax;dotnet;analyzer;roslyn;code-quality</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+    <None
+      Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+    <None
+      Include="$(MSBuildThisFileDirectory)licenses/*.txt"
+      Pack="true"
+      PackagePath="licenses/"
+      Visible="false"
+    />
+    <None
+      Include="$(MSBuildThisFileDirectory)../.github/brand/icon-128.png"
+      Pack="true"
+      PackagePath="icon.png"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <!-- Deterministic/reproducible builds. -->
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

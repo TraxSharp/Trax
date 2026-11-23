@@ -11,7 +11,7 @@ namespace Trax.Effect.Data.Sqlite.Services.SqliteContext;
 /// fixed-width UTC text so it compares in time order.
 /// Infrastructure registered by <c>UseSqlite</c>; not intended to be constructed directly.
 /// </summary>
-internal class SqliteContext(DbContextOptions<SqliteContext> options)
+internal sealed class SqliteContext(DbContextOptions<SqliteContext> options)
     : DataContext<SqliteContext>(options)
 {
     /// <summary>
@@ -25,16 +25,17 @@ internal class SqliteContext(DbContextOptions<SqliteContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.AddRunExternalIdUnchanged();
+        modelBuilder.AddSqliteDatabaseFunctions();
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             // SQLite has no schema support — remove from all entities
-            entityType.SetSchema(null);
+            entityType.SetSchema(value: null);
 
             foreach (var property in entityType.GetProperties())
             {
                 // Remap Postgres JSONB columns to TEXT
-                if (property.GetColumnType() == "jsonb")
+                if (string.Equals(property.GetColumnType(), "jsonb", StringComparison.Ordinal))
                     property.SetColumnType("TEXT");
 
                 // Ensure all DateTime values round-trip as UTC

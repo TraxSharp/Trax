@@ -11,7 +11,7 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [TestFixture]
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
-public class PackagesPageTests
+public partial class PackagesPageTests
 {
     private const string Adr = "Trax.Docs/adr/0008-documentation-conventions-are-linted.md";
 
@@ -22,8 +22,10 @@ public class PackagesPageTests
     [
         // Trax.Core
         "Trax.Core",
-        "Trax.Core.Analyzers",
         "Trax.Core.Testing",
+        // Trax.Analyzers
+        "Trax.Analyzers",
+        "Trax.Analyzers.Annotations",
         // Trax.Effect
         "Trax.Effect",
         "Trax.Effect.Broadcaster.RabbitMQ",
@@ -77,14 +79,19 @@ public class PackagesPageTests
         "Trax.Samples.Templates",
     ];
 
-    private static readonly Regex NuGetLink = new(
+    [GeneratedRegex(
         @"\]\(https://www\.nuget\.org/packages/(?<id>Trax\.[A-Za-z0-9.]+)\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex NuGetLink { get; }
 
-    private static HashSet<string> LinkedPackages()
+    private static Task<string> PageAsync() =>
+        File.ReadAllTextAsync(RepoRoot.Combine("reference", "packages.md"));
+
+    private static async Task<HashSet<string>> LinkedPackagesAsync()
     {
-        var page = File.ReadAllText(RepoRoot.Combine("reference", "packages.md"));
+        var page = await PageAsync().ConfigureAwait(false);
         return NuGetLink
             .Matches(page)
             .Select(m => m.Groups["id"].Value)
@@ -92,9 +99,9 @@ public class PackagesPageTests
     }
 
     [Test]
-    public void PackagesPage_Links_EveryPublishedPackage()
+    public async Task PackagesPage_Links_EveryPublishedPackage()
     {
-        var linked = LinkedPackages();
+        var linked = await LinkedPackagesAsync().ConfigureAwait(false);
 
         PublishedPackages
             .Where(id => !linked.Contains(id))
@@ -107,15 +114,18 @@ public class PackagesPageTests
             );
     }
 
-    private static readonly Regex StatedCount = new(
+    [GeneratedRegex(
         @"Trax ships as (?<count>\d+) NuGet packages",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex StatedCount { get; }
 
     [Test]
-    public void PackagesPage_StatesTheNumberOfPackagesItLists()
+    public async Task PackagesPage_StatesTheNumberOfPackagesItLists()
     {
-        var page = File.ReadAllText(RepoRoot.Combine("reference", "packages.md"));
+        var page = await PageAsync().ConfigureAwait(false);
+        var linked = await LinkedPackagesAsync().ConfigureAwait(false);
         var stated = StatedCount.Match(page);
 
         stated
@@ -124,17 +134,17 @@ public class PackagesPageTests
         int.Parse(stated.Groups["count"].Value, System.Globalization.CultureInfo.InvariantCulture)
             .Should()
             .Be(
-                LinkedPackages().Count,
+                linked.Count,
                 "the count in the page's opening must match the packages it lists. See " + Adr + "."
             );
     }
 
     [Test]
-    public void PackagesPage_Links_OnlyKnownPackages()
+    public async Task PackagesPage_Links_OnlyKnownPackages()
     {
         var known = PublishedPackages.ToHashSet(StringComparer.Ordinal);
 
-        LinkedPackages()
+        (await LinkedPackagesAsync().ConfigureAwait(false))
             .Where(id => !known.Contains(id))
             .Should()
             .BeEmpty(

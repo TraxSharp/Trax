@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Xml.Linq;
+using Trax.Core.Extensions;
 using static Trax.Samples.Templates.Tests.Utils.Dotnet;
 
 namespace Trax.Samples.Templates.Tests.Utils;
@@ -33,10 +35,10 @@ internal static class ScaffoldFeed
     /// <summary>Packs everything once per test run and returns where it is.</summary>
     public static async Task<Packed> Get()
     {
-        await Gate.WaitAsync();
+        await Gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            return _packed ??= await Pack();
+            return _packed ??= await Pack().ConfigureAwait(false);
         }
         finally
         {
@@ -49,29 +51,30 @@ internal static class ScaffoldFeed
     /// from the feed and everything else from nuget.org, as a consumer with the packages
     /// published would.
     /// </summary>
-    public static void WriteNuGetConfig(string directory, Packed packed) =>
-        File.WriteAllText(
-            Path.Combine(directory, "nuget.config"),
-            $"""
-            <?xml version="1.0" encoding="utf-8"?>
-            <configuration>
-              <packageSources>
-                <clear />
-                <add key="scaffold" value="{SecurityElement.Escape(packed.Feed)}" />
-                <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-              </packageSources>
-              <packageSourceMapping>
-                <clear />
-                <packageSource key="scaffold">
-                  <package pattern="Trax.*" />
-                </packageSource>
-                <packageSource key="nuget.org">
-                  <package pattern="*" />
-                </packageSource>
-              </packageSourceMapping>
-            </configuration>
-            """
-        );
+    public static async Task WriteNuGetConfig(string directory, Packed packed) =>
+        await File.WriteAllTextAsync(
+                Path.Combine(directory, "nuget.config"),
+                $"""
+                <?xml version="1.0" encoding="utf-8"?>
+                <configuration>
+                  <packageSources>
+                    <clear />
+                    <add key="scaffold" value="{SecurityElement.Escape(packed.Feed)}" />
+                    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+                  </packageSources>
+                  <packageSourceMapping>
+                    <clear />
+                    <packageSource key="scaffold">
+                      <package pattern="Trax.*" />
+                    </packageSource>
+                    <packageSource key="nuget.org">
+                      <package pattern="*" />
+                    </packageSource>
+                  </packageSourceMapping>
+                </configuration>
+                """
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Deletes the feed, and the packages a run restored into the global packages folder under
@@ -104,13 +107,16 @@ internal static class ScaffoldFeed
 
     private static async Task<Packed> Pack()
     {
-        var version = $"0.0.0-scaffold.{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var version = string.Create(
+            CultureInfo.InvariantCulture,
+            $"0.0.0-scaffold.{TimeProvider.System.GetUtcNow().UtcDateTime:yyyyMMddHHmmss}"
+        );
         var root = Path.Combine(Path.GetTempPath(), "trax-scaffold-feed-" + Guid.NewGuid());
         var feed = Path.Combine(root, "feed");
         Directory.CreateDirectory(feed);
         try
         {
-            return await PackInto(root, feed, version);
+            return await PackInto(root, feed, version).ConfigureAwait(false);
         }
         catch
         {
@@ -127,89 +133,132 @@ internal static class ScaffoldFeed
             "templates",
             "Trax.Samples.Templates.csproj"
         );
-        await Run(root, "pack", templatesProject, "--output", root, $"-p:Version={version}");
+        await Run(root, "pack", templatesProject, "--output", root, $"-p:Version={version}")
+            .ConfigureAwait(false);
         var templatesNupkg = Directory.GetFiles(root, "*.nupkg").Single();
 
-        // The Trax packages the templates pin are exactly the ones a scaffold can resolve, and
-        // every one of them is in the restore graph of the template projects, so each is
-        // already restored.
-        var projects = PinnedTraxPackages(templatesNupkg).Select(id => TraxProject(id)).ToList();
+        // The Trax packages the templates pin are exactly the ones a scaffold can resolve. Each
+        // is in the restore graph of the template projects, so it is already restored, except
+        // Trax.Analyzers: the strict option's package, whose project the repository's own build
+        // never references. It is restored here, from its lockfile.
+        var projects = (await PinnedTraxPackagesAsync(templatesNupkg).ConfigureAwait(false))
+            .Select(id => TraxProject(id))
+            .ToList();
+        foreach (
+            var project in projects.Where(p =>
+                !File.Exists(
+                    Path.Combine(Path.GetDirectoryName(p).NotNull(), "obj", "project.assets.json")
+                )
+            )
+        )
+            await Run(root, "restore", project, "--locked-mode").ConfigureAwait(false);
 
         var traversal = Path.Combine(root, "pack-trax.proj");
-        File.WriteAllText(
-            traversal,
-            new XDocument(
-                new XElement(
-                    "Project",
-                    new XElement(
-                        "ItemGroup",
-                        projects.Select(p => new XElement(
-                            "TraxPackage",
-                            new XAttribute("Include", p)
-                        ))
-                    ),
-                    new XElement(
-                        "Target",
-                        new XAttribute("Name", "PackTrax"),
-                        new XElement(
-                            "MSBuild",
-                            new XAttribute("Projects", "@(TraxPackage)"),
-                            new XAttribute("Targets", "Pack"),
-                            new XAttribute("BuildInParallel", "true"),
-                            new XAttribute(
-                                "Properties",
-                                $"Configuration=ScaffoldTest;Version={version};"
-                                    + $"PackageOutputPath={feed};EnablePackageValidation=false"
-                            )
-                        )
-                    )
-                )
-            ).ToString()
-        );
+        await File.WriteAllTextAsync(traversal, PackTraxProject(projects, feed, version))
+            .ConfigureAwait(false);
         await Run(
-            root,
-            "msbuild",
-            traversal,
-            "-t:PackTrax",
-            "-m",
-            "-nodeReuse:false",
-            "-nologo",
-            "-v:minimal"
-        );
+                root,
+                "msbuild",
+                traversal,
+                "-t:PackTrax",
+                "-m",
+                "-nodeReuse:false",
+                "-nologo",
+                "-v:minimal"
+            )
+            .ConfigureAwait(false);
 
         return new Packed(root, feed, templatesNupkg, version);
     }
+
+    // A traversal project that packs every Trax project into the feed at the given version.
+    private static string PackTraxProject(List<string> projects, string feed, string version) =>
+        new XDocument(
+            new XElement(
+                "Project",
+                new XElement(
+                    "ItemGroup",
+                    projects.Select(p => new XElement("TraxPackage", new XAttribute("Include", p)))
+                ),
+                new XElement(
+                    "Target",
+                    new XAttribute("Name", "PackTrax"),
+                    new XElement(
+                        "MSBuild",
+                        new XAttribute("Projects", "@(TraxPackage)"),
+                        new XAttribute("Targets", "Pack"),
+                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute(
+                            "Properties",
+                            $"Configuration=ScaffoldTest;Version={version};"
+                                + $"PackageOutputPath={feed};EnablePackageValidation=false"
+                        )
+                    )
+                )
+            )
+        ).ToString();
 
     /// <summary>
     /// The Trax package ids the packed templates pin, read from each template's
     /// Directory.Packages.props inside the package just packed.
     /// </summary>
-    private static List<string> PinnedTraxPackages(string templatesNupkg)
+    private static async Task<List<string>> PinnedTraxPackagesAsync(string templatesNupkg)
     {
-        using var zip = ZipFile.OpenRead(templatesNupkg);
-        return zip
-            .Entries.Where(e => e.Name == "Directory.Packages.props")
-            .SelectMany(e =>
+        var zip = await ZipFile.OpenReadAsync(templatesNupkg).ConfigureAwait(false);
+        await using (zip.ConfigureAwait(false))
+        {
+            var pins = new List<XElement>();
+            foreach (
+                var entry in zip.Entries.Where(e =>
+                    string.Equals(e.Name, "Directory.Packages.props", StringComparison.Ordinal)
+                )
+            )
             {
-                using var stream = e.Open();
-                return XDocument.Load(stream).Descendants("PackageVersion").ToList();
-            })
-            .Select(e => e.Attribute("Include")!.Value)
-            .Where(id => id.StartsWith("Trax.", StringComparison.Ordinal))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+                var stream = await entry.OpenAsync().ConfigureAwait(false);
+                await using (stream.ConfigureAwait(false))
+                    pins.AddRange(
+                        (
+                            await XDocument
+                                .LoadAsync(stream, LoadOptions.None, CancellationToken.None)
+                                .ConfigureAwait(false)
+                        ).Descendants("PackageVersion")
+                    );
+            }
+            return pins.Select(e => e.Attribute("Include").NotNull().Value)
+                .Where(id => id.StartsWith("Trax.", StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
     }
 
+    // A package is the csproj of its name, unless a project names it with <PackageId>: Trax.Analyzers
+    // is packed by Trax.Analyzers.Package, beside the Trax.Analyzers project that holds the rules.
     private static string TraxProject(string id)
     {
-        var monorepo = Path.GetDirectoryName(RepoRoot())!;
-        return Directory
-                .EnumerateDirectories(monorepo, "Trax.*")
-                .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
-                .Select(folder => Path.Combine(folder, "src", id, id + ".csproj"))
+        var monorepo = Path.GetDirectoryName(RepoRoot()).NotNull();
+        var sources = Directory
+            .EnumerateDirectories(monorepo, "Trax.*")
+            .SelectMany(f => new[] { Path.Combine(f, "src"), Path.Combine(f, "dotnet", "src") })
+            .Where(Directory.Exists)
+            .ToList();
+        var named = sources
+            .SelectMany(src =>
+                Directory.EnumerateFiles(src, "*.csproj", SearchOption.AllDirectories)
+            )
+            .Where(csproj =>
+                XDocument
+                    .Load(csproj)
+                    .Descendants("PackageId")
+                    .Any(e => string.Equals(e.Value.Trim(), id, StringComparison.Ordinal))
+            )
+            .ToList();
+        if (named.Count == 1)
+            return named[0];
+        return sources
+                .Select(src => Path.Combine(src, id, id + ".csproj"))
                 .SingleOrDefault(File.Exists)
             ?? throw new InvalidOperationException(
-                $"The templates pin {id}, but no folder in the repository has src/{id}/{id}.csproj."
+                $"The templates pin {id}, but no project in the repository packs it."
             );
     }
 }

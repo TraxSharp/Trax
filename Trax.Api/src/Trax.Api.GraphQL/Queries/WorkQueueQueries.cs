@@ -45,7 +45,8 @@ public class WorkQueueQueries
         take = OperationsPageBounds.Take(take);
         skip = OperationsPageBounds.Skip(skip);
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         IQueryable<Effect.Models.WorkQueue.WorkQueue> baseQuery = db
             .WorkQueues.AsNoTracking()
@@ -71,20 +72,43 @@ public class WorkQueueQueries
 
         // An unfiltered total is estimated on every page, so the cursor never changes it.
         var (totalCount, isEstimate) = hasFilter
-            ? (await baseQuery.CountAsync(ct), false)
-            : await CountEstimator.EstimateOrCountAsync(
-                db,
-                sqlDialect,
-                "work_queue",
-                () => baseQuery.CountAsync(ct),
-                ct
-            );
+            ? (await baseQuery.CountAsync(ct).ConfigureAwait(false), false)
+            : await CountEstimator
+                .EstimateOrCountAsync(
+                    db,
+                    sqlDialect,
+                    "work_queue",
+                    () => baseQuery.CountAsync(ct),
+                    ct
+                )
+                .ConfigureAwait(false);
 
         var query = afterId.HasValue ? baseQuery.Where(q => q.Id < afterId.Value) : baseQuery;
 
         if (!afterId.HasValue && skip > 0)
             query = query.Skip(skip);
 
+        var items = await ReadWorkQueueSummariesAsync(query, take, ct).ConfigureAwait(false);
+
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<WorkQueueSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        );
+    }
+
+    /// <summary>One page of work queue summaries, read from an ordered and filtered query.</summary>
+    private static async Task<List<WorkQueueSummary>> ReadWorkQueueSummariesAsync(
+        IQueryable<Effect.Models.WorkQueue.WorkQueue> query,
+        int take,
+        CancellationToken ct
+    )
+    {
         var items = await query
             .Take(take)
             .Select(q => new WorkQueueSummary(
@@ -107,18 +131,9 @@ public class WorkQueueQueries
             {
                 ReplayDecisionsOf = q.ReplayDecisionsOf,
             })
-            .ToListAsync(ct);
-
-        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
-
-        return new PagedResult<WorkQueueSummary>(
-            items,
-            totalCount,
-            afterId.HasValue ? 0 : skip,
-            take,
-            isEstimate,
-            nextCursor
-        );
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return items;
     }
 
     /// <summary>
@@ -128,7 +143,7 @@ public class WorkQueueQueries
     /// The entry keeps the input unmasked because the run starts from it; here each
     /// <c>[TraxSensitive]</c> member reads <c>{"_redacted": true}</c>, as in an execution's
     /// recorded input, and an input this host cannot read as its type is masked whole.
-    /// Returns <c>null</c> when the entry does not exist.
+    /// Returns <see langword="null"/> when the entry does not exist.
     /// </summary>
     /// <remarks>
     /// Read through <see cref="IOperationsService.GetWorkQueueEntryDetailAsync"/>, the call the
@@ -139,7 +154,8 @@ public class WorkQueueQueries
         [Service] IOperationsService operationsService,
         CancellationToken ct
     ) =>
-        await operationsService.GetWorkQueueEntryDetailAsync(id, ct) is { } entry
+        await operationsService.GetWorkQueueEntryDetailAsync(id, ct).ConfigureAwait(false)
+            is { } entry
             ? new WorkQueueDetail(
                 entry.Id,
                 entry.ExternalId,

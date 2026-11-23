@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.ContentShield.E2E.Fixtures;
 
 namespace Trax.Samples.ContentShield.E2E.ApiTests;
@@ -14,12 +15,12 @@ public partial class DocumentedExamplesTests : ApiTestFixture
     [Test]
     public async Task Every_try_it_example_in_the_api_header_succeeds()
     {
-        var examples = TryItExamples();
+        var examples = await TryItExamplesAsync().ConfigureAwait(false);
         examples.Should().HaveCountGreaterThanOrEqualTo(3, "the header documents three examples");
 
         foreach (var (body, apiKey) in examples)
         {
-            var result = await GetGraphQLClient().SendRawAsync(body, apiKey);
+            var result = await GetGraphQLClient().SendRawAsync(body, apiKey).ConfigureAwait(false);
 
             result
                 .HasErrors.Should()
@@ -30,9 +31,9 @@ public partial class DocumentedExamplesTests : ApiTestFixture
         }
     }
 
-    private static List<(string Body, string? ApiKey)> TryItExamples()
+    private static async Task<List<(string Body, string? ApiKey)>> TryItExamplesAsync()
     {
-        var source = File.ReadAllText(ApiProgramPath());
+        var source = await File.ReadAllTextAsync(ApiProgramPath()).ConfigureAwait(false);
         var header = source[..source.IndexOf("\nusing ", StringComparison.Ordinal)];
 
         // Each example is one curl command continued over comment lines ending in a backslash.
@@ -58,9 +59,9 @@ public partial class DocumentedExamplesTests : ApiTestFixture
         return commands
             .Select(command =>
             {
-                var key = ApiKeyHeader().Match(command);
+                var key = ApiKeyHeader.Match(command);
                 return (
-                    Body: Body().Match(command).Groups["body"].Value,
+                    Body: Body.Match(command).Groups["body"].Value,
                     ApiKey: key.Success ? key.Groups["key"].Value : null
                 );
             })
@@ -75,7 +76,7 @@ public partial class DocumentedExamplesTests : ApiTestFixture
 
         dir.Should().NotBeNull("the tests run inside the Trax.Samples repository");
         return Path.Combine(
-            dir!.FullName,
+            dir.NotNull().FullName,
             "samples",
             "EphemeralWorkers",
             "Trax.Samples.ContentShield.Api",
@@ -83,9 +84,13 @@ public partial class DocumentedExamplesTests : ApiTestFixture
         );
     }
 
-    [GeneratedRegex(@"-d '(?<body>[^']+)'")]
-    private static partial Regex Body();
+    [GeneratedRegex(@"-d '(?<body>[^']+)'", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Body { get; }
 
-    [GeneratedRegex(@"-H ""X-Api-Key: (?<key>[^""]+)""")]
-    private static partial Regex ApiKeyHeader();
+    [GeneratedRegex(
+        @"-H ""X-Api-Key: (?<key>[^""]+)""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ApiKeyHeader { get; }
 }

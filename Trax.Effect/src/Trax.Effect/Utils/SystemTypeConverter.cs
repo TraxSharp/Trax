@@ -24,7 +24,7 @@ namespace Trax.Effect.Utils;
 /// The converter is registered in the TraxJsonSerializationOptions.Default
 /// options, making it available throughout the system.
 /// </remarks>
-internal class SystemTypeConverter : JsonConverter<Type>
+internal sealed class SystemTypeConverter : JsonConverter<Type>
 {
     /// <summary>
     /// Reads a JSON value and converts it to a Type object.

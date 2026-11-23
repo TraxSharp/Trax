@@ -38,7 +38,7 @@ public class TotalityTests
                 Context = new JsonObject(),
             };
 
-            AdvanceResult result = null!;
+            AdvanceResult? result = null;
             var act = () =>
                 result = TestTurnstile.Machine.Advance(snapshot, trigger, input?.DeepClone());
 
@@ -68,7 +68,7 @@ public class TotalityTests
     {
         foreach (var json in GarbageJson)
         {
-            RehydrationResult result = null!;
+            RehydrationResult? result = null;
             var act = () => result = TestTurnstile.Machine.Rehydrate(json);
 
             act.Should().NotThrow($"Rehydrate({json}) must be total");

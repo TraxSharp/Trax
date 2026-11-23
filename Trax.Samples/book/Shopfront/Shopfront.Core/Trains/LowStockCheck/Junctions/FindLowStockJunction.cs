@@ -4,7 +4,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.LowStockCheck.Junctions;
 
-internal class FindLowStockJunction(IShopfrontDbContext db)
+internal sealed class FindLowStockJunction(IShopfrontDbContext db)
     : EffectJunction<LowStockCheckInput, LowStockCheckOutput>
 {
     public override async Task<LowStockCheckOutput> Run(LowStockCheckInput input) =>
@@ -14,5 +14,6 @@ internal class FindLowStockJunction(IShopfrontDbContext db)
                 .OrderBy(p => p.Sku)
                 .Select(p => p.Sku)
                 .ToListAsync(CancellationToken)
+                .ConfigureAwait(false)
         );
 }

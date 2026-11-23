@@ -10,15 +10,17 @@ namespace Trax.Docs.Tests.Tests;
 /// <para>Not ADR-enforcing: it pins page content an outside build found missing, not a recorded decision.</para>
 /// </summary>
 [TestFixture]
-public class StateMachinePagesTests
+public partial class StateMachinePagesTests
 {
-    private static string Page(string relative) =>
-        File.ReadAllText(RepoRoot.Combine(relative.Split('/'))).Replace("\r\n", "\n");
+    private static async Task<string> PageAsync(string relative) =>
+        (
+            await File.ReadAllTextAsync(RepoRoot.Combine(relative.Split('/'))).ConfigureAwait(false)
+        ).Replace("\r\n", "\n", StringComparison.Ordinal);
 
     [Test]
-    public void Invoking_trains_says_a_scheduler_must_dispatch_the_run()
+    public async Task Invoking_trains_says_a_scheduler_must_dispatch_the_run()
     {
-        Page("statemachine/invoking-trains.md")
+        (await PageAsync("statemachine/invoking-trains.md").ConfigureAwait(false))
             .Should()
             .Contain(
                 "a scheduler on this host or another host sharing the database",
@@ -27,9 +29,9 @@ public class StateMachinePagesTests
     }
 
     [Test]
-    public void Invoking_trains_says_a_timer_on_the_invoking_state_fires_without_a_scheduler()
+    public async Task Invoking_trains_says_a_timer_on_the_invoking_state_fires_without_a_scheduler()
     {
-        Page("statemachine/invoking-trains.md")
+        (await PageAsync("statemachine/invoking-trains.md").ConfigureAwait(false))
             .Should()
             .Contain(
                 "An `After(...)`\non the invoking state fires with or without a scheduler",
@@ -39,47 +41,52 @@ public class StateMachinePagesTests
     }
 
     [Test]
-    public void Only_the_server_refuses_an_effect_bound_advance()
+    public async Task Only_the_server_refuses_an_effect_bound_advance()
     {
-        Page("sdk-reference/statemachine-api/machine.md")
+        (await PageAsync("sdk-reference/statemachine-api/machine.md").ConfigureAwait(false))
             .Should()
             .Contain(
                 "The engine's own `SnapshotMachine.Advance` and the TypeScript twin's `advance` do not refuse it",
                 "the bare engine fires an effect-bound edge like any other"
             );
-        Page("sdk-reference/statemachine-api/i-snapshot-effect.md")
+        (
+            await PageAsync("sdk-reference/statemachine-api/i-snapshot-effect.md")
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain(
                 "the bare engine does not:\n`SnapshotMachine.Advance` fires the edge like any other"
             );
-        Page("sdk-reference/statemachine-api/result-codes.md")
+        (await PageAsync("sdk-reference/statemachine-api/result-codes.md").ConfigureAwait(false))
             .Should()
             .Contain("| `EFFECT_BOUND` | advance (server) |")
             .And.Contain("`EFFECT_BOUND` is not among them");
     }
 
     [Test]
-    public void A_state_may_take_several_seeds_and_a_probe_is_not_one()
+    public async Task A_state_may_take_several_seeds_and_a_probe_is_not_one()
     {
-        Page("sdk-reference/statemachine-api/machine.md")
+        (await PageAsync("sdk-reference/statemachine-api/machine.md").ConfigureAwait(false))
             .Should()
             .Contain("A state may be seeded more than once, and the search starts from every seed")
             .And.NotContain("add further contexts with `Probe`");
-        Page("statemachine/codegen-pipeline.md")
+        (await PageAsync("statemachine/codegen-pipeline.md").ConfigureAwait(false))
             .Should()
             .Contain(
                 "crossed with every state once and never\n  expanded",
                 "a probe is not a substitute for a seed: following that advice lost coverage"
             );
-        Page("sdk-reference/statemachine-api/ir-format.md")
+        (await PageAsync("sdk-reference/statemachine-api/ir-format.md").ConfigureAwait(false))
             .Should()
             .Contain("or a list of contexts when the state is seeded more than once");
     }
 
     [Test]
-    public void Rules_say_what_a_comparison_refuses_and_how_AtMost_differs_from_a_negation()
+    public async Task Rules_say_what_a_comparison_refuses_and_how_AtMost_differs_from_a_negation()
     {
-        var page = Page("sdk-reference/statemachine-api/rules.md");
+        var page = (
+            await PageAsync("sdk-reference/statemachine-api/rules.md").ConfigureAwait(false)
+        );
 
         page.Should()
             .Contain("`AtMost(12)` is false there, where \"not greater than 12\" would be true")
@@ -89,18 +96,20 @@ public class StateMachinePagesTests
     }
 
     [Test]
-    public void Ir_format_says_a_field_is_its_json_name()
+    public async Task Ir_format_says_a_field_is_its_json_name()
     {
-        Page("sdk-reference/statemachine-api/ir-format.md")
+        (await PageAsync("sdk-reference/statemachine-api/ir-format.md").ConfigureAwait(false))
             .Should()
             .Contain("`field` (the member's JSON name: its\n`[JsonPropertyName]` when it has one")
             .And.NotContain("the camelCase key");
     }
 
     [Test]
-    public void Ir_format_gives_the_wire_form_of_a_comparison_and_a_constant()
+    public async Task Ir_format_gives_the_wire_form_of_a_comparison_and_a_constant()
     {
-        var page = Page("sdk-reference/statemachine-api/ir-format.md");
+        var page = (
+            await PageAsync("sdk-reference/statemachine-api/ir-format.md").ConfigureAwait(false)
+        );
 
         page.Should().Contain("\"op\": \"lt\"").And.Contain("`gt`, `gte`, `lt`, `lte` or `eq`");
         page.Should().Contain("{ \"const\":");
@@ -110,12 +119,12 @@ public class StateMachinePagesTests
     [TestCase("effect/move-a-domain-data-context-to-ef-migrations.md")]
     [TestCase("sdk-reference/configuration/domain-data-context.md")]
     [TestCase("api/expose-an-entity-as-a-query-model.md")]
-    public void Every_AddDomainDataContext_snippet_imports_its_namespace(string relative)
+    public async Task Every_AddDomainDataContext_snippet_imports_its_namespace(string relative)
     {
-        var page = Page(relative);
+        var page = (await PageAsync(relative).ConfigureAwait(false));
         // An excerpt (from=) mirrors a real file, whose using lines are in that file.
-        var blocks = Regex
-            .Matches(page, "```csharp(?<marker>[^\n]*)\n(?<body>.*?)```", RegexOptions.Singleline)
+        var blocks = CSharpBlock
+            .Matches(page)
             .Where(b =>
                 !b.Groups["marker"].Value.TrimStart().StartsWith("from=", StringComparison.Ordinal)
             );
@@ -134,4 +143,11 @@ public class StateMachinePagesTests
                 "a snippet copied on its own must compile"
             );
     }
+
+    [GeneratedRegex(
+        "```csharp(?<marker>[^\n]*)\n(?<body>.*?)```",
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CSharpBlock { get; }
 }

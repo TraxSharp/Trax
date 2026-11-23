@@ -12,6 +12,9 @@ namespace Trax.Effect.Data.Services.HostHeartbeats;
 /// heartbeat never stops a host, and a host that cannot write its row shows as offline, which is
 /// what an operator needs to see.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class HostHeartbeatService(
     HostHeartbeatWriter writer,
     TimeProvider clock,
@@ -25,8 +28,8 @@ internal sealed class HostHeartbeatService(
         using var timer = new PeriodicTimer(HostRow.Interval, clock);
         do
         {
-            await BeatOnce(stoppingToken);
-        } while (await WaitForNextBeat(timer, stoppingToken));
+            await BeatOnce(stoppingToken).ConfigureAwait(false);
+        } while (await WaitForNextBeat(timer, stoppingToken).ConfigureAwait(false));
     }
 
     private static async Task<bool> WaitForNextBeat(
@@ -36,7 +39,7 @@ internal sealed class HostHeartbeatService(
     {
         try
         {
-            return await timer.WaitForNextTickAsync(stoppingToken);
+            return await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -48,7 +51,7 @@ internal sealed class HostHeartbeatService(
     {
         try
         {
-            await writer.Beat(stoppingToken);
+            await writer.Beat(stoppingToken).ConfigureAwait(false);
             _lastBeatFailed = false;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }

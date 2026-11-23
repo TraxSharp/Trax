@@ -53,10 +53,3 @@ internal sealed class SocketOriginListener : ServerDiagnosticEventListener
         }
     }
 }
-
-/// <summary>
-/// Thrown when a WebSocket upgrade to the Trax schema comes from an origin that is not allowed.
-/// HotChocolate reports it as a session error; the response is <c>403</c>.
-/// </summary>
-internal sealed class SocketUpgradeRefusedException()
-    : InvalidOperationException("The WebSocket upgrade origin is not allowed for this endpoint.");

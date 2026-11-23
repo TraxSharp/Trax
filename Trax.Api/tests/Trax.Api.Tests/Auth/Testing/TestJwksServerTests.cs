@@ -72,7 +72,7 @@ public class TestJwksServerTests
     public async Task CreateIssuer_ProducesValidatableRs256Tokens()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var issuer = server.CreateIssuer("trax-aud");
+        var issuer = server.CreateIssuer("trax-aud", TimeProvider.System);
         var token = issuer.Mint(b => b.WithSubject("alice"));
 
         // Verify signature with the published public key.
@@ -103,7 +103,9 @@ public class TestJwksServerTests
         using var host = await BuildHost(server);
         var client = host.GetTestClient();
 
-        var token = server.CreateIssuer("trax-aud").Mint(b => b.WithSubject("alice"));
+        var token = server
+            .CreateIssuer("trax-aud", TimeProvider.System)
+            .Mint(b => b.WithSubject("alice"));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var resp = await client.GetAsync("/protected");
@@ -120,7 +122,7 @@ public class TestJwksServerTests
         await server.DisposeAsync();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        Func<Task> act = async () => await http.GetAsync(jwksUri);
+        Func<Task> act = async () => await http.GetAsync(jwksUri).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<HttpRequestException>();
     }
@@ -167,7 +169,7 @@ public class TestJwksServerTests
                     })
             )
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

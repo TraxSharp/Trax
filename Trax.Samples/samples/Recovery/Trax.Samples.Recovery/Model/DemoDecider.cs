@@ -18,19 +18,24 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
 {
     public const string ModelName = "demo-rules-1.0";
 
+    // The latency is drawn from a seeded sequence, so it varies from call to call but a run of the
+    // demo waits the same way each time. Random is not thread-safe, and runs decide concurrently.
+    private readonly Random _latency = new(Seed: 2026);
+    private readonly Lock _latencyGate = new();
+
     public async Task<DecisionResult> Decide(
         DecisionRequest request,
         CancellationToken cancellationToken
     )
     {
-        await Task.Delay(Latency(), cancellationToken);
+        await Task.Delay(Latency(), cancellationToken).ConfigureAwait(false);
         return Answer(request);
     }
 
     /// <summary>The answers, without the latency.</summary>
     public static DecisionResult Answer(DecisionRequest request)
     {
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
         foreach (var question in request.Questions)
             answers[question.Key] = (request.State, question) switch
             {
@@ -48,14 +53,19 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
     private static ChoiceAnswer NameProblem(RefundCase refund) =>
         refund.Reason.ToLowerInvariant() switch
         {
-            var r when r.Contains("broken") || r.Contains("damaged") => new ChoiceAnswer(
+            var r
+                when r.Contains("broken", StringComparison.Ordinal)
+                    || r.Contains("damaged", StringComparison.Ordinal) => new ChoiceAnswer(
                 nameof(Problem.Damaged),
                 0.91
             )
             {
                 Model = ModelName,
             },
-            var r when r.Contains("never arrived") => new ChoiceAnswer(nameof(Problem.Lost), 0.88)
+            var r when r.Contains("never arrived", StringComparison.Ordinal) => new ChoiceAnswer(
+                nameof(Problem.Lost),
+                0.88
+            )
             {
                 Model = ModelName,
             },
@@ -66,7 +76,9 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
     {
         var probability = evidence.Amount <= 250m ? 0.93 : 0.62;
         probability -= 0.35 * evidence.PriorRefunds;
-        return new YesNoAnswer(Math.Round(Math.Clamp(probability, 0.02, 0.98), 2))
+        return new YesNoAnswer(
+            Math.Round(Math.Clamp(probability, 0.02, 0.98), 2, MidpointRounding.ToEven)
+        )
         {
             Model = ModelName,
         };
@@ -77,7 +89,9 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
     private static YesNoAnswer SameTopic(CoCitationEvidence evidence)
     {
         var linked = evidence.Papers == 0 ? 0 : (double)evidence.LinkedPapers / evidence.Papers;
-        return new YesNoAnswer(Math.Round(Math.Clamp(0.1 + 0.9 * linked, 0.02, 0.98), 2))
+        return new YesNoAnswer(
+            Math.Round(Math.Clamp(0.1 + 0.9 * linked, 0.02, 0.98), 2, MidpointRounding.ToEven)
+        )
         {
             Model = ModelName,
         };
@@ -100,7 +114,9 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         var max = pace.ModelLatencyMax;
         if (max <= min)
             return min;
-        return min
-            + TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * (max - min).TotalMilliseconds);
+        double draw;
+        lock (_latencyGate)
+            draw = _latency.NextDouble();
+        return min + TimeSpan.FromMilliseconds(draw * (max - min).TotalMilliseconds);
     }
 }

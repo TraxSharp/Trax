@@ -48,20 +48,25 @@ public class LaunchUrlTests
             "Properties",
             "launchSettings.json"
         );
-        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(settings));
+        using var json = JsonDocument.Parse(
+            await File.ReadAllTextAsync(settings).ConfigureAwait(false)
+        );
         var launchUrl = json
             .RootElement.GetProperty("profiles")
             .EnumerateObject()
             .Select(p => p.Value.GetProperty("launchUrl").GetString())
             .Single();
 
-        await using var factory = new WebApplicationFactory<T>().WithWebHostBuilder(b =>
+        var factory = new WebApplicationFactory<T>().WithWebHostBuilder(b =>
             b.UseEnvironment("Development")
         );
-        // As the browser asks for it: the GraphQL endpoint serves its IDE only to a request for HTML.
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/" + launchUrl);
-        request.Headers.Accept.ParseAdd("text/html");
-        var response = await factory.CreateClient().SendAsync(request);
-        return response.StatusCode;
+        await using (factory.ConfigureAwait(false))
+        {
+            // As the browser asks for it: the GraphQL endpoint serves its IDE only to a request for HTML.
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/" + launchUrl);
+            request.Headers.Accept.ParseAdd("text/html");
+            var response = await factory.CreateClient().SendAsync(request).ConfigureAwait(false);
+            return response.StatusCode;
+        }
     }
 }

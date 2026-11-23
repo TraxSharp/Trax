@@ -77,7 +77,7 @@ public sealed class CascadingDecider : IDecider, IVetsQuestions
         CancellationToken cancellationToken
     )
     {
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
 
         try
         {
@@ -134,7 +134,7 @@ public sealed class CascadingDecider : IDecider, IVetsQuestions
         new[] { _first, _then }
             .OfType<IVetsQuestions>()
             .SelectMany(tier => tier.Problems(declared) ?? [])
-            .Distinct();
+            .Distinct(StringComparer.Ordinal);
 
     // Written so that NaN, which compares false with everything, counts as unsure.
     private bool IsUnsure(Answer answer) =>
@@ -153,7 +153,9 @@ public sealed class CascadingDecider : IDecider, IVetsQuestions
     private static bool Fits(Question question, Answer answer) =>
         (question, answer) switch
         {
-            (ChoiceQuestion q, ChoiceAnswer a) => q.Options.Any(o => o.Name == a.Choice)
+            (ChoiceQuestion q, ChoiceAnswer a) => q.Options.Any(o =>
+                string.Equals(o.Name, a.Choice, StringComparison.Ordinal)
+            )
                 && IsProbability(a.Confidence)
                 && (a.Probabilities?.Values.All(IsProbability) ?? true),
             (ScoreQuestion q, ScoreAnswer a) => a.Score >= 0

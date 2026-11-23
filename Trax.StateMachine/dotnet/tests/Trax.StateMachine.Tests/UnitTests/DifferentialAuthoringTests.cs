@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using static Trax.StateMachine.Rules;
 
@@ -53,24 +54,32 @@ public class DifferentialAuthoringTests
     [Test]
     public void Export_carries_samples_seeds_and_contexts()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(BuildRich()))!;
-        var diff = (JsonObject)ir["differential"]!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(BuildRich())).NotNull();
+        var diff = (JsonObject)ir["differential"].NotNull();
 
         // Raw sample under its trigger.
-        var coin = ((JsonObject)diff["samples"]!)["Coin"]!.AsArray();
+        var coin = ((JsonObject)diff["samples"].NotNull())["Coin"].NotNull().AsArray();
         coin.Should().HaveCount(1);
-        ((JsonObject)coin[0]!)["coin"]!.GetValue<string>().Should().Be("raw");
+        ((JsonObject)coin[0].NotNull())["coin"].NotNull().GetValue<string>().Should().Be("raw");
 
         // Typed seed serializes camelCase; raw empty seed stays {}.
-        var seeds = (JsonObject)diff["seeds"]!;
-        seeds["Unlocked"]!["paidWith"]!.GetValue<string>().Should().Be("seed");
-        seeds["Locked"]!.AsObject().Count.Should().Be(0);
+        var seeds = (JsonObject)diff["seeds"].NotNull();
+        seeds["Unlocked"].NotNull()["paidWith"].NotNull().GetValue<string>().Should().Be("seed");
+        seeds["Locked"].NotNull().AsObject().Count.Should().Be(0);
 
         // Both probe contexts land in `contexts`, typed then raw.
-        var contexts = diff["contexts"]!.AsArray();
+        var contexts = diff["contexts"].NotNull().AsArray();
         contexts.Should().HaveCount(2);
-        ((JsonObject)contexts[0]!)["paidWith"]!.GetValue<string>().Should().Be("probe");
-        ((JsonObject)contexts[1]!)["paidWith"]!.GetValue<string>().Should().Be("raw-probe");
+        ((JsonObject)contexts[0].NotNull())["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("probe");
+        ((JsonObject)contexts[1].NotNull())["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("raw-probe");
     }
 
     [Test]
@@ -130,13 +139,25 @@ public class DifferentialAuthoringTests
         );
 
         var built = m.Build();
-        built.Declarative!.Differential!.Seeds[TurnstileState.Unlocked].Should().HaveCount(2);
+        built
+            .Declarative.NotNull()
+            .Differential.NotNull()
+            .Seeds[TurnstileState.Unlocked]
+            .Should()
+            .HaveCount(2);
 
-        var seeds = JsonNode.Parse(IrExporter.Export(built))!["differential"]!["seeds"]!;
-        var unlocked = seeds["Unlocked"]!.AsArray();
-        unlocked.Select(s => s!["paidWith"]!.GetValue<string>()).Should().Equal("a", "b");
+        var seeds = JsonNode
+            .Parse(IrExporter.Export(built))
+            .NotNull()["differential"]
+            .NotNull()["seeds"]
+            .NotNull();
+        var unlocked = seeds["Unlocked"].NotNull().AsArray();
+        unlocked
+            .Select(s => s.NotNull()["paidWith"].NotNull().GetValue<string>())
+            .Should()
+            .Equal("a", "b");
         // A state seeded once is written as the context itself, as it was before a state could take several.
-        seeds["Locked"]!.Should().BeOfType<JsonObject>();
+        seeds["Locked"].NotNull().Should().BeOfType<JsonObject>();
     }
 
     [Test]

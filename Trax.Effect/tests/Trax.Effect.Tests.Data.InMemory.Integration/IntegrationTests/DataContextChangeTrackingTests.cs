@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Services.InMemoryContext;
 using Trax.Effect.Data.Services.DataContext;
@@ -18,7 +19,7 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 /// </summary>
 public class DataContextChangeTrackingTests
 {
-    private InMemoryContext CreateContext(string dbName) =>
+    private static InMemoryContext CreateContext(string dbName) =>
         new(new DbContextOptionsBuilder<InMemoryContext>().UseInMemoryDatabase(dbName).Options);
 
     #region Track Tests
@@ -100,7 +101,7 @@ public class DataContextChangeTrackingTests
         context.Reset();
         var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
         found.Should().NotBeNull();
-        found!.Name.Should().Be("SaveAndQuery");
+        found.NotNull().Name.Should().Be("SaveAndQuery");
     }
 
     #endregion
@@ -164,7 +165,7 @@ public class DataContextChangeTrackingTests
 
         // Mutate the entity (it's Unchanged → becomes Modified via snapshot)
         metadata.TrainState = TrainState.Failed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
 
         // Update is a no-op for already-tracked entities
         await context.Update(metadata);
@@ -215,7 +216,7 @@ public class DataContextChangeTrackingTests
 
         // Step 4-5: Finish with final state
         metadata.TrainState = TrainState.Completed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
         await context.Update(metadata);
 
         // Step 6: Second SaveChanges (UPDATE)
@@ -243,7 +244,7 @@ public class DataContextChangeTrackingTests
 
         // Error path
         metadata.TrainState = TrainState.Failed;
-        metadata.EndTime = DateTime.UtcNow;
+        metadata.EndTime = TestTime.UtcDateTime;
         await context.Update(metadata);
         await context.SaveChanges(CancellationToken.None);
 
@@ -332,7 +333,7 @@ public class DataContextChangeTrackingTests
 
         // Manifest should NOT be tracked — this is the bug fix
         contextC
-            .Entry(loaded.Manifest!)
+            .Entry(loaded.Manifest.NotNull())
             .State.Should()
             .Be(
                 EntityState.Detached,
@@ -377,7 +378,7 @@ public class DataContextChangeTrackingTests
 
         // Manifest should NOT be tracked
         contextC
-            .Entry(loaded.Manifest!)
+            .Entry(loaded.Manifest.NotNull())
             .State.Should()
             .Be(
                 EntityState.Detached,
@@ -396,7 +397,8 @@ public class DataContextChangeTrackingTests
                 Name = name,
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TestTime.Clock
         );
 
     #endregion

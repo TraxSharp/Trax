@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Tests.Meta.Tests;
 
 /// <summary>
@@ -82,8 +84,10 @@ public class NoTestFrameworkInSrcTests
                 .Load(proj)
                 .Descendants("PackageReference")
                 .Select(e => e.Attribute("Include")?.Value)
-                .Where(v => v is not null)
-                .Where(v => TestFrameworkPackages.Contains(v, StringComparer.OrdinalIgnoreCase))
+                .Where(v =>
+                    v is not null
+                    && TestFrameworkPackages.Contains(v, StringComparer.OrdinalIgnoreCase)
+                )
                 .ToList();
 
             if (referenced.Count > 0)
@@ -128,7 +132,11 @@ public class NoTestFrameworkInSrcTests
                 .Select(e => e.Attribute("Include")?.Value)
                 .Should()
                 .Contain(
-                    v => TestFrameworkPackages.Contains(v!, StringComparer.OrdinalIgnoreCase),
+                    v =>
+                        TestFrameworkPackages.Contains(
+                            v.NotNull(),
+                            StringComparer.OrdinalIgnoreCase
+                        ),
                     $"'{name}' is on the sanctioned list because it ships test fixtures. It no "
                         + "longer references a test framework, so the exemption is stale and "
                         + "should be removed."
@@ -215,8 +223,10 @@ public class NoTestFrameworkInSrcTests
             var referenced = document
                 .Descendants("PackageReference")
                 .Select(e => e.Attribute("Include")?.Value)
-                .Where(v => v is not null)
-                .Where(v => TestProjectOnlyPackages.Contains(v, StringComparer.OrdinalIgnoreCase))
+                .Where(v =>
+                    v is not null
+                    && TestProjectOnlyPackages.Contains(v, StringComparer.OrdinalIgnoreCase)
+                )
                 .ToList();
 
             if (referenced.Count > 0)

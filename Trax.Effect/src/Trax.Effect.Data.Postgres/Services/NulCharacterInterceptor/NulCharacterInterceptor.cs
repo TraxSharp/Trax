@@ -102,7 +102,7 @@ internal sealed class NulCharacterInterceptor : SaveChangesInterceptor
 
     /// <summary>Replaces each raw NUL. Returns the same instance when there is none.</summary>
     internal static string ScrubText(string value) =>
-        value.Contains('\0') ? value.Replace('\0', Replacement) : value;
+        value.Contains('\0', StringComparison.Ordinal) ? value.Replace('\0', Replacement) : value;
 
     /// <summary>
     /// Replaces each <c>\u0000</c> escape, and each raw NUL, in JSON text. An escaped backslash

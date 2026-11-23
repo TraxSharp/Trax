@@ -17,6 +17,7 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/Exceptions/PersistedOperationInputException.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/Exceptions/PersistedOperationNotBroadcastException.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/Exceptions/ValidationFailure.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/Exceptions/ValidationFailureLocation.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/ShapeDiffViolationException.cs
 ---
 

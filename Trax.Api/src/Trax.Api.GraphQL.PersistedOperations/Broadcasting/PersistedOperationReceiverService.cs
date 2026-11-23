@@ -5,6 +5,7 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 
@@ -48,6 +49,8 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
     /// <summary>The channel the receiver currently consumes on. For tests.</summary>
     internal IChannel? Channel => _channel;
 
+    private readonly TimeProvider _time;
+
     public PersistedOperationReceiverService(
         PersistedOperationsOptions options,
         IPersistedOperationCache cache,
@@ -64,6 +67,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         _cache = cache;
         _hcInvalidator = hcInvalidator;
         _logger = logger;
+        _time = time ?? TimeProvider.System;
         _verifier = new InvalidationMessageVerifier(
             options.RabbitMqExchange,
             options.RabbitMqInvalidation,
@@ -124,7 +128,8 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
     /// </summary>
     private async Task ConsumeAsync(CancellationToken cancellationToken)
     {
-        var channel = await _connection!
+        var channel = await _connection
+            .NotNull()
             .CreateChannelAsync(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         channel.ChannelShutdownAsync += (_, args) => OnChannelShutdownAsync(args);
@@ -191,7 +196,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             // cover it.
             return Task.CompletedTask;
 
-        _ = Task.Run(SubscribeAgainAsync);
+        _ = Task.Run(SubscribeAgainAsync, cancellationToken: CancellationToken.None);
         return EmptyEveryCacheAsync("the broker closed the receiver's channel");
     }
 
@@ -216,7 +221,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
                 );
                 try
                 {
-                    await Task.Delay(delay, _stopping.Token).ConfigureAwait(false);
+                    await Task.Delay(delay, _time, _stopping.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -343,14 +348,18 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         if (_channel is not null)
         {
             if (_channel.IsOpen)
-                await _channel.CloseAsync().ConfigureAwait(false);
+                await _channel
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _channel.Dispose();
         }
 
         if (_connection is not null)
         {
             if (_connection.IsOpen)
-                await _connection.CloseAsync().ConfigureAwait(false);
+                await _connection
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _connection.Dispose();
         }
 

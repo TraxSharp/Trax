@@ -89,19 +89,19 @@ public class ExtractTests : TestSetup
 
         // Act
         var monad = train.Activate(input);
-        monad.Extract<TestClass, string>(null!);
+        monad.Extract<TestClass, string>(Null.Of<TestClass>());
 
         // Assert
         monad.Exception.Should().NotBeNull();
         monad.Memory.Should().NotBeNull();
     }
 
-    private class TestClass
+    private sealed class TestClass
     {
-        public string TestString { get; set; } = null!;
+        public required string TestString { get; set; }
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

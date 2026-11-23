@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
@@ -22,26 +23,7 @@ public class ArrayLoggerMemoryTests
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                for (int i = 0; i < 100; i++)
-                {
-                    using var provider = new ArrayLoggingProvider();
-
-                    // Create multiple loggers
-                    for (int j = 0; j < 10; j++)
-                    {
-                        var logger = provider.CreateLogger($"TestLogger_{i}_{j}");
-
-                        loggerReferences.Add(new WeakReference(logger));
-
-                        // Generate some log entries
-                        for (int k = 0; k < 20; k++)
-                        {
-                            logger.LogInformation("Test log message {Index}", k);
-                        }
-                    }
-
-                    // Provider gets disposed here, should clean up all loggers
-                }
+                CreateAndDisposeManyLoggers(loggerReferences);
 
                 // Force GC to see if loggers are properly collected
                 GC.Collect();
@@ -51,7 +33,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggingProvider_LoggerCreation"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Should not retain significant memory after disposal
         result
@@ -64,7 +46,9 @@ public class ArrayLoggerMemoryTests
         // "Everything was freed" is a claim about reachability, not about the process's heap, so it
         // is asserted on the loggers themselves. A byte bound tight enough to mean the same thing
         // sits below the measurement's noise floor — see MemoryProfiler.RetainedNoiseFloorBytes.
-        var aliveLoggers = await MemoryProfiler.CountAliveAsync(loggerReferences);
+        var aliveLoggers = await MemoryProfiler
+            .CountAliveAsync(loggerReferences)
+            .ConfigureAwait(false);
 
         aliveLoggers
             .Should()
@@ -73,6 +57,32 @@ public class ArrayLoggerMemoryTests
                 "every logger's provider was disposed and nothing else references them, so a logger "
                     + "still reachable is a provider that did not let go of it"
             );
+    }
+
+    private static void CreateAndDisposeManyLoggers(List<WeakReference> loggerReferences)
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            using var provider = new ArrayLoggingProvider();
+
+            // Create multiple loggers
+            for (int j = 0; j < 10; j++)
+            {
+                var logger = provider.CreateLogger(
+                    string.Create(CultureInfo.InvariantCulture, $"TestLogger_{i}_{j}")
+                );
+
+                loggerReferences.Add(new WeakReference(logger));
+
+                // Generate some log entries
+                for (int k = 0; k < 20; k++)
+                {
+                    logger.LogInformation("Test log message {Index}", k);
+                }
+            }
+
+            // Provider gets disposed here, should clean up all loggers
+        }
     }
 
     [Test]
@@ -96,7 +106,7 @@ public class ArrayLoggerMemoryTests
                 }
 
                 // Verify logs are accumulated
-                var arrayLogger = provider.Loggers.First();
+                var arrayLogger = provider.Loggers[0];
                 arrayLogger.Logs.Count.Should().Be(5000);
 
                 // Clear logs to prevent memory leak
@@ -108,7 +118,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggerEffect_LogAccumulation"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Memory should be manageable after clearing logs
         result
@@ -142,7 +152,7 @@ public class ArrayLoggerMemoryTests
                 }
 
                 // Verify logs are trimmed (allow for some logs added after last trim)
-                var arrayLogger = provider.Loggers.First();
+                var arrayLogger = provider.Loggers[0];
                 arrayLogger
                     .Logs.Count.Should()
                     .BeLessThanOrEqualTo(
@@ -153,7 +163,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggingProvider_LogTrimming"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Trimming should keep memory usage bounded
         result
@@ -176,25 +186,31 @@ public class ArrayLoggerMemoryTests
                     {
                         for (int i = 0; i < 50; i++)
                         {
-                            var logger = provider.CreateLogger($"ConcurrentLogger_{taskId}_{i}");
+                            var logger = provider.CreateLogger(
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"ConcurrentLogger_{taskId}_{i}"
+                                )
+                            );
 
                             // Generate logs concurrently
                             await Task.Run(() =>
-                            {
-                                for (int j = 0; j < 30; j++)
                                 {
-                                    logger.LogInformation(
-                                        "Concurrent log {TaskId}-{Index}-{LogIndex}",
-                                        taskId,
-                                        i,
-                                        j
-                                    );
-                                }
-                            });
+                                    for (int j = 0; j < 30; j++)
+                                    {
+                                        logger.LogInformation(
+                                            "Concurrent log {TaskId}-{Index}-{LogIndex}",
+                                            taskId,
+                                            i,
+                                            j
+                                        );
+                                    }
+                                })
+                                .ConfigureAwait(false);
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 // Periodically trim logs during concurrent access
                 provider.TrimLoggers(1000);
@@ -202,7 +218,7 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggingProvider_ConcurrentUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent usage should not cause excessive memory retention
         result
@@ -225,7 +241,9 @@ public class ArrayLoggerMemoryTests
                 for (int i = 0; i < 50; i++)
                 {
                     using var provider = new ArrayLoggingProvider();
-                    var logger = provider.CreateLogger($"DisposalTest_{i}");
+                    var logger = provider.CreateLogger(
+                        string.Create(CultureInfo.InvariantCulture, $"DisposalTest_{i}")
+                    );
 
                     loggerReferences.Add(new WeakReference(logger));
 
@@ -241,19 +259,24 @@ public class ArrayLoggerMemoryTests
             "ArrayLoggerEffect_DisposalPattern"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Force GC and check if loggers can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        await Task.Delay(100); // Give GC time to work
+        await Task.Delay(100).ConfigureAwait(false); // Give GC time to work
 
         var aliveLoggers = loggerReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            $"Logger effects still alive after GC: {aliveLoggers}/{loggerReferences.Count}"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Logger effects still alive after GC: {aliveLoggers}/{loggerReferences.Count}"
+                )
+            )
+            .ConfigureAwait(false);
 
         aliveLoggers
             .Should()
@@ -293,7 +316,7 @@ public class ArrayLoggerMemoryTests
         // Log before disposal
         logger.LogInformation("Before {Action}", "disposal");
 
-        var arrayLogger = provider.Loggers.First();
+        var arrayLogger = provider.Loggers[0];
         arrayLogger.Logs.Count.Should().Be(1);
 
         // Dispose the logger

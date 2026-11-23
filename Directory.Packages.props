@@ -56,6 +56,8 @@
     <PackageVersion Include="HotChocolate.Data" Version="16.7.5" />
     <PackageVersion Include="HotChocolate.Data.EntityFramework" Version="16.7.5" />
     <PackageVersion Include="HotChocolate.Execution.Projections" Version="16.7.5" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
@@ -64,7 +66,10 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0-1.26328.17" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeRefactoring.Testing" Version="1.1.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -86,8 +91,8 @@
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <!-- NUnit3TestAdapter pulls these; every version it asks for, up to 6.3.1's 2.4.1, is
          deprecated as Legacy. Referenced next to the adapter so Dependabot keeps them moving. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.1" />
-    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.3" />
+    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.3" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="Microsoft.OpenApi.Readers" Version="1.6.31" />
     <!-- Browser tests (Trax.Docs/adr/0049). Test projects only, and the same version as the samples'
@@ -112,12 +117,17 @@
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.12" />
-    <!-- Referenced directly by Trax.Core.Tests.Analyzers, the one project that pulls it in
+    <!-- Referenced directly by Trax.Analyzers.Tests, the project that pulls it in
          (Analyzer.Testing -> NuGet.Packaging, at 9.0.6), for the same reason as the SQLite floor
          above. Floor for CVE-2026-70162 and CVE-2026-84008. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!-- trax-console. Its minors still break its API (v2 "still accepts planned API breaks"), so Dependabot proposes them
          on their own (.github/dependabot.yml, terminal-gui). -->
     <PackageVersion Include="Terminal.Gui" Version="2.5.0" />
+    <!-- Trax.Analyzers.Tests, the copied Meziantou.Analyzer suite, is written for xunit v3; the
+         rest of the repository uses NUnit. The mtp-off flavour runs under dotnet test's VSTest mode, as
+         the NUnit projects do. -->
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <PackageVersion Include="xunit.v3.mtp-off" Version="4.0.3" />
   </ItemGroup>
 </Project>

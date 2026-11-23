@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Models;
@@ -31,7 +32,8 @@ public class SignalRLifecycleHookForwarderTests
     [Test]
     public async Task TheForwarderImplementsEveryLifecycleHookMember()
     {
-        await using var dispatcher = NewDispatcher(out _);
+        var dispatcher = NewDispatcher(out _);
+        await using var dispatcherDisposal = dispatcher.ConfigureAwait(false);
         var forwarderType = ForwarderFrom(dispatcher).GetType();
         var map = forwarderType.GetInterfaceMap(typeof(ITrainLifecycleHook));
 
@@ -52,7 +54,8 @@ public class SignalRLifecycleHookForwarderTests
     [Test]
     public async Task EveryLifecycleEventReachesTheClientsThroughTheForwarder()
     {
-        await using var dispatcher = NewDispatcher(out var client);
+        var dispatcher = NewDispatcher(out var client);
+        await using var dispatcherDisposal = dispatcher.ConfigureAwait(false);
         var hook = ForwarderFrom(dispatcher);
         var metadata = NewRun();
 
@@ -65,7 +68,7 @@ public class SignalRLifecycleHookForwarderTests
 
         var sent = client
             .ReceivedCalls()
-            .Select(call => ((TraxClientEvent)call.GetArguments()[0]!).EventType)
+            .Select(call => ((TraxClientEvent)call.GetArguments()[0].NotNull()).EventType)
             .ToList();
         sent.Should()
             .BeEquivalentTo(["Started", "Completed", "Failed", "Cancelled", "StateChanged"]);
@@ -112,7 +115,8 @@ public class SignalRLifecycleHookForwarderTests
 
         // The dispatcher is often first resolved on a train run's flow, and its loop outlives it.
         Ambient.Value = "the creating run";
-        await using var dispatcher = NewDispatcher(out var client);
+        var dispatcher = NewDispatcher(out var client);
+        await using var dispatcherDisposal = dispatcher.ConfigureAwait(false);
         Ambient.Value = null;
         client
             .TrainEvent(Arg.Any<object>())
@@ -124,7 +128,9 @@ public class SignalRLifecycleHookForwarderTests
 
         await ForwarderFrom(dispatcher).OnStarted(NewRun(), CancellationToken.None);
 
-        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull();
+        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System))
+            .Should()
+            .BeNull();
     }
 
     private static ITrainLifecycleHook ForwarderFrom(SignalRTrainEventDispatcher dispatcher) =>
@@ -139,7 +145,7 @@ public class SignalRLifecycleHookForwarderTests
         hub.Clients.Returns(clients);
 
         var options = (SignalRSinkOptions)
-            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true)!;
+            Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true).NotNull();
         return new SignalRTrainEventDispatcher(hub, options.Build());
     }
 
@@ -151,7 +157,8 @@ public class SignalRLifecycleHookForwarderTests
                 Name = "T.IDoThing",
                 ExternalId = "run-1",
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.InProgress;
         return metadata;

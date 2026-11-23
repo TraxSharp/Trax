@@ -59,12 +59,9 @@ public class InMemoryNonceStoreTests
                 .Range(0, 64)
                 .Select(_ =>
                     Task.Run(async () =>
-                        await store.TryRecordAsync(
-                            "a",
-                            Now.AddMinutes(5),
-                            Now,
-                            CancellationToken.None
-                        )
+                        await store
+                            .TryRecordAsync("a", Now.AddMinutes(5), Now, CancellationToken.None)
+                            .ConfigureAwait(false)
                     )
                 )
         );

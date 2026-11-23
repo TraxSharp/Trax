@@ -1,7 +1,9 @@
+using System.Globalization;
 using AwesomeAssertions;
 using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.GraphQL.Queries;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -27,7 +29,11 @@ public class MetricsQueriesTests
             Array.Empty<TrainAverageDuration>(),
             Array.Empty<ThroughputSeries>()
         );
-        ops.GetDashboardMetricsAsync(MetricsRange.Last60Minutes, true, Arg.Any<CancellationToken>())
+        ops.GetDashboardMetricsAsync(
+                MetricsRange.Last60Minutes,
+                hideAdminTrains: true,
+                Arg.Any<CancellationToken>()
+            )
             .Returns(result);
         var queries = new MetricsQueries();
 
@@ -42,7 +48,7 @@ public class MetricsQueriesTests
         await ops.Received(1)
             .GetDashboardMetricsAsync(
                 MetricsRange.Last60Minutes,
-                true,
+                hideAdminTrains: true,
                 Arg.Any<CancellationToken>()
             );
     }
@@ -72,7 +78,7 @@ public class MetricsQueriesTests
         await ops.Received(1)
             .GetDashboardMetricsAsync(
                 MetricsRange.Last24Hours,
-                false,
+                hideAdminTrains: false,
                 Arg.Any<CancellationToken>()
             );
     }
@@ -82,7 +88,7 @@ public class MetricsQueriesTests
     {
         var ops = Substitute.For<IOperationsService>();
         var snap = new ServerMetrics(
-            DateTime.UtcNow.AddHours(-1),
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1),
             UptimeSeconds: 3600,
             WorkingSetBytes: 1024 * 1024,
             GcHeapBytes: 512 * 1024
@@ -101,36 +107,10 @@ public class MetricsQueriesTests
                 new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
             );
         const string train = "Trax.Tests.ISeriesTrain";
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var quarter = TimeSpan.FromMinutes(15).Ticks;
         var t0 = new DateTime(now.Ticks - now.Ticks % quarter, DateTimeKind.Utc).AddHours(-2);
-        var durations = new List<(DateTime Start, double Ms)>();
-        await using (var db = await factory.CreateDbContextAsync(default))
-        {
-            // Ten runs, one every 12 minutes; the fourth failed, the rest completed in (i + 1) seconds.
-            for (var i = 0; i < 10; i++)
-            {
-                var start = t0.AddMinutes(12 * i);
-                var run = Trax.Effect.Models.Metadata.Metadata.Create(
-                    new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
-                    {
-                        Name = train,
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                    }
-                );
-                run.TrainState =
-                    i == 3
-                        ? Trax.Effect.Enums.TrainState.Failed
-                        : Trax.Effect.Enums.TrainState.Completed;
-                run.StartTime = start;
-                run.EndTime = start.AddSeconds(i + 1);
-                await db.Track(run);
-                if (i != 3)
-                    durations.Add((start, (i + 1) * 1000));
-            }
-            await db.SaveChanges(default);
-        }
+        var durations = await SeedTenRunsAsync(factory, train, t0);
         var ops = new OperationsService(
             Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>(),
             factory,
@@ -153,8 +133,12 @@ public class MetricsQueriesTests
         {
             var bucketStart = t0.AddMinutes(15 * b);
             var bucket = series.Buckets.Single(x => x.Start == bucketStart);
-            bucket.Completed.Should().Be(completed[b], $"bucket {b}");
-            bucket.Failed.Should().Be(b == 2 ? 1 : 0, $"bucket {b}");
+            bucket
+                .Completed.Should()
+                .Be(completed[b], string.Create(CultureInfo.InvariantCulture, $"bucket {b}"));
+            bucket
+                .Failed.Should()
+                .Be(b == 2 ? 1 : 0, string.Create(CultureInfo.InvariantCulture, $"bucket {b}"));
             var recorded = durations
                 .Where(d => d.Start >= bucketStart && d.Start < bucketStart.AddMinutes(15))
                 .Select(d => d.Ms)
@@ -165,6 +149,44 @@ public class MetricsQueriesTests
                 bucket.P95DurationMs.Should().BeInRange(recorded.Min(), recorded.Max());
         }
         series.Buckets.Sum(x => x.Completed + x.Failed).Should().Be(10);
+    }
+
+    private static async Task<List<(DateTime Start, double Ms)>> SeedTenRunsAsync(
+        IDataContextProviderFactory factory,
+        string train,
+        DateTime t0
+    )
+    {
+        var durations = new List<(DateTime Start, double Ms)>();
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // Ten runs, one every 12 minutes; the fourth failed, the rest completed in (i + 1) seconds.
+            for (var i = 0; i < 10; i++)
+            {
+                var start = t0.AddMinutes(12 * i);
+                var run = Trax.Effect.Models.Metadata.Metadata.Create(
+                    new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
+                    {
+                        Name = train,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    },
+                    TimeProvider.System
+                );
+                run.TrainState =
+                    i == 3
+                        ? Trax.Effect.Enums.TrainState.Failed
+                        : Trax.Effect.Enums.TrainState.Completed;
+                run.StartTime = start;
+                run.EndTime = start.AddSeconds(i + 1);
+                await db.Track(run).ConfigureAwait(false);
+                if (i != 3)
+                    durations.Add((start, (i + 1) * 1000));
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
+        return durations;
     }
 
     [TestCase(MetricSeriesScope.Train, 7L, null)]
@@ -196,12 +218,13 @@ public class MetricsQueriesTests
 
         var read = () => new MetricsQueries().GetSeries(ops, default, scope, range, id, name);
 
-        (await read.Should().ThrowAsync<HotChocolate.GraphQLException>())
+        (await read.Should().ThrowAsync<HotChocolate.GraphQLException>().ConfigureAwait(false))
             .Which.Errors.Single()
             .Code.Should()
             .Be(MetricsQueries.SeriesArgumentCode);
         await ops.DidNotReceiveWithAnyArgs()
-            .GetMetricSeriesAsync(default, default, default, default, default);
+            .GetMetricSeriesAsync(default, default, default, default, default)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -211,15 +234,15 @@ public class MetricsQueriesTests
         var result = new MetricSeries(
             MetricSeriesScope.Group,
             MetricSeriesRange.Last7Days,
-            DateTime.UtcNow,
-            DateTime.UtcNow,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
             3600,
             []
         );
         ops.GetMetricSeriesAsync(
                 MetricSeriesScope.Group,
                 5,
-                null,
+                name: null,
                 MetricSeriesRange.Last7Days,
                 Arg.Any<CancellationToken>()
             )

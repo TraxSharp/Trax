@@ -28,7 +28,12 @@ public class SqliteWorkQueuePromotionTests : TestSetup
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(10);
 
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
-        services.AddScoped<IWorkQueuePromotion, WorkQueuePromotion>().BuildServiceProvider();
+        services
+            .AddScoped<IWorkQueuePromotion>(sp => new WorkQueuePromotion(
+                sp.GetRequiredService<IDataContextProviderFactory>(),
+                TestTime.Clock
+            ))
+            .BuildServiceProvider();
 
     private IWorkQueuePromotion Promotion =>
         Scope.ServiceProvider.GetRequiredService<IWorkQueuePromotion>();
@@ -109,7 +114,8 @@ public class SqliteWorkQueuePromotionTests : TestSetup
         // from EF, so the TEXT cutoff comparison has to hold across both formats.
         var staleExternalId = Guid.NewGuid().ToString("N");
         var recentExternalId = Guid.NewGuid().ToString("N");
-        using (var context = await Factory.CreateDbContextAsync(CancellationToken.None))
+        var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        await using (context.ConfigureAwait(false))
         {
             var database = ((DbContext)context).Database;
             await database.ExecuteSqlRawAsync(
@@ -126,7 +132,11 @@ public class SqliteWorkQueuePromotionTests : TestSetup
             );
         }
 
-        await Promotion.CancelStaleAsync(Window, CancellationToken.None);
+        // The database wrote created_at from its own clock, so the sweep compares on the real one.
+        await new WorkQueuePromotion(Factory, TimeProvider.System).CancelStaleAsync(
+            Window,
+            CancellationToken.None
+        );
 
         (await LoadByExternalId(staleExternalId)).Status.Should().Be(WorkQueueStatus.Cancelled);
         (await LoadByExternalId(recentExternalId)).Status.Should().Be(WorkQueueStatus.Queued);
@@ -136,7 +146,7 @@ public class SqliteWorkQueuePromotionTests : TestSetup
     public async Task CancelStaleAsync_deletes_what_an_earlier_pass_cancelled_once_past_the_retention()
     {
         // Retention is 30 days from creation. Rows are aged rather than a clock advanced: the
-        // sweep reads DateTime.UtcNow, and created_at is what it measures from.
+        // sweep reads its clock (a fixed one here), and created_at is what it measures from.
         var run = Guid.NewGuid().ToString("N");
         await StageMany($"Sqlite.Expired.{run}", 1000, age: TimeSpan.FromDays(31));
         await StageMany($"Sqlite.Fresh.{run}", 1000, age: TimeSpan.FromHours(1));
@@ -187,7 +197,10 @@ public class SqliteWorkQueuePromotionTests : TestSetup
         bool confirmed = false
     )
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         for (var i = 0; i < count; i++)
         {
@@ -197,27 +210,32 @@ public class SqliteWorkQueuePromotionTests : TestSetup
                     TrainName = trainName,
                     InputTypeName = "Sqlite.Input",
                     DeferPromotion = true,
-                }
+                },
+                TestTime.Clock
             );
-            entry.CreatedAt = DateTime.UtcNow - age;
+            entry.CreatedAt = TestTime.UtcDateTime - age;
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;
-            await context.Track(entry);
+            await context.Track(entry).ConfigureAwait(false);
         }
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var statuses = await context
             .WorkQueues.AsNoTracking()
             .Where(w => w.TrainName == trainName)
             .Select(w => w.Status)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         return statuses.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
     }
@@ -234,40 +252,60 @@ public class SqliteWorkQueuePromotionTests : TestSetup
                 TrainName = "Sqlite.Staged",
                 InputTypeName = "Sqlite.Input",
                 DeferPromotion = true,
-            }
+            },
+            TestTime.Clock
         );
-        entry.CreatedAt = DateTime.UtcNow - (age ?? TimeSpan.Zero);
+        entry.CreatedAt = TestTime.UtcDateTime - (age ?? TimeSpan.Zero);
         entry.Status = status;
         if (confirmed)
             entry.ConfirmedAt = entry.CreatedAt;
 
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Track(entry);
-        await context.SaveChanges(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        await context.Track(entry).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return entry.Id;
     }
 
     private async Task<WorkQueue> Load(long id)
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     private async Task<WorkQueue> LoadByExternalId(string externalId)
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.AsNoTracking().SingleAsync(w => w.ExternalId == externalId);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.ExternalId == externalId)
+            .ConfigureAwait(false);
     }
 
     private async Task<string> StoredStatus(long id)
     {
-        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await Factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await ((DbContext)context)
             .Database.SqlQueryRaw<string>(
                 "SELECT CAST(status AS TEXT) AS \"Value\" FROM work_queue WHERE id = {0}",
                 id
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
     }
 }

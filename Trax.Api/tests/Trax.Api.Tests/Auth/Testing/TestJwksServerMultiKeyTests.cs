@@ -68,7 +68,7 @@ public class TestJwksServerMultiKeyTests
         var firstKid = server.SigningKey.KeyId;
         var secondKid = server.AddSigningKey();
 
-        var issuer = server.CreateIssuer("trax-aud");
+        var issuer = server.CreateIssuer("trax-aud", TimeProvider.System);
         var firstToken = issuer.WithSigningKey(firstKid).Mint(b => b.WithSubject("user1"));
         var secondToken = issuer.WithSigningKey(secondKid).Mint(b => b.WithSubject("user2"));
 
@@ -98,7 +98,9 @@ public class TestJwksServerMultiKeyTests
     {
         await using var server = await TestJwksServer.StartAsync();
         var secondKid = server.AddSigningKey();
-        var firstKid = server.SigningKeyIds.Single(k => k != secondKid);
+        var firstKid = server.SigningKeyIds.Single(k =>
+            !string.Equals(k, secondKid, StringComparison.Ordinal)
+        );
 
         var removed = server.RemoveSigningKey(secondKid);
 
@@ -184,19 +186,23 @@ public class TestJwksServerMultiKeyTests
     }
 
     [Test]
-    public void StartAsync_PathPrefixWithoutLeadingSlash_Throws()
+    public async Task StartAsync_PathPrefixWithoutLeadingSlash_Throws()
     {
         Func<Task> act = async () =>
-            await TestJwksServer.StartAsync(new TestJwksServerOptions { PathPrefix = "bad" });
-        act.Should().ThrowAsync<ArgumentException>().WithMessage("*'/' when non-empty*");
+            await TestJwksServer
+                .StartAsync(new TestJwksServerOptions { PathPrefix = "bad" })
+                .ConfigureAwait(false);
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*'/' when non-empty*");
     }
 
     [Test]
-    public void StartAsync_PathPrefixWithTrailingSlash_Throws()
+    public async Task StartAsync_PathPrefixWithTrailingSlash_Throws()
     {
         Func<Task> act = async () =>
-            await TestJwksServer.StartAsync(new TestJwksServerOptions { PathPrefix = "/bad/" });
-        act.Should().ThrowAsync<ArgumentException>().WithMessage("*not end with*");
+            await TestJwksServer
+                .StartAsync(new TestJwksServerOptions { PathPrefix = "/bad/" })
+                .ConfigureAwait(false);
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*not end with*");
     }
 
     #endregion
@@ -207,7 +213,7 @@ public class TestJwksServerMultiKeyTests
     public async Task WithSigningKey_UnknownKid_Throws()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var issuer = server.CreateIssuer("aud");
+        var issuer = server.CreateIssuer("aud", TimeProvider.System);
 
         Action act = () => issuer.WithSigningKey("nope");
         act.Should().Throw<ArgumentException>().WithMessage("*kid 'nope'*");
@@ -217,7 +223,7 @@ public class TestJwksServerMultiKeyTests
     public async Task WithSigningKey_EmptyKid_Throws()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var issuer = server.CreateIssuer("aud");
+        var issuer = server.CreateIssuer("aud", TimeProvider.System);
 
         Action act = () => issuer.WithSigningKey("  ");
         act.Should().Throw<ArgumentException>();

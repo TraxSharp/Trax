@@ -61,17 +61,23 @@ public sealed class GraphQLWs : IAsyncDisposable
         client.SubProtocols.Add("graphql-transport-ws");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(ConnectDeadline);
-        var socket = await client.ConnectAsync(
-            new Uri("ws://localhost/trax/graphql"),
-            deadline.Token
-        );
+        var socket = await client
+            .ConnectAsync(new Uri("ws://localhost/trax/graphql"), deadline.Token)
+            .ConfigureAwait(false);
 
         var ws = new GraphQLWs(socket);
         try
         {
-            await ws.SendAsync(new { type = "connection_init", payload });
-            var ack = await ws.ReceiveAnyAsync(DefaultTimeout);
-            if (ack.GetProperty("type").GetString() != "connection_ack")
+            await ws.SendAsync(new { type = "connection_init", payload }).ConfigureAwait(false);
+            var ack = await ws.ReceiveAnyAsync(DefaultTimeout, cancellationToken)
+                .ConfigureAwait(false);
+            if (
+                !string.Equals(
+                    ack.GetProperty("type").GetString(),
+                    "connection_ack",
+                    StringComparison.Ordinal
+                )
+            )
                 throw new InvalidOperationException(
                     "The server did not acknowledge the connection: " + ack.GetRawText()
                 );
@@ -79,7 +85,7 @@ public sealed class GraphQLWs : IAsyncDisposable
         }
         catch
         {
-            await ws.DisposeAsync();
+            await ws.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -126,7 +132,7 @@ public sealed class GraphQLWs : IAsyncDisposable
     /// </summary>
     public async Task<JsonElement> NextAsync(string id, TimeSpan? timeout = null)
     {
-        var kept = _pending.FindIndex(m => IdOf(m) == id);
+        var kept = _pending.FindIndex(m => string.Equals(IdOf(m), id, StringComparison.Ordinal));
         if (kept >= 0)
         {
             var message = _pending[kept];
@@ -137,8 +143,9 @@ public sealed class GraphQLWs : IAsyncDisposable
         using var deadline = new CancellationTokenSource(timeout ?? DefaultTimeout);
         while (true)
         {
-            var message = await ReceiveAnyAsync(timeout ?? DefaultTimeout, deadline.Token);
-            if (IdOf(message) == id)
+            var message = await ReceiveAnyAsync(timeout ?? DefaultTimeout, deadline.Token)
+                .ConfigureAwait(false);
+            if (string.Equals(IdOf(message), id, StringComparison.Ordinal))
                 return message;
             _pending.Add(message);
         }
@@ -150,9 +157,13 @@ public sealed class GraphQLWs : IAsyncDisposable
     /// </summary>
     public async Task<JsonElement> NextDataAsync(string id, TimeSpan? timeout = null)
     {
-        var message = await NextAsync(id, timeout);
+        var message = await NextAsync(id, timeout).ConfigureAwait(false);
         if (
-            message.GetProperty("type").GetString() != "next"
+            !string.Equals(
+                message.GetProperty("type").GetString(),
+                "next",
+                StringComparison.Ordinal
+            )
             || !message.GetProperty("payload").TryGetProperty("data", out var data)
             || data.ValueKind == JsonValueKind.Null
         )
@@ -170,7 +181,7 @@ public sealed class GraphQLWs : IAsyncDisposable
     {
         try
         {
-            return await NextAsync(id, window);
+            return await NextAsync(id, window).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -183,7 +194,7 @@ public sealed class GraphQLWs : IAsyncDisposable
         _socket.SendAsync(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message)),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             CancellationToken.None
         );
 
@@ -201,12 +212,15 @@ public sealed class GraphQLWs : IAsyncDisposable
             WebSocketReceiveResult received;
             do
             {
-                received = await _socket.ReceiveAsync(_buffer, deadline.Token);
+                received = await _socket
+                    .ReceiveAsync(_buffer, deadline.Token)
+                    .ConfigureAwait(false);
                 if (received.MessageType == WebSocketMessageType.Close)
                     throw new WebSocketException(
                         $"The server closed the socket ({received.CloseStatus}): {received.CloseStatusDescription}"
                     );
-                text.Write(_buffer, 0, received.Count);
+                await text.WriteAsync(_buffer, 0, received.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             } while (!received.EndOfMessage);
 
             if (text.Length == 0)
@@ -215,7 +229,7 @@ public sealed class GraphQLWs : IAsyncDisposable
             switch (root.GetProperty("type").GetString())
             {
                 case "ping":
-                    await SendAsync(new { type = "pong" });
+                    await SendAsync(new { type = "pong" }).ConfigureAwait(false);
                     continue;
                 case "pong":
                     continue;
@@ -236,7 +250,13 @@ public sealed class GraphQLWs : IAsyncDisposable
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, cts.Token);
+                await _socket
+                    .CloseOutputAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        statusDescription: null,
+                        cts.Token
+                    )
+                    .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is WebSocketException or OperationCanceledException) { }
         }

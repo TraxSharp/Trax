@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -25,7 +26,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class LogRunLinkTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -35,7 +36,7 @@ public class LogRunLinkTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -55,27 +56,33 @@ public class LogRunLinkTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_line_logged_in_a_run_names_that_run_and_one_logged_outside_names_none()
     {
         var tag = Guid.NewGuid().ToString("N");
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             await scope.ServiceProvider.GetRequiredService<IOuterTrain>().Run(tag);
         }
 
         _provider
+            .NotNull()
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger(Category)
             .LogInformation("{Tag} outside", tag);
 
         var rows = await WaitForLines(tag, count: 4);
 
-        var outerId = _outerRunId!.Value;
-        var innerId = _innerRunId!.Value;
+        var outerId = _outerRunId.NotNull().Value;
+        var innerId = _innerRunId.NotNull().Value;
         outerId.Should().BePositive();
         innerId.Should().NotBe(outerId);
 
@@ -94,20 +101,21 @@ public class LogRunLinkTests
     {
         var tag = Guid.NewGuid().ToString("N");
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             await scope.ServiceProvider.GetRequiredService<IProviderBuildingTrain>().Run(tag);
         }
 
         // The writer logs its line when it opens its data context, on its own schedule. Disposing
         // closes the queue, so wait for that line to be queued first; disposing then drains it.
-        await _writerLogged!.Task.WaitAsync(TimeSpan.FromSeconds(15));
-        _builtInRun!.Dispose();
+        await _writerLogged.NotNull().Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
+        _builtInRun?.Dispose();
 
         var rows = await WaitForLines(tag, count: 2);
 
         _buildingRunId.Should().BePositive();
-        rows[$"{tag} in the run"].Should().Be(_buildingRunId!.Value);
+        rows[$"{tag} in the run"].Should().Be(_buildingRunId.NotNull().Value);
         rows[$"{tag} from the writer"]
             .Should()
             .Be(0, "the writer is not part of the run that happened to build its provider");
@@ -124,19 +132,21 @@ public class LogRunLinkTests
 
     private async Task<Dictionary<string, long>> WaitForLines(string tag, int count)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
 
         // Polled rather than waited on: the writer flushes on its own schedule.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
         while (true)
         {
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var rows = await context
                 .Logs.AsNoTracking()
                 .Where(l => l.Category == Category && l.Message.StartsWith(tag))
-                .ToDictionaryAsync(l => l.Message, l => l.MetadataId);
+                .ToDictionaryAsync(l => l.Message, l => l.MetadataId, StringComparer.Ordinal)
+                .ConfigureAwait(false);
 
-            if (rows.Count >= count || DateTime.UtcNow > deadline)
+            if (rows.Count >= count || TimeProvider.System.GetUtcNow() > deadline)
                 return rows;
 
             await Task.Yield();
@@ -148,11 +158,11 @@ public class LogRunLinkTests
     {
         public override async Task<Unit> Run(string tag)
         {
-            _outerRunId = Metadata!.TrainMetadataId;
+            _outerRunId = Metadata.NotNull().TrainMetadataId;
             var logger = loggers.CreateLogger(Category);
 
             logger.LogInformation("{Tag} outer before", tag);
-            await inner.Run(tag);
+            await inner.Run(tag, CancellationToken.None).ConfigureAwait(false);
             logger.LogInformation("{Tag} outer after", tag);
 
             return Unit.Default;
@@ -163,7 +173,7 @@ public class LogRunLinkTests
     {
         public override Task<Unit> Run(string tag)
         {
-            _innerRunId = Metadata!.TrainMetadataId;
+            _innerRunId = Metadata.NotNull().TrainMetadataId;
             loggers.CreateLogger(Category).LogInformation("{Tag} inner", tag);
             return Task.FromResult(Unit.Default);
         }
@@ -179,7 +189,7 @@ public class LogRunLinkTests
     {
         public override Task<Unit> Run(string tag)
         {
-            _buildingRunId = Metadata!.TrainMetadataId;
+            _buildingRunId = Metadata.NotNull().TrainMetadataId;
 
             _writerLogged = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
@@ -219,7 +229,7 @@ public class LogRunLinkTests
 
             Provider.CreateLogger(Category).LogInformation("{Tag} from the writer", tag);
             logged.TrySetResult();
-            return await inner.CreateDbContextAsync(cancellationToken);
+            return await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

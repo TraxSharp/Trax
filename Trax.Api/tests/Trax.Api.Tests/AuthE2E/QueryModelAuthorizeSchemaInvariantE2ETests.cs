@@ -99,7 +99,7 @@ public class QueryModelAuthorizeSchemaInvariantE2ETests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 }

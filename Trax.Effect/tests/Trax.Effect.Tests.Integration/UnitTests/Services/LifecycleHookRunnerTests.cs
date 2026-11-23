@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.LifecycleHookRunner;
@@ -151,7 +152,7 @@ public class LifecycleHookRunnerTests
         await runner.OnStarted(metadata, CancellationToken.None);
 
         hook.LastMetadata.Should().BeSameAs(metadata);
-        hook.LastMetadata!.Name.Should().Be("TestTrain");
+        hook.LastMetadata.NotNull().Name.Should().Be("TestTrain");
     }
 
     [Test]
@@ -549,7 +550,7 @@ public class LifecycleHookRunnerTests
         return new Metadata { Name = name, ExternalId = Guid.NewGuid().ToString("N") };
     }
 
-    private class RecordingHook : ITrainLifecycleHook
+    private sealed class RecordingHook : ITrainLifecycleHook
     {
         public bool StartedCalled { get; private set; }
         public bool CompletedCalled { get; private set; }
@@ -602,7 +603,7 @@ public class LifecycleHookRunnerTests
         }
     }
 
-    private class DisposableRecordingHook : ITrainLifecycleHook, IDisposable
+    private sealed class DisposableRecordingHook : ITrainLifecycleHook, IDisposable
     {
         public bool Disposed { get; private set; }
 
@@ -618,7 +619,7 @@ public class LifecycleHookRunnerTests
         public void Dispose() => Disposed = true;
     }
 
-    private class ThrowingDisposableHook : ITrainLifecycleHook, IDisposable
+    private sealed class ThrowingDisposableHook : ITrainLifecycleHook, IDisposable
     {
         public Task OnStarted(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
 
@@ -632,7 +633,7 @@ public class LifecycleHookRunnerTests
         public void Dispose() => throw new InvalidOperationException("dispose failed");
     }
 
-    private class ThrowingHook : ITrainLifecycleHook
+    private sealed class ThrowingHook : ITrainLifecycleHook
     {
         public Task OnStarted(Metadata metadata, CancellationToken ct) =>
             throw new InvalidOperationException("hook failed");
@@ -650,7 +651,7 @@ public class LifecycleHookRunnerTests
     /// <summary>
     /// Hook that only overrides OnCompleted — all other methods use default no-op.
     /// </summary>
-    private class PartialHook : ITrainLifecycleHook
+    private sealed class PartialHook : ITrainLifecycleHook
     {
         public bool CompletedCalled { get; private set; }
 
@@ -661,7 +662,7 @@ public class LifecycleHookRunnerTests
         }
     }
 
-    private class ScopeRecordingHookFactory : ITrainLifecycleHookFactory
+    private sealed class ScopeRecordingHookFactory : ITrainLifecycleHookFactory
     {
         public IServiceProvider? CreatedFrom { get; private set; }
 
@@ -675,16 +676,16 @@ public class LifecycleHookRunnerTests
         }
     }
 
-    private sealed class NoOpHook : ITrainLifecycleHook { }
+    private sealed class NoOpHook : ITrainLifecycleHook;
 
-    private sealed class ScopedDependency { }
+    private sealed class ScopedDependency;
 
     private sealed class HookWithScopedDependency(ScopedDependency dependency) : ITrainLifecycleHook
     {
         public ScopedDependency Dependency => dependency;
     }
 
-    private class TrackingHookFactory : ITrainLifecycleHookFactory
+    private sealed class TrackingHookFactory : ITrainLifecycleHookFactory
     {
         public bool CreateCalled { get; private set; }
 
@@ -695,7 +696,7 @@ public class LifecycleHookRunnerTests
         }
     }
 
-    private class DisabledTrackingHookFactory : ITrainLifecycleHookFactory
+    private sealed class DisabledTrackingHookFactory : ITrainLifecycleHookFactory
     {
         public bool CreateCalled { get; private set; }
 
@@ -706,33 +707,34 @@ public class LifecycleHookRunnerTests
         }
     }
 
-    private class DirectHookFactory(ITrainLifecycleHook hook) : ITrainLifecycleHookFactory
+    private sealed class DirectHookFactory(ITrainLifecycleHook hook) : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class DirectHookFactory2(ITrainLifecycleHook hook) : ITrainLifecycleHookFactory
+    private sealed class DirectHookFactory2(ITrainLifecycleHook hook) : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class ThrowingHookFactory : ITrainLifecycleHookFactory
+    private sealed class ThrowingHookFactory : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => new ThrowingHook();
     }
 
-    private class DisposableHookFactory(DisposableRecordingHook hook) : ITrainLifecycleHookFactory
-    {
-        public ITrainLifecycleHook Create() => hook;
-    }
-
-    private class ThrowingDisposableHookFactory(ThrowingDisposableHook hook)
+    private sealed class DisposableHookFactory(DisposableRecordingHook hook)
         : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class PartialHookFactory(PartialHook hook) : ITrainLifecycleHookFactory
+    private sealed class ThrowingDisposableHookFactory(ThrowingDisposableHook hook)
+        : ITrainLifecycleHookFactory
+    {
+        public ITrainLifecycleHook Create() => hook;
+    }
+
+    private sealed class PartialHookFactory(PartialHook hook) : ITrainLifecycleHookFactory
     {
         public ITrainLifecycleHook Create() => hook;
     }

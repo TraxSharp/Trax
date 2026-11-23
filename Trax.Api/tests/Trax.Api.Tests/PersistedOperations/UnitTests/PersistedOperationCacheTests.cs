@@ -15,15 +15,15 @@ public class PersistedOperationCacheTests
         public void TryGet_AfterSet_ReturnsNull()
         {
             var cache = new NoOpPersistedOperationCache();
-            cache.Set(null, "id1", "doc");
-            cache.TryGet(null, "id1").Should().BeNull();
+            cache.Set(tenantKey: null, "id1", "doc");
+            cache.TryGet(tenantKey: null, "id1").Should().BeNull();
         }
 
         [Test]
         public void Invalidate_DoesNotThrow()
         {
             var cache = new NoOpPersistedOperationCache();
-            Action act = () => cache.Invalidate(null, "id1");
+            Action act = () => cache.Invalidate(tenantKey: null, "id1");
             act.Should().NotThrow();
         }
     }
@@ -43,35 +43,35 @@ public class PersistedOperationCacheTests
         public void TryGet_BeforeSet_ReturnsNull()
         {
             var cache = Build();
-            cache.TryGet(null, "missing").Should().BeNull();
+            cache.TryGet(tenantKey: null, "missing").Should().BeNull();
         }
 
         [Test]
         public void TryGet_AfterSet_ReturnsDocument()
         {
             var cache = Build();
-            cache.Set(null, "id1", "the-document");
-            cache.TryGet(null, "id1").Should().Be("the-document");
+            cache.Set(tenantKey: null, "id1", "the-document");
+            cache.TryGet(tenantKey: null, "id1").Should().Be("the-document");
         }
 
         [Test]
         public void Set_OverwritesExistingEntry()
         {
             var cache = Build();
-            cache.Set(null, "id1", "v1");
-            cache.Set(null, "id1", "v2");
-            cache.TryGet(null, "id1").Should().Be("v2");
+            cache.Set(tenantKey: null, "id1", "v1");
+            cache.Set(tenantKey: null, "id1", "v2");
+            cache.TryGet(tenantKey: null, "id1").Should().Be("v2");
         }
 
         [Test]
         public void Invalidate_RemovesSingleEntry()
         {
             var cache = Build();
-            cache.Set(null, "id1", "doc");
-            cache.Set(null, "id2", "doc2");
-            cache.Invalidate(null, "id1");
-            cache.TryGet(null, "id1").Should().BeNull();
-            cache.TryGet(null, "id2").Should().Be("doc2");
+            cache.Set(tenantKey: null, "id1", "doc");
+            cache.Set(tenantKey: null, "id2", "doc2");
+            cache.Invalidate(tenantKey: null, "id1");
+            cache.TryGet(tenantKey: null, "id1").Should().BeNull();
+            cache.TryGet(tenantKey: null, "id2").Should().Be("doc2");
         }
 
         [Test]
@@ -84,7 +84,7 @@ public class PersistedOperationCacheTests
 
             cache.TryGet("a", "id1").Should().Be("tenant-a-doc");
             cache.TryGet("b", "id1").Should().Be("tenant-b-doc");
-            cache.TryGet(null, "id1").Should().Be("default-doc");
+            cache.TryGet(tenantKey: null, "id1").Should().Be("default-doc");
         }
 
         [Test]
@@ -104,7 +104,7 @@ public class PersistedOperationCacheTests
         public void Set_RespectsTtl_Deterministically()
         {
             // MemoryCacheOptions.Clock lets us drive expiration without sleeping.
-            var clock = new TestClock(DateTimeOffset.UtcNow);
+            var clock = new TestClock(TimeProvider.System.GetUtcNow());
             var memCache = new MemoryCache(
                 new MemoryCacheOptions { Clock = clock, ExpirationScanFrequency = TimeSpan.Zero }
             );
@@ -115,13 +115,16 @@ public class PersistedOperationCacheTests
                 TimeProvider.System
             );
 
-            cache.Set(null, "id1", "doc");
-            cache.TryGet(null, "id1").Should().Be("doc", "set-then-get must hit");
+            cache.Set(tenantKey: null, "id1", "doc");
+            cache.TryGet(tenantKey: null, "id1").Should().Be("doc", "set-then-get must hit");
 
             // Advance past the TTL boundary.
             clock.Advance(TimeSpan.FromMinutes(15) + TimeSpan.FromSeconds(1));
 
-            cache.TryGet(null, "id1").Should().BeNull("entry should have expired by TTL");
+            cache
+                .TryGet(tenantKey: null, "id1")
+                .Should()
+                .BeNull("entry should have expired by TTL");
         }
 
         [Test]
@@ -137,9 +140,9 @@ public class PersistedOperationCacheTests
             var readIn = generation.Current;
             generation.Advance();
 
-            cache.Set(null, "id1", "old", readIn, TimeProvider.System.GetTimestamp());
+            cache.Set(tenantKey: null, "id1", "old", readIn, TimeProvider.System.GetTimestamp());
 
-            cache.TryGet(null, "id1").Should().BeNull();
+            cache.TryGet(tenantKey: null, "id1").Should().BeNull();
         }
 
         [Test]
@@ -155,13 +158,13 @@ public class PersistedOperationCacheTests
             );
             var readAt = clock.GetTimestamp();
             clock.Advance(TimeSpan.FromMinutes(4));
-            cache.Set(null, "id1", "doc", generation.Current, readAt);
+            cache.Set(tenantKey: null, "id1", "doc", generation.Current, readAt);
 
-            cache.TryGet(null, "id1", out _, out var seenReadAt).Should().BeTrue();
+            cache.TryGet(tenantKey: null, "id1", out _, out var seenReadAt).Should().BeTrue();
             seenReadAt.Should().Be(readAt);
 
             clock.Advance(TimeSpan.FromMinutes(1));
-            cache.TryGet(null, "id1").Should().BeNull();
+            cache.TryGet(tenantKey: null, "id1").Should().BeNull();
         }
 
         [Test]
@@ -171,7 +174,7 @@ public class PersistedOperationCacheTests
                 _ = new InMemoryPersistedOperationCache(
                     new MemoryCache(new MemoryCacheOptions()),
                     new PersistedOperationsOptions(),
-                    null!,
+                    Null.Of<Trax.Api.GraphQL.PersistedOperations.Storage.PersistedOperationCacheGeneration>(),
                     TimeProvider.System
                 );
             Action nullClock = () =>
@@ -179,7 +182,7 @@ public class PersistedOperationCacheTests
                     new MemoryCache(new MemoryCacheOptions()),
                     new PersistedOperationsOptions(),
                     new PersistedOperationCacheGeneration(),
-                    null!
+                    Null.Of<TimeProvider>()
                 );
             nullGeneration.Should().Throw<ArgumentNullException>();
             nullClock.Should().Throw<ArgumentNullException>();
@@ -199,7 +202,7 @@ public class PersistedOperationCacheTests
         {
             Action act = () =>
                 _ = new InMemoryPersistedOperationCache(
-                    null!,
+                    Null.Of<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
                     new PersistedOperationsOptions(),
                     new PersistedOperationCacheGeneration(),
                     TimeProvider.System
@@ -213,7 +216,7 @@ public class PersistedOperationCacheTests
             Action act = () =>
                 _ = new InMemoryPersistedOperationCache(
                     new MemoryCache(new MemoryCacheOptions()),
-                    null!,
+                    Null.Of<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsOptions>(),
                     new PersistedOperationCacheGeneration(),
                     TimeProvider.System
                 );

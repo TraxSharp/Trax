@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -14,15 +15,17 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task RunAsync_TrainThatCannotBeResolved_LeavesNoPendingMetadata()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var act = () =>
-            execution.RunAsync(typeof(IUnresolvableTrain).FullName!, """{"label":"x"}""");
+            execution.RunAsync(typeof(IUnresolvableTrain).FullName.NotNull(), """{"label":"x"}""");
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var rows = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == typeof(IUnresolvableTrain).FullName)

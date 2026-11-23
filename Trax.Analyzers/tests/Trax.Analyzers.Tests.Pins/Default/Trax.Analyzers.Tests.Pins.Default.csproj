@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The default target framework (AnalyzerTestDefaults), the packages the tests add
+       (ReferenceAssembliesExtensions) and the analyzers the harness loads (AnalyzerTestExtensions). -->
+  <Import Project="../Pins.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETCore.App.Ref" Version="11.0.0-preview.7.26381.103" />
+    <PackageReference Include="Microsoft.AspNetCore.App.Ref" Version="11.0.0-preview.7.26381.103" />
+    <PackageReference Include="Microsoft.JSInterop" Version="11.0.0-preview.7.26381.103" />
+    <PackageReference
+      Include="Microsoft.JSInterop.WebAssembly"
+      Version="11.0.0-preview.7.26381.103"
+    />
+    <PackageReference Include="BenchmarkDotNet.Annotations" Version="0.15.8" />
+    <PackageReference Include="Microsoft.Extensions.Compliance.Abstractions" Version="10.9.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Analyzers" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageReference
+      Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+      Version="10.0.11"
+    />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Primitives" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.11" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="2.1.12" />
+    <PackageReference Include="Meziantou.Framework" Version="6.0.2" />
+    <PackageReference Include="Meziantou.Framework.Assertions" Version="2.0.5" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Castle.Core" Version="5.1.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.3.3" />
+    <PackageReference Include="MSTest.Analyzers" Version="4.3.3" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="xunit.v3.extensibility.core" Version="4.0.0" />
+    <PackageReference Include="xunit.v3.assert" Version="4.0.0" />
+    <PackageReference Include="xunit.v3.common" Version="4.0.0" />
+    <PackageReference Include="xunit.extensibility.core" Version="2.9.3" />
+    <PackageReference Include="xunit.assert" Version="2.9.3" />
+    <PackageReference Include="xunit.abstractions" Version="2.0.3" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.7" />
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.100" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeStyle" Version="5.6.0" />
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+  </ItemGroup>
+</Project>

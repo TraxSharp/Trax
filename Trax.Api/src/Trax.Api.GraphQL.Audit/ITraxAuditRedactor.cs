@@ -15,7 +15,7 @@ namespace Trax.Api.GraphQL.Audit;
 /// The variables arrive as a JSON object built for this call: an input object is a nested
 /// <see cref="JsonObject"/> and a list a <see cref="JsonArray"/>, so a field such as
 /// <c>$input.password</c> can be found and removed at any depth. The redactor may change the
-/// object in place and return it, return a different one, or return <c>null</c> to record no
+/// object in place and return it, return a different one, or return <see langword="null"/> to record no
 /// variables. If it throws, the entry is recorded without variables.
 /// </para>
 /// <para>
@@ -28,25 +28,8 @@ namespace Trax.Api.GraphQL.Audit;
 public interface ITraxAuditRedactor
 {
     /// <summary>
-    /// Returns the variables to record, or <c>null</c> to record none.
-    /// <paramref name="variables"/> is <c>null</c> when the request had none.
+    /// Returns the variables to record, or <see langword="null"/> to record none.
+    /// <paramref name="variables"/> is <see langword="null"/> when the request had none.
     /// </summary>
     JsonObject? Redact(JsonObject? variables);
-}
-
-/// <summary>
-/// The redactor <c>AddAudit</c> registers when the host registers none. It records no variables.
-/// </summary>
-/// <remarks>
-/// NO WARRANTY. Trax auth is plumbing, not a security product. You are solely
-/// responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.
-/// <para>
-/// To record variables, register an <see cref="ITraxAuditRedactor"/> of your own that returns
-/// the ones you want kept, with anything sensitive removed.
-/// </para>
-/// </remarks>
-public sealed class DefaultAuditRedactor : ITraxAuditRedactor
-{
-    /// <inheritdoc />
-    public JsonObject? Redact(JsonObject? variables) => null;
 }

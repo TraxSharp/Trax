@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -45,8 +46,16 @@ public class ClientDivergenceMeterTests
         listener.InstrumentPublished = (instrument, l) =>
         {
             if (
-                instrument.Meter.Name == StateMachineInstruments.MeterName
-                && instrument.Name == StateMachineInstruments.ClientDivergence
+                string.Equals(
+                    instrument.Meter.Name,
+                    StateMachineInstruments.MeterName,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    instrument.Name,
+                    StateMachineInstruments.ClientDivergence,
+                    StringComparison.Ordinal
+                )
             )
                 l.EnableMeasurementEvents(instrument);
         };
@@ -70,8 +79,9 @@ public class ClientDivergenceMeterTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.ClientDivergence);
-        (await TestDb.NewStore().Get(user, id))!
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.ClientDivergence);
+        (await TestDb.NewStore().Get(user, id))
+            .NotNull()
             .Json.Should()
             .Contain("\"Locked\"", "a divergent advance persists nothing");
         listener.RecordObservableInstruments();

@@ -6,10 +6,12 @@ namespace Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
 public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed = false;
 
-    public List<Log> Logs { get; } = [];
+    private readonly List<Log> _logs = [];
+
+    public IList<Log> Logs => _logs;
 
     public void Log<TState>(
         LogLevel logLevel,
@@ -82,7 +84,7 @@ public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
                 // Keep only the most recent logs
                 var logsToKeep = Logs.Skip(Logs.Count - maxLogs).ToList();
                 Logs.Clear();
-                Logs.AddRange(logsToKeep);
+                _logs.AddRange(logsToKeep);
             }
         }
     }

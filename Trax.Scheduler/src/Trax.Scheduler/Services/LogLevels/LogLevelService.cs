@@ -1,10 +1,14 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Trax.Scheduler.Services.LogLevels;
 
-/// <inheritdoc />
+/// <summary>
+/// Reads the host's configured log levels and the overrides set at runtime, and applies a
+/// change to the logger filter.
+/// </summary>
 /// <param name="overrides">The levels set at runtime, applied to the logger filter options.</param>
 /// <param name="configuration">The host's configuration; null when it registered none.</param>
 /// <param name="filters">The logger filter options; null when the host registered no logging.</param>
@@ -52,7 +56,15 @@ internal sealed class LogLevelService(
         if (undefined.Count > 0)
             return Refused(
                 "Not a log level: "
-                    + string.Join(", ", undefined.Select(l => $"{(int)l.Level} for {l.Category}"))
+                    + string.Join(
+                        ", ",
+                        undefined.Select(l =>
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{(int)l.Level} for {l.Category}"
+                            )
+                        )
+                    )
                     + "."
             );
 
@@ -93,10 +105,11 @@ internal sealed class LogLevelService(
                 $" The host filters {string.Join(", ", notApplied)} at another level, so the change "
                 + "does not apply there.";
 
-        return new LogLevelUpdateResult(true, changes.Count, notApplied, message);
+        return new LogLevelUpdateResult(Success: true, changes.Count, notApplied, message);
     }
 
-    private static LogLevelUpdateResult Refused(string message) => new(false, 0, [], message);
+    private static LogLevelUpdateResult Refused(string message) =>
+        new(Success: false, 0, [], message);
 
     /// <summary>The categories configured under <c>Logging:LogLevel</c>, with their values as written.</summary>
     private Dictionary<string, string?> Configured()

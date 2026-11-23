@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Effect.Models.SnapshotDraft;
@@ -52,7 +53,11 @@ public class SnapshotDraft
     /// The id of the machine this draft belongs to, part of the key. Not null.
     /// </summary>
     [Column("machine")]
-    public string Machine { get; set; } = null!;
+    public string Machine
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The machine definition version the snapshot was written under, copied from the snapshot on every write.
@@ -64,7 +69,11 @@ public class SnapshotDraft
 
     /// <summary>The current state's name (the <c>TState</c> enum member as text). Not null.</summary>
     [Column("state")]
-    public string State { get; set; } = null!;
+    public string State
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>The per-state context, stored as a genuine <c>jsonb</c> column (queryable server-side).</summary>
     [Column("context", TypeName = "jsonb")]

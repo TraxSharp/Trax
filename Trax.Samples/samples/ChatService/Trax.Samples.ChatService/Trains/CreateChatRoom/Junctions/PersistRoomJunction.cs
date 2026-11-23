@@ -14,12 +14,13 @@ namespace Trax.Samples.ChatService.Trains.CreateChatRoom.Junctions;
 public class PersistRoomJunction(
     ChatDbContext db,
     TraxPrincipal caller,
-    ILogger<PersistRoomJunction> logger
+    ILogger<PersistRoomJunction> logger,
+    TimeProvider clock
 ) : Junction<CreateChatRoomInput, CreateChatRoomOutput>
 {
     public override async Task<CreateChatRoomOutput> Run(CreateChatRoomInput input)
     {
-        var now = DateTime.UtcNow;
+        var now = clock.GetUtcNow().UtcDateTime;
 
         var room = new ChatRoom
         {
@@ -40,7 +41,7 @@ public class PersistRoomJunction(
 
         db.ChatRooms.Add(room);
         db.ChatParticipants.Add(participant);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Created chat room {RoomId} '{Name}' with creator {UserId}",

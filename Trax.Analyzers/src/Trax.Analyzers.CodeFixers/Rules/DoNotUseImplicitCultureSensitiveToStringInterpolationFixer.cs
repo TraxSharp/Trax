@@ -1,0 +1,71 @@
+using Microsoft.CodeAnalysis.Simplification;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class DoNotUseImplicitCultureSensitiveToStringInterpolationFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.DoNotUseImplicitCultureSensitiveToStringInterpolation);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        if (context.Document.Project.ParseOptions is not CSharpParseOptions parseOptions || !parseOptions.LanguageVersion.IsCSharp10OrGreater())
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null || !CanUseStringCreate(semanticModel.Compilation))
+            return;
+
+        var cultureInfoType = semanticModel.Compilation.GetTypeByMetadataName("System.Globalization.CultureInfo");
+        if (cultureInfoType is null)
+            return;
+
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix?.AncestorsAndSelf().OfType<InterpolatedStringExpressionSyntax>().FirstOrDefault() is not InterpolatedStringExpressionSyntax interpolatedString)
+            return;
+
+        var title = "Use string.Create with CultureInfo.InvariantCulture";
+        context.RegisterCodeFix(
+            CodeAction.Create(
+                title,
+                ct => Fix(context.Document, interpolatedString, cultureInfoType, ct),
+                equivalenceKey: title),
+            context.Diagnostics);
+    }
+
+    private static async Task<Document> Fix(Document document, InterpolatedStringExpressionSyntax interpolatedStringExpression, INamedTypeSymbol cultureInfoType, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var compilation = editor.SemanticModel.Compilation;
+
+        var generator = editor.Generator;
+        var replacement = generator.InvocationExpression(
+            generator.MemberAccessExpression(generator.TypeExpression(compilation.GetSpecialType(SpecialType.System_String)), "Create"),
+            generator.MemberAccessExpression(generator.TypeExpression(cultureInfoType).WithAdditionalAnnotations(Simplifier.AddImportsAnnotation), "InvariantCulture"),
+            interpolatedStringExpression);
+
+        editor.ReplaceNode(interpolatedStringExpression, replacement.WithTriviaFrom(interpolatedStringExpression));
+        return editor.GetChangedDocument();
+    }
+
+    private static bool CanUseStringCreate(Compilation compilation)
+    {
+        var formatProviderType = compilation.GetTypeByMetadataName("System.IFormatProvider");
+        var defaultInterpolatedStringHandlerType = compilation.GetBestTypeByMetadataName("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler");
+
+        if (formatProviderType is null || defaultInterpolatedStringHandlerType is null)
+            return false;
+
+        return compilation.GetSpecialType(SpecialType.System_String)
+            .GetMembers("Create")
+            .OfType<IMethodSymbol>()
+            .Any(method =>
+                method.ReturnType.IsString() &&
+                method.Parameters.Length == 2 &&
+                method.Parameters[0].Type.IsEqualTo(formatProviderType) &&
+                method.Parameters[1].Type.IsEqualTo(defaultInterpolatedStringHandlerType));
+    }
+}

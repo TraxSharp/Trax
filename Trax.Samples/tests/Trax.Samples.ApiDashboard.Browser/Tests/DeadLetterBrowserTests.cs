@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Pages;
@@ -13,7 +15,7 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// service does for every surface (central ADR 0022).
 /// </summary>
 [TestFixture]
-public class DeadLetterBrowserTests : ConsoleTest
+public partial class DeadLetterBrowserTests : ConsoleTest
 {
     [Test]
     [Covers("route:/runs/dead-letters")]
@@ -34,13 +36,16 @@ public class DeadLetterBrowserTests : ConsoleTest
 
         var requeue = Page.WaitForRequestAsync(
             r =>
-                r.Url.EndsWith("/trax/graphql")
-                && r.PostData?.Contains("\"operationName\":\"RequeueDeadLetter\"") == true,
+                r.Url.EndsWith("/trax/graphql", StringComparison.Ordinal)
+                && r.PostData?.Contains(
+                    "\"operationName\":\"RequeueDeadLetter\"",
+                    StringComparison.Ordinal
+                ) == true,
             new() { Timeout = BrowserTimeouts.Render.Ms() }
         );
         await deadLetters.RequeueAsync(deadLetter.Id);
 
-        var sent = (await requeue).PostDataJSON()!.Value;
+        var sent = (await requeue).PostDataJSON().NotNull().Value;
         sent.GetProperty("id")
             .GetString()
             .Should()
@@ -59,7 +64,7 @@ public class DeadLetterBrowserTests : ConsoleTest
             dc.WorkQueues.AsNoTracking().SingleOrDefaultAsync(w => w.DeadLetterId == deadLetter.Id)
         );
         entry.Should().NotBeNull("the requeue queues a run of the dead letter's manifest");
-        entry!.ManifestId.Should().Be(deadLetter.ManifestId);
+        entry.NotNull().ManifestId.Should().Be(deadLetter.ManifestId);
         (
             await Host.QueryAsync(dc =>
                 dc.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == deadLetter.Id)
@@ -69,7 +74,9 @@ public class DeadLetterBrowserTests : ConsoleTest
             .Be(DeadLetterStatus.Retried);
 
         Checks
-            .Sent.Count(s => s.OperationName == "RequeueDeadLetter")
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "RequeueDeadLetter", StringComparison.Ordinal)
+            )
             .Should()
             .Be(1, "one click sends one requeue");
     }
@@ -87,7 +94,10 @@ public class DeadLetterBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("AcknowledgeDeadLetter");
         await page.Button(row, "Acknowledge").ClickAsync();
         await Console.NoteAsync(
-            $"Acknowledge dead letter #{deadLetter.Id}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Acknowledge dead letter #{deadLetter.Id}"
+            ),
             "Supplier confirmed the feed was empty.",
             "Acknowledge"
         );
@@ -112,7 +122,11 @@ public class DeadLetterBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("RequeueDeadLetters");
         await Console.Button("Requeue selected").ClickAsync();
         await Console.ConfirmAsync("Requeue dead letters", "Requeue 2 dead letter(s)?");
-        var ids = (await sent).PostDataJSON()!.Value.GetProperty("variables").GetProperty("ids");
+        var ids = (await sent)
+            .PostDataJSON()
+            .NotNull()
+            .Value.GetProperty("variables")
+            .GetProperty("ids");
         ids.EnumerateArray()
             .Select(i => i.GetInt64())
             .Should()
@@ -124,9 +138,18 @@ public class DeadLetterBrowserTests : ConsoleTest
         foreach (var d in new[] { first, second })
         {
             (await DeadLetter(d.Id)).Status.Should().Be(DeadLetterStatus.Retried);
-            (await QueuedFor(d.Id)).Should().BeTrue($"dead letter {d.Id} queued a run");
+            (await QueuedFor(d.Id))
+                .Should()
+                .BeTrue(
+                    string.Create(CultureInfo.InvariantCulture, $"dead letter {d.Id} queued a run")
+                );
         }
-        Checks.Sent.Count(s => s.OperationName == "RequeueDeadLetters").Should().Be(1);
+        Checks
+            .Sent.Count(s =>
+                string.Equals(s.OperationName, "RequeueDeadLetters", StringComparison.Ordinal)
+            )
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -249,15 +272,7 @@ public class DeadLetterBrowserTests : ConsoleTest
         await sent;
 
         await Assertions
-            .Expect(
-                Page.GetByRole(AriaRole.Status)
-                    .Filter(
-                        new()
-                        {
-                            HasTextRegex = new Regex("not authori[sz]ed", RegexOptions.IgnoreCase),
-                        }
-                    )
-            )
+            .Expect(Page.GetByRole(AriaRole.Status).Filter(new() { HasTextRegex = NotAuthorized }))
             .ToBeVisibleAsync(new() { Timeout = Render });
         (await DeadLetter(deadLetter.Id))
             .Status.Should()
@@ -280,19 +295,27 @@ public class DeadLetterBrowserTests : ConsoleTest
 
         var sent = Console.SendsAsync("RequeueDeadLetter");
         await Console.Button("Requeue").ClickAsync();
-        await Console.ConfirmAsync("Requeue dead letter", $"Requeue dead letter #{deadLetter.Id}?");
+        await Console.ConfirmAsync(
+            "Requeue dead letter",
+            string.Create(CultureInfo.InvariantCulture, $"Requeue dead letter #{deadLetter.Id}?")
+        );
         await sent;
 
         // The requeue opens the work queue entry it wrote, which names the dead letter it retries.
         await Assertions
             .Expect(Console.Toast("has been requeued"))
             .ToBeVisibleAsync(new() { Timeout = Render });
-        await Assertions
-            .Expect(Page)
-            .ToHaveURLAsync(new Regex(@"/runs/queued/\d+$"), new() { Timeout = Render });
+        await Assertions.Expect(Page).ToHaveURLAsync(QueuedRunUrl, new() { Timeout = Render });
         await Assertions
             .Expect(
-                Page.GetByRole(AriaRole.Link, new() { Name = $"#{deadLetter.Id}", Exact = true })
+                Page.GetByRole(
+                    AriaRole.Link,
+                    new()
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"#{deadLetter.Id}"),
+                        Exact = true,
+                    }
+                )
             )
             .ToBeVisibleAsync(new() { Timeout = Render });
         (await DeadLetter(deadLetter.Id)).Status.Should().Be(DeadLetterStatus.Retried);
@@ -311,7 +334,10 @@ public class DeadLetterBrowserTests : ConsoleTest
         var sent = Console.SendsAsync("AcknowledgeDeadLetter");
         await Console.Button("Acknowledge").ClickAsync(new() { Timeout = Render });
         await Console.NoteAsync(
-            $"Acknowledge dead letter #{deadLetter.Id}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Acknowledge dead letter #{deadLetter.Id}"
+            ),
             "Duplicate of an earlier import.",
             "Acknowledge"
         );
@@ -331,16 +357,19 @@ public class DeadLetterBrowserTests : ConsoleTest
     private async Task<DeadLettersPage> OpenAwaitingListAsync()
     {
         var page = new DeadLettersPage(Console);
-        await page.OpenAsync(Caller.Operator);
-        await page.ShowAwaitingAsync();
-        await page.ShowAsListAsync();
+        await page.OpenAsync(Caller.Operator).ConfigureAwait(false);
+        await page.ShowAwaitingAsync().ConfigureAwait(false);
+        await page.ShowAsListAsync().ConfigureAwait(false);
         return page;
     }
 
     private static async Task SelectAsync(DeadLettersPage page, params long[] ids)
     {
         foreach (var id in ids)
-            await page.Row(id).GetByRole(AriaRole.Checkbox).CheckAsync(new() { Timeout = Render });
+            await page.Row(id)
+                .GetByRole(AriaRole.Checkbox)
+                .CheckAsync(new() { Timeout = Render })
+                .ConfigureAwait(false);
     }
 
     private static Task<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetter(long id) =>
@@ -350,4 +379,10 @@ public class DeadLetterBrowserTests : ConsoleTest
         Host.QueryAsync(dc =>
             dc.WorkQueues.AsNoTracking().AnyAsync(w => w.DeadLetterId == deadLetter)
         );
+
+    [GeneratedRegex(@"/runs/queued/\d+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex QueuedRunUrl { get; }
+
+    [GeneratedRegex("not authori[sz]ed", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NotAuthorized { get; }
 }

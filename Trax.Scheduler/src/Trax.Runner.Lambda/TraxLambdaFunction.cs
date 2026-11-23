@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Enums;
@@ -90,11 +91,17 @@ public abstract class TraxLambdaFunction
     /// </summary>
     private static readonly JsonSerializerOptions CaseInsensitiveOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = true,
         AllowDuplicateProperties = false,
     };
 
     private readonly Lazy<IServiceProvider> _serviceProvider;
+
+    // Started with the first invocation and awaited by every one, so the warning is logged once
+    // and before the first run, as when the provider is built.
+    private readonly Lazy<Task> _executionServiceCheck;
 
     /// <summary>
     /// Initializes the function without building its service provider; that is deferred to the
@@ -102,16 +109,17 @@ public abstract class TraxLambdaFunction
     /// </summary>
     protected TraxLambdaFunction()
     {
-        _serviceProvider = new Lazy<IServiceProvider>(() =>
+        _serviceProvider = new Lazy<IServiceProvider>(() => BuildServiceProvider());
+        _executionServiceCheck = new Lazy<Task>(() =>
         {
-            var services = BuildServiceProvider();
-            if (services.GetService<ILogger<TraxRequestHandler>>() is { } logger)
-                TraxRequestHandler.WarnIfExecutionServiceReplaced(
+            var services = _serviceProvider.Value;
+            return services.GetService<ILogger<TraxRequestHandler>>() is { } logger
+                ? TraxRequestHandler.WarnIfExecutionServiceReplacedAsync(
                     services,
                     logger,
                     nameof(TraxLambdaFunction)
-                );
-            return services;
+                )
+                : Task.CompletedTask;
         });
     }
 
@@ -205,10 +213,41 @@ public abstract class TraxLambdaFunction
         var halfRemaining = remaining / 2;
         var margin = TerminalWriteMargin < halfRemaining ? TerminalWriteMargin : halfRemaining;
         using var cts = new CancellationTokenSource(remaining - margin);
-        using var scope = _serviceProvider.Value.CreateScope();
+        var scope = (await ServicesAsync().ConfigureAwait(false)).CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraxLambdaFunction>>();
 
+        WarnIfMarginCut(remaining, logger);
+
+        await VerifyEnvelopeAsync(envelope, scope.ServiceProvider, logger, cts.Token)
+            .ConfigureAwait(false);
+
+        return envelope.Type switch
+        {
+            LambdaRequestType.Execute => await HandleExecute(
+                    envelope.PayloadJson,
+                    handler,
+                    logger,
+                    cts.Token,
+                    recordCancelledIn: scope.ServiceProvider
+                )
+                .ConfigureAwait(false),
+            LambdaRequestType.Run => await HandleRun(
+                    envelope.PayloadJson,
+                    handler,
+                    logger,
+                    cts.Token
+                )
+                .ConfigureAwait(false),
+            _ => throw new InvalidOperationException(
+                $"Unknown Lambda request type: {envelope.Type}"
+            ),
+        };
+    }
+
+    private void WarnIfMarginCut(TimeSpan remaining, ILogger logger)
+    {
         if (remaining <= TerminalWriteMargin && Interlocked.Exchange(ref _warnedMarginCut, 1) == 0)
             logger.LogWarning(
                 "The function had {Remaining} left, no more than the terminal write margin of "
@@ -217,7 +256,15 @@ public abstract class TraxLambdaFunction
                 remaining,
                 TerminalWriteMargin
             );
+    }
 
+    private static async Task VerifyEnvelopeAsync(
+        LambdaEnvelope envelope,
+        IServiceProvider services,
+        ILogger logger,
+        CancellationToken ct
+    )
+    {
         var purpose = envelope.Type switch
         {
             LambdaRequestType.Execute => RunnerRequestPurpose.Execute,
@@ -229,14 +276,15 @@ public abstract class TraxLambdaFunction
 
         // An Execute arrives by asynchronous invocation, which Lambda retries with the same
         // payload, so only its signature is checked; a Run is synchronous and must be fresh.
-        var verdict = await RequireVerifier(scope.ServiceProvider)
+        var verdict = await RequireVerifier(services)
             .VerifyAsync(
                 purpose,
                 Encoding.UTF8.GetBytes(envelope.PayloadJson),
                 envelope.Signature,
                 requireFresh: purpose == RunnerRequestPurpose.Run,
-                cts.Token
-            );
+                ct
+            )
+            .ConfigureAwait(false);
         if (verdict != RunnerRequestVerdict.Accepted)
         {
             logger.LogWarning(
@@ -248,26 +296,6 @@ public abstract class TraxLambdaFunction
                 $"Refused a {envelope.Type} invocation: signature {verdict}."
             );
         }
-
-        return envelope.Type switch
-        {
-            LambdaRequestType.Execute => await HandleExecute(
-                envelope.PayloadJson,
-                handler,
-                logger,
-                cts.Token,
-                recordCancelledIn: scope.ServiceProvider
-            ),
-            LambdaRequestType.Run => await HandleRun(
-                envelope.PayloadJson,
-                handler,
-                logger,
-                cts.Token
-            ),
-            _ => throw new InvalidOperationException(
-                $"Unknown Lambda request type: {envelope.Type}"
-            ),
-        };
     }
 
     /// <summary>
@@ -310,12 +338,14 @@ public abstract class TraxLambdaFunction
     /// completes once it has shut down.</param>
     public async Task RunLocalAsync(string[] args, CancellationToken cancellationToken)
     {
-        await using var app = CreateLocalBuilder(args).Build();
-        ConfigureRoutes(app);
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(
-            app,
-            cancellationToken
-        );
+        var app = CreateLocalBuilder(args).Build();
+        await using (app.ConfigureAwait(false))
+        {
+            ConfigureRoutes(app);
+            await HostingAbstractionsHostExtensions
+                .RunAsync(app, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -352,13 +382,15 @@ public abstract class TraxLambdaFunction
             routes,
             "/trax/execute",
             RunnerRequestPurpose.Execute,
-            async (body, handler, logger, ct) => await HandleExecute(body, handler, logger, ct)
+            async (body, handler, logger, ct) =>
+                await HandleExecute(body, handler, logger, ct).ConfigureAwait(false)
         );
         MapLocalRoute(
             routes,
             "/trax/run",
             RunnerRequestPurpose.Run,
-            async (body, handler, logger, ct) => await HandleRun(body, handler, logger, ct)
+            async (body, handler, logger, ct) =>
+                await HandleRun(body, handler, logger, ct).ConfigureAwait(false)
         );
     }
 
@@ -372,41 +404,16 @@ public abstract class TraxLambdaFunction
             route,
             async (HttpContext ctx) =>
             {
-                using var scope = _serviceProvider.Value.CreateScope();
+                var scope = (await ServicesAsync().ConfigureAwait(false)).CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
                 var verifier = RequireVerifier(scope.ServiceProvider);
 
-                // Unsigned is a posture for the Lambda invocation entry point. Over HTTP it is
-                // honoured only in development, and only for a caller on this machine.
-                if (!verifier.RequiresSignature)
-                {
-                    if (!IsLocalDevelopment(ctx))
-                    {
-                        verifier.ReportRefusal(
-                            ctx.Request.Path,
-                            "unsigned request outside Development; the local routes accept "
-                                + "unsigned requests only in the Development environment or with "
-                                + "AllowUnsignedLocalDevelopmentRequests"
-                        );
-                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        return;
-                    }
+                if (RefusedUnsigned(ctx, verifier))
+                    return;
 
-                    if (!IsFromThisMachine(ctx))
-                    {
-                        verifier.ReportRefusal(
-                            ctx.Request.Path,
-                            "unsigned request from another machine; the local routes accept "
-                                + "unsigned requests only from loopback"
-                        );
-                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        return;
-                    }
-                }
-
-                var (body, refusedStatus) = await verifier.ReadVerifiedBodyAsync(
-                    ctx.Request,
-                    purpose
-                );
+                var (body, refusedStatus) = await verifier
+                    .ReadVerifiedBodyAsync(ctx.Request, purpose)
+                    .ConfigureAwait(false);
                 if (refusedStatus is { } status)
                 {
                     ctx.Response.StatusCode = status;
@@ -418,35 +425,80 @@ public abstract class TraxLambdaFunction
                     ILogger<TraxLambdaFunction>
                 >();
                 var result = await handle(
-                    Encoding.UTF8.GetString(body.Span),
-                    handler,
-                    logger,
-                    ctx.RequestAborted
-                );
-
-                // A run's answer is signed over these exact bytes, bound to the request it
-                // answers, when the runner has a signing key, as UseTraxRunEndpoint signs it.
-                var responseBody = JsonSerializer.SerializeToUtf8Bytes(
-                    result,
-                    result.GetType(),
-                    RemoteRunJson.Write
-                );
-                if (
-                    purpose == RunnerRequestPurpose.Run
-                    && verifier.SignResponse(
-                        purpose,
-                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
-                        responseBody
+                        Encoding.UTF8.GetString(body.Span),
+                        handler,
+                        logger,
+                        ctx.RequestAborted
                     )
-                        is { } responseSignature
-                )
-                    ctx.Response.Headers[RunnerRequestSignature.ResponseHeaderName] =
-                        responseSignature;
+                    .ConfigureAwait(false);
 
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.Body.WriteAsync(responseBody);
+                await WriteLocalResponseAsync(ctx, verifier, purpose, result).ConfigureAwait(false);
             }
         );
+
+    // Unsigned is a posture for the Lambda invocation entry point. Over HTTP it is
+    // honoured only in development, and only for a caller on this machine.
+    private bool RefusedUnsigned(HttpContext ctx, RunnerRequestVerifier verifier)
+    {
+        if (!verifier.RequiresSignature)
+        {
+            if (!IsLocalDevelopment(ctx))
+            {
+                verifier.ReportRefusal(
+                    ctx.Request.Path,
+                    "unsigned request outside Development; the local routes accept "
+                        + "unsigned requests only in the Development environment or with "
+                        + "AllowUnsignedLocalDevelopmentRequests"
+                );
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return true;
+            }
+
+            if (!IsFromThisMachine(ctx))
+            {
+                verifier.ReportRefusal(
+                    ctx.Request.Path,
+                    "unsigned request from another machine; the local routes accept "
+                        + "unsigned requests only from loopback"
+                );
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task WriteLocalResponseAsync(
+        HttpContext ctx,
+        RunnerRequestVerifier verifier,
+        RunnerRequestPurpose purpose,
+        object result
+    )
+    {
+        // A run's answer is signed over these exact bytes, bound to the request it
+        // answers, when the runner has a signing key, as UseTraxRunEndpoint signs it.
+        var responseBody = JsonSerializer.SerializeToUtf8Bytes(
+            result,
+            result.GetType(),
+            RemoteRunJson.Write
+        );
+        if (
+            purpose == RunnerRequestPurpose.Run
+            && verifier.SignResponse(
+                purpose,
+                ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
+                responseBody
+            )
+                is { } responseSignature
+        )
+            ctx.Response.Headers[RunnerRequestSignature.ResponseHeaderName] = responseSignature;
+
+        ctx.Response.ContentType = "application/json";
+        await ctx
+            .Response.Body.WriteAsync(responseBody, CancellationToken.None)
+            .ConfigureAwait(false);
+    }
 
     // A host with no environment registered is not taken for Development.
     private bool IsLocalDevelopment(HttpContext ctx) =>
@@ -479,7 +531,8 @@ public abstract class TraxLambdaFunction
                 "No time was left to run MetadataId {MetadataId}; not starting it",
                 request.MetadataId
             );
-            await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger);
+            await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger)
+                .ConfigureAwait(false);
             return new RemoteJobResponse(
                 request.MetadataId,
                 IsError: true,
@@ -490,7 +543,7 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            var result = await handler.ExecuteJobAsync(request, ct);
+            var result = await handler.ExecuteJobAsync(request, ct).ConfigureAwait(false);
             return new RemoteJobResponse(result.MetadataId);
         }
         catch (Exception ex)
@@ -509,7 +562,8 @@ public abstract class TraxLambdaFunction
                 && ct.IsCancellationRequested
                 && recordCancelledIn is not null
             )
-                await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger);
+                await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger)
+                    .ConfigureAwait(false);
 
             // A TrainException's message is Trax's own account of the failure; anything else, and
             // every stack trace, stays in this function's log.
@@ -549,36 +603,22 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-            var now = DateTime.UtcNow;
-            var pending = context.Metadatas.Where(m =>
-                m.Id == metadataId && m.TrainState == TrainState.Pending
-            );
-
-            int cancelled;
-            if (context is DbContext db && db.Database.IsRelational())
-                cancelled = await pending.ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(m => m.TrainState, TrainState.Cancelled)
-                            .SetProperty(m => m.EndTime, now),
-                    CancellationToken.None
-                );
-            else
-            {
-                var runs = await pending.ToListAsync(CancellationToken.None);
-                foreach (var run in runs)
-                {
-                    run.TrainState = TrainState.Cancelled;
-                    run.EndTime = now;
-                }
-                await context.SaveChanges(CancellationToken.None);
-                cancelled = runs.Count;
-            }
+            var context = await factory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
+            var now = (services.GetService<TimeProvider>() ?? TimeProvider.System)
+                .GetUtcNow()
+                .UtcDateTime;
+            var cancelled = await CancelPendingAsync(context, metadataId, now)
+                .ConfigureAwait(false);
 
             // Committed, and only by this write: its train never ran, so nothing else publishes
             // the outcome.
             if (cancelled > 0)
-                await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadataId], logger);
+                await OutOfTrainOutcomes
+                    .PublishCancelledAsync(services, [metadataId], logger)
+                    .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -588,6 +628,41 @@ public abstract class TraxLambdaFunction
                 metadataId
             );
         }
+    }
+
+    private static async Task<int> CancelPendingAsync(
+        IDataContext context,
+        long metadataId,
+        DateTime now
+    )
+    {
+        var pending = context.Metadatas.Where(m =>
+            m.Id == metadataId && m.TrainState == TrainState.Pending
+        );
+
+        int cancelled;
+        if (context is DbContext db && db.Database.IsRelational())
+            cancelled = await pending
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.TrainState, TrainState.Cancelled)
+                            .SetProperty(m => m.EndTime, now),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        else
+        {
+            var runs = await pending.ToListAsync(CancellationToken.None).ConfigureAwait(false);
+            foreach (var run in runs)
+            {
+                run.TrainState = TrainState.Cancelled;
+                run.EndTime = now;
+            }
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            cancelled = runs.Count;
+        }
+
+        return cancelled;
     }
 
     private static async Task<RemoteRunResponse> HandleRun(
@@ -603,7 +678,7 @@ public abstract class TraxLambdaFunction
 
         try
         {
-            return await handler.RunTrainAsync(request, ct);
+            return await handler.RunTrainAsync(request, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -626,6 +701,13 @@ public abstract class TraxLambdaFunction
             );
         verifier.EnsurePosture(nameof(TraxLambdaFunction));
         return verifier;
+    }
+
+    private async Task<IServiceProvider> ServicesAsync()
+    {
+        var services = _serviceProvider.Value;
+        await _executionServiceCheck.Value.ConfigureAwait(false);
+        return services;
     }
 
     /// <summary>

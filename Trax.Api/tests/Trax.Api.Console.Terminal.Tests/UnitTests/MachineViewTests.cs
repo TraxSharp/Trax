@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Machines;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Api.Console.Terminal.Screens;
@@ -34,7 +35,7 @@ public class MachineViewTests
     public void The_graph_draws_each_state_as_a_box_and_each_transition_as_a_labelled_arrow()
     {
         var lines = MachineGraph.Lines(Machine(), current: "Paying");
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
         TestContext.Out.WriteLine(text);
 
         text.Should().Contain("●─▶│ Cart", "the initial state is entered by the arrow");
@@ -64,7 +65,7 @@ public class MachineViewTests
                 new GraphEdge("Busy", "Done", "Finish"),
             ]
         );
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
         TestContext.Out.WriteLine(text);
 
         text.Should().Contain("↻ Tick", "a transition to the same state is written in its box");
@@ -76,16 +77,16 @@ public class MachineViewTests
     public void Drawn_down_the_states_go_in_rows_and_the_lines_enter_from_above()
     {
         var lines = MachineGraph.Lines(Machine(), current: "Paying", vertical: true).ToList();
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
         TestContext.Out.WriteLine(text);
 
         lines[0].Trim().Should().Be("●", "the initial state is entered from above");
         lines[1].Trim().Should().Be("▼");
         text.Should().Contain("Checkout").And.Contain("on Paid").And.Contain("after 15m");
         lines.Sum(l => l.Count(c => c is '▶' or '◀' or '▲' or '▼')).Should().Be(4);
-        var cart = lines.FindIndex(l => l.Contains("Cart"));
-        var paying = lines.FindIndex(l => l.Contains("Paying"));
-        var shipped = lines.FindIndex(l => l.Contains("Shipped"));
+        var cart = lines.FindIndex(l => l.Contains("Cart", StringComparison.Ordinal));
+        var paying = lines.FindIndex(l => l.Contains("Paying", StringComparison.Ordinal));
+        var shipped = lines.FindIndex(l => l.Contains("Shipped", StringComparison.Ordinal));
         cart.Should().BeLessThan(paying, "each state sits below the one before it");
         paying.Should().BeLessThan(shipped);
     }
@@ -107,10 +108,10 @@ public class MachineViewTests
             ],
             vertical: true
         );
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.Should().NotContain(l => l.Contains("──▶"), "every label found room on the graph");
-        string.Join("\n", lines)
+        string.Join('\n', lines)
             .Should()
             .Contain("Pause")
             .And.Contain("Start")
@@ -135,10 +136,10 @@ public class MachineViewTests
             ],
             vertical: true
         );
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.Should().NotContain(l => l.Contains("──▶"), "every label found room on the graph");
-        string.Join("\n", lines)
+        string.Join('\n', lines)
             .Should()
             .Contain("on cancelled")
             .And.Contain("on failed")
@@ -150,20 +151,7 @@ public class MachineViewTests
     {
         var state = "Paying";
         var host = new FakeHost()
-            .Answer(
-                "MachineInstance",
-                _ =>
-                    (System.Text.Json.Nodes.JsonObject)
-                        System.Text.Json.Nodes.JsonNode.Parse(
-                            """
-                            {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
-                             "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":true,
-                             "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
-                             "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
-                             "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
-                            """.Replace("STATE", state)
-                        )!
-            )
+            .Answer("MachineInstance", _ => DetailWaitingOnRun(state))
             .Answer(
                 "MachineInstanceTransitions",
                 """
@@ -171,24 +159,17 @@ public class MachineViewTests
                   {"revision":2,"kind":"COMMAND","trigger":"Checkout","actor":"OWNER","fromState":"Cart","toState":"Paying","at":"2026-10-22T10:01:00Z","startedRun":{"executionId":4900}}]}}}}
                 """
             );
-        var instance =
-            JsonSerializer.Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
+        var instance = JsonSerializer
+            .Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
                 """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
                 TraxJson.Options
-            )!;
-        var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
-            new ConsoleContext(
-                app,
-                new TraxClient(host),
-                new Uri("https://ops.example.com/trax/graphql")
-            ),
-            Machine(),
-            instance
-        ));
+            )
+            .NotNull();
+        var (terminal, window) = await OpenInstanceWindow(host, instance);
         await using var _ = terminal;
 
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("║ Paying ")),
+            () => window.Lines.Any(l => l.Contains("║ Paying ", StringComparison.Ordinal)),
             "the instance is read"
         );
         window.Lines.Should().Contain("Waits on run 4900 (IN_PROGRESS)");
@@ -207,7 +188,7 @@ public class MachineViewTests
         await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
 
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("║ Shipped ")),
+            () => window.Lines.Any(l => l.Contains("║ Shipped ", StringComparison.Ordinal)),
             "the change is read"
         );
     }
@@ -232,19 +213,11 @@ public class MachineViewTests
                     }
             )
             .Answer("MachineInstanceTransitions", Transitions);
-        var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
-            new ConsoleContext(
-                app,
-                new TraxClient(host),
-                new Uri("https://ops.example.com/trax/graphql")
-            ),
-            Machine(),
-            Instance()
-        ));
+        var (terminal, window) = await OpenInstanceWindow(host, Instance());
         await using var _ = terminal;
         await terminal.Until(
             () =>
-                window.Lines.Any(l => l.Contains("║ Paying "))
+                window.Lines.Any(l => l.Contains("║ Paying ", StringComparison.Ordinal))
                 && host.Follows("OnMachineInstanceChanged"),
             "the instance is read and followed"
         );
@@ -261,7 +234,7 @@ public class MachineViewTests
         await terminal.OnUi(() => { });
         await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("║ Shipped ")),
+            () => window.Lines.Any(l => l.Contains("║ Shipped ", StringComparison.Ordinal)),
             "the newer read is shown"
         );
 
@@ -322,8 +295,8 @@ public class MachineViewTests
 
         await terminal.OnUi(() => window.RequestStop());
 
-        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
-        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
         host.Sent("MachineInstanceTransitions").Should().BeEmpty();
     }
 
@@ -331,23 +304,57 @@ public class MachineViewTests
         {"operations":{"machineInstance":{"rowId":5,"transitions":{"items":[]}}}}
         """;
 
+    private static Task<(TerminalHarness Harness, MachineInstanceWindow Window)> OpenInstanceWindow(
+        FakeHost host,
+        MachineInstancesAttentionResultOperationsMachineInstancesItems instance
+    ) =>
+        TerminalHarness.StartAsync(app => new MachineInstanceWindow(
+            new ConsoleContext(
+                app,
+                new TraxClient(host),
+                new Uri("https://ops.example.com/trax/graphql")
+            ),
+            Machine(),
+            instance
+        ));
+
+    private static System.Text.Json.Nodes.JsonObject DetailWaitingOnRun(string state) =>
+        (System.Text.Json.Nodes.JsonObject)
+            System
+                .Text.Json.Nodes.JsonNode.Parse(
+                    """
+                    {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
+                     "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":true,
+                     "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
+                     "waitingOn":{"executionId":4900,"trainState":"IN_PROGRESS","workQueueEntryId":null},
+                     "invokedRuns":[{"id":4900,"externalId":"run-4900","name":"Shop.IChargeTrain","trainState":"IN_PROGRESS","startTime":"2026-10-22T10:01:00Z","failureClass":"UNCLASSIFIED","cancellationRequested":false,"isLive":true}]}}}
+                    """.Replace("STATE", state, StringComparison.Ordinal)
+                )
+                .NotNull();
+
     private static System.Text.Json.Nodes.JsonObject Detail(string state) =>
         (System.Text.Json.Nodes.JsonObject)
-            System.Text.Json.Nodes.JsonNode.Parse(
-                """
-                {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
-                 "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":false,
-                 "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
-                 "waitingOn":null,"invokedRuns":[]}}}
-                """.Replace("STATE", state)
-            )!;
+            System
+                .Text.Json.Nodes.JsonNode.Parse(
+                    """
+                    {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
+                     "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":false,
+                     "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
+                     "waitingOn":null,"invokedRuns":[]}}}
+                    """.Replace("STATE", state, StringComparison.Ordinal)
+                )
+                .NotNull();
 
     private static MachineInstancesAttentionResultOperationsMachineInstancesItems Instance() =>
-        JsonSerializer.Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
-            """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
-            TraxJson.Options
-        )!;
+        JsonSerializer
+            .Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
+                """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
+                TraxJson.Options
+            )
+            .NotNull();
 
     private static MachinesResultOperationsMachines Machine() =>
-        JsonSerializer.Deserialize<MachinesResultOperationsMachines>(Checkout, TraxJson.Options)!;
+        JsonSerializer
+            .Deserialize<MachinesResultOperationsMachines>(Checkout, TraxJson.Options)
+            .NotNull();
 }

@@ -12,7 +12,7 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class PageDescriptionTests
+public partial class PageDescriptionTests
 {
     private const string Adr = "Trax.Docs/adr/0008-documentation-conventions-are-linted.md";
 
@@ -22,10 +22,12 @@ public class PageDescriptionTests
     /// </summary>
     private const int MaxLength = 160;
 
-    private static readonly Regex FrontMatter = new(
+    [GeneratedRegex(
         @"\A---\n(?<body>.*?)\n---\n",
-        RegexOptions.Singleline
-    );
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FrontMatter { get; }
 
     [Test]
     public void EveryPublishedPage_HasA_ShortDescription()
@@ -38,7 +40,9 @@ public class PageDescriptionTests
             if (!RepoRoot.IsPublished(rel))
                 continue;
 
-            var problem = Check(File.ReadAllText(file).Replace("\r\n", "\n"));
+            var problem = Check(
+                File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal)
+            );
             if (problem is not null)
                 offenders.Add($"{rel}  -> {problem}");
         }
@@ -52,7 +56,7 @@ public class PageDescriptionTests
                     + "back to the first paragraph without it. See contributing/writing-docs.md and "
                     + Adr
                     + ". Offenders:\n  "
-                    + string.Join("\n  ", offenders.OrderBy(o => o, StringComparer.Ordinal))
+                    + string.Join("\n  ", offenders.Order(StringComparer.Ordinal))
             );
     }
 

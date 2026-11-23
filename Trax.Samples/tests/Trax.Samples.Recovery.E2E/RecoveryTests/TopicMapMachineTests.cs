@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Samples.Recovery.Corpus;
@@ -21,7 +23,7 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 [TestFixture]
 public class TopicMapMachineTests : RecoveryTestFixture
 {
-    private TopicMapDraft _draft = null!;
+    private TopicMapDraft? _draft;
 
     [SetUp]
     public void NewDraft() => _draft = new TopicMapDraft(GraphQL, OperatorKey);
@@ -29,19 +31,21 @@ public class TopicMapMachineTests : RecoveryTestFixture
     [Test]
     public async Task TheWizard_BuildsTheMap_AndTheDraftKeepsAPointerToIt()
     {
-        (await _draft.CreateAsync()).State.Should().Be(nameof(TopicMapState.ChoosingFields));
+        (await _draft.NotNull().CreateAsync())
+            .State.Should()
+            .Be(nameof(TopicMapState.ChoosingFields));
 
-        var building = await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var building = await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
         building.Problem.Should().BeNull();
         building.State.Should().Be(nameof(TopicMapState.Building));
 
-        var built = await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
+        var built = await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built));
 
         var context = built.Context;
-        context["papers"]!.GetValue<int>().Should().Be(CorpusFixture.Works.Count);
-        context["topicPairs"]!.GetValue<int>().Should().Be(32);
-        context["coCitationTrack"]!.GetValue<string>().Should().Be("Trusted");
-        var mapId = context["mapId"]!.GetValue<string>();
+        context["papers"].NotNull().GetValue<int>().Should().Be(CorpusFixture.Works.Count);
+        context["topicPairs"].NotNull().GetValue<int>().Should().Be(32);
+        context["coCitationTrack"].NotNull().GetValue<string>().Should().Be("Trusted");
+        var mapId = context["mapId"].NotNull().GetValue<string>();
         mapId.Should().StartWith("map-");
         context.Should().NotContainKey("strongest", "the draft holds a summary, never the rows");
 
@@ -50,8 +54,12 @@ public class TopicMapMachineTests : RecoveryTestFixture
             (await db.TopicPairs.CountAsync(p => p.RunId == mapId)).Should().Be(32);
 
         // Close the tab and come back: the draft is where it was left.
-        var reloaded = await _draft.LoadAsync();
-        reloaded.Snapshot!.ToJsonString().Should().Be(built.Snapshot!.ToJsonString());
+        var reloaded = await _draft.NotNull().LoadAsync();
+        reloaded
+            .Snapshot.NotNull()
+            .ToJsonString()
+            .Should()
+            .Be(built.Snapshot.NotNull().ToJsonString());
     }
 
     [Test]
@@ -75,16 +83,16 @@ public class TopicMapMachineTests : RecoveryTestFixture
     [Test]
     public async Task StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNothingThatCountsTowardTheCap()
     {
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
-        await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
+        await _draft.NotNull().CreateAsync();
+        await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built));
         (await Row()).DueAt.Should().NotBeNull("Built holds the map for review under a timer");
-        (await _draft.DiscardAsync())
+        (await _draft.NotNull().DiscardAsync())
             .Should()
             .BeFalse("a draft a build's outcome put in Built is the record of that build");
 
         // Start a new map, as the page does once a build began: the same draft, back at the first step.
-        var reset = await _draft.AdvanceAsync(nameof(TopicMapTrigger.StartOver));
+        var reset = await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.StartOver));
 
         reset.Problem.Should().BeNull();
         reset.State.Should().Be(nameof(TopicMapState.ChoosingFields));
@@ -98,10 +106,10 @@ public class TopicMapMachineTests : RecoveryTestFixture
         row.InvokeToken.Should().BeNull();
 
         // Nothing is left that the user cannot throw away: a fresh draft is discarded like any other.
-        (await _draft.DiscardAsync())
+        (await _draft.NotNull().DiscardAsync())
             .Should()
             .BeTrue();
-        (await _draft.LoadAsync()).Problem.Should().Be("NOT_FOUND");
+        (await _draft.NotNull().LoadAsync()).Problem.Should().Be("NOT_FOUND");
     }
 
     [TestCase(TopicMapState.Building)]
@@ -111,30 +119,13 @@ public class TopicMapMachineTests : RecoveryTestFixture
     [TestCase(TopicMapState.Expired)]
     public async Task StartingANewMap_ResetsTheDraft_FromEveryStateThatOffersIt(TopicMapState from)
     {
-        await _draft.CreateAsync();
-        switch (from)
-        {
-            case TopicMapState.Building:
-                // Started at once, before the run ends: the draft is in Building, or Built if the run won.
-                (await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025))
-                    .State.Should()
-                    .Be(nameof(TopicMapState.Building));
-                break;
-            case TopicMapState.BuildFailed:
-                // One field over two years holds fewer than two papers, so the build fails.
-                await _draft.BuildAsync([CorpusFixture.Hydrology], 1990, 1991);
-                await _draft.WaitForStateAsync(nameof(TopicMapState.BuildFailed));
-                break;
-            default:
-                await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
-                await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
-                break;
-        }
+        await _draft.NotNull().CreateAsync();
+        await BuildTowardAsync(from);
         await using (var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
             var row = db.SnapshotDrafts.Where(d =>
-                d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId
+                d.Id == _draft.NotNull().Id && d.Machine == TopicMapMachine.MachineId
             );
             if (from == TopicMapState.BuildCancelled)
                 // An operator's cancel of the run is what puts a build here; the page cannot, so the row is moved
@@ -142,21 +133,22 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 await row.ExecuteUpdateAsync(x =>
                     x.SetProperty(d => d.State, nameof(TopicMapState.BuildCancelled))
                         .SetProperty(d => d.DueAt, (DateTimeOffset?)null)
-                        .SetProperty(d => d.ServerRecord, true)
+                        .SetProperty(d => d.ServerRecord, valueExpression: true)
                 );
             if (from == TopicMapState.Expired)
             {
-                await row.ExecuteUpdateAsync(x =>
-                    x.SetProperty(d => d.DueAt, DateTimeOffset.UtcNow.AddMinutes(-1))
-                );
+                var minuteAgo = TimeProvider.System.GetUtcNow().AddMinutes(-1);
+                await row.ExecuteUpdateAsync(x => x.SetProperty(d => d.DueAt, minuteAgo));
                 await SharedRecoverySetup
                     .Factory.Services.GetRequiredService<InvokeOutcomeReconciler>()
                     .FireDueTimersOnce(CancellationToken.None);
-                (await _draft.LoadAsync()).State.Should().Be(nameof(TopicMapState.Expired));
+                (await _draft.NotNull().LoadAsync())
+                    .State.Should()
+                    .Be(nameof(TopicMapState.Expired));
             }
         }
 
-        var reset = await _draft.AdvanceAsync(nameof(TopicMapTrigger.StartOver));
+        var reset = await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.StartOver));
 
         reset.Problem.Should().BeNull($"StartOver is offered from {from}");
         reset.State.Should().Be(nameof(TopicMapState.ChoosingFields));
@@ -167,7 +159,9 @@ public class TopicMapMachineTests : RecoveryTestFixture
         var after = await Row();
         after.DueAt.Should().BeNull();
         after.InvokeToken.Should().BeNull("a run the draft was waiting on is cancelled with it");
-        (await _draft.DiscardAsync()).Should().BeTrue("the new map is the owner's own draft");
+        (await _draft.NotNull().DiscardAsync())
+            .Should()
+            .BeTrue("the new map is the owner's own draft");
     }
 
     [Test]
@@ -184,9 +178,9 @@ public class TopicMapMachineTests : RecoveryTestFixture
             ["coCitationTrack"] = "Trusted",
         };
 
-        var saved = await _draft.SaveAsync(
-            TopicMapDraft.Snapshot(nameof(TopicMapState.Built), forged)
-        );
+        var saved = await _draft
+            .NotNull()
+            .SaveAsync(TopicMapDraft.Snapshot(nameof(TopicMapState.Built), forged));
 
         saved
             .Problem.Should()
@@ -195,27 +189,29 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 "the host serves the topic map only through its typed operations, which have no save, and only "
                     + "the build's outcome puts a draft in Built"
             );
-        (await _draft.LoadAsync()).Snapshot.Should().BeNull("nothing was written");
+        (await _draft.NotNull().LoadAsync()).Snapshot.Should().BeNull("nothing was written");
     }
 
     [Test]
     public async Task WhileBuilding_AHandFiredOutcome_AndAnAutosave_AreRefused()
     {
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        await _draft.NotNull().CreateAsync();
+        await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
 
-        var forged = await _draft.AdvanceAsync(
-            "Building.done",
-            new
-            {
-                runId = "map-forged",
-                papers = 28,
-                topicPairs = 999,
-                coCitationTrack = "Trusted",
-                strongest = Array.Empty<object>(),
-                hiddenTwins = Array.Empty<object>(),
-            }
-        );
+        var forged = await _draft
+            .NotNull()
+            .AdvanceAsync(
+                "Building.done",
+                new
+                {
+                    runId = "map-forged",
+                    papers = 28,
+                    topicPairs = 999,
+                    coCitationTrack = "Trusted",
+                    strongest = Array.Empty<object>(),
+                    hiddenTwins = Array.Empty<object>(),
+                }
+            );
         forged
             .Problem.Should()
             .Be(
@@ -223,11 +219,13 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 "an outcome has no client field: only the run's outcome applies it"
             );
 
-        var current = await _draft.LoadAsync();
+        var current = await _draft.NotNull().LoadAsync();
         current.State.Should().Be(nameof(TopicMapState.Building));
-        var moved = await _draft.SaveAsync(
-            TopicMapDraft.Snapshot(nameof(TopicMapState.ChoosingRange), current.Context)
-        );
+        var moved = await _draft
+            .NotNull()
+            .SaveAsync(
+                TopicMapDraft.Snapshot(nameof(TopicMapState.ChoosingRange), current.Context)
+            );
         moved
             .Problem.Should()
             .Be(
@@ -236,8 +234,8 @@ public class TopicMapMachineTests : RecoveryTestFixture
             );
 
         // The real outcome still lands.
-        var built = await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
-        built.Context["topicPairs"]!.GetValue<int>().Should().Be(32);
+        var built = await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built));
+        built.Context["topicPairs"].NotNull().GetValue<int>().Should().Be(32);
     }
 
     // The built map's review timer: Built is held for a review window, then the server moves it on. A timer
@@ -251,32 +249,36 @@ public class TopicMapMachineTests : RecoveryTestFixture
     )]
     public async Task AHandFiredTimer_IsRefused()
     {
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
-        var built = await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
+        await _draft.NotNull().CreateAsync();
+        await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var built = await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built));
 
         // A timer trigger is not an event: the typed surface has no field for it, so a client cannot even name it.
-        (await _draft.AdvanceAsync(ReviewTimer))
+        (await _draft.NotNull().AdvanceAsync(ReviewTimer))
             .Problem.Should()
             .Be(TopicMapDraft.NotServed, "a timer has no client field (Trax.Docs/adr/0048)");
 
         // Nor can host code acting for the draft's owner fire it, whatever role it holds.
         string owner;
-        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+        var draftId = _draft.NotNull().Id;
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             owner = (
                 await scope
                     .ServiceProvider.GetRequiredService<IDataContext>()
                     .SnapshotDrafts.AsNoTracking()
-                    .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId)
-            ).UserKey!;
-        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+                    .SingleAsync(d => d.Id == draftId && d.Machine == TopicMapMachine.MachineId)
+            ).UserKey.NotNull();
+        var advanceScope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (advanceScope.ConfigureAwait(false))
             (
-                await scope
+                await advanceScope
                     .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .Service(TopicMapMachine.MachineId)!
+                    .Service(TopicMapMachine.MachineId)
+                    .NotNull()
                     .Advance(
                         new Actor.Client(owner, Trax.Samples.Recovery.Auth.RecoveryRoles.Operator),
-                        _draft.Id,
+                        _draft.NotNull().Id,
                         ReviewTimer
                     )
             )
@@ -288,12 +290,13 @@ public class TopicMapMachineTests : RecoveryTestFixture
                     "only the server fires a timer, when it is due (Trax.Docs/adr/0048)"
                 );
 
-        var after = await _draft.LoadAsync();
+        var after = await _draft.NotNull().LoadAsync();
         after.State.Should().Be(nameof(TopicMapState.Built));
         after
-            .Snapshot!.ToJsonString()
+            .Snapshot.NotNull()
+            .ToJsonString()
             .Should()
-            .Be(built.Snapshot!.ToJsonString(), "a refused timer writes nothing");
+            .Be(built.Snapshot.NotNull().ToJsonString(), "a refused timer writes nothing");
     }
 
     [Test]
@@ -304,11 +307,11 @@ public class TopicMapMachineTests : RecoveryTestFixture
         Trax.Effect.Models.WorkQueue.WorkQueue run;
         using (Decider.Hold(nameof(SameTopic)))
         {
-            await _draft.CreateAsync();
-            await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+            await _draft.NotNull().CreateAsync();
+            await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
             run = (await Runs()).Single();
 
-            var back = await _draft.AdvanceAsync(nameof(TopicMapTrigger.CancelBuild));
+            var back = await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.CancelBuild));
 
             back.State.Should().Be(nameof(TopicMapState.ChoosingRange));
         }
@@ -324,7 +327,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
         )
             .Should()
             .BeTrue("leaving Building cancels the run it queued");
-        (await _draft.LoadAsync())
+        (await _draft.NotNull().LoadAsync())
             .State.Should()
             .Be(nameof(TopicMapState.ChoosingRange), "the cancelled run's outcome lands nowhere");
     }
@@ -332,74 +335,154 @@ public class TopicMapMachineTests : RecoveryTestFixture
     [Test]
     public async Task AFailedBuild_IsRebuiltByEnteringBuildingAgain_WithANewRun()
     {
-        await _draft.CreateAsync();
+        await _draft.NotNull().CreateAsync();
 
         // One field over two years holds fewer than two papers, so the build fails.
-        (await _draft.BuildAsync([CorpusFixture.Hydrology], 1990, 1991))
+        (await _draft.NotNull().BuildAsync([CorpusFixture.Hydrology], 1990, 1991))
             .State.Should()
             .Be(nameof(TopicMapState.Building));
-        await _draft.WaitForStateAsync(nameof(TopicMapState.BuildFailed));
+        await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.BuildFailed));
         var failedRun = (await Runs()).Single();
 
         // Rebuild enters Building again: a new run, under a new token.
-        (await _draft.AdvanceAsync(nameof(TopicMapTrigger.Rebuild)))
+        (await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.Rebuild)))
             .State.Should()
             .Be(nameof(TopicMapState.Building));
         var runs = await Runs();
         runs.Should().HaveCount(2);
         runs[1].ExternalId.Should().NotBe(failedRun.ExternalId);
-        await _draft.WaitForStateAsync(nameof(TopicMapState.BuildFailed));
+        await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.BuildFailed));
 
         // Edit the choices and build again.
-        (await _draft.AdvanceAsync(nameof(TopicMapTrigger.Edit)))
+        (await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.Edit)))
             .State.Should()
             .Be(nameof(TopicMapState.ChoosingRange));
-        (await _draft.AdvanceAsync(nameof(TopicMapTrigger.Back)))
+        (await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.Back)))
             .State.Should()
             .Be(nameof(TopicMapState.ChoosingFields));
-        (await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025)).Problem.Should().BeNull();
-        var built = await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
-        built.Context["topicPairs"]!.GetValue<int>().Should().Be(32);
+        (await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025))
+            .Problem.Should()
+            .BeNull();
+        var built = await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built));
+        built.Context["topicPairs"].NotNull().GetValue<int>().Should().Be(32);
     }
 
     [Test]
     public async Task AnOperator_CannotCancelTheBuild_ThroughTheRunOrItsEntry_OneByOneOrInBulk()
     {
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        await _draft.NotNull().CreateAsync();
+        await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
         var entry = (await Runs()).Single();
 
         var refused = new List<(bool Success, string? Message)>
         {
             await OperationAsync(
-                $"mutation {{ operations {{ workQueue {{ cancelWorkQueueEntry(id: {entry.Id}) {{ success message }} }} }} }}",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"mutation {{ operations {{ workQueue {{ cancelWorkQueueEntry(id: {entry.Id}) {{ success message }} }} }} }}"
+                ),
                 "workQueue",
                 "cancelWorkQueueEntry"
             ),
         };
 
         // Once dispatched, the run itself: alone, and in a batch with an id that names nothing.
-        long? run = null;
-        (
-            await Shared.Testing.Polling.WaitUntilAsync(
-                async () => (run = (await EntryAsync(entry.Id)).MetadataId) is not null,
-                TopicMapDraft.Patience,
-                TimeSpan.FromMilliseconds(100)
-            )
-        )
-            .Should()
-            .BeTrue("the build's entry is dispatched");
+        var run = await DispatchedRunAsync(entry.Id);
         refused.Add(
             await OperationAsync(
-                $"mutation {{ operations {{ cancelExecution(id: {run}) {{ success message }} }} }}",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"mutation {{ operations {{ cancelExecution(id: {run}) {{ success message }} }} }}"
+                ),
                 "cancelExecution"
             )
         );
         var bulk = await OperationAsync(
-            $"mutation {{ operations {{ cancelExecutions(ids: [{run}, 999999999]) {{ success count message }} }} }}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"mutation {{ operations {{ cancelExecutions(ids: [{run}, 999999999]) {{ success count message }} }} }}"
+            ),
             "cancelExecutions"
         );
 
+        ShouldAllBeRefused(refused, bulk);
+
+        // The build goes on, and its outcome moves the draft.
+        (await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built)))
+            .Context["topicPairs"]
+            .NotNull()
+            .GetValue<int>()
+            .Should()
+            .Be(32);
+    }
+
+    // Builds the draft as far as the state the test starts from lets the page take it.
+    private async Task BuildTowardAsync(TopicMapState from)
+    {
+        switch (from)
+        {
+            case TopicMapState.Building:
+                // Started at once, before the run ends: the draft is in Building, or Built if the run won.
+                (
+                    await _draft
+                        .NotNull()
+                        .BuildAsync(CorpusFixture.Fields, 2016, 2025)
+                        .ConfigureAwait(false)
+                )
+                    .State.Should()
+                    .Be(nameof(TopicMapState.Building));
+                break;
+            case TopicMapState.BuildFailed:
+                // One field over two years holds fewer than two papers, so the build fails.
+                await _draft
+                    .NotNull()
+                    .BuildAsync([CorpusFixture.Hydrology], 1990, 1991)
+                    .ConfigureAwait(false);
+                await _draft
+                    .NotNull()
+                    .WaitForStateAsync(nameof(TopicMapState.BuildFailed))
+                    .ConfigureAwait(false);
+                break;
+            default:
+                await _draft
+                    .NotNull()
+                    .BuildAsync(CorpusFixture.Fields, 2016, 2025)
+                    .ConfigureAwait(false);
+                await _draft
+                    .NotNull()
+                    .WaitForStateAsync(nameof(TopicMapState.Built))
+                    .ConfigureAwait(false);
+                break;
+        }
+    }
+
+    // The run the build's entry was dispatched as, once it has been.
+    private static async Task<long?> DispatchedRunAsync(long entryId)
+    {
+        long? run = null;
+        (
+            await Shared
+                .Testing.Polling.WaitUntilAsync(
+                    async () =>
+                        (run = (await EntryAsync(entryId).ConfigureAwait(false)).MetadataId)
+                            is not null,
+                    TopicMapDraft.Patience,
+                    TimeSpan.FromMilliseconds(100)
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeTrue("the build's entry is dispatched");
+
+        return run;
+    }
+
+    // Every cancel is refused, and the bulk cancel skips the run and says why.
+    private static void ShouldAllBeRefused(
+        List<(bool Success, string? Message)> refused,
+        (bool Success, string? Message) bulk
+    )
+    {
         refused
             .Should()
             .AllSatisfy(r =>
@@ -420,11 +503,6 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 "1 skipped: "
                     + Trax.Scheduler.Services.Operations.OperationsService.UserOwnedRunCancelRefusal
             );
-
-        // The build goes on, and its outcome moves the draft.
-        (
-            await _draft.WaitForStateAsync(nameof(TopicMapState.Built))
-        ).Context["topicPairs"]!.GetValue<int>().Should().Be(32);
     }
 
     private async Task<(bool Success, string? Message)> OperationAsync(
@@ -432,7 +510,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
         params string[] path
     )
     {
-        var response = await GraphQL.SendAsync(mutation, OperatorKey);
+        var response = await GraphQL.SendAsync(mutation, OperatorKey).ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var payload = response.GetData(["operations", .. path]);
         return (
@@ -443,35 +521,46 @@ public class TopicMapMachineTests : RecoveryTestFixture
 
     private static async Task<Trax.Effect.Models.WorkQueue.WorkQueue> EntryAsync(long id)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .SingleAsync(w => w.Id == id);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.AsNoTracking()
+                .SingleAsync(w => w.Id == id)
+                .ConfigureAwait(false);
+        }
     }
 
     [Test]
     public async Task ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt()
     {
         var sweeper = SharedRecoverySetup.Factory.Services.GetRequiredService<TopicMapSweeper>();
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
-        var first = (await _draft.WaitForStateAsync(nameof(TopicMapState.Built))).Context[
-            "mapId"
-        ]!.GetValue<string>();
+        await _draft.NotNull().CreateAsync();
+        await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var first = (await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built)))
+            .Context["mapId"]
+            .NotNull()
+            .GetValue<string>();
 
-        (await _draft.AdvanceAsync(nameof(TopicMapTrigger.Rebuild)))
+        (await _draft.NotNull().AdvanceAsync(nameof(TopicMapTrigger.Rebuild)))
             .State.Should()
             .Be(nameof(TopicMapState.Building));
         var rebuilt = await Shared.Testing.Polling.WaitUntilAsync(
             async () =>
-                (await _draft.LoadAsync()).Context["mapId"]?.GetValue<string>() is { } id
-                && id != first,
+                (await _draft.NotNull().LoadAsync().ConfigureAwait(false))
+                    .Context["mapId"]
+                    ?.GetValue<string>()
+                    is { } id
+                && !string.Equals(id, first, StringComparison.Ordinal),
             TopicMapDraft.Patience,
             TimeSpan.FromMilliseconds(200)
         );
         rebuilt.Should().BeTrue("the rebuild's outcome moves the draft's pointer to its new map");
-        var second = (await _draft.LoadAsync()).Context["mapId"]!.GetValue<string>();
+        var second = (await _draft.NotNull().LoadAsync())
+            .Context["mapId"]
+            .NotNull()
+            .GetValue<string>();
 
         // A map one sweep finds unreferenced is kept until the next, a build's pairs being written
         // a moment before its outcome points the draft at them.
@@ -491,11 +580,12 @@ public class TopicMapMachineTests : RecoveryTestFixture
     public async Task TheSweep_NeverDeletesAMapAStoredDraftPointsAt_NorOneItSawOnlyOnce()
     {
         var sweeper = SharedRecoverySetup.Factory.Services.GetRequiredService<TopicMapSweeper>();
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
-        var kept = (await _draft.WaitForStateAsync(nameof(TopicMapState.Built))).Context[
-            "mapId"
-        ]!.GetValue<string>();
+        await _draft.NotNull().CreateAsync();
+        await _draft.NotNull().BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var kept = (await _draft.NotNull().WaitForStateAsync(nameof(TopicMapState.Built)))
+            .Context["mapId"]
+            .NotNull()
+            .GetValue<string>();
 
         // Pairs no draft points at, written after the last sweep: the next sweep only notes them.
         const string Orphan = "map-orphan-sweep-test";
@@ -523,11 +613,11 @@ public class TopicMapMachineTests : RecoveryTestFixture
     [Test]
     public async Task AnotherUser_CannotLoadTheDraft()
     {
-        await _draft.CreateAsync();
+        await _draft.NotNull().CreateAsync();
         var viewer = new GraphQLClient(Http);
 
         var response = await viewer.SendAsync(
-            $$"""{ machines { topicMap { get(id: "{{_draft.Id}}") { id state } } } }""",
+            $$"""{ machines { topicMap { get(id: "{{_draft.NotNull().Id}}") { id state } } } }""",
             Auth.DemoKeys.Viewer
         );
 
@@ -543,35 +633,52 @@ public class TopicMapMachineTests : RecoveryTestFixture
 
     private async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Row()
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .SnapshotDrafts.AsNoTracking()
-            .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId);
+        var draftId = _draft.NotNull().Id;
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.AsNoTracking()
+                .SingleAsync(d => d.Id == draftId && d.Machine == TopicMapMachine.MachineId)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> Runs()
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.AsNoTracking()
-            .Where(w => w.InvokingInstanceId == _draft.Id)
-            .OrderBy(w => w.Id)
-            .ToListAsync();
+        var draftId = _draft.NotNull().Id;
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.AsNoTracking()
+                .Where(w => w.InvokingInstanceId == draftId)
+                .OrderBy(w => w.Id)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private static async Task<bool> RunCancelled(string externalId)
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var entry = await db.WorkQueues.AsNoTracking().SingleAsync(w => w.ExternalId == externalId);
-        if (entry.Status == WorkQueueStatus.Cancelled)
-            return true;
-        return entry.MetadataId is { } id
-            && await db
-                .Metadatas.AsNoTracking()
-                .AnyAsync(m => m.Id == id && m.TrainState == TrainState.Cancelled);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
+            var entry = await db
+                .WorkQueues.AsNoTracking()
+                .SingleAsync(w => w.ExternalId == externalId)
+                .ConfigureAwait(false);
+            if (entry.Status == WorkQueueStatus.Cancelled)
+                return true;
+            return entry.MetadataId is { } id
+                && await db
+                    .Metadatas.AsNoTracking()
+                    .AnyAsync(m => m.Id == id && m.TrainState == TrainState.Cancelled)
+                    .ConfigureAwait(false);
+        }
     }
 
     private static Task<TopicMapDbContext> TopicMapDb() =>

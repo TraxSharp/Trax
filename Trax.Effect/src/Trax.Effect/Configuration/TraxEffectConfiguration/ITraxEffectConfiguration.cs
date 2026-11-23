@@ -18,8 +18,8 @@ public interface ITraxEffectConfiguration
 
     /// <summary>
     /// Whether the junction logger stores each junction's serialized output in <c>JunctionMetadata.OutputJson</c>.
-    /// <c>false</c> unless <c>AddJunctionLogger(serializeJunctionData: true)</c> was called; while it is
-    /// <c>false</c>, <c>OutputJson</c> is left <c>null</c>.
+    /// <see langword="false"/> unless <c>AddJunctionLogger(serializeJunctionData: true)</c> was called; while it is
+    /// <see langword="false"/>, <c>OutputJson</c> is left <see langword="null"/>.
     /// </summary>
     public bool SerializeJunctionData { get; }
 

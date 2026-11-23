@@ -10,7 +10,7 @@ namespace Trax.Scheduler.Services.DeadLetterCleanupPollingService;
 /// <summary>
 /// Background service that periodically runs the dead letter cleanup train.
 /// </summary>
-internal class DeadLetterCleanupPollingService(
+internal sealed class DeadLetterCleanupPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
     ILogger<DeadLetterCleanupPollingService> logger
@@ -25,16 +25,19 @@ internal class DeadLetterCleanupPollingService(
         );
 
         // Run immediately on startup
-        await RunCleanup(stoppingToken);
+        await RunCleanup(stoppingToken).ConfigureAwait(false);
 
         while (
-            await PollingDelay.WaitAsync(
-                () => configuration.DeadLetterCleanupInterval,
-                stoppingToken
-            )
+            await PollingDelay
+                .WaitAsync(
+                    () => configuration.DeadLetterCleanupInterval,
+                    serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System,
+                    stoppingToken
+                )
+                .ConfigureAwait(false)
         )
         {
-            await RunCleanup(stoppingToken);
+            await RunCleanup(stoppingToken).ConfigureAwait(false);
         }
 
         logger.LogInformation("DeadLetterCleanupPollingService stopping");
@@ -44,11 +47,14 @@ internal class DeadLetterCleanupPollingService(
     {
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<IDeadLetterCleanupTrain>();
 
             logger.LogDebug("Dead letter cleanup cycle starting");
-            await train.Run(new DeadLetterCleanupRequest(), cancellationToken);
+            await train
+                .Run(new DeadLetterCleanupRequest(), cancellationToken)
+                .ConfigureAwait(false);
             logger.LogDebug("Dead letter cleanup cycle completed");
         }
         catch (Exception ex)

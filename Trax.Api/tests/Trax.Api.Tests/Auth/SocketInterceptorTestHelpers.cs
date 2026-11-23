@@ -68,7 +68,11 @@ internal static class SocketInterceptorTestHelpers
         );
     }
 
-    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     /// <summary>
     /// Builds a fake <see cref="ISocketSession"/> wrapping a

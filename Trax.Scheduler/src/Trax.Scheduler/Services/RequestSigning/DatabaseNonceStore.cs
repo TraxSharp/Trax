@@ -35,17 +35,21 @@ internal sealed class DatabaseNonceStore(IDataContextProviderFactory contexts, I
         CancellationToken cancellationToken
     )
     {
-        var context = await contexts.CreateDbContextAsync(cancellationToken);
-        await using var _ = context;
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var _ = context;
+        await using (_.ConfigureAwait(false))
+        {
+            var recorded = await Record(context, nonce, expiresAt, now, cancellationToken)
+                .ConfigureAwait(false);
 
-        var recorded = await Record(context, nonce, expiresAt, now, cancellationToken);
+            if (recorded && Interlocked.Increment(ref _recordedSinceSweep) % SweepEvery == 0)
+                await context
+                    .RunnerNonces.Where(n => n.ExpiresAt < now)
+                    .ExecuteDeleteAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
-        if (recorded && Interlocked.Increment(ref _recordedSinceSweep) % SweepEvery == 0)
-            await context
-                .RunnerNonces.Where(n => n.ExpiresAt < now)
-                .ExecuteDeleteAsync(cancellationToken);
-
-        return recorded;
+            return recorded;
+        }
     }
 
     private async Task<bool> Record(
@@ -59,7 +63,7 @@ internal sealed class DatabaseNonceStore(IDataContextProviderFactory contexts, I
         context.RunnerNonces.Add(new RunnerNonce { Nonce = nonce, ExpiresAt = expiresAt });
         try
         {
-            await context.SaveChanges(cancellationToken);
+            await context.SaveChanges(cancellationToken).ConfigureAwait(false);
             return true;
         }
         catch (DbUpdateException exception) when (dialect.IsUniqueViolation(exception))
@@ -72,7 +76,8 @@ internal sealed class DatabaseNonceStore(IDataContextProviderFactory contexts, I
                 .ExecuteUpdateAsync(
                     set => set.SetProperty(n => n.ExpiresAt, expiresAt),
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
             return takenOver == 1;
         }
     }

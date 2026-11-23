@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -16,6 +17,8 @@ public sealed class DeployManifest
 
     private static readonly JsonSerializerOptions Json = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
@@ -28,19 +31,19 @@ public sealed class DeployManifest
     /// What the host runs, sorted: <c>api</c> (it maps the Trax GraphQL endpoint), <c>job-runner</c> (it maps a runner
     /// endpoint), <c>scheduler</c>, <c>worker</c>.
     /// </summary>
-    public List<string> Roles { get; set; } = [];
+    public IList<string> Roles { get; set; } = [];
 
     /// <summary>The database the host keeps its runs in, or null when it has no data provider.</summary>
     public DeployDatabase? Database { get; set; }
 
     /// <summary>The message transports the host connects to, sorted (<c>rabbitmq</c>).</summary>
-    public List<string> Transports { get; set; } = [];
+    public IList<string> Transports { get; set; } = [];
 
     /// <summary>The paths of the endpoints a deployment routes to or probes.</summary>
     public DeployEndpoints Endpoints { get; set; } = new();
 
     /// <summary>The authentication schemes the host registers, sorted by name.</summary>
-    public List<DeployAuthenticationScheme> Authentication { get; set; } = [];
+    public IList<DeployAuthenticationScheme> Authentication { get; set; } = [];
 
     /// <summary>Writes the manifest as indented JSON.</summary>
     public string Write() => JsonSerializer.Serialize(this, Json) + "\n";
@@ -57,45 +60,12 @@ public sealed class DeployManifest
             ?? throw new InvalidOperationException("The deploy manifest is empty.");
         if (manifest.Version > CurrentVersion)
             throw new InvalidOperationException(
-                $"The deploy manifest has format version {manifest.Version}, and this build reads up to "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The deploy manifest has format version {manifest.Version}, and this build reads up to "
+                )
                     + $"{CurrentVersion}. Update the trax tool to the version of the packages the host uses."
             );
         return manifest;
     }
-}
-
-/// <summary>The database a deployed host needs.</summary>
-public sealed class DeployDatabase
-{
-    /// <summary><c>postgres</c>, <c>sqlite</c> or <c>in-memory</c>.</summary>
-    public string Provider { get; set; } = "";
-
-    /// <summary>
-    /// Whether the host migrates the schema when it starts. False when its code calls <c>SkipMigrations()</c>; a
-    /// deployment that runs <c>--trax-migrate</c> sets <c>TRAX_MIGRATIONS=skip</c> on the rest regardless.
-    /// </summary>
-    public bool MigratesOnStart { get; set; }
-}
-
-/// <summary>The paths a deployment routes to or probes. A path the host does not map is null.</summary>
-public sealed class DeployEndpoints
-{
-    /// <summary>The Trax GraphQL endpoint, from <c>UseTraxGraphQL</c>.</summary>
-    public string? GraphQL { get; set; }
-
-    /// <summary>The health check, from <c>MapHealthChecks</c>.</summary>
-    public string? Health { get; set; }
-
-    /// <summary>The operations console, from <c>UseTraxApiDashboard</c>.</summary>
-    public string? Console { get; set; }
-}
-
-/// <summary>An authentication scheme the host registers.</summary>
-public sealed class DeployAuthenticationScheme
-{
-    /// <summary>The scheme's name, as <c>AddAuthentication</c> registered it.</summary>
-    public string Name { get; set; } = "";
-
-    /// <summary>The handler's type name, such as <c>JwtBearerHandler</c> or <c>OpenIdConnectHandler</c>.</summary>
-    public string Handler { get; set; } = "";
 }

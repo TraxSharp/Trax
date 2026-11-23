@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Route;
@@ -120,7 +121,7 @@ public class ServiceExtensionsRegistrationTests
         var train = scope.ServiceProvider.GetService<IFakeTrain>() as FakeTrain;
 
         train.Should().NotBeNull();
-        train!.CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
+        train.NotNull().CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
     }
 
     [Test]
@@ -133,7 +134,7 @@ public class ServiceExtensionsRegistrationTests
         var train = provider.GetService<IFakeTrain>() as FakeTrain;
 
         train.Should().NotBeNull();
-        train!.CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
+        train.NotNull().CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
     }
 
     [Test]
@@ -161,7 +162,7 @@ public class ServiceExtensionsRegistrationTests
         var train = scope.ServiceProvider.GetService<IFakeTrain>() as FakeTrain;
 
         train.Should().NotBeNull();
-        train!.CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
+        train.NotNull().CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
     }
 
     [Test]
@@ -175,21 +176,21 @@ public class ServiceExtensionsRegistrationTests
         var junction = scope.ServiceProvider.GetService<IFakeJunction>() as FakeJunction;
 
         junction.Should().NotBeNull();
-        junction!.GetType().GetProperty("CanonicalName").Should().BeNull();
+        junction.NotNull().GetType().GetProperty("CanonicalName").Should().BeNull();
     }
 
     #endregion
 
     #region Test helpers
 
-    public interface IFakeJunction : IJunction<string, int> { }
+    public interface IFakeJunction : IJunction<string, int>;
 
     public class FakeJunction : Junction<string, int>, IFakeJunction
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    public interface IFakeRoute : IRoute<string, int> { }
+    public interface IFakeRoute : IRoute<string, int>;
 
     public class FakeRoute : IFakeRoute
     {
@@ -197,7 +198,7 @@ public class ServiceExtensionsRegistrationTests
             Task.FromResult(input.Length);
     }
 
-    public interface IFakeTrain : IServiceTrain<string, Unit> { }
+    public interface IFakeTrain : IServiceTrain<string, Unit>;
 
     public class FakeTrain : ServiceTrain<string, Unit>, IFakeTrain
     {

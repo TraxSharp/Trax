@@ -1,38 +1,9 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Fakes;
-
-public enum StrictState
-{
-    Open,
-    Done,
-}
-
-public enum StrictTrigger
-{
-    Submit,
-    Check,
-}
-
-public enum StrictColor
-{
-    Red,
-    DarkGreen,
-
-    [JsonStringEnumMemberName("sky-blue")]
-    SkyBlue,
-}
-
-/// <summary>A flags enum, which no schema can describe: <c>SchemaFormatTests</c> checks a record holding one is refused.</summary>
-[Flags]
-public enum StrictFlags
-{
-    None = 0,
-    Bold = 1,
-    Italic = 2,
-}
 
 /// <summary>
 /// A declarative machine whose <c>Submit</c> takes a <see cref="StrictInput"/>: one field of every CLR type the
@@ -41,7 +12,7 @@ public enum StrictFlags
 /// </summary>
 public static class StrictInputMachine
 {
-    public sealed record StrictInput
+    internal sealed record StrictInput
     {
         public StrictColor Color { get; init; }
         public Guid Id { get; init; }
@@ -188,7 +159,7 @@ public static class StrictInputMachine
         )
         {
             why =
-                $"the record writes back {written!.ToJsonString()}, which is refused: {r.Reason} {r.Detail}";
+                $"the record writes back {written.NotNull().ToJsonString()}, which is refused: {r.Reason} {r.Detail}";
             return false;
         }
         return true;

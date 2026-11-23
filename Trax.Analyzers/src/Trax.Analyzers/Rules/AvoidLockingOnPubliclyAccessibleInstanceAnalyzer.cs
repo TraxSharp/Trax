@@ -1,0 +1,54 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class AvoidLockingOnPubliclyAccessibleInstanceAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.AvoidLockingOnPubliclyAccessibleInstance,
+        title: "Avoid locking on publicly accessible instance",
+        messageFormat: "Avoid locking on publicly accessible instance",
+        RuleCategories.Design,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.AvoidLockingOnPubliclyAccessibleInstance));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var typeSymbol = compilationContext.Compilation.GetTypeByMetadataName("System.Type");
+            compilationContext.RegisterOperationAction(context => AnalyzeOperation(context, typeSymbol), OperationKind.Lock);
+        });
+    }
+
+    private static void AnalyzeOperation(OperationAnalysisContext context, ITypeSymbol? typeSymbol)
+    {
+        var operation = (ILockOperation)context.Operation;
+        if (operation.LockedValue is ITypeOfOperation)
+        {
+            context.ReportDiagnostic(Rule, operation.LockedValue);
+        }
+        else if (operation.LockedValue is IInstanceReferenceOperation)
+        {
+            if (operation.LockedValue.Type.IsVisibleOutsideOfAssembly())
+            {
+                context.ReportDiagnostic(Rule, operation.LockedValue);
+            }
+
+        }
+        else if (operation.LockedValue is IFieldReferenceOperation fieldReferenceOperation && fieldReferenceOperation.Field.IsVisibleOutsideOfAssembly())
+        {
+            context.ReportDiagnostic(Rule, operation.LockedValue);
+        }
+        else if (operation.LockedValue is ILocalReferenceOperation localReference && localReference.Local.Type.IsEqualTo(typeSymbol))
+        {
+            context.ReportDiagnostic(Rule, operation.LockedValue);
+        }
+    }
+}

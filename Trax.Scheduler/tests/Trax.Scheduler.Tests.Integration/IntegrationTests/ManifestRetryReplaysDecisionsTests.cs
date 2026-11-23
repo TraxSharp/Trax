@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -60,19 +61,19 @@ public class ManifestRetryReplaysDecisionsTests
     private const string Adr =
         "docs/adr/0017-a-manifests-retry-replays-the-decisions-of-the-run-it-retries.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     // A host built for one test, in place of the shared one. Disposed by that test.
     private IServiceProvider? _override;
 
-    private IServiceProvider Provider => _override ?? _provider;
-    private ScriptedDecider _decider = null!;
+    private IServiceProvider Provider => _override ?? _provider.NotNull();
+    private ScriptedDecider? _decider;
 
     [OneTimeSetUp]
     public void BuildProvider()
     {
         _decider = new ScriptedDecider();
-        _provider = BuildProvider(_decider);
+        _provider = BuildProvider(_decider.NotNull());
     }
 
     private static ServiceProvider BuildProvider(
@@ -119,7 +120,11 @@ public class ManifestRetryReplaysDecisionsTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task Clean()
@@ -127,7 +132,8 @@ public class ManifestRetryReplaysDecisionsTests
         DecisionProbe.Reset();
         Answer(ProbeLane.Slow, ProbeSize.Large);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -138,12 +144,14 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task A_retry_takes_the_failed_runs_tracks_without_asking_the_decider()
     {
         var manifest = await CreateManifestAsync("retry");
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
 
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
         var failed = await CycleAsync(manifest);
         failed.TrainState.Should().Be(TrainState.Failed);
-        (_decider.Requests.Count - before).Should().Be(2, "the first run asked both questions");
+        (_decider.NotNull().Requests.Count - before)
+            .Should()
+            .Be(2, "the first run asked both questions");
 
         // A decider asked now would send the retry down the other tracks.
         DecisionProbe.FailAt = ProbeFailure.None;
@@ -155,7 +163,7 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .Be(failed.Id, $"the retry replays the run it retries. See {Adr}");
         (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().Be(failed.Id);
-        (_decider.Requests.Count - before)
+        (_decider.NotNull().Requests.Count - before)
             .Should()
             .Be(2, $"the retry asked nothing: two questions in all, not four. See {Adr}");
         DecisionProbe
@@ -172,7 +180,7 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task A_retry_replays_once_and_the_retry_after_a_failed_replay_asks_afresh()
     {
         var manifest = await CreateManifestAsync("once", maxRetries: 3);
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
 
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
         var first = await CycleAsync(manifest);
@@ -182,7 +190,9 @@ public class ManifestRetryReplaysDecisionsTests
         var second = await CycleAsync(manifest);
         second.TrainState.Should().Be(TrainState.Failed);
         second.ReplayDecisionsOf.Should().Be(first.Id);
-        (_decider.Requests.Count - before).Should().Be(2, "the first retry asked nothing");
+        (_decider.NotNull().Requests.Count - before)
+            .Should()
+            .Be(2, "the first retry asked nothing");
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
@@ -192,7 +202,7 @@ public class ManifestRetryReplaysDecisionsTests
         third
             .ReplayDecisionsOf.Should()
             .BeNull($"answers already replayed into a failure are not replayed again. See {Adr}");
-        (_decider.Requests.Count - before)
+        (_decider.NotNull().Requests.Count - before)
             .Should()
             .Be(4, "the second retry asked both questions afresh");
         DecisionProbe
@@ -237,13 +247,14 @@ public class ManifestRetryReplaysDecisionsTests
         // An operator requeues the failed run itself. Its run replays the failed run's answers
         // and fails too. It belongs to no manifest, so the manifest never retries it directly.
         long requeueEntry;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .RequeueExecutionAsync(failed.Id, CancellationToken.None);
             result.Success.Should().BeTrue(result.Message);
-            requeueEntry = result.Id!.Value;
+            requeueEntry = result.Id.NotNull().Value;
         }
         var requeued = await DispatchEntryAsync(requeueEntry);
         requeued.TrainState.Should().Be(TrainState.Failed);
@@ -267,16 +278,23 @@ public class ManifestRetryReplaysDecisionsTests
         // Dead-lettered, then acknowledged: the failure no longer counts, so the next run is an
         // ordinary occurrence, not a retry of it.
         await RunManifestManagerAsync();
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
             var deadLetterId = await WithData(data =>
                 data.DeadLetters.AsNoTracking()
                     .Where(d => d.ManifestId == manifest.Id)
                     .Select(d => d.Id)
-                    .SingleAsync()
+                    .SingleAsync(cancellationToken: CancellationToken.None)
             );
-            (await scheduler.AcknowledgeDeadLetterAsync(deadLetterId, "handled"))
+            (
+                await scheduler.AcknowledgeDeadLetterAsync(
+                    deadLetterId,
+                    "handled",
+                    CancellationToken.None
+                )
+            )
                 .Success.Should()
                 .BeTrue();
         }
@@ -316,10 +334,11 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The parent succeeds again: the dependent's next run is fired by that success.
         DecisionProbe.FailAt = ProbeFailure.None;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             await scope
                 .ServiceProvider.GetRequiredService<ITraxScheduler>()
-                .TriggerAsync(parent.ExternalId);
+                .TriggerAsync(parent.ExternalId, CancellationToken.None);
         (await DispatchQueuedAsync(parent)).TrainState.Should().Be(TrainState.Completed);
 
         await AssertRetryAsksAfreshAsync(dependent, "fired");
@@ -341,50 +360,20 @@ public class ManifestRetryReplaysDecisionsTests
         await RunManifestManagerAsync();
 
         // An operator's requeue of the failed run is queued, or already running.
-        await WithData(async data =>
-        {
-            if (queuedEntry)
-                data.WorkQueues.Add(
-                    WorkQueue.Create(
-                        new CreateWorkQueue
-                        {
-                            TrainName = manifest.Name,
-                            Input = manifest.Properties,
-                            InputTypeName = manifest.PropertyTypeName,
-                            ReplayDecisionsOf = failed.Id,
-                            ScheduledAt = DateTime.UtcNow.AddHours(1),
-                        }
-                    )
-                );
-            else
-            {
-                var running = Metadata.Create(
-                    new CreateMetadata
-                    {
-                        Name = manifest.Name,
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                        ReplayDecisionsOf = failed.Id,
-                    }
-                );
-                running.TrainState = TrainState.InProgress;
-                data.Metadatas.Add(running);
-            }
-            await data.SaveChanges(CancellationToken.None);
-            return true;
-        });
+        await SeedReplayOf(manifest, failed.Id, queuedEntry);
 
         var deadLetterId = await WithData(data =>
             data.DeadLetters.AsNoTracking()
                 .Where(d => d.ManifestId == manifest.Id)
                 .Select(d => d.Id)
-                .SingleAsync()
+                .SingleAsync(cancellationToken: CancellationToken.None)
         );
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ITraxScheduler>()
-                    .RequeueDeadLetterAsync(deadLetterId)
+                    .RequeueDeadLetterAsync(deadLetterId, CancellationToken.None)
             )
                 .Success.Should()
                 .BeTrue();
@@ -397,13 +386,14 @@ public class ManifestRetryReplaysDecisionsTests
     [Test]
     public async Task A_retry_after_cleanup_swept_the_failed_replay_asks_afresh_on_a_host_without_cleanup()
     {
-        await using var swept = BuildProvider(
-            _decider,
+        var swept = BuildProvider(
+            _decider.NotNull(),
             configureScheduler: scheduler =>
                 scheduler.AddMetadataCleanup(c =>
                     c.AddTrainType<IDecisionProbeTrain>(TimeSpan.FromMinutes(5))
                 )
         );
+        await using var sweptDisposal = swept.ConfigureAwait(false);
         _override = swept;
         Manifest manifest;
         try
@@ -418,27 +408,30 @@ public class ManifestRetryReplaysDecisionsTests
             // Both runs are older than the retention. The sweep deletes the replay together with
             // the run it replayed, never the replay alone, which would leave that run looking as
             // though nothing had replayed it.
-            await WithData(async data =>
-            {
-                await data
-                    .Metadatas.Where(m => m.Id == first.Id)
-                    .ExecuteUpdateAsync(s =>
-                        s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-11))
-                    );
-                return await data
-                    .Metadatas.Where(m => m.Id == replay.Id)
-                    .ExecuteUpdateAsync(s =>
-                        s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-10))
-                    );
-            });
-            using (var scope = Provider.CreateScope())
+            await AgePastRetention(first.Id, replay.Id);
+            var scope = Provider.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 await scope
                     .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
-                    .Run(new MetadataCleanupRequest());
-            (await WithData(data => data.Metadatas.AnyAsync(m => m.Id == replay.Id)))
+                    .Run(new MetadataCleanupRequest(), CancellationToken.None);
+            (
+                await WithData(data =>
+                    data.Metadatas.AnyAsync(
+                        m => m.Id == replay.Id,
+                        cancellationToken: CancellationToken.None
+                    )
+                )
+            )
                 .Should()
                 .BeFalse();
-            (await WithData(data => data.Metadatas.AnyAsync(m => m.Id == first.Id)))
+            (
+                await WithData(data =>
+                    data.Metadatas.AnyAsync(
+                        m => m.Id == first.Id,
+                        cancellationToken: CancellationToken.None
+                    )
+                )
+            )
                 .Should()
                 .BeFalse($"a replay is deleted only with the run it replays. See {Adr}");
         }
@@ -465,14 +458,23 @@ public class ManifestRetryReplaysDecisionsTests
         (await QueuedEntryOf(manifest)).ReplayDecisionsOf.Should().Be(failed.Id);
         await WithData(async data =>
         {
-            await data.RecordedDecisions.Where(d => d.MetadataId == failed.Id).ExecuteDeleteAsync();
-            await data.WorkQueues.Where(q => q.MetadataId == failed.Id).ExecuteDeleteAsync();
-            return await data.Metadatas.Where(m => m.Id == failed.Id).ExecuteDeleteAsync();
+            await data
+                .RecordedDecisions.Where(d => d.MetadataId == failed.Id)
+                .ExecuteDeleteAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
+            await data
+                .WorkQueues.Where(q => q.MetadataId == failed.Id)
+                .ExecuteDeleteAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
+            return await data
+                .Metadatas.Where(m => m.Id == failed.Id)
+                .ExecuteDeleteAsync(cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
         });
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await DispatchQueuedAsync(manifest);
 
         retry
@@ -482,7 +484,9 @@ public class ManifestRetryReplaysDecisionsTests
                 $"a manifest's retry that cannot replay asks afresh rather than failing. See {Adr}"
             );
         retry.ReplayDecisionsOf.Should().Be(failed.Id, "the link reached the run");
-        (_decider.Requests.Count - asked).Should().Be(2, "both questions were asked afresh");
+        (_decider.NotNull().Requests.Count - asked)
+            .Should()
+            .Be(2, "both questions were asked afresh");
         DecisionProbe.TracksOf("vanished").TakeLast(2).Should().Equal("Fast", "Small");
     }
 
@@ -497,13 +501,14 @@ public class ManifestRetryReplaysDecisionsTests
         (await QueuedEntryOf(manifest)).ReplayDecisionsOf.Should().Be(failed.Id);
 
         // The retry is claimed and run by a host without AddDecisionRecording.
-        await using var unrecording = BuildProvider(_decider, recordDecisions: false);
+        var unrecording = BuildProvider(_decider.NotNull(), recordDecisions: false);
+        await using var unrecordingDisposal = unrecording.ConfigureAwait(false);
         _override = unrecording;
         try
         {
             DecisionProbe.FailAt = ProbeFailure.None;
             Answer(ProbeLane.Fast, ProbeSize.Small);
-            var asked = _decider.Requests.Count;
+            var asked = _decider.NotNull().Requests.Count;
             var retry = await DispatchQueuedAsync(manifest);
 
             retry
@@ -513,7 +518,7 @@ public class ManifestRetryReplaysDecisionsTests
                     $"a manifest's retry that cannot replay asks afresh rather than failing. See {Adr}"
                 );
             retry.ReplayDecisionsOf.Should().Be(failed.Id, "the link reached the run");
-            (_decider.Requests.Count - asked).Should().Be(2);
+            (_decider.NotNull().Requests.Count - asked).Should().Be(2);
             DecisionProbe.TracksOf("unrecording-host").TakeLast(2).Should().Equal("Fast", "Small");
         }
         finally
@@ -535,19 +540,22 @@ public class ManifestRetryReplaysDecisionsTests
         // recorded under a fingerprint the question no longer has.
         await WithData(data =>
             data.RecordedDecisions.Where(d => d.MetadataId == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Fingerprint, "an-older-question"))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(d => d.Fingerprint, "an-older-question"),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await CycleAsync(manifest);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
         retry
             .ReplayDecisionsOf.Should()
             .Be(failed.Id, "the run is linked; the answers no longer fit");
-        (_decider.Requests.Count - asked)
+        (_decider.NotNull().Requests.Count - asked)
             .Should()
             .Be(2, $"an answer given to another question is not replayed. See {Adr}");
         DecisionProbe
@@ -578,7 +586,7 @@ public class ManifestRetryReplaysDecisionsTests
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
 
         var requeued = await RequeueDeadLetterAndRunAsync(manifest, askAfresh, how);
 
@@ -588,7 +596,7 @@ public class ManifestRetryReplaysDecisionsTests
             requeued
                 .ReplayDecisionsOf.Should()
                 .BeNull($"the operator asked the requeue to ask afresh. See {Adr}");
-            (_decider.Requests.Count - asked).Should().Be(2);
+            (_decider.NotNull().Requests.Count - asked).Should().Be(2);
             DecisionProbe
                 .TracksOf("dead-letter")
                 .Should()
@@ -599,7 +607,7 @@ public class ManifestRetryReplaysDecisionsTests
             requeued
                 .ReplayDecisionsOf.Should()
                 .Be(failed.Id, $"a dead-letter requeue retries the failed run. See {Adr}");
-            (_decider.Requests.Count - asked).Should().Be(0, "the requeue asked nothing");
+            (_decider.NotNull().Requests.Count - asked).Should().Be(0, "the requeue asked nothing");
             DecisionProbe
                 .TracksOf("dead-letter")
                 .Should()
@@ -621,13 +629,18 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The retry is queued with its link; an operator triggers the manifest before it runs.
         await RunManifestManagerAsync();
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
             if (askAfresh)
-                await scheduler.TriggerAsync(manifest.ExternalId, askAfresh: true);
+                await scheduler.TriggerAsync(
+                    manifest.ExternalId,
+                    askAfresh: true,
+                    CancellationToken.None
+                );
             else
-                await scheduler.TriggerAsync(manifest.ExternalId);
+                await scheduler.TriggerAsync(manifest.ExternalId, CancellationToken.None);
         }
 
         DecisionProbe.FailAt = ProbeFailure.None;
@@ -666,12 +679,13 @@ public class ManifestRetryReplaysDecisionsTests
 
         if (throughOperations)
         {
-            using var scope = Provider.CreateScope();
+            var scope = Provider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .SetManifestsReplayDecisionsOnRetryAsync(
                     [manifest.Id],
-                    false,
+                    replay: false,
                     CancellationToken.None
                 );
             result.Success.Should().BeTrue();
@@ -684,12 +698,15 @@ public class ManifestRetryReplaysDecisionsTests
             // A write that leaves the queued link in place: the dispatcher must still honour it.
             await WithData(data =>
                 data.Manifests.Where(m => m.Id == manifest.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOnRetry, false))
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.ReplayDecisionsOnRetry, valueExpression: false),
+                        cancellationToken: CancellationToken.None
+                    )
             );
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await DispatchQueuedAsync(manifest);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
@@ -697,7 +714,7 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .BeNull($"the manifest no longer replays decisions on retry. See {Adr}");
         (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().BeNull();
-        (_decider.Requests.Count - asked).Should().Be(2);
+        (_decider.NotNull().Requests.Count - asked).Should().Be(2);
     }
 
     [Test]
@@ -710,14 +727,15 @@ public class ManifestRetryReplaysDecisionsTests
         failed.TrainState.Should().Be(TrainState.Failed);
 
         // A host whose replay lookup cannot reach its store.
-        await using var faulty = BuildProvider(
-            _decider,
+        var faulty = BuildProvider(
+            _decider.NotNull(),
             services =>
                 services.AddScoped(_ => new RetryDecisionReplay(
                     new UnreachableStore(),
                     NullLogger.Instance
                 ))
         );
+        await using var faultyDisposal = faulty.ConfigureAwait(false);
         _override = faulty;
         try
         {
@@ -738,7 +756,7 @@ public class ManifestRetryReplaysDecisionsTests
             maxRetries: deadLetter ? 0 : 3,
             replayDecisionsOnRetry: false
         );
-        var before = _decider.Requests.Count;
+        var before = _decider.NotNull().Requests.Count;
 
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
         var failed = await CycleAsync(manifest);
@@ -760,7 +778,7 @@ public class ManifestRetryReplaysDecisionsTests
         retry
             .ReplayDecisionsOf.Should()
             .BeNull($"the manifest set ReplayDecisionsOnRetry(false). See {Adr}");
-        (_decider.Requests.Count - before)
+        (_decider.NotNull().Requests.Count - before)
             .Should()
             .Be(4, "the failed run and its retry each asked both questions");
         DecisionProbe
@@ -780,15 +798,20 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The manifest's properties are edited between the failure and its retry. The answers
         // were given about the old input.
-        var edited = manifest.Properties!.Replace("before-edit", "after-edit");
+        var edited = manifest
+            .Properties.NotNull()
+            .Replace("before-edit", "after-edit", StringComparison.Ordinal);
         await WithData(data =>
             data.Manifests.Where(m => m.Id == manifest.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.Properties, edited))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.Properties, edited),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
         var retry = await CycleAsync(manifest);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
@@ -796,7 +819,9 @@ public class ManifestRetryReplaysDecisionsTests
             .ReplayDecisionsOf.Should()
             .BeNull($"answers given about one input are not replayed into another. See {Adr}");
         (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().BeNull();
-        (_decider.Requests.Count - asked).Should().Be(2, "the retry asked both questions afresh");
+        (_decider.NotNull().Requests.Count - asked)
+            .Should()
+            .Be(2, "the retry asked both questions afresh");
         DecisionProbe.TracksOf("after-edit").Should().Equal("Fast", "Small");
     }
 
@@ -813,7 +838,10 @@ public class ManifestRetryReplaysDecisionsTests
         // answers nobody can know. Replaying it would fail the retry permanently.
         await WithData(data =>
             data.Metadatas.Where(m => m.Id == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.DecisionsRecorded, false))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.DecisionsRecorded, valueExpression: false),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         await AssertRetryAsksAfreshAsync(manifest, "unrecorded");
@@ -829,7 +857,8 @@ public class ManifestRetryReplaysDecisionsTests
 
         // With no entry there is no input to compare the retry's with.
         await WithData(data =>
-            data.WorkQueues.Where(q => q.MetadataId == failed.Id).ExecuteDeleteAsync()
+            data.WorkQueues.Where(q => q.MetadataId == failed.Id)
+                .ExecuteDeleteAsync(cancellationToken: CancellationToken.None)
         );
 
         await AssertRetryAsksAfreshAsync(manifest, "entry-gone");
@@ -847,7 +876,10 @@ public class ManifestRetryReplaysDecisionsTests
         // The failed run's entry claims another manifest: it was not queued by this one.
         await WithData(data =>
             data.WorkQueues.Where(q => q.MetadataId == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(q => q.ManifestId, (long?)other.Id))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(q => q.ManifestId, (long?)other.Id),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         await AssertRetryAsksAfreshAsync(manifest, "own-entry");
@@ -863,7 +895,10 @@ public class ManifestRetryReplaysDecisionsTests
 
         await WithData(data =>
             data.WorkQueues.Where(q => q.MetadataId == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(q => q.SubjectKey, "tenant-a"))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(q => q.SubjectKey, "tenant-a"),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         await AssertRetryAsksAfreshAsync(manifest, "subject");
@@ -880,7 +915,10 @@ public class ManifestRetryReplaysDecisionsTests
         // Same JSON, read as another type: not the input the answers were given about.
         await WithData(data =>
             data.WorkQueues.Where(q => q.MetadataId == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(q => q.InputTypeName, "Some.Other.Input"))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(q => q.InputTypeName, "Some.Other.Input"),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         await AssertRetryAsksAfreshAsync(manifest, "retyped");
@@ -897,7 +935,10 @@ public class ManifestRetryReplaysDecisionsTests
 
         await WithData(data =>
             data.Metadatas.Where(m => m.Id == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.Name, "Some.Other.ITrain"))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.Name, "Some.Other.ITrain"),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         await AssertRetryAsksAfreshAsync(manifest, "renamed");
@@ -913,8 +954,13 @@ public class ManifestRetryReplaysDecisionsTests
         // Due again at once, as an ordinary occurrence rather than a retry.
         await WithData(data =>
             data.Manifests.Where(m => m.Id == manifest.Id)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(m => m.LastSuccessfulRun, DateTime.UtcNow.AddHours(-2))
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(
+                            m => m.LastSuccessfulRun,
+                            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+                        ),
+                    cancellationToken: CancellationToken.None
                 )
         );
 
@@ -990,34 +1036,21 @@ public class ManifestRetryReplaysDecisionsTests
         // The parent's LastSuccessfulRun and the entry's DispatchedAt are stamped by the database's
         // clock, the run's StartTime by its host's. Here the two clocks disagree about whether the
         // parent succeeded after the failed run.
-        var success = DateTime.UtcNow.AddMinutes(-10);
+        var success = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10);
         var startedAt = dispatchedAfterTheParentsSuccess
             ? success.AddMinutes(-5)
             : success.AddMinutes(5);
         var dispatchedAt = dispatchedAfterTheParentsSuccess
             ? success.AddMinutes(5)
             : success.AddMinutes(-5);
-        await WithData(async data =>
-        {
-            await data
-                .Metadatas.Where(m => m.Id == failed.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startedAt));
-            await data
-                .WorkQueues.Where(q => q.MetadataId == failed.Id)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(q => q.DispatchedAt, (DateTime?)dispatchedAt)
-                );
-            return await data
-                .Manifests.Where(m => m.Id == parent.Id)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(m => m.LastSuccessfulRun, (DateTime?)success)
-                );
-        });
+        await StampClocks(failed.Id, parent.Id, startedAt, dispatchedAt, success);
 
         var stored = await WithData(data =>
-            data.Manifests.AsNoTracking().SingleAsync(m => m.Id == dependent.Id)
+            data.Manifests.AsNoTracking()
+                .SingleAsync(m => m.Id == dependent.Id, cancellationToken: CancellationToken.None)
         );
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var source = await scope
             .ServiceProvider.GetRequiredService<RetryDecisionReplay>()
             .SourceForRetryAsync(stored, CancellationToken.None);
@@ -1041,13 +1074,19 @@ public class ManifestRetryReplaysDecisionsTests
         var failed = await CycleAsync(manifest);
         failed.TrainState.Should().Be(TrainState.Failed);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var result = await scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
             .RequeueExecutionAsync(failed.Id, askAfresh, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
-        (await WithData(data => data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == result.Id)))
+        (
+            await WithData(data =>
+                data.WorkQueues.AsNoTracking()
+                    .SingleAsync(q => q.Id == result.Id, cancellationToken: CancellationToken.None)
+            )
+        )
             .ReplayDecisionsOf.Should()
             .Be(askAfresh ? null : failed.Id, $"an operator can requeue without replay. See {Adr}");
     }
@@ -1067,14 +1106,20 @@ public class ManifestRetryReplaysDecisionsTests
         (await QueuedEntryOf(manifest)).ReplayDecisionsOf.Should().Be(failed.Id);
 
         OperationResult result;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
                 .RequeueExecutionAsync(failed.Id, CancellationToken.None);
 
         result.Success.Should().BeTrue(result.Message);
         result.Message.Should().Contain("afresh");
-        (await WithData(data => data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == result.Id)))
+        (
+            await WithData(data =>
+                data.WorkQueues.AsNoTracking()
+                    .SingleAsync(q => q.Id == result.Id, cancellationToken: CancellationToken.None)
+            )
+        )
             .ReplayDecisionsOf.Should()
             .BeNull($"the failed run's answers are already being replayed once. See {Adr}");
         (await QueuedEntryOf(manifest))
@@ -1102,22 +1147,26 @@ public class ManifestRetryReplaysDecisionsTests
                     sp.GetRequiredService<IDataContextProviderFactory>(),
                     gate
                 ));
-        await using var first = BuildProvider(_decider, Configure);
-        await using var second = BuildProvider(_decider, Configure);
+        var first = BuildProvider(_decider.NotNull(), Configure);
+        await using var firstDisposal = first.ConfigureAwait(false);
+        var second = BuildProvider(_decider.NotNull(), Configure);
+        await using var secondDisposal = second.ConfigureAwait(false);
 
         static async Task Cycle(IServiceProvider host)
         {
-            using var scope = host.CreateScope();
+            var scope = host.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             await scope
                 .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
-                .Run(Unit.Default);
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
         }
         await Task.WhenAll(Cycle(first), Cycle(second));
 
         var entries = await WithData(data =>
             data.WorkQueues.AsNoTracking()
                 .Where(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
-                .ToListAsync()
+                .ToListAsync(cancellationToken: CancellationToken.None)
         );
         entries.Should().ContainSingle("a manifest has one queued entry at a time");
         entries[0]
@@ -1150,8 +1199,8 @@ public class ManifestRetryReplaysDecisionsTests
         // where the refused insert survives only because EF Core rolls back to the savepoint it
         // takes before each save, so the retry can be saved again without its link.
         await QueueCompetingReplayAsync(manifest, failed.Id);
-        await using var stale = BuildProvider(
-            _decider,
+        var stale = BuildProvider(
+            _decider.NotNull(),
             services =>
                 services.AddScoped<RetryDecisionReplay>(sp => new StaleLookup(
                     sp.GetRequiredService<IDataContextProviderFactory>(),
@@ -1159,6 +1208,7 @@ public class ManifestRetryReplaysDecisionsTests
                     failed.Id
                 ))
         );
+        await using var staleDisposal = stale.ConfigureAwait(false);
         var polling = new ManifestManagerPollingService(
             stale,
             stale.GetRequiredService<SchedulerConfiguration>(),
@@ -1185,7 +1235,7 @@ public class ManifestRetryReplaysDecisionsTests
         {
             if (Interlocked.Increment(ref _arrived) == participants)
                 _all.TrySetResult();
-            return _all.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            return _all.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         }
     }
 
@@ -1197,8 +1247,8 @@ public class ManifestRetryReplaysDecisionsTests
             CancellationToken ct
         )
         {
-            var sources = await base.SourcesForRetriesAsync(manifests, ct);
-            await gate.ArriveAndWaitAsync();
+            var sources = await base.SourcesForRetriesAsync(manifests, ct).ConfigureAwait(false);
+            await gate.ArriveAndWaitAsync().ConfigureAwait(false);
             return sources;
         }
     }
@@ -1249,12 +1299,18 @@ public class ManifestRetryReplaysDecisionsTests
         var queued = await QueuedEntryOf(manifest);
         DecisionProbe.FailAt = ProbeFailure.None;
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var scheduler = (TraxScheduler)scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
         // The dispatcher claims the entry between the trigger reading it and releasing it.
-        scheduler.BeforeTriggerRelease = async (_, _) => await DispatchEntryAsync(queued.Id);
+        scheduler.BeforeTriggerRelease = async (_, _) =>
+            await DispatchEntryAsync(queued.Id).ConfigureAwait(false);
 
-        var result = await scheduler.TriggerAsync(manifest.ExternalId, askAfresh: true);
+        var result = await scheduler.TriggerAsync(
+            manifest.ExternalId,
+            askAfresh: true,
+            CancellationToken.None
+        );
 
         result.WorkQueueId.Should().Be(queued.Id);
         result.Created.Should().BeFalse();
@@ -1277,10 +1333,11 @@ public class ManifestRetryReplaysDecisionsTests
         await RunManifestManagerAsync();
         var queued = await QueuedEntryOf(manifest);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var result = await scope
             .ServiceProvider.GetRequiredService<ITraxScheduler>()
-            .TriggerAsync(manifest.ExternalId, askAfresh: true);
+            .TriggerAsync(manifest.ExternalId, askAfresh: true, CancellationToken.None);
 
         result.WorkQueueId.Should().Be(queued.Id);
         result.AlreadyDispatched.Should().BeFalse();
@@ -1291,10 +1348,11 @@ public class ManifestRetryReplaysDecisionsTests
     public async Task Turning_replay_off_clears_queued_links_in_its_message_and_signals_the_queue()
     {
         var recording = new RecordingChangeSignal();
-        await using var signalled = BuildProvider(
-            _decider,
+        var signalled = BuildProvider(
+            _decider.NotNull(),
             services => services.AddSingleton<ITraxChangeSignal>(recording)
         );
+        await using var signalledDisposal = signalled.ConfigureAwait(false);
         _override = signalled;
         try
         {
@@ -1309,17 +1367,21 @@ public class ManifestRetryReplaysDecisionsTests
             // carries its link.
             await WithData(data =>
                 data.Manifests.Where(m => m.Id == manifest.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOnRetry, false))
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.ReplayDecisionsOnRetry, valueExpression: false),
+                        cancellationToken: CancellationToken.None
+                    )
             );
             recording.Clear();
 
             OperationResult result;
-            using (var scope = Provider.CreateScope())
+            var scope = Provider.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
                 result = await scope
                     .ServiceProvider.GetRequiredService<IOperationsService>()
                     .SetManifestsReplayDecisionsOnRetryAsync(
                         [manifest.Id],
-                        false,
+                        replay: false,
                         CancellationToken.None
                     );
 
@@ -1347,11 +1409,12 @@ public class ManifestRetryReplaysDecisionsTests
                         Input = manifest.Properties,
                         InputTypeName = manifest.PropertyTypeName,
                         ReplayDecisionsOf = source,
-                        ScheduledAt = DateTime.UtcNow.AddHours(1),
-                    }
+                        ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                    },
+                    TimeProvider.System
                 )
             );
-            await data.SaveChanges(CancellationToken.None);
+            await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return true;
         });
 
@@ -1364,7 +1427,8 @@ public class ManifestRetryReplaysDecisionsTests
         var failed = await CycleAsync(manifest);
         failed.TrainState.Should().Be(TrainState.Failed);
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var operations = (OperationsService)
             scope.ServiceProvider.GetRequiredService<IOperationsService>();
         // Another requeue of the same run lands between this one's check and its insert.
@@ -1374,7 +1438,12 @@ public class ManifestRetryReplaysDecisionsTests
 
         result.Success.Should().BeTrue(result.Message);
         result.Message.Should().Contain("afresh");
-        (await WithData(data => data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == result.Id)))
+        (
+            await WithData(data =>
+                data.WorkQueues.AsNoTracking()
+                    .SingleAsync(q => q.Id == result.Id, cancellationToken: CancellationToken.None)
+            )
+        )
             .ReplayDecisionsOf.Should()
             .BeNull($"the index holds one queued replay of a run. See {Adr}");
     }
@@ -1391,14 +1460,17 @@ public class ManifestRetryReplaysDecisionsTests
             data.DeadLetters.AsNoTracking()
                 .Where(d => d.ManifestId == manifest.Id)
                 .Select(d => d.Id)
-                .SingleAsync()
+                .SingleAsync(cancellationToken: CancellationToken.None)
         );
 
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var scheduler = (TraxScheduler)scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
         scheduler.BeforeRequeueInsert = _ => QueueCompetingReplayAsync(manifest, failed.Id);
 
-        (await scheduler.RequeueDeadLettersAsync([deadLetterId])).Count.Should().Be(1);
+        (await scheduler.RequeueDeadLettersAsync([deadLetterId], CancellationToken.None))
+            .Count.Should()
+            .Be(1);
 
         (await QueuedEntryOf(manifest))
             .ReplayDecisionsOf.Should()
@@ -1416,8 +1488,8 @@ public class ManifestRetryReplaysDecisionsTests
 
         // The lookup ran before a requeue of the failed run was queued, so it still names it.
         await QueueCompetingReplayAsync(manifest, failed.Id);
-        await using var stale = BuildProvider(
-            _decider,
+        var stale = BuildProvider(
+            _decider.NotNull(),
             services =>
                 services.AddScoped<RetryDecisionReplay>(sp => new StaleLookup(
                     sp.GetRequiredService<IDataContextProviderFactory>(),
@@ -1425,6 +1497,7 @@ public class ManifestRetryReplaysDecisionsTests
                     failed.Id
                 ))
         );
+        await using var staleDisposal = stale.ConfigureAwait(false);
         _override = stale;
         try
         {
@@ -1469,13 +1542,18 @@ public class ManifestRetryReplaysDecisionsTests
         // The second run abandoned its replay and asked its deciders itself.
         await WithData(data =>
             data.Metadatas.Where(m => m.Id == second.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayAbandoned, true))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.ReplayAbandoned, valueExpression: true),
+                    cancellationToken: CancellationToken.None
+                )
         );
 
         var stored = await WithData(data =>
-            data.Manifests.AsNoTracking().SingleAsync(m => m.Id == manifest.Id)
+            data.Manifests.AsNoTracking()
+                .SingleAsync(m => m.Id == manifest.Id, cancellationToken: CancellationToken.None)
         );
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (
             await scope
                 .ServiceProvider.GetRequiredService<RetryDecisionReplay>()
@@ -1489,7 +1567,12 @@ public class ManifestRetryReplaysDecisionsTests
             .ServiceProvider.GetRequiredService<IOperationsService>()
             .RequeueExecutionAsync(first.Id, CancellationToken.None);
         result.Success.Should().BeTrue(result.Message);
-        (await WithData(data => data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == result.Id)))
+        (
+            await WithData(data =>
+                data.WorkQueues.AsNoTracking()
+                    .SingleAsync(q => q.Id == result.Id, cancellationToken: CancellationToken.None)
+            )
+        )
             .ReplayDecisionsOf.Should()
             .Be(first.Id);
     }
@@ -1553,21 +1636,26 @@ public class ManifestRetryReplaysDecisionsTests
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ReplayDecisionsOf = failed.Id,
-                }
+                },
+                TimeProvider.System
             );
-            await data.Track(earlier);
-            await data.SaveChanges(CancellationToken.None);
+            await data.Track(earlier).ConfigureAwait(false);
+            await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return await data
                 .Metadatas.Where(m => m.Id == earlier.Id)
-                .ExecuteUpdateAsync(s =>
-                {
-                    if (abandoned)
-                        s.SetProperty(m => m.TrainState, TrainState.Completed)
-                            .SetProperty(m => m.ReplayAbandoned, true);
-                    else
-                        s.SetProperty(m => m.TrainState, TrainState.Failed)
-                            .SetProperty(m => m.FailureException, DispatchFailure.Requeued);
-                });
+                .ExecuteUpdateAsync(
+                    s =>
+                    {
+                        if (abandoned)
+                            s.SetProperty(m => m.TrainState, TrainState.Completed)
+                                .SetProperty(m => m.ReplayAbandoned, valueExpression: true);
+                        else
+                            s.SetProperty(m => m.TrainState, TrainState.Failed)
+                                .SetProperty(m => m.FailureException, DispatchFailure.Requeued);
+                    },
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
         });
 
         var replay = await DispatchEntryAsync(await QueueReplayAsync(manifest, failed.Id));
@@ -1582,7 +1670,7 @@ public class ManifestRetryReplaysDecisionsTests
     private async Task<Metadata> FailOnceAsync(Manifest manifest)
     {
         DecisionProbe.FailAt = ProbeFailure.AfterQuestions;
-        var failed = await CycleAsync(manifest);
+        var failed = await CycleAsync(manifest).ConfigureAwait(false);
         failed.TrainState.Should().Be(TrainState.Failed);
         DecisionProbe.FailAt = ProbeFailure.None;
         return failed;
@@ -1592,12 +1680,14 @@ public class ManifestRetryReplaysDecisionsTests
     private async Task<Metadata> RequeueAndDispatchAsync(long metadataId)
     {
         OperationResult result;
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
             result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
-                .RequeueExecutionAsync(metadataId, CancellationToken.None);
+                .RequeueExecutionAsync(metadataId, CancellationToken.None)
+                .ConfigureAwait(false);
         result.Success.Should().BeTrue(result.Message);
-        return await DispatchEntryAsync(result.Id!.Value);
+        return await DispatchEntryAsync(result.Id.NotNull().Value).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1614,10 +1704,11 @@ public class ManifestRetryReplaysDecisionsTests
                     Input = input ?? manifest.Properties,
                     InputTypeName = manifest.PropertyTypeName,
                     ReplayDecisionsOf = source,
-                }
+                },
+                TimeProvider.System
             );
             data.WorkQueues.Add(entry);
-            await data.SaveChanges(CancellationToken.None);
+            await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return entry.Id;
         });
 
@@ -1626,7 +1717,7 @@ public class ManifestRetryReplaysDecisionsTests
             data.Metadatas.AsNoTracking()
                 .Where(m => m.ReplayDecisionsOf == source)
                 .Select(m => m.Id)
-                .ToListAsync()
+                .ToListAsync(cancellationToken: CancellationToken.None)
         );
 
     /// <summary>
@@ -1642,20 +1733,23 @@ public class ManifestRetryReplaysDecisionsTests
         var tracksBefore = expectedTracksBefore ?? DecisionProbe.TracksOf(value).Count;
         DecisionProbe.FailAt = ProbeFailure.None;
         Answer(ProbeLane.Fast, ProbeSize.Small);
-        var asked = _decider.Requests.Count;
+        var asked = _decider.NotNull().Requests.Count;
 
-        var retry = await CycleAsync(manifest);
+        var retry = await CycleAsync(manifest).ConfigureAwait(false);
 
         retry.TrainState.Should().Be(TrainState.Completed, retry.FailureReason);
         retry
             .ReplayDecisionsOf.Should()
             .BeNull($"a replay that could not be honoured is not linked. See {Adr}");
-        (await EntryOf(retry.Id)).ReplayDecisionsOf.Should().BeNull();
-        (_decider.Requests.Count - asked).Should().Be(2, "the retry asked both questions afresh");
+        (await EntryOf(retry.Id).ConfigureAwait(false)).ReplayDecisionsOf.Should().BeNull();
+        (_decider.NotNull().Requests.Count - asked)
+            .Should()
+            .Be(2, "the retry asked both questions afresh");
         DecisionProbe.TracksOf(value).Skip(tracksBefore).Should().Equal("Fast", "Small");
     }
 
-    private void Answer(ProbeLane lane, ProbeSize size) => _decider.Choose(lane).Choose(size);
+    private void Answer(ProbeLane lane, ProbeSize size) =>
+        _decider.NotNull().Choose(lane).Choose(size);
 
     public enum DeadLetterRequeue
     {
@@ -1672,42 +1766,66 @@ public class ManifestRetryReplaysDecisionsTests
     )
     {
         var deadLetterId = await WithData(data =>
-            data.DeadLetters.AsNoTracking()
-                .Where(d =>
-                    d.ManifestId == manifest.Id && d.Status == DeadLetterStatus.AwaitingIntervention
-                )
-                .Select(d => d.Id)
-                .SingleAsync()
-        );
+                data.DeadLetters.AsNoTracking()
+                    .Where(d =>
+                        d.ManifestId == manifest.Id
+                        && d.Status == DeadLetterStatus.AwaitingIntervention
+                    )
+                    .Select(d => d.Id)
+                    .SingleAsync(cancellationToken: CancellationToken.None)
+            )
+            .ConfigureAwait(false);
 
-        using (var scope = Provider.CreateScope())
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
             switch (how)
             {
                 case DeadLetterRequeue.Single:
-                    (await scheduler.RequeueDeadLetterAsync(deadLetterId, askAfresh))
+                    (
+                        await scheduler
+                            .RequeueDeadLetterAsync(deadLetterId, askAfresh, CancellationToken.None)
+                            .ConfigureAwait(false)
+                    )
                         .Success.Should()
                         .BeTrue();
                     break;
                 case DeadLetterRequeue.Batch:
-                    (await scheduler.RequeueDeadLettersAsync([deadLetterId], askAfresh))
+                    (
+                        await scheduler
+                            .RequeueDeadLettersAsync(
+                                [deadLetterId],
+                                askAfresh,
+                                CancellationToken.None
+                            )
+                            .ConfigureAwait(false)
+                    )
                         .Count.Should()
                         .Be(1);
                     break;
                 default:
-                    (await scheduler.RequeueAllDeadLettersAsync(askAfresh)).Count.Should().Be(1);
+                    (
+                        await scheduler
+                            .RequeueAllDeadLettersAsync(askAfresh, CancellationToken.None)
+                            .ConfigureAwait(false)
+                    )
+                        .Count.Should()
+                        .Be(1);
                     break;
             }
         }
 
-        return await DispatchQueuedAsync(manifest);
+        return await DispatchQueuedAsync(manifest).ConfigureAwait(false);
     }
 
     private Task<WorkQueue> QueuedEntryOf(Manifest manifest) =>
         WithData(data =>
             data.WorkQueues.AsNoTracking()
-                .SingleAsync(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
+                .SingleAsync(
+                    q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued,
+                    cancellationToken: CancellationToken.None
+                )
         );
 
     /// <summary>A store that cannot be reached, for the replay lookup only.</summary>
@@ -1728,13 +1846,13 @@ public class ManifestRetryReplaysDecisionsTests
         Manifest? dependsOn = null
     )
     {
-        using var scope = Provider.CreateScope();
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            data,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -1750,8 +1868,8 @@ public class ManifestRetryReplaysDecisionsTests
         );
         manifest.ManifestGroupId = group.Id;
         manifest.Owner = owner;
-        await data.Track(manifest);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(manifest).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return manifest;
     }
 
@@ -1761,44 +1879,67 @@ public class ManifestRetryReplaysDecisionsTests
     /// </summary>
     private async Task<Metadata> CycleAsync(Manifest manifest)
     {
-        await RunManifestManagerAsync();
-        return await DispatchQueuedAsync(manifest);
+        await RunManifestManagerAsync().ConfigureAwait(false);
+        return await DispatchQueuedAsync(manifest).ConfigureAwait(false);
     }
 
     private async Task RunManifestManagerAsync()
     {
-        using var scope = Provider.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        await scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private async Task<Metadata> DispatchQueuedAsync(Manifest manifest)
     {
         var entryId = await WithData(data =>
-            data.WorkQueues.AsNoTracking()
-                .Where(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
-                .Select(q => q.Id)
-                .SingleAsync()
-        );
+                data.WorkQueues.AsNoTracking()
+                    .Where(q => q.ManifestId == manifest.Id && q.Status == WorkQueueStatus.Queued)
+                    .Select(q => q.Id)
+                    .SingleAsync(cancellationToken: CancellationToken.None)
+            )
+            .ConfigureAwait(false);
 
-        return await DispatchEntryAsync(entryId);
+        return await DispatchEntryAsync(entryId).ConfigureAwait(false);
     }
 
     private async Task<Metadata> DispatchEntryAsync(long entryId)
     {
-        using (var scope = Provider.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+        var scope = Provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default, CancellationToken.None)
+                .ConfigureAwait(false);
 
         return await WithData(async data =>
-        {
-            var entry = await data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId);
-            entry.Status.Should().Be(WorkQueueStatus.Dispatched);
-            return await data.Metadatas.AsNoTracking().SingleAsync(m => m.Id == entry.MetadataId);
-        });
+            {
+                var entry = await data
+                    .WorkQueues.AsNoTracking()
+                    .SingleAsync(q => q.Id == entryId, cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
+                entry.Status.Should().Be(WorkQueueStatus.Dispatched);
+                return await data
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(
+                        m => m.Id == entry.MetadataId,
+                        cancellationToken: CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+            })
+            .ConfigureAwait(false);
     }
 
     private Task<WorkQueue> EntryOf(long metadataId) =>
         WithData(data =>
-            data.WorkQueues.AsNoTracking().SingleAsync(q => q.MetadataId == metadataId)
+            data.WorkQueues.AsNoTracking()
+                .SingleAsync(
+                    q => q.MetadataId == metadataId,
+                    cancellationToken: CancellationToken.None
+                )
         );
 
     private Task<List<Effect.Models.RecordedDecision.RecordedDecision>> DecisionsOf(
@@ -1808,12 +1949,109 @@ public class ManifestRetryReplaysDecisionsTests
             data.RecordedDecisions.AsNoTracking()
                 .Where(d => d.MetadataId == metadataId)
                 .OrderBy(d => d.Id)
-                .ToListAsync()
+                .ToListAsync(cancellationToken: CancellationToken.None)
         );
+
+    private Task<int> StampClocks(
+        long failedId,
+        long parentId,
+        DateTime startedAt,
+        DateTime dispatchedAt,
+        DateTime success
+    ) =>
+        WithData(async data =>
+        {
+            await data
+                .Metadatas.Where(m => m.Id == failedId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.StartTime, startedAt),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            await data
+                .WorkQueues.Where(q => q.MetadataId == failedId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(q => q.DispatchedAt, (DateTime?)dispatchedAt),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            return await data
+                .Manifests.Where(m => m.Id == parentId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.LastSuccessfulRun, (DateTime?)success),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        });
+
+    private Task<bool> SeedReplayOf(Manifest manifest, long failedId, bool queuedEntry) =>
+        WithData(async data =>
+        {
+            if (queuedEntry)
+                data.WorkQueues.Add(
+                    WorkQueue.Create(
+                        new CreateWorkQueue
+                        {
+                            TrainName = manifest.Name,
+                            Input = manifest.Properties,
+                            InputTypeName = manifest.PropertyTypeName,
+                            ReplayDecisionsOf = failedId,
+                            ScheduledAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+                        },
+                        TimeProvider.System
+                    )
+                );
+            else
+            {
+                var running = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = manifest.Name,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                        ReplayDecisionsOf = failedId,
+                    },
+                    TimeProvider.System
+                );
+                running.TrainState = TrainState.InProgress;
+                data.Metadatas.Add(running);
+            }
+            await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+            return true;
+        });
+
+    private Task<int> AgePastRetention(long firstId, long replayId) =>
+        WithData(async data =>
+        {
+            await data
+                .Metadatas.Where(m => m.Id == firstId)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(
+                            m => m.StartTime,
+                            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-11)
+                        ),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            return await data
+                .Metadatas.Where(m => m.Id == replayId)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(
+                            m => m.StartTime,
+                            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+                        ),
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        });
 
     private async Task<T> WithData<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = Provider.CreateScope();
-        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>());
+        var scope = Provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
+            .ConfigureAwait(false);
     }
 }

@@ -64,6 +64,22 @@ internal static class TypedQueryGenerator
         var keyword = opAttr.OperationType == OperationType.Query ? "query" : "mutation";
         sb.Append(keyword).Append(' ').Append(operationName);
 
+        AppendVariables(sb, args);
+
+        AppendOperationBody(sb, pathSegments, rootField, args, elementResultType);
+
+        return new GeneratedQuery(
+            sb.ToString(),
+            operationName,
+            opAttr.OperationType,
+            args,
+            pathSegments,
+            rootField
+        );
+    }
+
+    private static void AppendVariables(StringBuilder sb, IReadOnlyList<ArgumentBinding> args)
+    {
         if (args.Count > 0)
         {
             sb.Append('(');
@@ -78,7 +94,16 @@ internal static class TypedQueryGenerator
             }
             sb.Append(')');
         }
+    }
 
+    private static void AppendOperationBody(
+        StringBuilder sb,
+        IReadOnlyList<string> pathSegments,
+        string rootField,
+        IReadOnlyList<ArgumentBinding> args,
+        Type elementResultType
+    )
+    {
         // Wrapper fields (e.g. `discover { netsuite { ... } }`) sit between the operation body
         // and the root field. Their indent grows with depth so the formatted output stays
         // readable. The root field's own indent is 2 spaces per nesting level above its baseline.
@@ -93,6 +118,23 @@ internal static class TypedQueryGenerator
 
         sb.Append(new string(' ', rootIndent)).Append(rootField);
 
+        AppendRootArguments(sb, args);
+
+        sb.Append(" {\n");
+        WriteSelectionSet(sb, elementResultType, indent: rootIndent + 2);
+        sb.Append(new string(' ', rootIndent)).Append("}\n");
+
+        for (var i = pathSegments.Count - 1; i >= 0; i--)
+        {
+            rootIndent -= 2;
+            sb.Append(new string(' ', rootIndent)).Append("}\n");
+        }
+
+        sb.Append("}\n");
+    }
+
+    private static void AppendRootArguments(StringBuilder sb, IReadOnlyList<ArgumentBinding> args)
+    {
         if (args.Count > 0)
         {
             sb.Append('(');
@@ -107,27 +149,6 @@ internal static class TypedQueryGenerator
             }
             sb.Append(')');
         }
-
-        sb.Append(" {\n");
-        WriteSelectionSet(sb, elementResultType, indent: rootIndent + 2);
-        sb.Append(new string(' ', rootIndent)).Append("}\n");
-
-        for (var i = pathSegments.Count - 1; i >= 0; i--)
-        {
-            rootIndent -= 2;
-            sb.Append(new string(' ', rootIndent)).Append("}\n");
-        }
-
-        sb.Append("}\n");
-
-        return new GeneratedQuery(
-            sb.ToString(),
-            operationName,
-            opAttr.OperationType,
-            args,
-            pathSegments,
-            rootField
-        );
     }
 
     private static IReadOnlyList<string> ParsePath(string? path, Type requestType)
@@ -212,7 +233,10 @@ internal static class TypedQueryGenerator
             var underlying = Nullable.GetUnderlyingType(nested) ?? nested;
 
             sb.Append(new string(' ', indent));
-            if (fieldName is null || fieldName == responseKey)
+            if (
+                fieldName is null
+                || string.Equals(fieldName, responseKey, StringComparison.Ordinal)
+            )
             {
                 sb.Append(responseKey);
             }
@@ -294,7 +318,7 @@ internal static class TypedQueryGenerator
     // server, and selecting their CLR properties would ask for fields no schema has.
     private static bool HasGraphQLType(Type t)
     {
-        if (t.GetCustomAttribute<GraphQLTypeAttribute>() is not null)
+        if (Attribute.IsDefined(t, typeof(GraphQLTypeAttribute)))
             return true;
         if (!t.IsClass || t == typeof(string) || t == typeof(object) || IsBclType(t))
             return false;
@@ -303,7 +327,10 @@ internal static class TypedQueryGenerator
 
     private static bool IsBclType(Type t) =>
         t.Namespace is { } ns
-        && (ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal));
+        && (
+            string.Equals(ns, "System", StringComparison.Ordinal)
+            || ns.StartsWith("System.", StringComparison.Ordinal)
+        );
 
     private static Type? UnwrapEnumerable(Type t)
     {

@@ -26,6 +26,8 @@ internal static class InvokedRunOutput
     public static JsonSerializerOptions Json { get; } =
         new()
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
         };

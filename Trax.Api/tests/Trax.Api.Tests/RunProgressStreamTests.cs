@@ -4,6 +4,7 @@ using HotChocolate.Execution;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Api.Tests;
@@ -45,7 +46,7 @@ public class RunProgressStreamTests
                 new[] { 1, 2, 4, 8, 16, 30, 30 }.Select(s => TimeSpan.FromSeconds(s)),
                 "a stream waiting for a retry looks once a second at first, then less often"
             );
-        events.Last().RetriedAs.Should().Be("retry");
+        events[^1].RetriedAs.Should().Be("retry");
     }
 
     [Test]
@@ -59,19 +60,21 @@ public class RunProgressStreamTests
                 return Task.FromResult<(string?, bool)>((null, false));
             },
             // allowed-delay: the stream's own wait between looks, kept short so the loop runs while the test watches.
-            (_, ct) => Task.Delay(TimeSpan.FromMilliseconds(10), ct)
+            (_, ct) => Task.Delay(TimeSpan.FromMilliseconds(10), TimeProvider.System, ct)
         );
         var reader = stream.ReadEventsAsync().GetAsyncEnumerator();
         (await reader.MoveNextAsync()).Should().BeTrue();
         var waiting = reader.MoveNextAsync().AsTask();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (Volatile.Read(ref looks) < 2 && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (
+            Volatile.Read(ref looks) < 2 && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+        )
             // allowed-delay: waits for the retry loop to start, bounded by the deadline.
             await Task.Delay(10);
 
         await stream.DisposeAsync();
 
-        (await waiting.WaitAsync(TimeSpan.FromSeconds(5)))
+        (await waiting.WaitAsync(TimeSpan.FromSeconds(5), stream.Clock))
             .Should()
             .BeFalse("a disposed stream ends");
         var after = Volatile.Read(ref looks);
@@ -162,7 +165,7 @@ public class RunProgressStreamTests
                 "a read that keeps failing is tried less often"
             );
         events.Should().HaveCount(2);
-        events[1].Problem!.Code.Should().Be(RefusalCode.InternalError);
+        events[1].Problem.NotNull().Code.Should().Be(RefusalCode.InternalError);
         events[1].Sequence.Should().Be(2);
         lease.Disposed.Should().Be(1, "the ended stream gives its place back");
     }
@@ -220,12 +223,12 @@ public class RunProgressStreamTests
         new(
             new string('a', 32),
             "Train",
-            null,
+            Field: null,
             1,
             state,
-            null,
+            Failure: null,
             "starter",
-            new LifecycleVisibility(false, new HashSet<string>(StringComparer.Ordinal))
+            new LifecycleVisibility(All: false, new HashSet<string>(StringComparer.Ordinal))
         )
         {
             ManifestId = 1,
@@ -273,7 +276,7 @@ public class RunProgressStreamTests
         )
         {
             // allowed-delay: waits for the stream to be cancelled, not for a duration.
-            await Task.Delay(Timeout.Infinite, ct);
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
             yield break;
         }
 

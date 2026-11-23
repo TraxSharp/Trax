@@ -15,6 +15,8 @@ public class ResponseShapeIgnoreConditionTests
 {
     private static readonly JsonSerializerOptions Options = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = true,
     };
 

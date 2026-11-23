@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -46,7 +47,7 @@ public class SharedGroupManifestPriorityTests
         var entries = await fx
             .DataContext.WorkQueues.AsNoTracking()
             .Where(q => q.Status == WorkQueueStatus.Queued)
-            .ToDictionaryAsync(q => q.ManifestId!.Value, q => q.Priority);
+            .ToDictionaryAsync(q => q.ManifestId.NotNull().Value, q => q.Priority);
 
         entries[urgent.Id].Should().Be(30, "the urgent manifest was scheduled with Priority(30)");
         entries[routine.Id].Should().Be(1, "the routine manifest was scheduled with Priority(1)");

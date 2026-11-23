@@ -1,166 +1,12 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.StateMachine.Persistence.Integration;
-
-public enum ShipState
-{
-    Packing,
-    Shipped,
-}
-
-public enum ShipTrigger
-{
-    Ship,
-}
-
-/// <summary>An effect whose target state is not marked committed: <c>Packing -Ship-&gt; Shipped</c>.</summary>
-public sealed class ShipMachine : Machine<ShipState, ShipTrigger>
-{
-    protected override void Configure(IMachineBuilder<ShipState, ShipTrigger> m)
-    {
-        m.Id("ship").Version(1).StartsAt(ShipState.Packing, () => new JsonObject());
-        m.In(ShipState.Packing)
-            .On(ShipTrigger.Ship)
-            .RunsOnce<IOrderCharge>()
-            .Reduce((_, input) => new JsonObject { ["receipt"] = input?["receipt"]?.DeepClone() })
-            .To(ShipState.Shipped);
-    }
-}
-
-public enum HatchState
-{
-    Shut,
-    Open,
-}
-
-public enum HatchTrigger
-{
-    Open,
-    Shut,
-}
-
-/// <summary>
-/// A hatch with no rule, timer, invoked train, effect, guard or reducer: <c>Shut -Open-&gt; Open -Shut-&gt; Shut</c>.
-/// The soft save serves it.
-/// </summary>
-public sealed class PlainHatchMachine : Machine<HatchState, HatchTrigger>
-{
-    public const string Id = "plain-hatch";
-
-    protected override void Configure(IMachineBuilder<HatchState, HatchTrigger> m)
-    {
-        m.Id(Id).Version(1).StartsAt(HatchState.Shut, () => new JsonObject());
-        m.In(HatchState.Shut).On(HatchTrigger.Open).To(HatchState.Open);
-        m.In(HatchState.Open).On(HatchTrigger.Shut).To(HatchState.Shut);
-    }
-
-    public static string Json(HatchState state) =>
-        new JsonObject
-        {
-            ["machine"] = Id,
-            ["version"] = 1,
-            ["state"] = state.ToString(),
-            ["context"] = new JsonObject(),
-        }.ToJsonString();
-}
-
-/// <summary>The hatch with one guard on <c>Open</c> and nothing else the server does.</summary>
-public sealed class GuardedHatchMachine : Machine<HatchState, HatchTrigger>
-{
-    public const string Id = "guarded-hatch";
-
-    protected override void Configure(IMachineBuilder<HatchState, HatchTrigger> m)
-    {
-        m.Id(Id).Version(1).StartsAt(HatchState.Shut, () => new JsonObject());
-        m.In(HatchState.Shut)
-            .On(HatchTrigger.Open)
-            .When(
-                (_, input) => input?["key"]?.GetValueKind() == System.Text.Json.JsonValueKind.String
-            )
-            .To(HatchState.Open);
-        m.In(HatchState.Open).On(HatchTrigger.Shut).To(HatchState.Shut);
-    }
-}
-
-/// <summary>The hatch whose <c>Shut</c> edge writes the context, and which has no guard.</summary>
-public sealed class ReducingHatchMachine : Machine<HatchState, HatchTrigger>
-{
-    public const string Id = "reducing-hatch";
-
-    protected override void Configure(IMachineBuilder<HatchState, HatchTrigger> m)
-    {
-        m.Id(Id).Version(1).StartsAt(HatchState.Shut, () => new JsonObject());
-        m.In(HatchState.Shut).On(HatchTrigger.Open).To(HatchState.Open);
-        m.In(HatchState.Open)
-            .On(HatchTrigger.Shut)
-            .Reduce((_, _) => new JsonObject { ["shutBy"] = "server" })
-            .To(HatchState.Shut);
-    }
-}
-
-public enum LedgerState
-{
-    Open,
-    Counting,
-    Closed,
-}
-
-public enum LedgerTrigger
-{
-    Count,
-    Close,
-    Reopen,
-}
-
-/// <summary>
-/// A ledger whose <c>Closed</c> state is committed and which has no effect, invoked train, role-gated event, guard
-/// or reducer, so the soft save still serves it: <c>Open -Count-&gt; Counting -Close-&gt; Closed -Reopen-&gt; Open</c>. A closed
-/// ledger holds at least one entry, so a stored one without any cannot be read back.
-/// </summary>
-public sealed class LedgerMachine : Machine<LedgerState, LedgerTrigger>
-{
-    public const string Id = "ledger";
-
-    private static JsonObject Fresh() => new() { ["entries"] = new JsonArray() };
-
-    protected override void Configure(IMachineBuilder<LedgerState, LedgerTrigger> m)
-    {
-        m.Id(Id).Version(1).StartsAt(LedgerState.Open, Fresh);
-        m.In(LedgerState.Open)
-            .Holds(ctx => ctx["entries"] is JsonArray ? null : "Open: entries[].")
-            .On(LedgerTrigger.Count)
-            .To(LedgerState.Counting);
-        m.In(LedgerState.Counting)
-            .Holds(ctx => ctx["entries"] is JsonArray ? null : "Counting: entries[].")
-            .On(LedgerTrigger.Close)
-            .To(LedgerState.Closed);
-        m.In(LedgerState.Closed)
-            .Committed()
-            .Holds(ctx =>
-                ctx["entries"] is JsonArray { Count: > 0 } ? null : "Closed: at least one entry."
-            )
-            .On(LedgerTrigger.Reopen)
-            .To(LedgerState.Open);
-    }
-
-    /// <summary>A ledger in <paramref name="state"/> holding <paramref name="entries"/>, as a client sends it.</summary>
-    public static string Json(LedgerState state, params int[] entries) =>
-        new JsonObject
-        {
-            ["machine"] = Id,
-            ["version"] = 1,
-            ["state"] = state.ToString(),
-            ["context"] = new JsonObject
-            {
-                ["entries"] = new JsonArray(entries.Select(e => (JsonNode)e).ToArray()),
-            },
-        }.ToJsonString();
-}
 
 /// <summary>
 /// Which writes the draft operations accept. A state that an effect-bound transition lands in, or that is
@@ -194,20 +40,29 @@ public class DraftWriteRulesTests
     private static async Task<Guid> SeedReview()
     {
         var id = Guid.NewGuid();
-        (await TestDb.NewStore().Upsert("u", id, Snapshot(OrderMachine.ReviewSnapshot(1))))
+        (
+            await TestDb
+                .NewStore()
+                .Upsert("u", id, Snapshot(OrderMachine.ReviewSnapshot(1)))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeTrue();
         return id;
     }
 
     private static async Task<string?> StoredState(Guid id) =>
-        await Orders().Load("u", id) is LoadResult.Loaded loaded ? loaded.Snapshot.State : null;
+        await Orders().Load("u", id).ConfigureAwait(false) is LoadResult.Loaded loaded
+            ? loaded.Snapshot.State
+            : null;
 
     private static ISnapshotDraftService Ledgers() =>
         new LedgerMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims());
 
     private static async Task<JsonObject?> StoredLedger(Guid id) =>
-        await Ledgers().Load("u", id) is LoadResult.Loaded loaded ? loaded.Snapshot.Context : null;
+        await Ledgers().Load("u", id).ConfigureAwait(false) is LoadResult.Loaded loaded
+            ? loaded.Snapshot.Context
+            : null;
 
     private const string NoSave =
         "the soft save serves only machines with no server-side behaviour, and an effect is one. See "
@@ -253,7 +108,7 @@ public class DraftWriteRulesTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.EffectBound, Adr);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.EffectBound, Adr);
         (await StoredState(id)).Should().Be("Review");
     }
 
@@ -262,11 +117,13 @@ public class DraftWriteRulesTests
     {
         var id = await SeedReview();
         var effect = new CountingEffect();
-        var runner = new OrderMachine().CreateEffectRunner(
-            new OrderMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims()),
-            new IdempotentEffect(TestDb.NewClaims()),
-            new ServiceCollection().AddSingleton<IOrderCharge>(effect).BuildServiceProvider()
-        )!;
+        var runner = new OrderMachine()
+            .CreateEffectRunner(
+                new OrderMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims()),
+                new IdempotentEffect(TestDb.NewClaims()),
+                new ServiceCollection().AddSingleton<IOrderCharge>(effect).BuildServiceProvider()
+            )
+            .NotNull();
 
         (await runner.Run("u", id, "req-1")).Should().BeOfType<AdvanceOutcome.Advanced>();
 
@@ -364,7 +221,7 @@ public class DraftWriteRulesTests
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.DraftCommitted, Adr);
-        (await StoredLedger(id))!["entries"]!.AsArray().Count.Should().Be(1);
+        (await StoredLedger(id)).NotNull()["entries"].NotNull().AsArray().Count.Should().Be(1);
     }
 
     [Test]
@@ -397,7 +254,7 @@ public class DraftWriteRulesTests
             .Which.Code.Should()
             .Be(RefusalCode.SaveNotAllowed, NoSave);
         var stored = (LoadResult.Loaded)await service.Load("u", id);
-        stored.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("r-1");
+        stored.Snapshot.Context["receipt"].NotNull().GetValue<string>().Should().Be("r-1");
     }
 
     [Test]
@@ -516,7 +373,8 @@ public class DraftWriteRulesTests
 
         output.Problem.Should().NotBeNull("the save is refused");
         output
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(
                 RefusalCode.SaveNotAllowed,
                 $"a gated machine's states are reached through its declared events only. See {MachinesAreTheApi}"
@@ -564,7 +422,8 @@ public class DraftWriteRulesTests
 
         output.Problem.Should().NotBeNull("the save is refused");
         output
-            .Problem!.Code.Should()
+            .Problem.NotNull()
+            .Code.Should()
             .Be(
                 RefusalCode.SaveNotAllowed,
                 $"only the guard decides whether the hatch opens. See {MachinesAreTheApi}"
@@ -599,13 +458,13 @@ public class DraftWriteRulesTests
 
     private static Snapshot Snapshot(string json)
     {
-        var node = JsonNode.Parse(json)!.AsObject();
+        var node = JsonNode.Parse(json).NotNull().AsObject();
         return new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = node["context"].NotNull().AsObject().DeepClone().AsObject(),
         };
     }
 }

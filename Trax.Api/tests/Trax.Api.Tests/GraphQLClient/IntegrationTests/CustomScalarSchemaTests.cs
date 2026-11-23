@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
 using Trax.Api.Tests.GraphQLClient.UnitTests;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -49,7 +50,7 @@ public class CustomScalarSchemaTests
 
     private const string SubscriptionOperation = "subscription { ticked }";
 
-    private string _path = null!;
+    private string? _path;
 
     [SetUp]
     public async Task SetUp()
@@ -58,16 +59,16 @@ public class CustomScalarSchemaTests
             System.IO.Path.GetTempPath(),
             $"scalars-{Guid.NewGuid():N}.graphql"
         );
-        await File.WriteAllTextAsync(_path, Sdl);
+        await File.WriteAllTextAsync(_path.NotNull(), Sdl);
     }
 
     [TearDown]
-    public void TearDown() => File.Delete(_path);
+    public void TearDown() => File.Delete(_path.NotNull());
 
     [Test]
     public async Task FileSchemaProvider_LoadsASchemaWithCustomScalars()
     {
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         (await validator.ValidateAsync(ScalarQuery))
             .Should()
@@ -77,7 +78,7 @@ public class CustomScalarSchemaTests
     [Test]
     public async Task FileSchemaProvider_RemovesSubscriptionsByDefault()
     {
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         var act = () => validator.ValidateAsync(SubscriptionOperation);
 
@@ -87,7 +88,7 @@ public class CustomScalarSchemaTests
     [Test]
     public async Task An_operation_whose_root_type_the_schema_lacks_is_refused()
     {
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         var act = () => validator.ValidateAsync("mutation { id }");
 
@@ -100,7 +101,7 @@ public class CustomScalarSchemaTests
     public async Task FileSchemaProvider_KeepsSubscriptionsWhenAskedTo()
     {
         var validator = new GraphQLClientValidator(
-            new FileSchemaProvider(_path, removeSubscriptionsFromSchema: false)
+            new FileSchemaProvider(_path.NotNull(), removeSubscriptionsFromSchema: false)
         );
 
         (await validator.ValidateAsync(SubscriptionOperation))
@@ -112,14 +113,14 @@ public class CustomScalarSchemaTests
     public async Task FileSchemaProvider_WithNoSchemaDefinition_RemovesTheSubscriptionType()
     {
         await File.WriteAllTextAsync(
-            _path,
+            _path.NotNull(),
             """
             scalar UUID
             type Query { id: UUID! }
             type Subscription { ticked: String! }
             """
         );
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         (await validator.ValidateAsync("{ id }"))
             .Should()
@@ -131,8 +132,11 @@ public class CustomScalarSchemaTests
     [Test]
     public async Task FileSchemaProvider_WithNoSubscriptionType_LoadsUnchanged()
     {
-        await File.WriteAllTextAsync(_path, "schema { query: Query } type Query { n: Int }");
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        await File.WriteAllTextAsync(
+            _path.NotNull(),
+            "schema { query: Query } type Query { n: Int }"
+        );
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         (await validator.ValidateAsync("{ n }")).Should().Be(GraphQLParser.AST.OperationType.Query);
     }
@@ -141,7 +145,7 @@ public class CustomScalarSchemaTests
     public async Task An_extension_of_the_subscription_root_is_removed_with_it()
     {
         await File.WriteAllTextAsync(
-            _path,
+            _path.NotNull(),
             """
             scalar Any
             type Query { n: Int }
@@ -149,7 +153,7 @@ public class CustomScalarSchemaTests
             extend type Subscription { tocked(payload: Any): String! }
             """
         );
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         (await validator.ValidateAsync("{ n }")).Should().Be(GraphQLParser.AST.OperationType.Query);
     }
@@ -158,13 +162,13 @@ public class CustomScalarSchemaTests
     public async Task A_custom_scalar_argument_with_an_object_default_loads()
     {
         await File.WriteAllTextAsync(
-            _path,
+            _path.NotNull(),
             """
             scalar JSON
             type Query { search(filter: JSON = { status: "open", tags: ["a"] }, cursor: JSON = null): String }
             """
         );
-        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path));
+        var validator = new GraphQLClientValidator(new FileSchemaProvider(_path.NotNull()));
 
         (await validator.ValidateAsync("{ search }"))
             .Should()
@@ -175,12 +179,16 @@ public class CustomScalarSchemaTests
     public async Task A_kept_subscription_field_validates_but_is_never_executed_by_the_client()
     {
         var schema = await new FileSchemaProvider(
-            _path,
+            _path.NotNull(),
             removeSubscriptionsFromSchema: false
         ).GetSchemaAsync();
 
-        var field = schema.Subscription!.Fields.Find("ticked")!;
-        var act = async () => await field.StreamResolver!.ResolveAsync(null!);
+        var field = schema.Subscription.NotNull().Fields.Find("ticked").NotNull();
+        var act = async () =>
+            await field
+                .StreamResolver.NotNull()
+                .ResolveAsync(Null.Of<global::GraphQL.IResolveFieldContext>())
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
@@ -188,8 +196,8 @@ public class CustomScalarSchemaTests
     [Test]
     public async Task An_sdl_naming_an_undeclared_type_fails_the_load_not_the_first_validation()
     {
-        await File.WriteAllTextAsync(_path, "type Query { thing: Thing }");
-        var provider = new FileSchemaProvider(_path);
+        await File.WriteAllTextAsync(_path.NotNull(), "type Query { thing: Thing }");
+        var provider = new FileSchemaProvider(_path.NotNull());
 
         await provider
             .Invoking(p => p.GetSchemaAsync())
@@ -205,7 +213,7 @@ public class CustomScalarSchemaTests
         services
             .AddTraxGraphQLClient(new Uri("http://localhost/graphql"))
             .Configure(c => c.RemoveSubscriptionsFromSchema = false)
-            .UseFileSchema(_path);
+            .UseFileSchema(_path.NotNull());
         await using var provider = services.BuildServiceProvider();
 
         var validator = provider.GetRequiredService<IGraphQLClientValidator>();
@@ -274,12 +282,18 @@ public class CustomScalarSchemaTests
     {
         var services = new ServiceCollection();
         ConfigureServer(services.AddGraphQL());
-        await using var provider = services.BuildServiceProvider();
-        var executor = await provider
-            .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync();
-        var result = await executor.ExecuteAsync(IntrospectingSchemaProvider.IntrospectionQuery);
-        return result.ToJson();
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            var executor = await provider
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync()
+                .ConfigureAwait(false);
+            var result = await executor
+                .ExecuteAsync(IntrospectingSchemaProvider.IntrospectionQuery)
+                .ConfigureAwait(false);
+            return result.ToJson();
+        }
     }
 
     public sealed class ScalarQueryType

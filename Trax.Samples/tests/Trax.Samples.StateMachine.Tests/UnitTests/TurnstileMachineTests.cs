@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.Tests.Fakes;
 using Trax.StateMachine;
 
@@ -10,7 +11,19 @@ namespace Trax.Samples.StateMachine.Tests.UnitTests;
 /// </summary>
 public class TurnstileMachineTests
 {
-    private static readonly Guid Id = Guid.Parse("a0000000-0000-0000-0000-000000000001");
+    private static readonly Guid Id = new Guid(
+        0xa0000000,
+        0x0000,
+        0x0000,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x01
+    ); // a0000000-0000-0000-0000-000000000001
     private const string User = "alice";
 
     // The turnstile guards its coin, so the generic save does not serve it; the draft is seeded through
@@ -38,7 +51,7 @@ public class TurnstileMachineTests
             .Which.Snapshot;
 
         snapshot.State.Should().Be("Unlocked");
-        snapshot.Context["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        snapshot.Context["paidWith"].NotNull().GetValue<string>().Should().Be("quarter");
     }
 
     [Test]

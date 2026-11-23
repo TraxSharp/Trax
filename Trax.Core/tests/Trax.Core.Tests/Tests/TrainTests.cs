@@ -36,7 +36,7 @@ public class TrainTests : TestSetup
         _brew = ServiceProvider.GetRequiredService<IBrew>();
     }
 
-    private class ChainTest(IBrew brew, IPrepare prepare, IBottle bottle)
+    private sealed class ChainTest(IBrew brew, IPrepare prepare, IBottle bottle)
         : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions() =>
@@ -49,7 +49,7 @@ public class TrainTests : TestSetup
                 .Resolve();
     }
 
-    private class ChainTestWithNoInputs : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithNoInputs : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -66,7 +66,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithInterfaceTuple : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithInterfaceTuple : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -84,7 +84,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithOneTypedService : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithOneTypedService : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -107,7 +107,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithTwoTypedServices : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithTwoTypedServices : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -131,7 +131,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithMockedService : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithMockedService : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -148,13 +148,14 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class TrainTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
+    private sealed class TrainTestWithTupleInput
+        : Train<(int, string, object), (bool, double, object)>
     {
         protected override Task<Either<Exception, (bool, double, object)>> Junctions() =>
             Chain<TupleReturnJunction>().ShortCircuit<TupleReturnJunction>().Resolve();
     }
 
-    private class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
+    private sealed class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
@@ -172,7 +173,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithShortCircuit(IPrepare prepare, IFerment ferment)
+    private sealed class ChainTestWithShortCircuit(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
@@ -190,7 +191,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ChainTestWithShortCircuitStaysLeft(IPrepare prepare, IFerment ferment)
+    private sealed class ChainTestWithShortCircuitStaysLeft(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
         protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
@@ -208,48 +209,48 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class OuterProperty
+    private sealed class OuterProperty
     {
-        public string OuterString { get; set; } = null!;
+        public required string OuterString { get; set; }
 
-        public InnerProperty InnerProperty { get; set; } = null!;
+        public required InnerProperty InnerProperty { get; set; }
     }
 
-    private class InnerProperty
+    private sealed class InnerProperty
     {
         public int Number { get; set; }
     }
 
-    private class OuterField
+    private sealed class OuterField
     {
-        public string OuterString = null!;
+        public required string OuterString;
 
-        public InnerField InnerProperty = null!;
+        public required InnerField InnerProperty;
     }
 
-    private class InnerField
+    private sealed class InnerField
     {
         public int Number;
     }
 
-    private class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
+    private sealed class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
     {
         protected override Task<Either<Exception, InnerProperty>> Junctions() =>
             Task.FromResult(Extract<OuterProperty, InnerProperty>().Resolve());
     }
 
-    private class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
+    private sealed class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
     {
         protected override Task<Either<Exception, InnerField>> Junctions() =>
             Task.FromResult(Extract<OuterField, InnerField>().Resolve());
     }
 
-    private class StubFerment : Junction<BrewingJug, Unit>, IFerment
+    private sealed class StubFerment : Junction<BrewingJug, Unit>, IFerment
     {
         public override Task<Unit> Run(BrewingJug input) => Task.FromResult(Unit.Default);
     }
 
-    private class TwoTupleJunctionTest : Junction<(Ingredients, BrewingJug), Unit>
+    private sealed class TwoTupleJunctionTest : Junction<(Ingredients, BrewingJug), Unit>
     {
         public override async Task<Unit> Run((Ingredients, BrewingJug) input)
         {
@@ -265,7 +266,7 @@ public class TrainTests : TestSetup
     /// <summary>
     /// Tests to ensure that tuple casting to interface works correctly
     /// </summary>
-    private class TwoTupleJunctionInterfaceTest : Junction<(Ingredients, IBrewingJug), Unit>
+    private sealed class TwoTupleJunctionInterfaceTest : Junction<(Ingredients, IBrewingJug), Unit>
     {
         public override async Task<Unit> Run((Ingredients, IBrewingJug) input)
         {
@@ -278,7 +279,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class CastBrewingJug : Junction<IBrewingJug, BrewingJug>
+    private sealed class CastBrewingJug : Junction<IBrewingJug, BrewingJug>
     {
         public override async Task<BrewingJug> Run(IBrewingJug input)
         {
@@ -287,7 +288,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class TupleReturnJunction : Junction<Unit, (bool, double, object)>
+    private sealed class TupleReturnJunction : Junction<Unit, (bool, double, object)>
     {
         public override async Task<(bool, double, object)> Run(Unit input)
         {
@@ -295,7 +296,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ThreeTupleJunctionTest : Junction<(Ingredients, BrewingJug, Unit), Unit>
+    private sealed class ThreeTupleJunctionTest : Junction<(Ingredients, BrewingJug, Unit), Unit>
     {
         public override async Task<Unit> Run((Ingredients, BrewingJug, Unit) input)
         {
@@ -360,7 +361,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -376,7 +377,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -392,7 +393,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -408,7 +409,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -424,7 +425,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -440,7 +441,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -459,7 +460,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -477,7 +478,7 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 
     [Theory]
@@ -496,6 +497,6 @@ public class TrainTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await train.Run(ingredients);
+        var result = await train.Run(ingredients, CancellationToken.None);
     }
 }

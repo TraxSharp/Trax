@@ -1,4 +1,5 @@
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.Api;
@@ -10,5 +11,5 @@ namespace Trax.Samples.Recovery.Api;
 /// </summary>
 public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPrincipal
 {
-    public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal!.Id : null;
+    public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal.NotNull().Id : null;
 }

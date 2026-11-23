@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
@@ -21,17 +22,20 @@ public class ScheduleOnceTests : SchedulingTestFixture
             afterId: 0,
             TimeSpan.FromSeconds(40)
         );
-        run.StartTime.Should().BeOnOrAfter(seeded.ScheduledAt!.Value);
+        run.StartTime.Should().BeOnOrAfter(seeded.ScheduledAt.NotNull().Value);
 
         await Db.WaitUntil(
-            async () => !(await Db.Manifest(ManifestNames.SendLaunchAnnouncement)).IsEnabled,
+            async () =>
+                !(
+                    await Db.Manifest(ManifestNames.SendLaunchAnnouncement).ConfigureAwait(false)
+                ).IsEnabled,
             TimeSpan.FromSeconds(10),
             "a once manifest disables itself after its first success"
         );
 
         // Several manifest-manager cycles later, still the one run.
         var ranAgain = await Polling.WaitUntilAsync(
-            async () => (await Db.Runs(seeded.Id, afterId: 0)).Count > 1,
+            async () => (await Db.Runs(seeded.Id, afterId: 0).ConfigureAwait(false)).Count > 1,
             TimeSpan.FromSeconds(4),
             TimeSpan.FromMilliseconds(250)
         );
