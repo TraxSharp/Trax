@@ -704,7 +704,15 @@ Without `--env`, `--target compose` (the default) writes the podman stack below;
   "secrets": ["Stripe__ApiKey"],
   "environments": {
     "local": { "target": "compose", "engine": "docker" },
-    "staging": { "target": "kubernetes", "profile": "try", "database": { "inCluster": true } }
+    "staging": {
+      "target": "kubernetes",
+      "profile": "try",
+      "database": { "inCluster": true },
+      "settings": {
+        "Auth__Authority": "https://issuer.example.com",
+        "Auth__Audience": "orders"
+      }
+    }
   }
 }
 ```
@@ -867,13 +875,13 @@ kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm
     "namespace": "orders-staging",
     "registry": "ghcr.io/acme",
     "database": { "inCluster": true },
-    "settings": { "Auth__Authority": "https://issuer.example.com" },
+    "settings": { "Auth__Authority": "https://issuer.example.com", "Auth__Audience": "orders" },
     "counts": { "worker": 3 }
   },
   "production": {
     "target": "kubernetes",
     "database": { "secret": "orders-db", "key": "connection" },
-    "settings": { "Auth__Authority": "https://issuer.example.com" }
+    "settings": { "Auth__Authority": "https://issuer.example.com", "Auth__Audience": "orders" }
   }
 }
 ```
