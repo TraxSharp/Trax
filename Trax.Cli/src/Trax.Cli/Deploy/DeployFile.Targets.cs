@@ -33,7 +33,13 @@ internal sealed partial class DeployFile
 
     private static void CheckAws(DeployEnvironment env, Func<string, string> problem)
     {
-        NotFor(problem, "aws", ("engine", env.Engine), ("namespace", env.Namespace));
+        NotFor(
+            problem,
+            "aws",
+            ("engine", env.Engine),
+            ("namespace", env.Namespace),
+            ("runtime", env.Runtime)
+        );
         NotFor(problem, "aws", ("registry", env.Registry));
         if (env.Database is not null)
             throw new InvalidOperationException(
@@ -94,7 +100,13 @@ internal sealed partial class DeployFile
     private static void CheckCompose(DeployEnvironment env, Func<string, string> problem)
     {
         NotForCloud(env, problem, "compose");
-        NotFor(problem, "compose", ("namespace", env.Namespace), ("registry", env.Registry));
+        NotFor(
+            problem,
+            "compose",
+            ("namespace", env.Namespace),
+            ("registry", env.Registry),
+            ("runtime", env.Runtime)
+        );
         if (env.Database is not null)
             throw new InvalidOperationException(
                 problem("database is for a kubernetes environment; compose runs its own Postgres.")
@@ -122,6 +134,7 @@ internal sealed partial class DeployFile
     {
         NotForCloud(env, problem, "kubernetes");
         NotFor(problem, "kubernetes", ("engine", env.Engine));
+        CheckRuntime(env, problem);
         if (env.Namespace is { } ns && !Dns1123Label.IsMatch(ns))
             throw new InvalidOperationException(
                 problem(
@@ -151,6 +164,33 @@ internal sealed partial class DeployFile
                 throw new InvalidOperationException(
                     problem($"secret '{secret}' cannot be a key of a Kubernetes Secret.")
                 );
+    }
+
+    /// <summary>
+    /// A podman environment runs on one host: there is no namespace (each app gets a network of its own instead), and
+    /// its images are built into that host's podman, so there is no registry either.
+    /// </summary>
+    private static void CheckRuntime(DeployEnvironment env, Func<string, string> problem)
+    {
+        if (env.Runtime is not (null or DeployEnvironment.Cluster or DeployEnvironment.Podman))
+            throw new InvalidOperationException(
+                problem($"runtime '{env.Runtime}' is not cluster or podman.")
+            );
+        if (!string.Equals(env.Runtime, DeployEnvironment.Podman, StringComparison.Ordinal))
+            return;
+        if (env.Namespace is not null)
+            throw new InvalidOperationException(
+                problem(
+                    "namespace is for a cluster. A podman environment gets a network of its own, named "
+                        + "<app>-<environment>."
+                )
+            );
+        if (env.Registry is not null)
+            throw new InvalidOperationException(
+                problem(
+                    "registry is for a cluster. A podman environment's images are built into this host's podman."
+                )
+            );
     }
 
     private static void CheckRegistry(DeployEnvironment env, Func<string, string> problem)

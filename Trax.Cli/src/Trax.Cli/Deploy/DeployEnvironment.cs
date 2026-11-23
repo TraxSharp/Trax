@@ -13,11 +13,19 @@ internal sealed class DeployEnvironment
     public const string Podman = "podman";
     public const string Docker = "docker";
 
+    public const string Cluster = "cluster";
+
     /// <summary>Where the environment runs: <c>compose</c>, <c>aws</c> (ECS Fargate) or <c>kubernetes</c>.</summary>
     public string? Target { get; set; }
 
     /// <summary>The engine a compose environment's stack is written for: <c>podman</c> (the default) or <c>docker</c>.</summary>
     public string? Engine { get; set; }
+
+    /// <summary>
+    /// Where a kubernetes environment's manifests run: <c>cluster</c> (the default), applied to the current kubeconfig
+    /// context, or <c>podman</c>, written as pod YAML and Quadlet units for one host to run under systemd.
+    /// </summary>
+    public string? Runtime { get; set; }
 
     /// <summary>A kubernetes environment's namespace. Without it, <c>&lt;app&gt;-&lt;environment&gt;</c>.</summary>
     public string? Namespace { get; set; }
