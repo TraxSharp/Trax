@@ -281,6 +281,7 @@
           "AWSSDK.EC2": "[4.0.126.2, )",
           "AWSSDK.ECR": "[4.0.101.7, )",
           "AWSSDK.ECS": "[4.0.106, )",
+          "AWSSDK.EKS": "[4.0.106.1, )",
           "AWSSDK.SSO": "[4.0.100.17, )",
           "AWSSDK.SSOOIDC": "[4.0.100.16, )",
           "AWSSDK.SecretsManager": "[4.0.100.15, )",
@@ -401,6 +402,15 @@
         "requested": "[4.0.106, )",
         "resolved": "4.0.106",
         "contentHash": "pZve5VF3tmEGrJObv/ecpuJ9XGvS7VxPaj2alnD0qpw2bd2JBfAe9s/Jubv7kRnQhS7K+2CP0LFKsSAFKvpPSg==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.EKS": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.106.1, )",
+        "resolved": "4.0.106.1",
+        "contentHash": "k+O4TV5fOfsUnuEMfg3Zjf54tINYMSr1NG05oxPk7w0FEhtBkxoLh0MZp22b6SNo/0mqLfzZliVwxBlSIQ5H9A==",
         "dependencies": {
           "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }

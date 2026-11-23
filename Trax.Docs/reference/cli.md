@@ -955,6 +955,53 @@ trax deploy destroy --env staging    # asks for the namespace's name; --delete-d
 the Secret, and an in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
 volume and every row in it.
 
+#### On EKS
+
+An `aws` block puts a kubernetes environment on an EKS cluster you created; trax never creates one. trax deploys the
+same AWS foundation the ECS runtime gets (network, private encrypted RDS Postgres, Secrets Manager) beside it, and
+the pods read their secrets from Secrets Manager with a role of their own, so no secret value becomes a Kubernetes
+Secret.
+
+```json
+"staging": {
+  "target": "kubernetes",
+  "profile": "try",
+  "aws": {
+    "region": "us-east-1",
+    "cluster": "apps",
+    "network": { "vpcId": "vpc-0abc", "cidr": "10.0.0.0/16", "privateSubnets": ["subnet-1", "subnet-2"] }
+  },
+  "settings": { "Auth__Authority": "https://issuer.example.com", "Auth__Audience": "orders" }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `aws.region`, `aws.cluster` | The EKS cluster. Required. The current kubeconfig context must be it (`aws eks update-kubeconfig --region us-east-1 --name apps`): before changing anything, a deploy asks EKS for the cluster's endpoint and refuses a context whose server is another. |
+| `aws.network` | The cluster's VPC and at least two private subnets, which the database goes in; public subnets are not needed. Without it the foundation creates the VPC: the first deploy deploys only the foundation and says where to create the cluster, and the next one deploys the app. |
+| `aws.databaseAccess` | `pods` (the default): Security Groups for Pods gives the app's pods, and only them, the group the database admits, beside the cluster's own. The cluster needs the VPC CNI with `ENABLE_POD_ENI` and nodes that support pod ENIs. `nodes`: the database admits the cluster's security group instead, so every pod on those nodes reaches it; choose it only for a cluster that runs nothing else. |
+
+`database` and `registry` are refused: the database is the foundation's, and the images go to the environment's
+ECR repositories (`trax/<app>-<env>/<service>`). RabbitMQ is refused until trax can name a broker.
+
+What a deploy does, in order, changing nothing until every check passes:
+
+1. each host must report `aws-secrets` in its export: it references `Trax.Effect.Configuration.Aws` and calls
+   [`AddTraxAwsSecretsAsync`](/docs/sdk-reference/configuration/add-trax-aws-secrets) before it is built;
+2. the cluster must be `ACTIVE`, the context its, and its VPC the one named;
+3. every name under `secrets` must have a value in Secrets Manager (`trax deploy secret set <name> --env staging`);
+4. the images are pushed to ECR;
+5. the foundation stack `<app>-<env>-base` is created or updated, with a role the pods assume through EKS Pod Identity
+   (the cluster needs the Pod Identity Agent add-on), allowed to read only the database's secret and
+   `<app>-<env>/app/*`, and one Pod Identity association per service account;
+6. the manifests are applied as on any cluster, with a ServiceAccount per service and, under `pods`, the
+   SecurityGroupPolicy. Each container is given the database's address with no password, and
+   `Trax__AwsSecrets__<n>__...` entries that tell `AddTraxAwsSecretsAsync` where to read the password and each
+   secret.
+
+`destroy` deletes the app's objects in the namespace, then the foundation as on ECS: production's database leaves a
+final snapshot, and `--delete-data` also deletes the images and the app's secrets.
+
 #### On one host, under podman
 
 `"runtime": "podman"` runs the same manifests on one host with no cluster: `podman kube play` under a Quadlet `.kube`

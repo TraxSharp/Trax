@@ -30,6 +30,7 @@
     <PackageReference Include="AWSSDK.EC2" />
     <PackageReference Include="AWSSDK.ECR" />
     <PackageReference Include="AWSSDK.ECS" />
+    <PackageReference Include="AWSSDK.EKS" />
     <PackageReference Include="AWSSDK.SecretsManager" />
     <PackageReference Include="AWSSDK.SecurityToken" />
     <PackageReference Include="AWSSDK.SimpleSystemsManagement" />

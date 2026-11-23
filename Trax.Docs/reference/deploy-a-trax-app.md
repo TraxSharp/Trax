@@ -116,6 +116,11 @@ with `"database": { "secret": "orders-db", "key": "connection" }`, a Secret hold
 Without a `registry`, images are built into your local container runtime, which Docker Desktop's and podman's
 clusters read; kind does not, so give it a registry (`"registry": "localhost:5001"`).
 
+On an EKS cluster you created, an `"aws"` block names it, and trax deploys the AWS foundation beside it for the
+database and secrets: the pods read their secrets from Secrets Manager with a role of their own, through
+`AddTraxAwsSecretsAsync`, so none becomes a Kubernetes Secret. The
+[CLI reference](/docs/reference/cli#on-eks) has the keys and what a deploy checks first.
+
 The same environment runs on one host with no cluster: give it `"runtime": "podman"` and `trax deploy --env` writes
 pod YAML and Quadlet units for systemd to run, takes the secret values from the `.env` beside `trax.deploy.json` into
 a file only you can read under `~/.config/trax/`, and prints the commands that install and start the units. The

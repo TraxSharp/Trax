@@ -24,6 +24,9 @@
     <PackageVersion Include="AWSSDK.EC2" Version="4.0.126.2" />
     <PackageVersion Include="AWSSDK.ECR" Version="4.0.101.7" />
     <PackageVersion Include="AWSSDK.ECS" Version="4.0.106" />
+    <!-- The Kubernetes target of trax deploy on EKS reads the cluster it applies to. Pinned where its AWSSDK.Core range
+         meets the other AWS packages'. -->
+    <PackageVersion Include="AWSSDK.EKS" Version="4.0.106.1" />
     <PackageVersion Include="AWSSDK.Lambda" Version="4.0.108.2" />
     <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.15" />
     <PackageVersion Include="AWSSDK.SSO" Version="4.0.100.17" />

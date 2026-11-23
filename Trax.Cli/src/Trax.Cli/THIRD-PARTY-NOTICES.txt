@@ -39,6 +39,10 @@ AWSSDK.ECS
   Licence:   Apache-2.0
   Project:   https://github.com/aws/aws-sdk-net/
 
+AWSSDK.EKS
+  Licence:   Apache-2.0
+  Project:   https://github.com/aws/aws-sdk-net/
+
 AWSSDK.SSO
   Licence:   Apache-2.0
   Project:   https://github.com/aws/aws-sdk-net/

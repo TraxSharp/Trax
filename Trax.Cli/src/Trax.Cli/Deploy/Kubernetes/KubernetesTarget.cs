@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using k8s;
 using k8s.Models;
+using Trax.Cli.Deploy.Aws;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Kubernetes;
@@ -75,11 +76,17 @@ internal static partial class KubernetesTarget
         return name[..Math.Min(name.Length, 63)].TrimEnd('-');
     }
 
+    /// <summary>
+    /// The environment's manifests. With <paramref name="eks"/>, for a cluster on EKS: images from ECR, a service
+    /// account per service for Pod Identity, the database and secrets read by the host from Secrets Manager rather
+    /// than from a Kubernetes Secret, and the security group policy that lets the app's pods reach the database.
+    /// </summary>
     public static KubernetesManifests Render(
         DeployFile file,
         string environment,
         IReadOnlyDictionary<string, DeployManifest> exports,
-        string tag
+        string tag,
+        EksTarget? eks = null
     )
     {
         var env = file.Environment(environment);
@@ -98,27 +105,34 @@ internal static partial class KubernetesTarget
                     + "broker in the cluster, which would be a single copy with no backups. trax cannot name an "
                     + "existing broker yet. Use the try profile, or a transport other than RabbitMQ."
             );
+        if (rabbit && eks is not null)
+            throw new InvalidOperationException(
+                $"Environment '{environment}': a host uses RabbitMQ, and on EKS trax neither runs a broker nor names "
+                    + "an existing one yet. Use a transport other than RabbitMQ."
+            );
         var inCluster = env.Database is { InCluster: true };
         var ns = NamespaceName(file, environment, env);
         var secret = SecretName(file, environment);
-        var r = new Renderer(file, env, ns, secret);
+        var r = new Renderer(file, env, ns, secret, eks);
 
         var migrator = ComposeTarget.Migrator(file, exports);
         var job = r.MigrateJob(
             MigrateJobName(file, tag),
-            Image(file, env, migrator, tag),
+            r.Image(migrator, tag),
             ServiceHardening.Trax(file.Services[migrator]),
             r.TraxEnv(rabbit)
         );
+        if (eks is not null)
+            job.Spec.Template.Spec.ServiceAccountName = migrator;
 
         return new KubernetesManifests(
             NamespaceObject(file, ns),
             secret,
-            SecretKeys(file, inCluster, rabbit),
+            eks is null ? SecretKeys(file, inCluster, rabbit) : [],
             env.Database is { Secret: { } dbSecret, Key: { } dbKey }
                 ? new V1SecretKeySelector { Name = dbSecret, Key = dbKey }
                 : null,
-            Backing(r, inCluster, rabbit),
+            eks is null ? Backing(r, inCluster, rabbit) : r.EksIdentity(eks),
             job,
             Services(file, env, exports, tag, r, rabbit)
         );
@@ -190,17 +204,18 @@ internal static partial class KubernetesTarget
             var hub = ComposeTarget.Hub(export);
             if (hub)
                 services.Add(r.Service(name, HttpPort));
-            services.Add(
-                r.Deployment(
-                    name,
-                    Image(file, env, name, tag),
-                    hub ? 1 : file.Count(env, name),
-                    hub,
-                    ServiceHardening.Trax(service),
-                    [.. r.TraxEnv(rabbit), Value(TraxMigrate.Variable, TraxMigrate.SkipValue)],
-                    export
-                )
+            var deployment = r.Deployment(
+                name,
+                r.Image(name, tag),
+                hub ? 1 : file.Count(env, name),
+                hub,
+                ServiceHardening.Trax(service),
+                [.. r.TraxEnv(rabbit), Value(TraxMigrate.Variable, TraxMigrate.SkipValue)],
+                export
             );
+            if (r.OnEks)
+                deployment.Spec.Template.Spec.ServiceAccountName = name;
+            services.Add(deployment);
         }
         return services;
     }
@@ -236,8 +251,66 @@ internal static partial class KubernetesTarget
             },
         };
 
-    private sealed class Renderer(DeployFile file, DeployEnvironment env, string ns, string secret)
+    private sealed class Renderer(
+        DeployFile file,
+        DeployEnvironment env,
+        string ns,
+        string secret,
+        EksTarget? eks
+    )
     {
+        public bool OnEks => eks is not null;
+
+        /// <summary>A service's image: where a deploy to EKS pushed it, else from the environment's registry.</summary>
+        public string Image(string service, string tag) =>
+            eks is not null ? eks.Images[service] : KubernetesTarget.Image(file, env, service, tag);
+
+        /// <summary>
+        /// On EKS: a service account per service, which its Pod Identity association binds the pod role to, and, with
+        /// Security Groups for Pods, the policy that gives the app's pods the group the database admits beside the
+        /// cluster's own.
+        /// </summary>
+        public List<IKubernetesObject<V1ObjectMeta>> EksIdentity(EksTarget target)
+        {
+            var objects = new List<IKubernetesObject<V1ObjectMeta>>();
+            foreach (var service in file.Services.Keys)
+                objects.Add(
+                    new V1ServiceAccount
+                    {
+                        ApiVersion = "v1",
+                        Kind = "ServiceAccount",
+                        Metadata = Meta(service),
+                        AutomountServiceAccountToken = false,
+                    }
+                );
+            if (target.PodSecurityGroups)
+                objects.Add(
+                    new EksSecurityGroupPolicy
+                    {
+                        Metadata = Meta($"{file.App}-database-clients"),
+                        Spec = new EksSecurityGroupPolicySpec
+                        {
+                            PodSelector = new V1LabelSelector
+                            {
+                                MatchLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                                {
+                                    [AppLabel] = file.App,
+                                },
+                            },
+                            SecurityGroups = new EksSecurityGroups
+                            {
+                                GroupIds =
+                                [
+                                    target.DatabaseClientSecurityGroup,
+                                    target.ClusterSecurityGroup,
+                                ],
+                            },
+                        },
+                    }
+                );
+            return objects;
+        }
+
         public Dictionary<string, string> Labels(string name) =>
             new(StringComparer.Ordinal)
             {
@@ -264,6 +337,8 @@ internal static partial class KubernetesTarget
         /// </summary>
         public List<V1EnvVar> TraxEnv(bool rabbit)
         {
+            if (eks is not null)
+                return EksEnv(eks);
             var vars = new List<V1EnvVar>();
             var connection = $"ConnectionStrings__{file.ConnectionStrings.Trax}";
             if (env.Database is { Secret: { } dbSecret, Key: { } dbKey })
@@ -290,6 +365,51 @@ internal static partial class KubernetesTarget
                 vars.Add(Value(name, env.Settings[name]));
             foreach (var name in file.Secrets.Order(StringComparer.Ordinal))
                 vars.Add(FromSecret(name, secret, name));
+            return vars;
+        }
+
+        /// <summary>
+        /// What a Trax container is given on EKS: the foundation's database by address with no password, and the
+        /// entries <c>AddTraxAwsSecretsAsync</c> follows to read the password and each app secret from Secrets
+        /// Manager with the pod's role. No value is in the manifest.
+        /// </summary>
+        private List<V1EnvVar> EksEnv(EksTarget target)
+        {
+            var trax = file.ConnectionStrings.Trax;
+            var vars = new List<V1EnvVar>
+            {
+                Value(
+                    $"ConnectionStrings__{trax}",
+                    $"Host={target.DatabaseAddress};Port={target.DatabasePort};Database={AwsStack.DatabaseName};"
+                        + $"Username={AwsStack.DatabaseUser};SSL Mode=VerifyFull;Root Certificate={AwsStack.RdsCaBundle};"
+                        + "GSS Encryption Mode=Disable"
+                ),
+                Value("AWS_REGION", target.Region),
+            };
+            var entries = new List<(string SecretId, string? JsonKey, string Field, string Target)>
+            {
+                (target.DatabaseSecretArn, "password", "PasswordOf", trax),
+            };
+            entries.AddRange(
+                file.Secrets.Order(StringComparer.Ordinal)
+                    .Select(name =>
+                        (AwsStack.AppSecretName(secret, name), (string?)null, "Key", name)
+                    )
+            );
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var prefix = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Trax__AwsSecrets__{i}__"
+                );
+                var (id, jsonKey, field, value) = entries[i];
+                vars.Add(Value($"{prefix}SecretId", id));
+                if (jsonKey is not null)
+                    vars.Add(Value($"{prefix}JsonKey", jsonKey));
+                vars.Add(Value($"{prefix}{field}", value));
+            }
+            foreach (var name in file.Settings.Order(StringComparer.Ordinal))
+                vars.Add(Value(name, env.Settings[name]));
             return vars;
         }
 

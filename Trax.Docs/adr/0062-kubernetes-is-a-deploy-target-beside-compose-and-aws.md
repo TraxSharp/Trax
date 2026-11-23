@@ -26,7 +26,11 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 - **Both ways onto AWS stay, over one foundation.** The AWS foundation (network, closed security groups, RDS,
   Secrets Manager, Cognito) is its own CloudFormation stack per environment. ECS is a runtime stack on top of it;
   Kubernetes on EKS is the Kubernetes target pointed at a cluster in the same network, with either side bringing
-  the VPC. On EKS the host reads its secrets from Secrets Manager through EKS Pod Identity.
+  the VPC. On EKS the host reads its secrets from Secrets Manager through EKS Pod Identity, with
+  `AddTraxAwsSecretsAsync` from the opt-in `Trax.Effect.Configuration.Aws` package (the database password included,
+  set on the connection string), and the database admits the app's pods through Security Groups for Pods; admitting
+  the cluster's nodes, and so every pod on them, is a choice the environment must name. trax applies only to the
+  current kubeconfig context, after EKS says its server is the named cluster's.
 - **Postgres off AWS** is either an existing database named by secret, or a StatefulSet that the production profile
   refuses. Trax provisions no database on any other cloud.
 - **Every target renders one hardening set**: capabilities dropped and named ones added back, no privilege
@@ -62,9 +66,14 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 **Enforced elsewhere:** `DeployKubernetesTests` and `KubernetesDeployerTests` in `Trax.Cli/tests/Trax.Cli.Tests/`
 hold the Kubernetes target to it: each environment names its target, the hub's Deployment is `Recreate` at one
 copy, the in-cluster database is refused under production, every container gets the hardening compose gives the
-same service, and the migrate Job runs before any Deployment is applied.
+same service, and the migrate Job runs before any Deployment is applied. `EksDeployTests` holds the EKS side: no
+secret reaches a manifest, the pods' role reads only the environment's secrets, the database admits the nodes only
+when the environment says so, and a host that does not read its secrets from AWS, or a context that is not the named
+cluster, is refused before anything changes. `TraxAwsSecretsTests` in `Trax.Effect` holds the reader.
 
 ## Changelog
 
+- **2026-11-23**: On EKS: how the database password reaches the host, pod security groups by default with node access
+  by name, and the context checked against the named cluster (user).
 - **2026-11-17**: Recorded.
 - **2026-11-17**: Named the tests that hold the Kubernetes target to it.

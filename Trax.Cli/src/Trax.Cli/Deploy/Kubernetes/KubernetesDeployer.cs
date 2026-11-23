@@ -24,16 +24,19 @@ internal sealed class KubernetesDeployer(
         string environment,
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
-        CancellationToken ct
+        CancellationToken ct,
+        EksTarget? eks = null
     )
     {
         var env = file.Environment(environment);
-        var manifests = KubernetesTarget.Render(file, environment, exports, tag);
+        var manifests = KubernetesTarget.Render(file, environment, exports, tag, eks);
         say(
             $"Deploying {file.App} to namespace {manifests.NamespaceName} in context {cluster.Context}."
         );
         await PrepareNamespaceAsync(file, environment, manifests, ct).ConfigureAwait(false);
-        await PublishImagesAsync(file, filePath, env, tag).ConfigureAwait(false);
+        // On EKS the images were pushed to ECR before the foundation was deployed.
+        if (eks is null)
+            await PublishImagesAsync(file, filePath, env, tag).ConfigureAwait(false);
 
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Backing, ct)
             .ConfigureAwait(false);
@@ -192,7 +195,15 @@ internal sealed class KubernetesDeployer(
         var mine = (await cluster.ListAsync(ns, ct).ConfigureAwait(false))
             .Where(o => string.Equals(o.App, file.App, StringComparison.Ordinal))
             .ToList();
-        string[] order = ["Deployment", "StatefulSet", "Job", "Service"];
+        string[] order =
+        [
+            "Deployment",
+            "StatefulSet",
+            "Job",
+            "Service",
+            "ServiceAccount",
+            "SecurityGroupPolicy",
+        ];
         foreach (var kind in order)
         foreach (
             var target in mine.Where(o => string.Equals(o.Kind, kind, StringComparison.Ordinal))

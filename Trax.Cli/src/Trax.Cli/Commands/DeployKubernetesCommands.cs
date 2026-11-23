@@ -1,5 +1,6 @@
 using System.Globalization;
 using Trax.Cli.Deploy;
+using Trax.Cli.Deploy.Aws;
 using Trax.Cli.Deploy.Kubernetes;
 using Trax.Core.Extensions;
 
@@ -20,6 +21,9 @@ internal static class DeployKubernetesCommands
         () => new KubernetesDeployClient(Clock);
 
     internal static IContainerImagePublisher Images { get; set; } = new DotnetContainerPublisher();
+
+    /// <summary>How an environment on EKS reaches its cluster's description, by region; tests swap in a fake.</summary>
+    internal static Func<string, IEksClient> Eks { get; set; } = region => new EksClient(region);
 
     /// <summary>
     /// Where a podman environment's Secrets are written with their values: <c>$XDG_CONFIG_HOME</c>, else
@@ -62,9 +66,20 @@ internal static class DeployKubernetesCommands
                             Clock.GetUtcNow().UtcDateTime
                         )
                         .ConfigureAwait(false);
-                    await new KubernetesDeployer(Client(), Images, stdout.WriteLine)
-                        .DeployAsync(file, filePath, environment, exports, tag, ct)
-                        .ConfigureAwait(false);
+                    if (file.Environment(environment).Eks is { } aws)
+                        await new EksDeployer(
+                            DeployAwsCommands.Client(aws.Region.NotNull()),
+                            Eks(aws.Region.NotNull()),
+                            Client(),
+                            DeployAwsCommands.Images,
+                            stdout.WriteLine
+                        )
+                            .DeployAsync(file, filePath, environment, exports, tag, ct)
+                            .ConfigureAwait(false);
+                    else
+                        await new KubernetesDeployer(Client(), Images, stdout.WriteLine)
+                            .DeployAsync(file, filePath, environment, exports, tag, ct)
+                            .ConfigureAwait(false);
                     await stdout
                         .WriteLineAsync(
                             $"Deployed {file.App} to {environment}. Until it is exposed, reach a hub with 'kubectl "
@@ -123,7 +138,6 @@ internal static class DeployKubernetesCommands
                             .ConfigureAwait(false);
                         return;
                     }
-                    var manifests = KubernetesTarget.Render(file, environment, exports, tag);
                     var dir = Path.Combine(
                         root,
                         ".trax",
@@ -131,10 +145,68 @@ internal static class DeployKubernetesCommands
                         "kubernetes",
                         file.StackName(environment)
                     );
+                    var eks = PlannedEks(file, environment, tag);
+                    var manifests = KubernetesTarget.Render(file, environment, exports, tag, eks);
                     await WritePlanAsync(dir, manifests, stdout, ct).ConfigureAwait(false);
+                    if (eks is not null)
+                        await WriteEksFoundationPlanAsync(file, environment, dir, stdout, ct)
+                            .ConfigureAwait(false);
                 }
             )
             .ConfigureAwait(false);
+
+    /// <summary>
+    /// What an EKS plan renders the manifests with, before the foundation exists: each value a deploy reads from AWS
+    /// written as the place it comes from.
+    /// </summary>
+    private static EksTarget? PlannedEks(DeployFile file, string environment, string tag)
+    {
+        if (file.Environment(environment).Eks is not { } aws)
+            return null;
+        var stack = file.StackName(environment);
+        return new EksTarget(
+            file.Services.Keys.ToDictionary(
+                s => s,
+                s =>
+                    $"<account>.dkr.ecr.{aws.Region}.amazonaws.com/{AwsDeployer.Repository(stack, s)}:{tag}",
+                StringComparer.Ordinal
+            ),
+            aws.Region.NotNull(),
+            "<foundation DatabaseAddress>",
+            "<foundation DatabasePort>",
+            "<foundation DatabaseSecretArn>",
+            "<foundation DatabaseClientSecurityGroup>",
+            "<cluster security group>",
+            PodSecurityGroups: !string.Equals(
+                aws.DatabaseAccess,
+                DeployEnvironmentAws.Nodes,
+                StringComparison.Ordinal
+            )
+        );
+    }
+
+    /// <summary>The foundation an EKS deploy creates or updates, beside the manifests.</summary>
+    private static async Task WriteEksFoundationPlanAsync(
+        DeployFile file,
+        string environment,
+        string dir,
+        TextWriter stdout,
+        CancellationToken ct
+    )
+    {
+        var aws = file.Environment(environment).Eks.NotNull();
+        var template = AwsStack.EksFoundation(
+            file,
+            environment,
+            Namespace(file, environment),
+            string.Equals(aws.DatabaseAccess, DeployEnvironmentAws.Nodes, StringComparison.Ordinal)
+                ? "<cluster security group>"
+                : null
+        );
+        var path = Path.Combine(dir, $"{file.FoundationStackName(environment)}.template.json");
+        await File.WriteAllTextAsync(path, AwsStack.Indented(template), ct).ConfigureAwait(false);
+        await stdout.WriteLineAsync($"Wrote {path}").ConfigureAwait(false);
+    }
 
     private static async Task WritePlanAsync(
         string dir,
@@ -294,6 +366,15 @@ internal static class DeployKubernetesCommands
                     await new KubernetesDeployer(Client(), Images, stdout.WriteLine)
                         .DestroyAsync(file, environment, deleteData, ct)
                         .ConfigureAwait(false);
+                    // On EKS the foundation goes after the pods, which wore its database client group.
+                    if (file.Environment(environment).Eks is { } aws)
+                        await new AwsDeployer(
+                            DeployAwsCommands.Client(aws.Region.NotNull()),
+                            DeployAwsCommands.Images,
+                            stdout.WriteLine
+                        )
+                            .DestroyAsync(file, environment, deleteData, ct)
+                            .ConfigureAwait(false);
                 }
             )
             .ConfigureAwait(false);

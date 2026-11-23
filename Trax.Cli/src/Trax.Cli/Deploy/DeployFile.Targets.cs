@@ -158,7 +158,10 @@ internal sealed partial class DeployFile
                     )
                 );
         CheckRegistry(env, problem);
-        CheckKubernetesDatabase(env, problem);
+        if (env.Eks is { } aws)
+            CheckEks(env, aws, problem);
+        else
+            CheckKubernetesDatabase(env, problem);
         foreach (var secret in Secrets)
             if (!SecretKey.IsMatch(secret))
                 throw new InvalidOperationException(
@@ -189,6 +192,62 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 problem(
                     "registry is for a cluster. A podman environment's images are built into this host's podman."
+                )
+            );
+    }
+
+    /// <summary>
+    /// A kubernetes environment on EKS: the cluster and region are named, the database is the foundation's (so none
+    /// is named here), images go to ECR (so no registry), and a network names the cluster's VPC and two or more
+    /// private subnets for the database.
+    /// </summary>
+    private static void CheckEks(
+        DeployEnvironment env,
+        DeployEnvironmentAws aws,
+        Func<string, string> problem
+    )
+    {
+        if (string.Equals(env.Runtime, DeployEnvironment.Podman, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                problem("aws is for a cluster, not a podman environment.")
+            );
+        if (string.IsNullOrWhiteSpace(aws.Region) || string.IsNullOrWhiteSpace(aws.Cluster))
+            throw new InvalidOperationException(
+                problem(
+                    "aws needs region and cluster: the EKS cluster to apply to, which trax never creates."
+                )
+            );
+        if (env.Database is not null)
+            throw new InvalidOperationException(
+                problem(
+                    "database is the foundation's on EKS: trax creates its RDS Postgres. Leave database out."
+                )
+            );
+        if (env.Registry is not null)
+            throw new InvalidOperationException(
+                problem(
+                    "registry is not read on EKS: images go to the environment's ECR repositories."
+                )
+            );
+        if (
+            aws.DatabaseAccess
+            is not (null or DeployEnvironmentAws.Pods or DeployEnvironmentAws.Nodes)
+        )
+            throw new InvalidOperationException(
+                problem($"aws.databaseAccess '{aws.DatabaseAccess}' is not pods or nodes.")
+            );
+        if (
+            aws.Network is { } network
+            && (
+                string.IsNullOrWhiteSpace(network.VpcId)
+                || string.IsNullOrWhiteSpace(network.Cidr)
+                || network.PrivateSubnets.Count < 2
+            )
+        )
+            throw new InvalidOperationException(
+                problem(
+                    "aws.network needs vpcId, cidr and at least two private subnets in different availability "
+                        + "zones, which the database spans. Public subnets are not needed."
                 )
             );
     }
