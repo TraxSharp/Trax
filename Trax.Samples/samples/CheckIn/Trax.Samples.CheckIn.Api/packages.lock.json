@@ -532,6 +532,7 @@
           "HotChocolate.Data": "[16.7.5, )",
           "HotChocolate.Data.EntityFramework": "[16.7.5, )",
           "HotChocolate.Execution.Projections": "[16.7.5, )",
+          "HotChocolate.Types.OffsetPagination": "[16.7.5, )",
           "Trax.Api": "[1.99.99, )",
           "Trax.Api.Auth": "[1.99.99, )",
           "Trax.Api.Auth.Jwt": "[1.99.99, )"
@@ -750,6 +751,15 @@
           "GreenDonut.Data.Primitives": "16.7.5",
           "HotChocolate.Caching.Memory": "16.7.5",
           "HotChocolate.Execution.Configuration.Abstractions": "16.7.5",
+          "HotChocolate.Types": "16.7.5"
+        }
+      },
+      "HotChocolate.Types.OffsetPagination": {
+        "type": "CentralTransitive",
+        "requested": "[16.7.5, )",
+        "resolved": "16.7.5",
+        "contentHash": "Mrpxl5vovGR6m1OokfN54T2chKqnuRFFwdLsp5N+8eo/lFnVz7nF5TI3iZq9wfWlKw3aBi3fzl93ko3BrF/4MA==",
+        "dependencies": {
           "HotChocolate.Types": "16.7.5"
         }
       },

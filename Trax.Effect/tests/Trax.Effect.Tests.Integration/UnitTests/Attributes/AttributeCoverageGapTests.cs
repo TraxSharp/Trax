@@ -108,7 +108,7 @@ public class AttributeCoverageGapTests
         attr.Name.Should().BeNull();
         attr.Description.Should().BeNull();
         attr.DeprecationReason.Should().BeNull();
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
         attr.Filtering.Should().BeTrue();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeTrue();
@@ -124,7 +124,7 @@ public class AttributeCoverageGapTests
             Name = "users",
             Description = "the users",
             DeprecationReason = "use usersV2",
-            Paging = false,
+            Paging = TraxPaging.None,
             Filtering = false,
             Sorting = false,
             Projection = false,
@@ -134,7 +134,7 @@ public class AttributeCoverageGapTests
         attr.Name.Should().Be("users");
         attr.Description.Should().Be("the users");
         attr.DeprecationReason.Should().Be("use usersV2");
-        attr.Paging.Should().BeFalse();
+        attr.Paging.Should().Be(TraxPaging.None);
         attr.Filtering.Should().BeFalse();
         attr.Sorting.Should().BeFalse();
         attr.Projection.Should().BeFalse();

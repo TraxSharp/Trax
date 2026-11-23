@@ -64,4 +64,11 @@ public record QueryModelRegistration
 
     /// <summary>Whether the entity carries <c>[TraxAllowAnonymous]</c>, so no <c>@authorize</c> is emitted for it.</summary>
     public bool AllowAnonymous { get; internal init; }
+
+    /// <summary>
+    /// How the entity's field is paged: the attribute's <see cref="TraxQueryModelAttribute.Paging"/>,
+    /// or the builder's <c>DefaultPaging</c> when the attribute leaves it at
+    /// <see cref="TraxPaging.Default"/>. Never <see cref="TraxPaging.Default"/>.
+    /// </summary>
+    public TraxPaging Paging { get; internal init; } = TraxPaging.Cursor;
 }

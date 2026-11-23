@@ -74,6 +74,13 @@ namespace Trax.Effect.Attributes
         public string? Namespace { get; init; }
         public Trax.Effect.Attributes.GraphQLOperation Operations { get; }
     }
+    public enum TraxPaging
+    {
+        Default = 0,
+        None = 1,
+        Cursor = 2,
+        Offset = 3,
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
     public class TraxQueryAttribute : System.Attribute
     {
@@ -94,7 +101,7 @@ namespace Trax.Effect.Attributes
         public bool Filtering { get; init; }
         public string? Name { get; init; }
         public string? Namespace { get; init; }
-        public bool Paging { get; init; }
+        public Trax.Effect.Attributes.TraxPaging Paging { get; init; }
         public bool Projection { get; init; }
         public bool Sorting { get; init; }
     }

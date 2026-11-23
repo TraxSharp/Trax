@@ -11,13 +11,14 @@ nav_order: 6
 source:
   - Trax.Effect/src/Trax.Effect/Attributes/TraxQueryModelAttribute.cs
   - Trax.Effect/src/Trax.Effect/Attributes/FieldBindingBehavior.cs
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxPaging.cs
   - Trax.Api/src/Trax.Api.GraphQL/TypeModules/QueryModelTypeModule.cs
 ---
 
 # TraxQueryModel
 
 `[TraxQueryModel]` exposes an EF Core entity as a GraphQL query field under `discover`, with cursor
-pagination, filtering, sorting and projection. The entity is found through a `DbSet<T>` on a
+or offset pagination, filtering, sorting and projection. The entity is found through a `DbSet<T>` on a
 `DbContext` registered with [`AddDbContext<TDbContext>()`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods)
 on the GraphQL builder. Where `[TraxQuery]` exposes a train, `[TraxQueryModel]` exposes a table; see
 [Query models and query trains](/docs/api/query-models-and-query-trains).
@@ -31,7 +32,7 @@ public class TraxQueryModelAttribute : Attribute
     public string? Name { get; init; }
     public string? Description { get; init; }
     public string? DeprecationReason { get; init; }
-    public bool Paging { get; init; } = true;
+    public TraxPaging Paging { get; init; } = TraxPaging.Default;
     public bool Filtering { get; init; } = true;
     public bool Sorting { get; init; } = true;
     public bool Projection { get; init; } = true;
@@ -49,7 +50,7 @@ public class TraxQueryModelAttribute : Attribute
 | `Description` | `string?` | `null` | Human-readable description that appears in the GraphQL schema documentation. |
 | `DeprecationReason` | `string?` | `null` | Marks the generated field as deprecated in the schema. |
 | `Namespace` | `string?` | `null` | Groups this field under a sub-namespace. When set, the field appears under `discover { namespace { field } }` instead of directly under `discover`. |
-| `Paging` | `bool` | `true` | Enables cursor-based pagination (Relay Connection spec). When true, the field returns a Connection type with `nodes`, `edges`, `pageInfo`, and `totalCount`. |
+| `Paging` | `TraxPaging` | `Default` | How the field is paged: `Cursor`, `Offset`, `None`, or `Default`, which takes the schema's default (`Cursor` unless the host sets another with [`DefaultPaging`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods)). See [Paging](#paging). |
 | `Filtering` | `bool` | `true` | Enables filtering via a `where` argument. The filter input offers the fields the entity's GraphQL type exposes (see `BindFields` and `ExposeAs`). |
 | `Sorting` | `bool` | `true` | Enables sorting via an `order` argument. HotChocolate generates sort input types for all entity properties. |
 | `Projection` | `bool` | `true` | Enables field projection. Only the columns requested by the GraphQL client are selected from the database. |
@@ -63,9 +64,36 @@ properties on the same context are ignored. The context is registered in DI sepa
 `AddDomainDataContext`, `AddDbContext`, `AddDbContextFactory` or `AddPooledDbContextFactory`), and
 each request resolves the concrete type named in `AddDbContext<TDbContext>()`.
 
-With `Paging = true` the field returns a Connection (`nodes`, `edges`, `pageInfo`, `totalCount`).
-With `Paging = false` it returns a plain list (`[Entity!]!`). Each of `Paging`, `Filtering`,
-`Sorting` and `Projection` switches its HotChocolate middleware off on its own.
+Each of `Paging`, `Filtering`, `Sorting` and `Projection` switches its HotChocolate middleware off
+on its own.
+
+### Paging
+
+| `TraxPaging` | Arguments | Returns |
+|---|---|---|
+| `Cursor` | `first`, `after`, `last`, `before` | A connection: `nodes`, `edges`, `pageInfo`, `totalCount` |
+| `Offset` | `skip`, `take` | A collection segment: `items`, `pageInfo`, `totalCount` |
+| `None` | none | A plain list (`[Entity!]!`) |
+| `Default` | | Whatever the schema's default is: `Cursor`, unless the host calls `DefaultPaging(...)` |
+
+```csharp fragment
+[TraxQueryModel(Namespace = "catalog", Paging = TraxPaging.Offset)]
+public class Product { /* ... */ }
+
+services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<CatalogContext>()
+    .DefaultPaging(TraxPaging.Offset));
+```
+
+A model that names a style keeps it whatever the default is. Both paged styles take the same
+`where` and `order` arguments, project the same way, and hold `totalCount` and `pageInfo` behind the
+model's `[TraxAuthorize]` gate. A page holds at most 50 rows and 10 when `first` or `take` is left
+out, HotChocolate's defaults.
+
+Offset paging is for numbered pages. The database reads and throws away every skipped row, so a
+`skip` above [`MaxOffsetSkip`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods)
+(10,000 unless the host changes it) is refused with `TRAX_OFFSET_SKIP_LIMIT` before the query runs.
+A model holds one style; to serve both during a move, run one deployment per style.
 
 ### Projection and hand-written resolvers
 

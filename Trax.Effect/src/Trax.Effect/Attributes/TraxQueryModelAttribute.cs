@@ -2,7 +2,7 @@ namespace Trax.Effect.Attributes;
 
 /// <summary>
 /// Exposes an EF Core entity as a typed GraphQL query field under <c>discover</c>
-/// with optional cursor pagination, filtering, sorting, and projection.
+/// with optional pagination, filtering, sorting, and projection.
 /// </summary>
 /// <remarks>
 /// Place this attribute on entity classes that are exposed via a <c>DbSet&lt;T&gt;</c>
@@ -36,11 +36,11 @@ public class TraxQueryModelAttribute : Attribute
     public string? DeprecationReason { get; init; }
 
     /// <summary>
-    /// Enables cursor-based pagination (Relay Connection spec) on the query field.
-    /// When <see langword="true"/>, the field returns a Connection type with <c>nodes</c>,
-    /// <c>edges</c>, and <c>pageInfo</c>.
+    /// How the query field is paged. <see cref="TraxPaging.Default"/> takes the schema's default,
+    /// which is <see cref="TraxPaging.Cursor"/> unless the host changes it;
+    /// <see cref="TraxPaging.None"/> returns a plain list.
     /// </summary>
-    public bool Paging { get; init; } = true;
+    public TraxPaging Paging { get; init; } = TraxPaging.Default;
 
     /// <summary>
     /// Enables filtering on the query field. When <see langword="true"/>, clients can use

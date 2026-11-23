@@ -118,6 +118,13 @@ public sealed class GraphQLConfiguration
         TraxCompositeSocketInterceptor.DefaultCredentialRecheckInterval;
 
     /// <summary>
+    /// The largest <c>skip</c> an offset-paged query model accepts (default
+    /// <see cref="TraxGraphQLBuilder.TraxGraphQLBuilder.DefaultMaxOffsetSkip"/>).
+    /// </summary>
+    public int MaxOffsetSkip { get; internal init; } =
+        TraxGraphQLBuilder.TraxGraphQLBuilder.DefaultMaxOffsetSkip;
+
+    /// <summary>
     /// True when <c>RequireAuthorization()</c> was called on the builder.
     /// Gates GraphQL execution (HTTP POST and GET-with-query); the schema download, the
     /// GraphQL IDE and introspection follow <see cref="IntrospectionPredicate"/> instead.

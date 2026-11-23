@@ -152,7 +152,8 @@ public class QueryModelTypeModuleTests
 
         config.ModelRegistrations.Should().HaveCount(1);
         var attr = config.ModelRegistrations[0].Attribute;
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
+        config.ModelRegistrations[0].Paging.Should().Be(TraxPaging.Cursor);
         attr.Filtering.Should().BeFalse();
         attr.Sorting.Should().BeFalse();
         attr.Projection.Should().BeTrue();
@@ -168,7 +169,8 @@ public class QueryModelTypeModuleTests
         var config = builder.Build();
 
         var attr = config.ModelRegistrations[0].Attribute;
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
+        config.ModelRegistrations[0].Paging.Should().Be(TraxPaging.Cursor);
         attr.Filtering.Should().BeTrue();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeTrue();
@@ -400,7 +402,7 @@ public class QueryModelTypeModuleTests
         attr.Name.Should().BeNull();
         attr.Description.Should().BeNull();
         attr.DeprecationReason.Should().BeNull();
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
         attr.Filtering.Should().BeTrue();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeTrue();
@@ -415,7 +417,7 @@ public class QueryModelTypeModuleTests
             Name = "allPlayers",
             Description = "All players",
             DeprecationReason = "Use v2",
-            Paging = false,
+            Paging = TraxPaging.None,
             Filtering = false,
             Sorting = true,
             Projection = false,
@@ -424,7 +426,7 @@ public class QueryModelTypeModuleTests
         attr.Name.Should().Be("allPlayers");
         attr.Description.Should().Be("All players");
         attr.DeprecationReason.Should().Be("Use v2");
-        attr.Paging.Should().BeFalse();
+        attr.Paging.Should().Be(TraxPaging.None);
         attr.Filtering.Should().BeFalse();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeFalse();
