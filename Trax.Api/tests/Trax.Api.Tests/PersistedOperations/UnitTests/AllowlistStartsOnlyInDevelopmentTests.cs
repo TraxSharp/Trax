@@ -29,7 +29,10 @@ public class AllowlistStartsOnlyInDevelopmentTests
     )
     {
         var act = () =>
-            StartAsync(environment, b => b.RequirePersisted(true).AllowOperations("HealthProbe"));
+            StartAsync(
+                environment,
+                b => b.RequirePersisted(require: true).AllowOperations("HealthProbe")
+            );
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>(
@@ -45,7 +48,7 @@ public class AllowlistStartsOnlyInDevelopmentTests
             StartAsync(
                 Environments.Production,
                 b =>
-                    b.RequirePersisted(true)
+                    b.RequirePersisted(require: true)
                         .AllowOperationsMatching(n =>
                             n.StartsWith("dev_", StringComparison.Ordinal)
                         )
@@ -62,7 +65,7 @@ public class AllowlistStartsOnlyInDevelopmentTests
     {
         var options = new PersistedOperationsBuilder()
             .SingleNode()
-            .RequirePersisted(true)
+            .RequirePersisted(require: true)
             .AllowOperations("HealthProbe")
             .Build();
         var gate = new PersistedOperationsAllowlistEnvironmentValidator(options);
@@ -81,7 +84,7 @@ public class AllowlistStartsOnlyInDevelopmentTests
         var act = () =>
             StartAsync(
                 Environments.Development,
-                b => b.RequirePersisted(true).AllowOperations("HealthProbe")
+                b => b.RequirePersisted(require: true).AllowOperations("HealthProbe")
             );
 
         await act.Should().NotThrowAsync();
@@ -90,7 +93,7 @@ public class AllowlistStartsOnlyInDevelopmentTests
     [Test]
     public async Task Required_without_allowlist_starts_outside_Development()
     {
-        var act = () => StartAsync(Environments.Production, b => b.RequirePersisted(true));
+        var act = () => StartAsync(Environments.Production, b => b.RequirePersisted(require: true));
 
         await act.Should().NotThrowAsync();
     }
@@ -102,8 +105,8 @@ public class AllowlistStartsOnlyInDevelopmentTests
             StartAsync(
                 Environments.Production,
                 b =>
-                    b.RequirePersisted(false)
-                        .LogNonPersistedRequests(true)
+                    b.RequirePersisted(require: false)
+                        .LogNonPersistedRequests(log: true)
                         .AllowOperations("HealthProbe")
             );
 
@@ -135,7 +138,7 @@ public class AllowlistStartsOnlyInDevelopmentTests
             builder.Build(),
             new Environment(environment)
         );
-        await gate.StartingAsync(CancellationToken.None);
+        await gate.StartingAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     private sealed class Environment(string name) : IHostEnvironment

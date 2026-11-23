@@ -11,7 +11,7 @@ namespace Trax.Scheduler.Lambda.Configuration
     {
         public LambdaRunOptions() { }
         public System.Action<Amazon.Lambda.AmazonLambdaConfig>? ConfigureLambdaClient { get; set; }
-        public string FunctionName { get; set; }
+        public string? FunctionName { get; set; }
         public Trax.Scheduler.Lambda.Configuration.LambdaRetryOptions Retry { get; set; }
         public byte[]? SigningKey { get; set; }
     }
@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Lambda.Configuration
     {
         public LambdaWorkerOptions() { }
         public System.Action<Amazon.Lambda.AmazonLambdaConfig>? ConfigureLambdaClient { get; set; }
-        public string FunctionName { get; set; }
+        public string? FunctionName { get; set; }
         public Trax.Scheduler.Lambda.Configuration.LambdaRetryOptions Retry { get; set; }
         public byte[]? SigningKey { get; set; }
     }

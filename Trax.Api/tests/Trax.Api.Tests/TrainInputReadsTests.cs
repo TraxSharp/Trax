@@ -5,6 +5,7 @@ using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Tests.Auth;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -21,8 +22,8 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class TrainInputReadsTests
 {
-    private ServiceProvider _provider = null!;
-    private IRequestExecutor _executor = null!;
+    private ServiceProvider? _provider;
+    private IRequestExecutor? _executor;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -39,12 +40,17 @@ public class TrainInputReadsTests
         );
         _provider = services.BuildServiceProvider();
         _executor = await _provider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
     }
 
     [OneTimeTearDown]
-    public async Task OneTimeTearDown() => await _provider.DisposeAsync();
+    public async Task OneTimeTearDown()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [TestCase("ExecutionSummary", "input")]
     [TestCase("ManifestSummary", "properties")]
@@ -76,8 +82,9 @@ public class TrainInputReadsTests
 
     private IEnumerable<string> FieldsOf(string typeName) =>
         _executor
+            .NotNull()
             .Schema.Types.OfType<ObjectType>()
-            .Single(t => t.Name == typeName)
+            .Single(t => string.Equals(t.Name, typeName, StringComparison.Ordinal))
             .Fields.Select(f => f.Name);
 
     /// <summary>

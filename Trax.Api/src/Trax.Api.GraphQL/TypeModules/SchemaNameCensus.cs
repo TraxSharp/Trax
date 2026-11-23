@@ -4,13 +4,6 @@ using Trax.Mediator.Services.TrainDiscovery;
 namespace Trax.Api.GraphQL.TypeModules;
 
 /// <summary>
-/// Who puts a field on a type, or names a type, that Trax builds.
-/// </summary>
-/// <param name="Key">Identifies the owner, so one owner contributing a name twice is not a clash.</param>
-/// <param name="Description">How the refusal names it.</param>
-internal sealed record SchemaNameOwner(string Key, string Description);
-
-/// <summary>
 /// The fields Trax places on its root and namespace types, and the types it generates, with the
 /// surface that owns each. Built from the configuration before any schema exists, so two surfaces
 /// claiming one name refuse the host, naming both, instead of HotChocolate merging two fields of
@@ -32,12 +25,13 @@ internal sealed class SchemaNameCensus
     private readonly Dictionary<(string Type, string Field), List<SchemaNameOwner>> _fields = [];
     private readonly Dictionary<string, List<SchemaNameOwner>> _types = new(StringComparer.Ordinal);
 
-    /// <summary>The owner Trax recorded for a field, or <c>null</c> when Trax places none there.</summary>
+    /// <summary>The owner Trax recorded for a field, or <see langword="null"/> when Trax places none there.</summary>
     public SchemaNameOwner? FieldOwner(string typeName, string fieldName) =>
         _fields.TryGetValue((typeName, fieldName), out var owners) ? owners[0] : null;
 
     /// <summary>Every type name the census places fields on.</summary>
-    public IReadOnlySet<string> FieldParents { get; private set; } = new HashSet<string>();
+    public IReadOnlySet<string> FieldParents { get; private set; } =
+        new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Records every field and generated type, and throws naming each pair of owners that claim
@@ -53,38 +47,7 @@ internal sealed class SchemaNameCensus
     {
         var census = new SchemaNameCensus();
 
-        // The views root, when the host serves views of machines derived from features.
-        if (viewsExposed)
-            census.Field(
-                "RootQuery",
-                MachineViewTypeModule.RootField,
-                Trax(MachineViewTypeModule.RootField)
-            );
-
-        // The machines root, on both roots, when the host exposes a machine.
-        if (machinesExposed)
-        {
-            census.Field("RootQuery", MachineSurface.RootField, Trax(MachineSurface.RootField));
-            census.Field("RootMutation", MachineSurface.RootField, Trax(MachineSurface.RootField));
-        }
-
-        // The entry fields Trax hangs off the roots.
-        if (configuration.ModelRegistrations.Count > 0 || trains.Any(t => t.IsQuery))
-            census.Field("RootQuery", "discover", Trax("discover"));
-        if (trains.Any(t => t.IsMutation))
-            census.Field("RootMutation", "dispatch", Trax("dispatch"));
-        if (configuration.OperationQueriesExposed)
-            census.Field("RootQuery", "operations", Trax("operations"));
-        if (configuration.OperationMutationsExposed)
-            census.Field("RootMutation", "operations", Trax("operations"));
-
-        // A feature package's own root fields, such as persistedOperations once its management
-        // gate is declared, on both roots.
-        foreach (var field in configuration.FeatureRootFields)
-        {
-            census.Field("RootQuery", field, Trax(field));
-            census.Field("RootMutation", field, Trax(field));
-        }
+        CountRootFields(census, configuration, trains, machinesExposed, viewsExposed);
 
         foreach (var reg in configuration.ModelRegistrations)
         {
@@ -125,9 +88,54 @@ internal sealed class SchemaNameCensus
                 );
         }
 
-        census.FieldParents = census._fields.Keys.Select(k => k.Type).ToHashSet();
+        census.FieldParents = census
+            ._fields.Keys.Select(k => k.Type)
+            .ToHashSet(StringComparer.Ordinal);
         census.ThrowOnClashes();
         return census;
+    }
+
+    // The fields Trax places on the roots themselves.
+    private static void CountRootFields(
+        SchemaNameCensus census,
+        GraphQLConfiguration configuration,
+        IReadOnlyList<TrainRegistration> trains,
+        bool machinesExposed,
+        bool viewsExposed
+    )
+    {
+        // The views root, when the host serves views of machines derived from features.
+        if (viewsExposed)
+            census.Field(
+                "RootQuery",
+                MachineViewTypeModule.RootField,
+                Trax(MachineViewTypeModule.RootField)
+            );
+
+        // The machines root, on both roots, when the host exposes a machine.
+        if (machinesExposed)
+        {
+            census.Field("RootQuery", MachineSurface.RootField, Trax(MachineSurface.RootField));
+            census.Field("RootMutation", MachineSurface.RootField, Trax(MachineSurface.RootField));
+        }
+
+        // The entry fields Trax hangs off the roots.
+        if (configuration.ModelRegistrations.Count > 0 || trains.Any(t => t.IsQuery))
+            census.Field("RootQuery", "discover", Trax("discover"));
+        if (trains.Any(t => t.IsMutation))
+            census.Field("RootMutation", "dispatch", Trax("dispatch"));
+        if (configuration.OperationQueriesExposed)
+            census.Field("RootQuery", "operations", Trax("operations"));
+        if (configuration.OperationMutationsExposed)
+            census.Field("RootMutation", "operations", Trax("operations"));
+
+        // A feature package's own root fields, such as persistedOperations once its management
+        // gate is declared, on both roots.
+        foreach (var field in configuration.FeatureRootFields)
+        {
+            census.Field("RootQuery", field, Trax(field));
+            census.Field("RootMutation", field, Trax(field));
+        }
     }
 
     /// <summary>
@@ -164,7 +172,7 @@ internal sealed class SchemaNameCensus
     {
         if (!map.TryGetValue(key, out var owners))
             map[key] = owners = [];
-        if (!owners.Any(o => o.Key == owner.Key))
+        if (!owners.Exists(o => string.Equals(o.Key, owner.Key, StringComparison.Ordinal)))
             owners.Add(owner);
     }
 

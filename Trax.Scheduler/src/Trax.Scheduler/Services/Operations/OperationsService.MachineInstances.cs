@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Utils;
@@ -61,12 +62,14 @@ public partial class OperationsService
         var take = Math.Clamp(query.Take, 1, MaxPageSize);
         var skip = Math.Max(query.Skip, 0);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var overdueBefore = OverdueBefore();
-        var items = await MachineInstancePageQuery(db, query, skip, take, overdueBefore)
-            .ToListAsync(ct);
+        var items = await MachineInstancePageQuery(db, query, skip, take, Clock, overdueBefore)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
         return new MachineInstancePage(
-            await WithAttentionAsync(db, items, overdueBefore, ct),
+            await WithAttentionAsync(db, items, overdueBefore, ct).ConfigureAwait(false),
             skip,
             take
         );
@@ -78,7 +81,8 @@ public partial class OperationsService
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // One match past the cap tells a capped count from an exact one, and the database stops
         // reading once it has found that many.
@@ -89,7 +93,8 @@ public partial class OperationsService
                 OverdueBefore()
             )
             .Take(MachineInstanceCountCap + 1)
-            .CountAsync(ct);
+            .CountAsync(ct)
+            .ConfigureAwait(false);
         return count > MachineInstanceCountCap
             ? new MachineInstanceTotal(MachineInstanceCountCap, Capped: true)
             : new MachineInstanceTotal(count, Capped: false);
@@ -103,13 +108,17 @@ public partial class OperationsService
     {
         ValidateLookup(key);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var record = await InstanceRows(db, key)
             .Select(ToMachineInstanceRecord)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
         return record is null
             ? null
-            : (await WithAttentionAsync(db, [record], OverdueBefore(), ct))[0];
+            : (await WithAttentionAsync(db, [record], OverdueBefore(), ct).ConfigureAwait(false))[
+                0
+            ];
     }
 
     /// <summary>
@@ -131,10 +140,12 @@ public partial class OperationsService
     {
         ValidateLookup(key);
 
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var instance = await InstanceRows(db, key)
             .Select(x => new { x.InvokeToken })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
         if (instance is null)
             return null;
 
@@ -171,15 +182,12 @@ public partial class OperationsService
                 m.CancellationRequested,
                 token != null && m.ExternalId == token
             ))
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         long? queuedEntryId = null;
-        if (token is not null && !runs.Any(r => r.IsLive))
-            queuedEntryId = await db
-                .WorkQueues.AsNoTracking()
-                .Where(w => w.ExternalId == token && w.Status == WorkQueueStatus.Queued)
-                .Select(w => (long?)w.Id)
-                .FirstOrDefaultAsync(ct);
+        if (token is not null && !runs.Exists(r => r.IsLive))
+            queuedEntryId = await ReadQueuedEntryIdAsync(db, token, ct).ConfigureAwait(false);
 
         var capped = runs.Count > MachineInstanceRunCap;
         return new MachineInstanceRuns(
@@ -216,11 +224,13 @@ public partial class OperationsService
             );
 
         string token;
-        using (var db = await _dataContextFactory.CreateDbContextAsync(ct))
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var instance = await InstanceRows(db, key)
                 .Select(x => new { x.State, x.InvokeToken })
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
             if (instance is null)
                 return new MachineInstanceCancelResult(
                     MachineInstanceCancelOutcome.NotFound,
@@ -234,46 +244,91 @@ public partial class OperationsService
             token = instance.InvokeToken;
 
             if (BeforeMachineInstanceCancel is { } beforeCancel)
-                await beforeCancel(ct);
+                await beforeCancel(ct).ConfigureAwait(false);
 
-            var queued = db.WorkQueues.Where(w =>
-                w.ExternalId == token && w.Status == WorkQueueStatus.Queued
-            );
-            var cancelled = db.SupportsSetUpdates()
-                ? await queued.ExecuteUpdateAsync(
-                    s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled),
-                    ct
-                )
-                : await db.UpdateEachAsync(queued, w => w.Status = WorkQueueStatus.Cancelled, ct);
+            var cancelled = await CancelQueuedEntryAsync(db, token, ct).ConfigureAwait(false);
 
             if (cancelled == 0)
-            {
-                var flagged = await ExecutionCancellation.RequestAsync(
-                    db,
-                    db.Metadatas.Where(m => m.ExternalId == token),
-                    _services?.GetService<ICancellationRegistry>(),
-                    _changeSignal,
-                    ct
-                );
-                return flagged > 0
-                    ? new MachineInstanceCancelResult(
-                        MachineInstanceCancelOutcome.CancelRequested,
-                        CancelRequestedMessage(key, instance.State)
-                    )
-                    : new MachineInstanceCancelResult(
-                        MachineInstanceCancelOutcome.RunEnded,
-                        RunEndedMessage(key, instance.State)
-                    );
-            }
+                return await RequestRunCancelAsync(db, key, token, instance.State, ct)
+                    .ConfigureAwait(false);
 
             _changeSignal?.Notify(ChangeDomain.WorkQueue);
         }
 
-        // The run never starts. Apply its Cancelled outcome now when this host can read the
-        // machine; otherwise the reconciler on a host that can does, woken on Postgres by the
-        // cancelled entry's notification.
+        return await DeliverCancelledRunAsync(key, token, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<long?> ReadQueuedEntryIdAsync(
+        IDataContext db,
+        string token,
+        CancellationToken ct
+    ) =>
+        await db
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.ExternalId == token && w.Status == WorkQueueStatus.Queued)
+            .Select(w => (long?)w.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+    private static async Task<int> CancelQueuedEntryAsync(
+        IDataContext db,
+        string token,
+        CancellationToken ct
+    )
+    {
+        var queued = db.WorkQueues.Where(w =>
+            w.ExternalId == token && w.Status == WorkQueueStatus.Queued
+        );
+        return db.SupportsSetUpdates()
+            ? await queued
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled),
+                    ct
+                )
+                .ConfigureAwait(false)
+            : await db.UpdateEachAsync(queued, w => w.Status = WorkQueueStatus.Cancelled, ct)
+                .ConfigureAwait(false);
+    }
+
+    private async Task<MachineInstanceCancelResult> RequestRunCancelAsync(
+        IDataContext db,
+        MachineInstanceKey key,
+        string token,
+        string state,
+        CancellationToken ct
+    )
+    {
+        var flagged = await ExecutionCancellation
+            .RequestAsync(
+                db,
+                db.Metadatas.Where(m => m.ExternalId == token),
+                _services?.GetService<ICancellationRegistry>(),
+                _changeSignal,
+                ct
+            )
+            .ConfigureAwait(false);
+        return flagged > 0
+            ? new MachineInstanceCancelResult(
+                MachineInstanceCancelOutcome.CancelRequested,
+                CancelRequestedMessage(key, state)
+            )
+            : new MachineInstanceCancelResult(
+                MachineInstanceCancelOutcome.RunEnded,
+                RunEndedMessage(key, state)
+            );
+    }
+
+    // The run never starts. Apply its Cancelled outcome now when this host can read the
+    // machine; otherwise the reconciler on a host that can does, woken on Postgres by the
+    // cancelled entry's notification.
+    private async Task<MachineInstanceCancelResult> DeliverCancelledRunAsync(
+        MachineInstanceKey key,
+        string token,
+        CancellationToken ct
+    )
+    {
         var moved = _services?.GetService<IInvokedRunOutcomes>() is { } outcomes
-            ? await outcomes.Deliver(token, ct)
+            ? await outcomes.Deliver(token, ct).ConfigureAwait(false)
             : null;
         return moved is not null
             ? new MachineInstanceCancelResult(
@@ -411,7 +466,7 @@ public partial class OperationsService
             read = entry.Read;
         }
 
-        return await read.WaitAsync(ct);
+        return await read.WaitAsync(ct).ConfigureAwait(false);
     }
 
     // One cache per data context factory, which is one per host, so two hosts in one process (a
@@ -435,7 +490,8 @@ public partial class OperationsService
         IReadOnlyList<MachineInstanceStateCount>
     > ReadMachineInstanceStateCountsAsync(string? machine, CancellationToken ct)
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         var rows = db.SnapshotDrafts.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(machine))
             rows = rows.Where(x => x.Machine == machine);
@@ -453,7 +509,8 @@ public partial class OperationsService
                 g.Key.OwnerKind,
                 Count = g.LongCount(),
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         // The stuck instances are few and found through the partial indexes on due_at and invoke_token, so they
         // are counted on their own rather than by a condition over every row.
@@ -473,6 +530,7 @@ public partial class OperationsService
                     Count = g.LongCount(),
                 })
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).ToDictionary(c => (c.Machine, c.State, c.OwnerKind), c => c.Count);
 
         return counts
@@ -522,7 +580,7 @@ public partial class OperationsService
                     .WithCancellation(ct)
                     .ConfigureAwait(false)
             )
-                if (OperatorView(change, only) is { } record)
+                if (OperatorView(change, only, Clock) is { } record)
                     yield return record;
         }
     }
@@ -532,7 +590,11 @@ public partial class OperationsService
     // names no instance, so it is not shown. A reload names none either, but it says writes may
     // have been missed (the listener started or reconnected, or the feed fell behind), so it is
     // sent as a record marked Reload, and the reader reads what it shows again.
-    internal static MachineInstanceRecord? OperatorView(SnapshotRowChange change, string? machine)
+    internal static MachineInstanceRecord? OperatorView(
+        SnapshotRowChange change,
+        string? machine,
+        TimeProvider clock
+    )
     {
         if (change.Kind is SnapshotRowChangeKind.Reload)
             return new MachineInstanceRecord(
@@ -542,9 +604,9 @@ public partial class OperationsService
                 Guid.Empty,
                 "",
                 0,
-                null,
-                DateTimeOffset.UtcNow,
-                false
+                CreatedAt: null,
+                clock.GetUtcNow(),
+                HasLiveInvokedRun: false
             )
             {
                 Reload = true,
@@ -569,7 +631,7 @@ public partial class OperationsService
             change.State,
             change.Version,
             change.CreatedAt,
-            change.UpdatedAt ?? DateTimeOffset.UtcNow,
+            change.UpdatedAt ?? clock.GetUtcNow(),
             change.Kind is not SnapshotRowChangeKind.Gone && change.HasInvokeToken
         )
         {
@@ -588,13 +650,14 @@ public partial class OperationsService
         MachineInstanceQuery query,
         int skip,
         int take,
+        TimeProvider clock,
         DateTimeOffset? overdueBefore = null
     ) =>
         FilterMachineInstances(
                 db,
                 db.SnapshotDrafts.AsNoTracking(),
                 query,
-                overdueBefore ?? DateTimeOffset.UtcNow - DefaultTimerGrace
+                overdueBefore ?? clock.GetUtcNow() - DefaultTimerGrace
             )
             .OrderByDescending(x => x.UpdatedAt)
             .ThenByDescending(x => x.RowId)
@@ -731,74 +794,93 @@ public partial class OperationsService
                 .SnapshotDrafts.AsNoTracking()
                 .Where(x => waiting.Contains(x.RowId) && x.InvokeToken != null)
                 .Select(x => new { x.RowId, x.InvokeToken })
-                .ToDictionaryAsync(x => x.RowId, x => x.InvokeToken!, ct);
-            var held = tokens.Values.Distinct().ToList();
+                .ToDictionaryAsync(x => x.RowId, x => x.InvokeToken.NotNull(), ct)
+                .ConfigureAwait(false);
+            var held = tokens.Values.Distinct(StringComparer.Ordinal).ToList();
             if (held.Count > 0)
             {
-                foreach (
-                    var run in await db
-                        .Metadatas.AsNoTracking()
-                        .Where(m => held.Contains(m.ExternalId))
-                        .Select(m => new
-                        {
-                            m.ExternalId,
-                            m.Id,
-                            m.TrainState,
-                            m.EndTime,
-                        })
-                        .ToListAsync(ct)
-                )
-                    runs[run.ExternalId] = (run.Id, run.TrainState, run.EndTime);
-                foreach (
-                    var entry in await db
-                        .WorkQueues.AsNoTracking()
-                        .Where(w => held.Contains(w.ExternalId))
-                        .Select(w => new
-                        {
-                            w.ExternalId,
-                            w.Id,
-                            w.Status,
-                        })
-                        .ToListAsync(ct)
-                )
-                    entries[entry.ExternalId] = (entry.Id, entry.Status);
+                await ReadHeldRunsAndEntriesAsync(db, held, runs, entries, ct)
+                    .ConfigureAwait(false);
             }
         }
 
         var endedBefore = overdueBefore.UtcDateTime;
         return records
-            .Select(r =>
-            {
-                var overdue = r.DueAt is { } due && due < overdueBefore;
-                MachineInstanceWaitingOn? waitingOn = null;
-                var failedRun = false;
-                if (tokens.TryGetValue(r.RowId, out var token))
-                {
-                    var hasRun = runs.TryGetValue(token, out var run);
-                    var hasEntry = entries.TryGetValue(token, out var entry);
-                    TrainState? state =
-                        hasRun ? run.State
-                        : hasEntry
-                            ? entry.Status == WorkQueueStatus.Cancelled ? TrainState.Cancelled
-                                : TrainState.Pending
-                        : null;
-                    waitingOn = new MachineInstanceWaitingOn(
-                        hasRun ? run.Id : null,
-                        state,
-                        hasEntry ? entry.Id : null
-                    );
-                    failedRun = hasRun
-                        ? run.State is TrainState.Failed or TrainState.Cancelled
-                            && (run.EndTime is null || run.EndTime < endedBefore)
-                        : hasEntry && entry.Status == WorkQueueStatus.Cancelled;
-                }
-                return r with
-                {
-                    Overdue = overdue,
-                    WaitingOn = waitingOn,
-                    Stuck = overdue || failedRun,
-                };
-            })
+            .Select(r => WithAttention(r, tokens, runs, entries, overdueBefore, endedBefore))
             .ToList();
+    }
+
+    private static async Task ReadHeldRunsAndEntriesAsync(
+        IDataContext db,
+        List<string> held,
+        Dictionary<string, (long Id, TrainState State, DateTime? EndTime)> runs,
+        Dictionary<string, (long Id, WorkQueueStatus Status)> entries,
+        CancellationToken ct
+    )
+    {
+        foreach (
+            var run in await db
+                .Metadatas.AsNoTracking()
+                .Where(m => held.Contains(m.ExternalId))
+                .Select(m => new
+                {
+                    m.ExternalId,
+                    m.Id,
+                    m.TrainState,
+                    m.EndTime,
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        )
+            runs[run.ExternalId] = (run.Id, run.TrainState, run.EndTime);
+        foreach (
+            var entry in await db
+                .WorkQueues.AsNoTracking()
+                .Where(w => held.Contains(w.ExternalId))
+                .Select(w => new
+                {
+                    w.ExternalId,
+                    w.Id,
+                    w.Status,
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        )
+            entries[entry.ExternalId] = (entry.Id, entry.Status);
+    }
+
+    private static MachineInstanceRecord WithAttention(
+        MachineInstanceRecord r,
+        Dictionary<long, string> tokens,
+        Dictionary<string, (long Id, TrainState State, DateTime? EndTime)> runs,
+        Dictionary<string, (long Id, WorkQueueStatus Status)> entries,
+        DateTimeOffset overdueBefore,
+        DateTime endedBefore
+    )
+    {
+        var overdue = r.DueAt is { } due && due < overdueBefore;
+        MachineInstanceWaitingOn? waitingOn = null;
+        var failedRun = false;
+        if (tokens.TryGetValue(r.RowId, out var token))
+        {
+            var hasRun = runs.TryGetValue(token, out var run);
+            var hasEntry = entries.TryGetValue(token, out var entry);
+            TrainState? state =
+                hasRun ? run.State
+                : hasEntry
+                    ? entry.Status == WorkQueueStatus.Cancelled ? TrainState.Cancelled
+                        : TrainState.Pending
+                : null;
+            waitingOn = new MachineInstanceWaitingOn(
+                hasRun ? run.Id : null,
+                state,
+                hasEntry ? entry.Id : null
+            );
+            failedRun = hasRun
+                ? run.State is TrainState.Failed or TrainState.Cancelled
+                    && (run.EndTime is null || run.EndTime < endedBefore)
+                : hasEntry && entry.Status == WorkQueueStatus.Cancelled;
+        }
+        return r with { Overdue = overdue, WaitingOn = waitingOn, Stuck = overdue || failedRun };
     }
 }

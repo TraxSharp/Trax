@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -48,7 +49,7 @@ public class EverySchemeAuthenticatesTheSocketTests
 
     private static string Sign(string issuer, byte[] key, string sub = "alice")
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         return new JwtSecurityTokenHandler().WriteToken(
             new JwtSecurityToken(
                 issuer,
@@ -66,7 +67,8 @@ public class EverySchemeAuthenticatesTheSocketTests
     {
         var (session, _) = NewSession();
 
-        var status = await NamedSchemesOnly().OnConnectAsync(session, Payload(new { }));
+        var status = await NamedSchemesOnly()
+            .OnConnectAsync(session, Payload(new { }), cancellationToken: CancellationToken.None);
 
         status
             .Accepted.Should()
@@ -81,11 +83,12 @@ public class EverySchemeAuthenticatesTheSocketTests
         var status = await NamedSchemesOnly()
             .OnConnectAsync(
                 session,
-                Payload(new { authToken = Sign(CustomerIssuer, CustomerKey) })
+                Payload(new { authToken = Sign(CustomerIssuer, CustomerKey) }),
+                cancellationToken: CancellationToken.None
             );
 
         status.Accepted.Should().BeTrue();
-        http.User.Identity!.AuthenticationType.Should().Be("Customer");
+        http.User.Identity.NotNull().AuthenticationType.Should().Be("Customer");
     }
 
     [Test]
@@ -94,10 +97,14 @@ public class EverySchemeAuthenticatesTheSocketTests
         var (session, http) = NewSession();
 
         var status = await NamedSchemesOnly()
-            .OnConnectAsync(session, Payload(new { bearer = Sign(StaffIssuer, StaffKey) }));
+            .OnConnectAsync(
+                session,
+                Payload(new { bearer = Sign(StaffIssuer, StaffKey) }),
+                cancellationToken: CancellationToken.None
+            );
 
         status.Accepted.Should().BeTrue();
-        http.User.Identity!.AuthenticationType.Should().Be("Staff");
+        http.User.Identity.NotNull().AuthenticationType.Should().Be("Staff");
     }
 
     [Test]
@@ -106,7 +113,11 @@ public class EverySchemeAuthenticatesTheSocketTests
         var (session, _) = NewSession();
 
         var status = await NamedSchemesOnly()
-            .OnConnectAsync(session, Payload(new { authToken = Sign(CustomerIssuer, StaffKey) }));
+            .OnConnectAsync(
+                session,
+                Payload(new { authToken = Sign(CustomerIssuer, StaffKey) }),
+                cancellationToken: CancellationToken.None
+            );
 
         status.Accepted.Should().BeFalse();
     }

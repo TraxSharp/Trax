@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Samples.Templates.Tests.Utils;
 using static Trax.Samples.Templates.Tests.Utils.Dotnet;
 
@@ -27,9 +29,9 @@ public class ScaffoldedTemplateTests
     private const string Adr =
         "see docs/adr/0003-templates-serve-the-dashboard-only-in-development.md";
 
-    private string _workDir = null!;
-    private string _hive = null!;
-    private readonly Dictionary<string, Task<string>> _scaffolds = new();
+    private string? _workDir;
+    private string? _hive;
+    private readonly Dictionary<string, Task<string>> _scaffolds = new(StringComparer.Ordinal);
 
     [OneTimeSetUp]
     public async Task PackAndInstallTheTemplates()
@@ -38,19 +40,27 @@ public class ScaffoldedTemplateTests
         // is where a consumer runs `dotnet new`. Its nuget.config stands in for the packages
         // being published.
         _workDir = Path.Combine(Path.GetTempPath(), "trax-template-scaffold-" + Guid.NewGuid());
-        _hive = Path.Combine(_workDir, "hive");
-        Directory.CreateDirectory(_workDir);
+        _hive = Path.Combine(_workDir.NotNull(), "hive");
+        Directory.CreateDirectory(_workDir.NotNull());
 
         var packed = await ScaffoldFeed.Get();
-        ScaffoldFeed.WriteNuGetConfig(_workDir, packed);
-        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive);
+        await ScaffoldFeed.WriteNuGetConfig(_workDir.NotNull(), packed).ConfigureAwait(false);
+        await Run(
+                _workDir.NotNull(),
+                "new",
+                "install",
+                packed.TemplatesNupkg,
+                "--debug:custom-hive",
+                _hive.NotNull()
+            )
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
     public void DeleteTheWorkDirectory()
     {
-        if (Directory.Exists(_workDir))
-            Directory.Delete(_workDir, recursive: true);
+        if (Directory.Exists(_workDir.NotNull()))
+            Directory.Delete(_workDir.NotNull(), recursive: true);
     }
 
     [TestCase("trax-hub")]
@@ -86,7 +96,11 @@ public class ScaffoldedTemplateTests
             .ExitCode.Should()
             .Be(0, $"the container config of {shortName} computes:\n{config.Output}");
         using var json = System.Text.Json.JsonDocument.Parse(
-            config.Output[config.Output.IndexOf('{')..(config.Output.LastIndexOf('}') + 1)]
+            config.Output[
+                config.Output.IndexOf('{', StringComparison.Ordinal)..(
+                    config.Output.LastIndexOf('}') + 1
+                )
+            ]
         );
         json.RootElement.GetProperty("Properties")
             .GetProperty("ContainerRepository")
@@ -108,7 +122,7 @@ public class ScaffoldedTemplateTests
         // and -t:PublishContainer puts the publish output in /app.
         var dir = await Scaffold("trax-hub");
         // Outside the project, whose globs would otherwise pick the output up.
-        var output = Path.Combine(_workDir, "trax-hub-publish");
+        var output = Path.Combine(_workDir.NotNull(), "trax-hub-publish");
 
         var publish = await Run(
             dir,
@@ -147,6 +161,67 @@ public class ScaffoldedTemplateTests
     [TestCase("trax-hub")]
     [TestCase("trax-scheduler")]
     [TestCase("trax-api")]
+    public async Task Scaffold_ByDefault_DoesNotReferenceTheAnalyzers(string shortName)
+    {
+        var dir = await Scaffold(shortName);
+
+        foreach (var project in Projects(dir))
+            (await File.ReadAllTextAsync(project))
+                .Should()
+                .NotContain(
+                    "Trax.Analyzers",
+                    $"a default {shortName} scaffold leaves the analyzers out"
+                );
+    }
+
+    [TestCase("trax-hub")]
+    [TestCase("trax-scheduler")]
+    [TestCase("trax-api")]
+    public async Task Scaffold_Strict_BuildsUnderTheAnalyzerProfile(string shortName)
+    {
+        var dir = Path.Combine(_workDir.NotNull(), shortName, "Strict", "App");
+        await Run(
+            _workDir.NotNull(),
+            "new",
+            shortName,
+            "--name",
+            "App",
+            "--output",
+            dir,
+            "--strict",
+            "--debug:custom-hive",
+            _hive.NotNull()
+        );
+
+        foreach (var project in Projects(dir))
+            (await File.ReadAllTextAsync(project))
+                .Should()
+                .Contain(
+                    "<PackageReference Include=\"Trax.Analyzers\" PrivateAssets=\"all\" />",
+                    $"{shortName} --strict references the analyzers in {Path.GetFileName(project)}"
+                );
+        foreach (var project in Projects(dir))
+        {
+            var build = await Run(dir, allowFailure: true, "build", project, "-warnaserror");
+            build
+                .ExitCode.Should()
+                .Be(
+                    0,
+                    $"a {shortName} --strict scaffold builds clean under the profile:\n{build.Output}"
+                );
+        }
+    }
+
+    // The application and its test project.
+    private static string[] Projects(string dir) =>
+        [
+            Path.Combine(dir, "App.csproj"),
+            Path.Combine(dir, "tests", "App.Tests", "App.Tests.csproj"),
+        ];
+
+    [TestCase("trax-hub")]
+    [TestCase("trax-scheduler")]
+    [TestCase("trax-api")]
     public async Task Scaffold_Readme_LinksToTheDocs(string shortName)
     {
         var dir = await Scaffold(shortName);
@@ -169,12 +244,12 @@ public class ScaffoldedTemplateTests
     )
     {
         var dir = await Scaffold(shortName);
-        var url = $"http://127.0.0.1:{FreePort()}";
+        var url = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}");
 
         // The launch profile sets Development; --urls only moves the port off the fixed one.
         await using var app = await Start(
             dir,
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             "Application started",
             "run",
             "--no-build",
@@ -212,7 +287,7 @@ public class ScaffoldedTemplateTests
         // export opens no database.
         var export = await Run(
             dir,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ConnectionStrings__Trax"] =
@@ -232,7 +307,7 @@ public class ScaffoldedTemplateTests
             await File.ReadAllTextAsync(path)
         );
         manifest.Roles.Should().Equal(roles.Split(','));
-        manifest.Database!.Provider.Should().Be("postgres");
+        manifest.Database.NotNull().Provider.Should().Be("postgres");
         manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
         manifest.Endpoints.Health.Should().Be(health);
         if (manifest.Roles.Contains("api"))
@@ -256,11 +331,11 @@ public class ScaffoldedTemplateTests
     )
     {
         var dir = await Scaffold(shortName);
-        var url = $"http://127.0.0.1:{FreePort()}";
+        var url = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}");
 
         await using var app = await Start(
             dir,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ASPNETCORE_URLS"] = url,
@@ -298,19 +373,20 @@ public class ScaffoldedTemplateTests
 
     private async Task<string> ScaffoldOnce(string shortName)
     {
-        var dir = Path.Combine(_workDir, shortName, "App");
+        var dir = Path.Combine(_workDir.NotNull(), shortName, "App");
         await Run(
-            _workDir,
-            "new",
-            shortName,
-            "--name",
-            "App",
-            "--output",
-            dir,
-            "--debug:custom-hive",
-            _hive
-        );
-        await Run(dir, "build");
+                _workDir.NotNull(),
+                "new",
+                shortName,
+                "--name",
+                "App",
+                "--output",
+                dir,
+                "--debug:custom-hive",
+                _hive.NotNull()
+            )
+            .ConfigureAwait(false);
+        await Run(dir, "build").ConfigureAwait(false);
         return dir;
     }
 

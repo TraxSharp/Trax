@@ -12,8 +12,8 @@ namespace Trax.Api.DTOs;
 /// <param name="InProgress">Executions running now.</param>
 /// <param name="Pending">Executions created but not yet started.</param>
 /// <param name="Cancelled">Executions that were cancelled.</param>
-/// <param name="LastRun">When the most recent execution started (UTC), or <c>null</c> if it never ran.</param>
-/// <param name="LastSuccessfulRun">When the most recent completed execution ended (UTC), or <c>null</c> if none completed.</param>
+/// <param name="LastRun">When the most recent execution started (UTC), or <see langword="null"/> if it never ran.</param>
+/// <param name="LastSuccessfulRun">When the most recent completed execution ended (UTC), or <see langword="null"/> if none completed.</param>
 public record ManifestExecutionStats(
     long ManifestId,
     long Total,

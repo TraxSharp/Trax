@@ -1,9 +1,11 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
@@ -125,7 +127,7 @@ public class TrainDiscoveryAuthorizationTests
             IsMutation = false,
             IsBroadcastEnabled = false,
             IsRemote = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
         handBuilt.RequiredRoleSets.Should().ContainSingle();
@@ -152,12 +154,12 @@ public class TrainDiscoveryAuthorizationTests
             OutputTypeName = reg.OutputTypeName,
             RequiredPolicies = [],
             RequiredRoles = ["Admin"],
-            RequiredRoleSets = setToNull ? null! : [],
+            RequiredRoleSets = setToNull ? Null.Of<IReadOnlyList<IReadOnlyList<string>>>() : [],
             IsQuery = false,
             IsMutation = false,
             IsBroadcastEnabled = false,
             IsRemote = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
         handBuilt.RequiredRoleSets.Should().ContainSingle();
@@ -264,7 +266,7 @@ public class TrainDiscoveryAuthorizationTests
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
-    public class BaseAuthorizedTrainImpl : AuthorizedBase, IBaseAuthorizedTrain { }
+    public class BaseAuthorizedTrainImpl : AuthorizedBase, IBaseAuthorizedTrain;
 
     [TraxAuthorize("FromInterface", Roles = "RoleA")]
     public interface IMultiSurfaceTrain : IServiceTrain<EmptyIn, EmptyOut>;

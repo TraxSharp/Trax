@@ -13,10 +13,11 @@ public class CliTests
         var parsed = Cli.Parse(Minimal(repo.Root));
 
         parsed.Error.Should().BeNull();
-        parsed.Options!.AdrRoot.Should().Be("docs/adr");
-        parsed.Options.TestRoots.Should().Equal("tests");
-        parsed.Options.RequireReposKey.Should().BeFalse();
-        parsed.Options.CensusRoot.Should().BeNull();
+        var options = parsed.Options ?? throw new AssertionException("Parse gave no options.");
+        options.AdrRoot.Should().Be("docs/adr");
+        options.TestRoots.Should().Equal("tests");
+        options.RequireReposKey.Should().BeFalse();
+        options.CensusRoot.Should().BeNull();
     }
 
     [Test]
@@ -41,12 +42,13 @@ public class CliTests
         ]);
 
         parsed.Error.Should().BeNull();
-        parsed.Options!.AdrRoot.Should().Be("adr");
-        parsed.Options.TestRoots.Should().Equal("tests", "samples");
-        parsed.Options.KnownAreas.Should().BeEquivalentTo(["testing", "migrations"]);
-        parsed.Options.KnownRepos.Should().BeEquivalentTo(["effect", "api"]);
-        parsed.Options.RequireReposKey.Should().BeTrue();
-        parsed.Options.CensusRoot.Should().Be("tests/Some.Tests.Meta");
+        var options = parsed.Options ?? throw new AssertionException("Parse gave no options.");
+        options.AdrRoot.Should().Be("adr");
+        options.TestRoots.Should().Equal("tests", "samples");
+        options.KnownAreas.Should().BeEquivalentTo(["testing", "migrations"]);
+        options.KnownRepos.Should().BeEquivalentTo(["effect", "api"]);
+        options.RequireReposKey.Should().BeTrue();
+        options.CensusRoot.Should().Be("tests/Some.Tests.Meta");
     }
 
     /// <summary>
@@ -63,7 +65,8 @@ public class CliTests
         var parsed = Cli.Parse([.. Minimal(repo.Root), "--census-root", value]);
 
         parsed.Error.Should().BeNull();
-        parsed.Options!.CensusRoot.Should().BeNull();
+        var options = parsed.Options ?? throw new AssertionException("Parse gave no options.");
+        options.CensusRoot.Should().BeNull();
     }
 
     [Test]

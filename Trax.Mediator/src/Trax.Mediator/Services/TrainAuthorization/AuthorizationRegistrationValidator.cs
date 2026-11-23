@@ -46,7 +46,7 @@ internal sealed class AuthorizationRegistrationValidator(
         var registrations = discoveryService.DiscoverTrains();
 
         ValidateAttributeShapes(registrations);
-        await ValidateAuthServicePresenceAsync(registrations);
+        await ValidateAuthServicePresenceAsync(registrations).ConfigureAwait(false);
     }
 
     private async Task ValidateAuthServicePresenceAsync(
@@ -61,7 +61,8 @@ internal sealed class AuthorizationRegistrationValidator(
         // ServiceProvider's scope validation in dev / test hosts. Disposed asynchronously, because
         // an implementation may be disposable only asynchronously, and disposing that scope
         // synchronously throws.
-        await using (var scope = serviceProvider.CreateAsyncScope())
+        var scope = serviceProvider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var authService = scope.ServiceProvider.GetService<ITrainAuthorizationService>();
             if (authService is not null)

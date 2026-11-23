@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -41,9 +42,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class RemoteDeliveryOutcomeTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
-    private IDataContext _dataContext = null!;
+    private ServiceProvider? _serviceProvider;
+    private AsyncServiceScope _scope;
+    private IDataContext? _dataContext;
     private static readonly StubRunner Runner = new();
 
     [OneTimeSetUp]
@@ -72,7 +73,8 @@ public class RemoteDeliveryOutcomeTests
                                     BaseUrl = "https://runner.test/trax/execute",
                                     Retry = new HttpRetryOptions { MaxRetries = 0 },
                                 },
-                                NullLogger<HttpJobSubmitter>.Instance
+                                NullLogger<HttpJobSubmitter>.Instance,
+                                TimeProvider.System
                             ))
                         )
                     )
@@ -82,26 +84,30 @@ public class RemoteDeliveryOutcomeTests
             )
             .BuildServiceProvider();
 
-        Runner.Services = _serviceProvider;
+        Runner.Services = _serviceProvider.NotNull();
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
-    public void TestTearDown()
+    public async Task TestTearDown()
     {
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
         Runner.Mode = StubRunnerMode.RunAndReport;
     }
 
@@ -121,8 +127,9 @@ public class RemoteDeliveryOutcomeTests
                 .Should()
                 .Be(1, "the runner ran it and reported its failure");
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var runs = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == manifest.Id)
                 .ToListAsync();
@@ -131,6 +138,7 @@ public class RemoteDeliveryOutcomeTests
             runs[0].FailureReason.Should().Contain("failed as asked", "the runner's record stands");
 
             var queued = await _dataContext
+                .NotNull()
                 .WorkQueues.AsNoTracking()
                 .SingleAsync(q => q.Id == entry.Id);
             queued.Status.Should().Be(WorkQueueStatus.Dispatched);
@@ -160,8 +168,9 @@ public class RemoteDeliveryOutcomeTests
 
             DeliveryProbeTrain.Runs[key].Should().Be(1, "the first delivery was accepted and ran");
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var runs = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == manifest.Id)
                 .ToListAsync();
@@ -169,6 +178,7 @@ public class RemoteDeliveryOutcomeTests
             runs[0].TrainState.Should().Be(TrainState.Completed);
 
             var queued = await _dataContext
+                .NotNull()
                 .WorkQueues.AsNoTracking()
                 .SingleAsync(q => q.Id == entry.Id);
             queued.Status.Should().Be(WorkQueueStatus.Dispatched);
@@ -193,14 +203,16 @@ public class RemoteDeliveryOutcomeTests
 
             DeliveryProbeTrain.Runs.ContainsKey(key).Should().BeFalse();
 
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             var queued = await _dataContext
+                .NotNull()
                 .WorkQueues.AsNoTracking()
                 .SingleAsync(q => q.Id == entry.Id);
             queued.Status.Should().Be(WorkQueueStatus.Queued, "the job never reached the train");
             queued.DispatchAttempts.Should().Be(1);
 
             var run = await _dataContext
+                .NotNull()
                 .Metadatas.AsNoTracking()
                 .SingleAsync(m => m.ManifestId == manifest.Id);
             run.TrainState.Should().Be(TrainState.Failed, "the attempt is recorded");
@@ -215,24 +227,26 @@ public class RemoteDeliveryOutcomeTests
     {
         for (var i = 0; i < cycles; i++)
         {
-            using var cycleScope = _serviceProvider.CreateScope();
+            var cycleScope = _serviceProvider.NotNull().CreateAsyncScope();
+            await using var cycleScopeDisposal = cycleScope.ConfigureAwait(false);
             var train = cycleScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-            await train.Run(Unit.Default);
+            await train.Run(Unit.Default).ConfigureAwait(false);
 
             // Stand in for time passing: a requeued entry waits out its dispatch backoff.
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
             await _dataContext
+                .NotNull()
                 .WorkQueues.Where(q => q.ScheduledAt != null)
-                .ExecuteUpdateAsync(s => s.SetProperty(q => q.ScheduledAt, (DateTime?)null));
+                .ExecuteUpdateAsync(s => s.SetProperty(q => q.ScheduledAt, (DateTime?)null))
+                .ConfigureAwait(false);
         }
     }
 
     private async Task<(Manifest, WorkQueue)> Queue(DeliveryProbeInput input)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _dataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(_dataContext.NotNull(), name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -245,24 +259,25 @@ public class RemoteDeliveryOutcomeTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await _dataContext.Track(manifest);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(IDeliveryProbeTrain).FullName!,
+                TrainName = typeof(IDeliveryProbeTrain).FullName.NotNull(),
                 Input = JsonSerializer.Serialize(
                     input,
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputTypeName = typeof(DeliveryProbeInput).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return (manifest, entry);
     }
@@ -287,7 +302,11 @@ public class RemoteDeliveryOutcomeTests
     {
         private readonly List<Task> _running = [];
 
-        public IServiceProvider Services { get; set; } = null!;
+        public IServiceProvider Services
+        {
+            get => field.NotNull(nameof(Services));
+            set;
+        }
 
         public StubRunnerMode Mode { get; set; } = StubRunnerMode.RunAndReport;
 
@@ -296,7 +315,9 @@ public class RemoteDeliveryOutcomeTests
             Task[] running;
             lock (_running)
                 running = [.. _running];
-            await Task.WhenAll(running).WaitAsync(TimeSpan.FromSeconds(30));
+            await Task.WhenAll(running)
+                .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+                .ConfigureAwait(false);
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -304,14 +325,13 @@ public class RemoteDeliveryOutcomeTests
             CancellationToken cancellationToken
         )
         {
-            var job = JsonSerializer.Deserialize<RemoteJobRequest>(
-                await request.Content!.ReadAsStringAsync(cancellationToken),
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            )!;
-            var input = JsonSerializer.Deserialize<DeliveryProbeInput>(
-                job.Input!,
-                TraxJsonSerializationOptions.ManifestProperties
-            )!;
+            var job = await ReadJob(request, cancellationToken).ConfigureAwait(false);
+            var input = JsonSerializer
+                .Deserialize<DeliveryProbeInput>(
+                    job.Input.NotNull(),
+                    TraxJsonSerializationOptions.ManifestProperties
+                )
+                .NotNull();
 
             switch (Mode)
             {
@@ -333,15 +353,17 @@ public class RemoteDeliveryOutcomeTests
                         _running.Add(run.ContinueWith(_ => { }, TaskScheduler.Default));
 
                     // Answer nothing until the scheduler gives up, once the train is running.
-                    await Task.WhenAny(started.Task, run);
-                    await new TaskCompletionSource().Task.WaitAsync(cancellationToken);
+                    await Task.WhenAny(started.Task, run).ConfigureAwait(false);
+                    await new TaskCompletionSource()
+                        .Task.WaitAsync(cancellationToken)
+                        .ConfigureAwait(false);
                     throw new InvalidOperationException("unreachable");
                 }
 
                 default:
                     try
                     {
-                        await RunJob(job.MetadataId, input);
+                        await RunJob(job.MetadataId, input).ConfigureAwait(false);
                         return Answer(new RemoteJobResponse(job.MetadataId));
                     }
                     catch (Exception ex)
@@ -358,12 +380,31 @@ public class RemoteDeliveryOutcomeTests
             }
         }
 
+        private static async Task<RemoteJobRequest> ReadJob(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            JsonSerializer
+                .Deserialize<RemoteJobRequest>(
+                    await request
+                        .Content.NotNull()
+                        .ReadAsStringAsync(cancellationToken)
+                        .ConfigureAwait(false),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        RespectNullableAnnotations = false,
+                        RespectRequiredConstructorParameters = false,
+                    }
+                )
+                .NotNull();
+
         private async Task RunJob(long metadataId, DeliveryProbeInput input)
         {
             await Task.Yield();
-            using var scope = Services.CreateScope();
+            var scope = Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var runner = scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
-            await runner.Run(new RunJobRequest(metadataId, input));
+            await runner.Run(new RunJobRequest(metadataId, input)).ConfigureAwait(false);
         }
 
         private static HttpResponseMessage Answer(RemoteJobResponse response) =>

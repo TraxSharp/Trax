@@ -17,16 +17,22 @@ public sealed class RetiredPageDocuments(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        foreach (var stored in await store.ListAsync(tenantKey: null, cancellationToken))
+        foreach (
+            var stored in await store
+                .ListAsync(tenantKey: null, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             if (!stored.IsActive || !stored.Id.StartsWith(Prefix, StringComparison.Ordinal))
                 continue;
-            await store.DeactivateAsync(
-                stored.Id,
-                tenantKey: null,
-                "The Recovery page runs on its generated client; this hand-written document is retired.",
-                cancellationToken
-            );
+            await store
+                .DeactivateAsync(
+                    stored.Id,
+                    tenantKey: null,
+                    "The Recovery page runs on its generated client; this hand-written document is retired.",
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
             logger.LogInformation("Deactivated the retired page document {Id}.", stored.Id);
         }
     }

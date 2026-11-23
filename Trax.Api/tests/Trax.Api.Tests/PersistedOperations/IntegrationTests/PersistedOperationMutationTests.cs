@@ -5,6 +5,7 @@ using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -17,9 +18,9 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class PersistedOperationMutationTests
 {
-    private ServiceProvider _sp = null!;
-    private IRequestExecutor _executor = null!;
-    private IPersistedOperationStore _store = null!;
+    private ServiceProvider? _sp;
+    private IRequestExecutor? _executor;
+    private IPersistedOperationStore? _store;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -28,15 +29,16 @@ public class PersistedOperationMutationTests
             Assert.Ignore("Postgres not reachable; skipping integration tests.");
 
         _sp = await GraphQLFixture.BuildAsync();
-        _executor = await GraphQLFixture.GetExecutorAsync(_sp);
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
+        _executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull());
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -59,9 +61,11 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        var row = await _store.GetAsync("upload_v1", null, CancellationToken.None);
+        var row = await _store
+            .NotNull()
+            .GetAsync("upload_v1", tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull();
-        row!.Document.Should().Be(GraphQLFixture.ValidDocument);
+        row.NotNull().Document.Should().Be(GraphQLFixture.ValidDocument);
         row.Description.Should().Be("first upload");
     }
 
@@ -78,7 +82,9 @@ public class PersistedOperationMutationTests
         errors.GetArrayLength().Should().BeGreaterThan(0);
         errors[0].GetProperty("code").GetString().Should().Be("PARSE_FAILED");
 
-        (await _store.GetAsync("syntax_v1", null, CancellationToken.None)).Should().BeNull();
+        (await _store.NotNull().GetAsync("syntax_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .BeNull();
     }
 
     [Test]
@@ -99,7 +105,9 @@ public class PersistedOperationMutationTests
         errors[0].GetProperty("code").GetString().Should().Be("INVALID_INPUT");
         errors[0].GetProperty("message").GetString().Should().Contain("exactly one operation");
 
-        (await _store.GetAsync("two_ops_v1", null, CancellationToken.None)).Should().BeNull();
+        (await _store.NotNull().GetAsync("two_ops_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .BeNull();
     }
 
     [Test]
@@ -116,19 +124,23 @@ public class PersistedOperationMutationTests
         errors[0].GetProperty("code").GetString().Should().Be("SCHEMA_VALIDATION_FAILED");
         errors[0].GetProperty("message").GetString().Should().NotBeNullOrEmpty();
 
-        (await _store.GetAsync("schema_v1", null, CancellationToken.None)).Should().BeNull();
+        (await _store.NotNull().GetAsync("schema_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .BeNull();
     }
 
     [Test]
     public async Task Upload_ShapeDiffWithoutBypass_ReturnsShapeDiffError_WithFingerprints()
     {
         // Seed.
-        await _store.UpsertAsync(
-            "shape_v1",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "shape_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await ExecuteMutationAsync("shape_v1", GraphQLFixture.ShapeChangingDocument);
 
@@ -150,19 +162,23 @@ public class PersistedOperationMutationTests
             .And.NotContain("UpsertOptions");
 
         // Row unchanged.
-        var row = await _store.GetAsync("shape_v1", null, CancellationToken.None);
-        row!.Document.Should().Be(GraphQLFixture.ValidDocument);
+        var row = await _store
+            .NotNull()
+            .GetAsync("shape_v1", tenantKey: null, CancellationToken.None);
+        row.NotNull().Document.Should().Be(GraphQLFixture.ValidDocument);
     }
 
     [Test]
     public async Task Upload_ShapeDiffWithBypass_Succeeds()
     {
-        await _store.UpsertAsync(
-            "bypass_v1",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "bypass_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await ExecuteMutationAsync(
             "bypass_v1",
@@ -178,19 +194,23 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        var row = await _store.GetAsync("bypass_v1", null, CancellationToken.None);
-        row!.Document.Should().Be(GraphQLFixture.ShapeChangingDocument);
+        var row = await _store
+            .NotNull()
+            .GetAsync("bypass_v1", tenantKey: null, CancellationToken.None);
+        row.NotNull().Document.Should().Be(GraphQLFixture.ShapeChangingDocument);
     }
 
     [Test]
     public async Task Deactivate_ExistingId_MarksInactive()
     {
-        await _store.UpsertAsync(
-            "deact_v1",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "deact_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await Execute(
             """
@@ -203,9 +223,9 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?>
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["id"] = "deact_v1",
                     ["reason"] = "rotating",
@@ -221,7 +241,7 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        (await _store.GetAsync("deact_v1", null, CancellationToken.None))
+        (await _store.NotNull().GetAsync("deact_v1", tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("because GetAsync filters by IsActive");
     }
@@ -240,9 +260,9 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?>
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["id"] = "does_not_exist_v1",
                     ["reason"] = "anything",
@@ -262,13 +282,17 @@ public class PersistedOperationMutationTests
     [Test]
     public async Task Restore_ReactivatesDeactivatedRow()
     {
-        await _store.UpsertAsync(
-            "restore_v1",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
-        await _store.DeactivateAsync("restore_v1", null, "test", CancellationToken.None);
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "restore_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
+        await _store
+            .NotNull()
+            .DeactivateAsync("restore_v1", tenantKey: null, "test", CancellationToken.None);
 
         var json = await Execute(
             """
@@ -281,9 +305,12 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?> { ["id"] = "restore_v1" },
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["id"] = "restore_v1",
+                },
             }
         );
 
@@ -295,9 +322,11 @@ public class PersistedOperationMutationTests
             .Should()
             .BeTrue();
 
-        var row = await _store.GetAsync("restore_v1", null, CancellationToken.None);
+        var row = await _store
+            .NotNull()
+            .GetAsync("restore_v1", tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull();
-        row!.IsActive.Should().BeTrue();
+        row.NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]
@@ -345,7 +374,9 @@ public class PersistedOperationMutationTests
             .Should()
             .Contain("document");
 
-        (await _store.GetAsync("ok_v1", null, CancellationToken.None)).Should().BeNull();
+        (await _store.NotNull().GetAsync("ok_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .BeNull();
     }
 
     [Test]
@@ -354,12 +385,14 @@ public class PersistedOperationMutationTests
         // Reason is required for audit accountability; passing an empty
         // string must be rejected rather than silently writing "" to the
         // deprecation_reason column.
-        await _store.UpsertAsync(
-            "deact_noreason_v1",
-            GraphQLFixture.ValidDocument,
-            null,
-            CancellationToken.None
-        );
+        await _store
+            .NotNull()
+            .UpsertAsync(
+                "deact_noreason_v1",
+                GraphQLFixture.ValidDocument,
+                options: null,
+                CancellationToken.None
+            );
 
         var json = await Execute(
             """
@@ -372,9 +405,9 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?>
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["id"] = "deact_noreason_v1",
                     ["reason"] = "  ",
@@ -394,9 +427,11 @@ public class PersistedOperationMutationTests
             .Should()
             .Be("INVALID_INPUT");
 
-        var row = await _store.GetAsync("deact_noreason_v1", null, CancellationToken.None);
+        var row = await _store
+            .NotNull()
+            .GetAsync("deact_noreason_v1", tenantKey: null, CancellationToken.None);
         row.Should().NotBeNull("the rejected deactivate must not have run");
-        row!.IsActive.Should().BeTrue();
+        row.NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]
@@ -413,9 +448,12 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?> { ["id"] = "never_existed_v1" },
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["id"] = "never_existed_v1",
+                },
             }
         );
 
@@ -441,9 +479,9 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?> { ["id"] = "" },
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal) { ["id"] = "" },
             }
         );
 
@@ -473,9 +511,13 @@ public class PersistedOperationMutationTests
               }
             }
             """,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["input"] = new Dictionary<string, object?> { ["id"] = "", ["reason"] = "x" },
+                ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["id"] = "",
+                    ["reason"] = "x",
+                },
             }
         );
 
@@ -510,7 +552,9 @@ public class PersistedOperationMutationTests
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         upload.GetProperty("success").GetBoolean().Should().BeFalse(Because);
-        (await _store.GetAsync(uploaded, null, CancellationToken.None)).Should().BeNull();
+        (await _store.NotNull().GetAsync(uploaded, tenantKey: null, CancellationToken.None))
+            .Should()
+            .BeNull();
 
         // A generated document, as the host stores it, written past the management surface.
         await SqlAsync(
@@ -520,25 +564,9 @@ public class PersistedOperationMutationTests
             stored
         );
 
-        var deactivate = (
-            await Execute(
-                """
-                mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-                  persistedOperations { deactivatePersistedOperation(input: $input) { success } }
-                }
-                """,
-                new Dictionary<string, object?>
-                {
-                    ["input"] = new Dictionary<string, object?>
-                    {
-                        ["id"] = stored,
-                        ["reason"] = "rotating",
-                    },
-                }
-            )
-        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
+        var deactivate = await DeactivateAsync(stored);
         deactivate.GetProperty("success").GetBoolean().Should().BeFalse(Because);
-        (await _store.GetAsync(stored, null, CancellationToken.None))
+        (await _store.NotNull().GetAsync(stored, tenantKey: null, CancellationToken.None))
             .Should()
             .NotBeNull("the generated document stays active");
 
@@ -546,34 +574,71 @@ public class PersistedOperationMutationTests
             "UPDATE trax.persisted_operation SET is_active = false WHERE id = @id",
             stored
         );
-        var restore = (
-            await Execute(
-                """
-                mutation Restore($input: RestorePersistedOperationInput!) {
-                  persistedOperations { restorePersistedOperation(input: $input) { success } }
-                }
-                """,
-                new Dictionary<string, object?>
-                {
-                    ["input"] = new Dictionary<string, object?> { ["id"] = stored },
-                }
-            )
-        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
+        var restore = await RestoreAsync(stored);
         restore.GetProperty("success").GetBoolean().Should().BeFalse(Because);
-        (await _store.GetAsync(stored, null, CancellationToken.None))
+        (await _store.NotNull().GetAsync(stored, tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("a deactivated generated document is the host's to bring back");
     }
 
+    private async Task<JsonElement> DeactivateAsync(string stored)
+    {
+        return (
+            await Execute(
+                    """
+                    mutation Deactivate($input: DeactivatePersistedOperationInput!) {
+                      persistedOperations { deactivatePersistedOperation(input: $input) { success } }
+                    }
+                    """,
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["id"] = stored,
+                            ["reason"] = "rotating",
+                        },
+                    }
+                )
+                .ConfigureAwait(false)
+        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
+    }
+
+    private async Task<JsonElement> RestoreAsync(string stored)
+    {
+        return (
+            await Execute(
+                    """
+                    mutation Restore($input: RestorePersistedOperationInput!) {
+                      persistedOperations { restorePersistedOperation(input: $input) { success } }
+                    }
+                    """,
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["input"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["id"] = stored,
+                        },
+                    }
+                )
+                .ConfigureAwait(false)
+        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
+    }
+
     private static async Task SqlAsync(string sql, string id)
     {
-        await using var connection = new Npgsql.NpgsqlConnection(PostgresFixture.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new Npgsql.NpgsqlCommand(sql, connection);
-        command.Parameters.AddWithValue("id", id);
-        if (sql.Contains("@document", StringComparison.Ordinal))
-            command.Parameters.AddWithValue("document", GraphQLFixture.ValidDocument);
-        await command.ExecuteNonQueryAsync();
+        var connection = new Npgsql.NpgsqlConnection(PostgresFixture.ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new Npgsql.NpgsqlCommand(sql, connection);
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue("id", id);
+                if (sql.Contains("@document", StringComparison.Ordinal))
+                    command.Parameters.AddWithValue("document", GraphQLFixture.ValidDocument);
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private Task<JsonDocument> ExecuteMutationAsync(
@@ -601,7 +666,7 @@ public class PersistedOperationMutationTests
             }
             """;
 
-        var input = new Dictionary<string, object?>
+        var input = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["id"] = id,
             ["document"] = document,
@@ -610,7 +675,10 @@ public class PersistedOperationMutationTests
         if (description is not null)
             input["description"] = description;
 
-        return Execute(query, new Dictionary<string, object?> { ["input"] = input });
+        return Execute(
+            query,
+            new Dictionary<string, object?>(StringComparer.Ordinal) { ["input"] = input }
+        );
     }
 
     private async Task<JsonDocument> Execute(
@@ -621,13 +689,15 @@ public class PersistedOperationMutationTests
         var request = OperationRequestBuilder
             .New()
             .SetDocument(query)
-            .SetVariableValues(variables.ToDictionary(p => p.Key, p => p.Value))
+            .SetVariableValues(
+                variables.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal)
+            )
             .AsManager()
             .Build();
-        var result = await _executor.ExecuteAsync(request);
+        var result = await _executor.NotNull().ExecuteAsync(request).ConfigureAwait(false);
         var op = result as OperationResult;
         op.Should().NotBeNull("expected OperationResult");
-        op!.Errors.Should().BeNullOrEmpty();
+        op.NotNull().Errors.Should().BeNullOrEmpty();
         return JsonDocument.Parse(op.ToJson());
     }
 }

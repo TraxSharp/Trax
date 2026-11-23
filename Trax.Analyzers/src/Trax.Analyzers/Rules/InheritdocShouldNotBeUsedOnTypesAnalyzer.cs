@@ -1,0 +1,28 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class InheritdocShouldNotBeUsedOnTypesAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.InheritdocShouldNotBeUsedOnTypes,
+        title: "Add dedicated documentation on types",
+        messageFormat: "A type should have dedicated documentation instead of '<inheritdoc />'",
+        RuleCategories.Design,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.InheritdocShouldNotBeUsedOnTypes));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterSymbolAction(static context =>
+        {
+            InheritdocOnTypesAnalyzerHelper.Analyze(context, static (hasBaseType, interfaceCount) => hasBaseType || interfaceCount == 1, Rule);
+        }, SymbolKind.NamedType);
+    }
+}

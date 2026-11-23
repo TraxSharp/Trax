@@ -87,7 +87,7 @@ public class InMemoryJobSubmitterTests
         };
         var submitter = new InMemoryJobSubmitter(train);
 
-        var act = async () => await submitter.EnqueueAsync(metadataId: 1);
+        var act = async () => await submitter.EnqueueAsync(metadataId: 1).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("train-fail");
     }

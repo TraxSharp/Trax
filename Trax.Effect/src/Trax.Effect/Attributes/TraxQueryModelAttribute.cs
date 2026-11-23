@@ -11,7 +11,7 @@ namespace Trax.Effect.Attributes;
 /// (e.g. <c>Player</c> → <c>players</c>), or overridden via <see cref="Name"/>.
 ///
 /// Each feature (paging, filtering, sorting, projection) can be individually disabled
-/// via the corresponding property. All default to <c>true</c>.
+/// via the corresponding property. All default to <see langword="true"/>.
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/query-models">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
@@ -37,25 +37,25 @@ public class TraxQueryModelAttribute : Attribute
 
     /// <summary>
     /// Enables cursor-based pagination (Relay Connection spec) on the query field.
-    /// When <c>true</c>, the field returns a Connection type with <c>nodes</c>,
+    /// When <see langword="true"/>, the field returns a Connection type with <c>nodes</c>,
     /// <c>edges</c>, and <c>pageInfo</c>.
     /// </summary>
     public bool Paging { get; init; } = true;
 
     /// <summary>
-    /// Enables filtering on the query field. When <c>true</c>, clients can use
+    /// Enables filtering on the query field. When <see langword="true"/>, clients can use
     /// a <c>where</c> argument to filter results by entity properties.
     /// </summary>
     public bool Filtering { get; init; } = true;
 
     /// <summary>
-    /// Enables sorting on the query field. When <c>true</c>, clients can use
+    /// Enables sorting on the query field. When <see langword="true"/>, clients can use
     /// an <c>order</c> argument to sort results by entity properties.
     /// </summary>
     public bool Sorting { get; init; } = true;
 
     /// <summary>
-    /// Enables field projection on the query field. When <c>true</c>,
+    /// Enables field projection on the query field. When <see langword="true"/>,
     /// only the columns requested by the client are selected from the database.
     /// </summary>
     public bool Projection { get; init; } = true;

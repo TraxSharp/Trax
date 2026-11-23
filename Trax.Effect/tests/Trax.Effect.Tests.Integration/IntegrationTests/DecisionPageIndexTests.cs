@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Tests.Integration.Fixtures;
 
@@ -22,12 +23,34 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class DecisionPageIndexTests : TestSetup
 {
+    // 20,000 runs of four decisions each, then one run of 200, analyzed.
+    private static readonly string SeedSql = """
+        INSERT INTO trax.metadata (external_id, name, train_state, start_time)
+        SELECT md5(g::text), 'Decision.Page', 'completed', now()
+        FROM generate_series(1, 20001) AS g;
+
+        INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
+        SELECT m.id, 'q' || o, 1, 'f', 'model', '{}', '{}'
+        FROM trax.metadata AS m CROSS JOIN generate_series(1, 4) AS o
+        WHERE m.name = 'Decision.Page' AND m.external_id <> md5('20001');
+
+        INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
+        SELECT m.id, 'q', o, 'f', 'model', '{}', '{}'
+        FROM trax.metadata AS m CROSS JOIN generate_series(1, 200) AS o
+        WHERE m.external_id = md5('20001');
+
+        ANALYZE trax.metadata;
+        ANALYZE trax.decision;
+        """;
+
     [Test]
     public async Task A_runs_first_page_of_decisions_reads_the_run_and_id_index()
     {
-        using var context = (DbContext)DataContextFactory.Create();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.Database.OpenConnectionAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var transaction = await context.Database.BeginTransactionAsync();
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
         var npgsqlTransaction = (NpgsqlTransaction)transaction.GetDbTransaction();
 
@@ -36,28 +59,7 @@ public class DecisionPageIndexTests : TestSetup
         // primary key as if the run's rows were spread evenly through it, so the walk's estimate
         // falls as the run grows; at 2,000 rows it tied with the index on a freshly loaded table
         // and the choice turned on ANALYZE's sample. At 200 the index wins by several times.
-        await Execute(
-            connection,
-            npgsqlTransaction,
-            """
-            INSERT INTO trax.metadata (external_id, name, train_state, start_time)
-            SELECT md5(g::text), 'Decision.Page', 'completed', now()
-            FROM generate_series(1, 20001) AS g;
-
-            INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
-            SELECT m.id, 'q' || o, 1, 'f', 'model', '{}', '{}'
-            FROM trax.metadata AS m CROSS JOIN generate_series(1, 4) AS o
-            WHERE m.name = 'Decision.Page' AND m.external_id <> md5('20001');
-
-            INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, question, answer)
-            SELECT m.id, 'q', o, 'f', 'model', '{}', '{}'
-            FROM trax.metadata AS m CROSS JOIN generate_series(1, 200) AS o
-            WHERE m.external_id = md5('20001');
-
-            ANALYZE trax.metadata;
-            ANALYZE trax.decision;
-            """
-        );
+        await Execute(connection, npgsqlTransaction, SeedSql);
         var runId = await Scalar(
             connection,
             npgsqlTransaction,
@@ -69,11 +71,13 @@ public class DecisionPageIndexTests : TestSetup
             .Where(d => d.MetadataId == runId)
             .OrderBy(d => d.Id)
             .Take(26);
-        await using var command = (NpgsqlCommand)page.CreateDbCommand();
+        var command = (NpgsqlCommand)page.CreateDbCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.Transaction = npgsqlTransaction;
         command.CommandText = "EXPLAIN " + command.CommandText;
         var plan = new List<string>();
-        await using (var reader = await command.ExecuteReaderAsync())
+        var reader = await command.ExecuteReaderAsync();
+        await using (reader.ConfigureAwait(false))
             while (await reader.ReadAsync())
                 plan.Add(reader.GetString(0));
 
@@ -94,8 +98,9 @@ public class DecisionPageIndexTests : TestSetup
         string sql
     )
     {
-        await using var command = new NpgsqlCommand(sql, connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        var command = new NpgsqlCommand(sql, connection, transaction);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static async Task<long> Scalar(
@@ -104,7 +109,8 @@ public class DecisionPageIndexTests : TestSetup
         string sql
     )
     {
-        await using var command = new NpgsqlCommand(sql, connection, transaction);
-        return (long)(await command.ExecuteScalarAsync())!;
+        var command = new NpgsqlCommand(sql, connection, transaction);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

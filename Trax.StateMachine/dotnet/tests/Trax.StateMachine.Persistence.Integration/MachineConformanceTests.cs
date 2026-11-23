@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Testing;
 
@@ -40,52 +41,54 @@ public class MachineConformanceTests
         public override string? Corpus => DriftCorpus;
     }
 
-    private string _dir = null!;
-    private string _ir = null!;
-    private string _corpus = null!;
+    private string? _dir;
+    private string? _ir;
+    private string? _corpus;
 
     [SetUp]
     public void SetUp()
     {
         _dir = Path.Combine(Path.GetTempPath(), $"trax-conformance-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
-        _ir = Path.Combine(_dir, "machine.ir.json");
-        _corpus = Path.Combine(_dir, "differential.json");
+        Directory.CreateDirectory(_dir.NotNull());
+        _ir = Path.Combine(_dir.NotNull(), "machine.ir.json");
+        _corpus = Path.Combine(_dir.NotNull(), "differential.json");
     }
 
     [TearDown]
     public void TearDown()
     {
-        if (Directory.Exists(_dir))
-            Directory.Delete(_dir, recursive: true);
+        if (Directory.Exists(_dir.NotNull()))
+            Directory.Delete(_dir.NotNull(), recursive: true);
     }
 
     /// <summary>Commit both artifacts exactly as the machine would generate them.</summary>
-    private void CommitArtifacts(IMachine machine)
+    private async Task CommitArtifacts(IMachine machine)
     {
-        File.WriteAllText(_ir, machine.ExportIr() + "\n");
-        File.WriteAllText(_corpus, machine.Corpus!);
+        await File.WriteAllTextAsync(_ir.NotNull(), machine.ExportIr() + "\n")
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(_corpus.NotNull(), machine.Corpus.NotNull())
+            .ConfigureAwait(false);
     }
 
     #region Check
 
     [Test]
-    public void Check_returns_no_problems_when_the_ir_the_corpus_and_the_engine_all_agree()
+    public async Task Check_returns_no_problems_when_the_ir_the_corpus_and_the_engine_all_agree()
     {
         var machine = new ConformingMachine();
-        CommitArtifacts(machine);
+        await CommitArtifacts(machine).ConfigureAwait(false);
 
-        MachineConformance.Check(machine, _ir, _corpus).Should().BeEmpty();
+        MachineConformance.Check(machine, _ir.NotNull(), _corpus.NotNull()).Should().BeEmpty();
     }
 
     [Test]
     public void Check_reports_all_three_kinds_of_drift_at_once()
     {
         var machine = new DriftingMachine();
-        File.WriteAllText(_ir, "{\"stale\":true}");
-        File.WriteAllText(_corpus, PassCorpus); // committed golden is not the embedded one
+        File.WriteAllText(_ir.NotNull(), "{\"stale\":true}");
+        File.WriteAllText(_corpus.NotNull(), PassCorpus); // committed golden is not the embedded one
 
-        var problems = MachineConformance.Check(machine, _ir, _corpus);
+        var problems = MachineConformance.Check(machine, _ir.NotNull(), _corpus.NotNull());
 
         problems.Should().HaveCount(3);
         problems.Should().ContainSingle(p => p.StartsWith("IR: "));
@@ -94,15 +97,15 @@ public class MachineConformanceTests
     }
 
     [Test]
-    public void Check_surfaces_a_self_check_diff_when_only_the_engine_disagrees()
+    public async Task Check_surfaces_a_self_check_diff_when_only_the_engine_disagrees()
     {
         // Both artifacts are exactly what the machine ships, so the only thing left to catch is the engine
         // failing to reproduce the corpus it embeds.
         var machine = new DriftingMachine();
-        CommitArtifacts(machine);
+        await CommitArtifacts(machine).ConfigureAwait(false);
 
         MachineConformance
-            .Check(machine, _ir, _corpus)
+            .Check(machine, _ir.NotNull(), _corpus.NotNull())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -116,7 +119,7 @@ public class MachineConformanceTests
     [Test]
     public void CheckIr_reports_a_committed_ir_that_was_never_written()
     {
-        var missing = Path.Combine(_dir, "absent.ir.json");
+        var missing = Path.Combine(_dir.NotNull(), "absent.ir.json");
 
         MachineConformance
             .CheckIr(new ConformingMachine(), missing)
@@ -129,10 +132,10 @@ public class MachineConformanceTests
     [Test]
     public void CheckIr_reports_a_committed_ir_that_no_longer_matches_the_machine()
     {
-        File.WriteAllText(_ir, "{\"machine\":\"something-else\"}");
+        File.WriteAllText(_ir.NotNull(), "{\"machine\":\"something-else\"}");
 
         MachineConformance
-            .CheckIr(new ConformingMachine(), _ir)
+            .CheckIr(new ConformingMachine(), _ir.NotNull())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -145,11 +148,11 @@ public class MachineConformanceTests
     {
         var machine = new ConformingMachine();
 
-        File.WriteAllText(_ir, machine.ExportIr());
-        MachineConformance.CheckIr(machine, _ir).Should().BeEmpty();
+        File.WriteAllText(_ir.NotNull(), machine.ExportIr());
+        MachineConformance.CheckIr(machine, _ir.NotNull()).Should().BeEmpty();
 
-        File.WriteAllText(_ir, machine.ExportIr() + "\n");
-        MachineConformance.CheckIr(machine, _ir).Should().BeEmpty();
+        File.WriteAllText(_ir.NotNull(), machine.ExportIr() + "\n");
+        MachineConformance.CheckIr(machine, _ir.NotNull()).Should().BeEmpty();
     }
 
     #endregion
@@ -160,7 +163,7 @@ public class MachineConformanceTests
     public void CheckCorpus_is_empty_when_the_machine_embeds_none_and_none_is_committed()
     {
         MachineConformance
-            .CheckCorpus(new DeclarativeTurnstileMachine(), _corpus)
+            .CheckCorpus(new DeclarativeTurnstileMachine(), _corpus.NotNull())
             .Should()
             .BeEmpty();
     }
@@ -168,10 +171,10 @@ public class MachineConformanceTests
     [Test]
     public void CheckCorpus_reports_a_committed_corpus_for_a_machine_that_embeds_none()
     {
-        File.WriteAllText(_corpus, PassCorpus);
+        File.WriteAllText(_corpus.NotNull(), PassCorpus);
 
         MachineConformance
-            .CheckCorpus(new DeclarativeTurnstileMachine(), _corpus)
+            .CheckCorpus(new DeclarativeTurnstileMachine(), _corpus.NotNull())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -182,7 +185,7 @@ public class MachineConformanceTests
     public void CheckCorpus_reports_a_missing_file_for_a_machine_that_embeds_one()
     {
         MachineConformance
-            .CheckCorpus(new ConformingMachine(), _corpus)
+            .CheckCorpus(new ConformingMachine(), _corpus.NotNull())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -192,10 +195,10 @@ public class MachineConformanceTests
     [Test]
     public void CheckCorpus_reports_a_committed_corpus_that_differs_from_the_embedded_one()
     {
-        File.WriteAllText(_corpus, DriftCorpus);
+        File.WriteAllText(_corpus.NotNull(), DriftCorpus);
 
         MachineConformance
-            .CheckCorpus(new ConformingMachine(), _corpus)
+            .CheckCorpus(new ConformingMachine(), _corpus.NotNull())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -206,9 +209,9 @@ public class MachineConformanceTests
     public void CheckCorpus_accepts_the_committed_corpus_with_a_trailing_newline()
     {
         var machine = new ConformingMachine();
-        File.WriteAllText(_corpus, machine.Corpus + "\n");
+        File.WriteAllText(_corpus.NotNull(), machine.Corpus + "\n");
 
-        MachineConformance.CheckCorpus(machine, _corpus).Should().BeEmpty();
+        MachineConformance.CheckCorpus(machine, _corpus.NotNull()).Should().BeEmpty();
     }
 
     #endregion
@@ -220,21 +223,21 @@ public class MachineConformanceTests
     {
         var machine = new ConformingMachine();
 
-        MachineConformance.WriteIr(machine, _ir);
+        MachineConformance.WriteIr(machine, _ir.NotNull());
 
-        File.ReadAllText(_ir).Should().Be(machine.ExportIr() + "\n");
+        File.ReadAllText(_ir.NotNull()).Should().Be(machine.ExportIr() + "\n");
     }
 
     [Test]
     public void WriteIr_overwrites_a_stale_ir_so_CheckIr_passes_again()
     {
         var machine = new ConformingMachine();
-        File.WriteAllText(_ir, "{\"stale\":true}");
-        MachineConformance.CheckIr(machine, _ir).Should().NotBeEmpty();
+        File.WriteAllText(_ir.NotNull(), "{\"stale\":true}");
+        MachineConformance.CheckIr(machine, _ir.NotNull()).Should().NotBeEmpty();
 
-        MachineConformance.WriteIr(machine, _ir);
+        MachineConformance.WriteIr(machine, _ir.NotNull());
 
-        MachineConformance.CheckIr(machine, _ir).Should().BeEmpty();
+        MachineConformance.CheckIr(machine, _ir.NotNull()).Should().BeEmpty();
     }
 
     #endregion

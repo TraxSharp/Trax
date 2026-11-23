@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.TestHost;
@@ -81,26 +82,35 @@ public static class MachineDocumentOps
     /// <summary>Every stored document under the reserved prefix, every tenant, active or not, by id.</summary>
     public static async Task<IReadOnlyList<StoredDocument>> MachineDocumentsAsync(string database)
     {
-        await using var connection = new NpgsqlConnection(E2EHost.ConnectionString(database));
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT tenant_key, id, document, is_active FROM trax.persisted_operation "
-                + "WHERE starts_with(id, @prefix) ORDER BY id, tenant_key",
-            connection
-        );
-        command.Parameters.AddWithValue("prefix", MachineDocuments.ReservedIdPrefix);
-        var rows = new List<StoredDocument>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            rows.Add(
-                new StoredDocument(
-                    reader.GetString(0),
-                    reader.GetString(1),
-                    reader.GetString(2),
-                    reader.GetBoolean(3)
-                )
+        var connection = new NpgsqlConnection(E2EHost.ConnectionString(database));
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand(
+                "SELECT tenant_key, id, document, is_active FROM trax.persisted_operation "
+                    + "WHERE starts_with(id, @prefix) ORDER BY id, tenant_key",
+                connection
             );
-        return rows;
+            await using (command.ConfigureAwait(false))
+            {
+                command.Parameters.AddWithValue("prefix", MachineDocuments.ReservedIdPrefix);
+                var rows = new List<StoredDocument>();
+                var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                        rows.Add(
+                            new StoredDocument(
+                                reader.GetString(0),
+                                reader.GetString(1),
+                                reader.GetString(2),
+                                reader.GetBoolean(3)
+                            )
+                        );
+                    return rows;
+                }
+            }
+        }
     }
 
     /// <summary>The documents of <paramref name="machine"/> under the null tenant.</summary>
@@ -108,7 +118,7 @@ public static class MachineDocumentOps
         string database,
         string machine
     ) =>
-        (await MachineDocumentsAsync(database))
+        (await MachineDocumentsAsync(database).ConfigureAwait(false))
             .Where(d => d.TenantKey == "" && d.Operation(machine) is not null)
             .ToList();
 
@@ -118,8 +128,11 @@ public static class MachineDocumentOps
     /// </summary>
     public static async Task<string> IdOfAsync(string database, string machine, string operation)
     {
-        var matches = (await MachineDocumentsAsync(database, machine))
-            .Where(d => d.IsActive && d.Operation(machine) == operation)
+        var matches = (await MachineDocumentsAsync(database, machine).ConfigureAwait(false))
+            .Where(d =>
+                d.IsActive
+                && string.Equals(d.Operation(machine), operation, StringComparison.Ordinal)
+            )
             .ToList();
         if (matches.Count != 1)
             Assert.Fail(
@@ -153,17 +166,24 @@ public static class MachineDocumentOps
         for (var day = TimeSpan.Zero; day <= grace + grace / 2; day += TimeSpan.FromDays(1))
         {
             clock.Advance(TimeSpan.FromDays(1));
-            var refreshed = await E2EWait.UntilAsync(async () =>
-                await E2ESql.ScalarAsync<long>(
-                    database,
-                    "SELECT count(*) FROM trax.persisted_operation WHERE id = ANY(@ids) AND updated_at < @since",
-                    ("ids", registered.ToArray()),
-                    ("since", clock.GetUtcNow() - grace / 4)
-                ) == 0
-            );
+            var refreshed = await E2EWait
+                .UntilAsync(async () =>
+                    await E2ESql
+                        .ScalarAsync<long>(
+                            database,
+                            "SELECT count(*) FROM trax.persisted_operation WHERE id = ANY(@ids) AND updated_at < @since",
+                            ("ids", registered.ToArray()),
+                            ("since", clock.GetUtcNow() - grace / 4)
+                        )
+                        .ConfigureAwait(false) == 0
+                )
+                .ConfigureAwait(false);
             if (!refreshed)
                 Assert.Fail(
-                    $"A node stopped writing updated_at on its documents {day.TotalDays + 1} days in."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"A node stopped writing updated_at on its documents {day.TotalDays + 1} days in."
+                    )
                 );
         }
     }
@@ -177,7 +197,11 @@ public static class MachineDocumentOps
         string documentId,
         object? variables = null,
         string? apiKey = null
-    ) => (await host.PostPersistedWithStatusAsync(documentId, variables, apiKey)).Body;
+    ) =>
+        (
+            await host.PostPersistedWithStatusAsync(documentId, variables, apiKey)
+                .ConfigureAwait(false)
+        ).Body;
 
     /// <summary>As <see cref="PostPersistedAsync"/>, with the HTTP status of the answer.</summary>
     public static async Task<(int Status, JsonDocument Body)> PostPersistedWithStatusAsync(
@@ -196,10 +220,10 @@ public static class MachineDocumentOps
         };
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
-        var response = await client.SendAsync(request);
+        var response = await client.SendAsync(request).ConfigureAwait(false);
         return (
             (int)response.StatusCode,
-            JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))
         );
     }
 
@@ -261,7 +285,7 @@ public static class MachineDocumentOps
                 foreach (var property in element.EnumerateObject())
                 {
                     if (
-                        property.Name == "problem"
+                        string.Equals(property.Name, "problem", StringComparison.Ordinal)
                         && property.Value.ValueKind == JsonValueKind.Object
                         && property.Value.TryGetProperty("code", out var code)
                         && code.GetString() is { } text

@@ -5,24 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Cli.Tests.Fakes;
 
-public enum CheckoutState
-{
-    Cart,
-    Review,
-    Paid,
-}
-
-public enum CheckoutTrigger
-{
-    Next,
-    Back,
-    Pay,
-    Restart,
-}
-
-/// <summary>A marker for the checkout's one irreversible effect (resolved from DI in a real host).</summary>
-public interface ICheckoutCharge : ISnapshotEffect;
-
 /// <summary>
 /// The multi-step, effectful checkout (Cart -> Review -> Paid) authored with the DECLARATIVE surface: a
 /// multi-key context, count/compare guards, a guarded effect edge, and per-state invariants. It reproduces the
@@ -107,6 +89,13 @@ public sealed class DeclarativeCheckoutMachine : Machine<CheckoutState, Checkout
             .Reduce(Reset())
             .To(CheckoutState.Cart);
 
+        ConfigureDifferentialInputs(m);
+    }
+
+    private static void ConfigureDifferentialInputs(
+        IMachineBuilder<CheckoutState, CheckoutTrigger> m
+    )
+    {
         // Differential inputs, matching the retired machine.json: a receipt sample and the empty {} for Pay,
         // plus valid Review/Paid seeds (items/total arrive via autosave, so those states are not BFS-reachable).
         m.Differential(d =>

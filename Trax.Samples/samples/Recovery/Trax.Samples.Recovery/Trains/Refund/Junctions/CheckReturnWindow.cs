@@ -7,7 +7,7 @@ public class CheckReturnWindow(DemoPace pace) : EffectJunction<RefundCase, Refun
 {
     public override async Task<RefundEvidence> Run(RefundCase refund)
     {
-        await Task.Delay(pace.StepDelay);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
         return new RefundEvidence(
             refund.RunId,
             refund.OrderId,

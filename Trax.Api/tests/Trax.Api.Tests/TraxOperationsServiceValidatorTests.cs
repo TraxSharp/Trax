@@ -71,7 +71,8 @@ public class TraxOperationsServiceValidatorTests
             mutationsExposed: false
         );
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*ITrainExecutionService*",
@@ -94,7 +95,8 @@ public class TraxOperationsServiceValidatorTests
             mutationsExposed: true
         );
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*IJobSubmitter*PostgresJobSubmitter*",

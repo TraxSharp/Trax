@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -17,19 +19,10 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// </remarks>
 [Property("adr", "Trax.Docs/adr/0013-trax-owns-the-vocabulary-for-its-own-concepts.md")]
 [TestFixture]
-public class NoForeignAuthorizationAttributesTests
+public partial class NoForeignAuthorizationAttributesTests
 {
     private const string Adr =
         "Trax.Docs/adr/0013-trax-owns-the-vocabulary-for-its-own-concepts.md";
-
-    /// <summary>
-    /// An <c>[Authorize]</c> or <c>[AllowAnonymous]</c> in attribute position, alone or combined
-    /// with others, plain or fully qualified.
-    /// </summary>
-    private static readonly Regex ForeignAttribute = new(
-        @"(?:\[|,)\s*(?:[\w.]+\.)?(Authorize|AllowAnonymous)\s*(?:\(|\])",
-        RegexOptions.Compiled
-    );
 
     [Test]
     public void SamplesDeclareAuthorizationInTraxsVocabulary()
@@ -51,7 +44,12 @@ public class NoForeignAuthorizationAttributesTests
             foreach (Match match in ForeignAttribute.Matches(text))
             {
                 var line = text.Take(match.Index).Count(c => c == '\n') + 1;
-                offenders.Add($"{RepoRoot.Relative(file)}:{line} ({match.Value.Trim()})");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{RepoRoot.Relative(file)}:{line} ({match.Value.Trim()})"
+                    )
+                );
             }
         }
 
@@ -66,4 +64,15 @@ public class NoForeignAuthorizationAttributesTests
                     + string.Join(", ", offenders)
             );
     }
+
+    /// <summary>
+    /// An <c>[Authorize]</c> or <c>[AllowAnonymous]</c> in attribute position, alone or combined
+    /// with others, plain or fully qualified.
+    /// </summary>
+    [GeneratedRegex(
+        @"(?:\[|,)\s*(?:[\w.]+\.)?(Authorize|AllowAnonymous)\s*(?:\(|\])",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ForeignAttribute { get; }
 }

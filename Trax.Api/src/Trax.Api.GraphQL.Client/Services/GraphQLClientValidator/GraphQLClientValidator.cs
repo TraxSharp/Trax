@@ -9,7 +9,7 @@ namespace Trax.Api.GraphQL.Client;
 /// The default <see cref="IGraphQLClientValidator"/>, registered by <c>AddTraxGraphQLClient</c>.
 /// Infrastructure not intended to be used directly; depend on <see cref="IGraphQLClientValidator"/>.
 /// </summary>
-internal class GraphQLClientValidator : IGraphQLClientValidator
+internal sealed class GraphQLClientValidator : IGraphQLClientValidator
 {
     private readonly ISchemaProvider _schemaProvider;
     private readonly DocumentValidator _validator = new();
@@ -22,7 +22,8 @@ internal class GraphQLClientValidator : IGraphQLClientValidator
     /// </summary>
     internal const int MaxCachedQueries = 1024;
 
-    internal ConcurrentDictionary<string, OperationType> CachedQueries { get; } = new();
+    internal ConcurrentDictionary<string, OperationType> CachedQueries { get; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>Creates a validator that checks queries against the schema from <paramref name="schemaProvider"/>.</summary>
     /// <param name="schemaProvider">Supplies the schema.</param>

@@ -33,7 +33,7 @@ public partial class TraxGraphQLBuilder
                 .GetTypes()
                 .Where(t =>
                     t is { IsAbstract: false, IsClass: true }
-                    && t.GetCustomAttribute<ExtendObjectTypeAttribute>() != null
+                    && Attribute.IsDefined(t, typeof(ExtendObjectTypeAttribute))
                 );
             AdditionalTypeExtensions.AddRange(types);
         }

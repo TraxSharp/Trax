@@ -2,21 +2,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum ReminderState
-{
-    Idle,
-    Review,
-    Expired,
-    Done,
-}
-
-public enum ReminderTrigger
-{
-    Open,
-    Approve,
-    Extend,
-}
-
 /// <summary>
 /// A user-owned machine with one timer: <c>Idle -(Open, Editor)-> Review</c>, <c>Review -(Approve)-> Done</c>,
 /// <c>Review -(Extend, any authenticated)-> Review</c>, and Review's timer moves it to Expired after ten minutes.

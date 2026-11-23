@@ -33,7 +33,7 @@ public class JsonEffectProvider(
 {
     private readonly Dictionary<IModel, string> _previousStates = new();
     private readonly HashSet<IModel> _trackedModels = [];
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>
     /// Disposes the effect provider and releases any resources.
@@ -81,7 +81,7 @@ public class JsonEffectProvider(
 
                 if (
                     !_previousStates.TryGetValue(model, out var previousState)
-                    || previousState != currentState
+                    || !string.Equals(previousState, currentState, StringComparison.Ordinal)
                 )
                 {
                     _previousStates[model] = currentState;

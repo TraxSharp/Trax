@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Samples.Recovery.Index;
 
@@ -18,7 +19,7 @@ public partial class NormaliseWorks(DemoPace pace)
 {
     public override async Task<NormalisedPartition> Run(FetchedPartition partition)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var works = partition
             .Records.Select(record =>
@@ -55,7 +56,7 @@ public partial class NormaliseWorks(DemoPace pace)
             work.GetProperty("display_name").GetString() ?? "",
             string.Join(' ', words),
             int.Parse(
-                work.GetProperty("publication_date").GetString()![..4],
+                work.GetProperty("publication_date").GetString().NotNull()[..4],
                 CultureInfo.InvariantCulture
             ),
             work.GetProperty("authorships")
@@ -64,7 +65,7 @@ public partial class NormaliseWorks(DemoPace pace)
                 .ToList(),
             work.GetProperty("referenced_works")
                 .EnumerateArray()
-                .Select(r => r.GetString()!.Split('/')[^1])
+                .Select(r => r.GetString().NotNull().Split('/')[^1])
                 .ToList()
         );
     }
@@ -74,7 +75,7 @@ public partial class NormaliseWorks(DemoPace pace)
             sourceId,
             Doi(item.GetProperty("DOI").GetString()),
             item.GetProperty("title").EnumerateArray().First().GetString() ?? "",
-            JatsTag().Replace(item.GetProperty("abstract").GetString() ?? "", ""),
+            JatsTag.Replace(item.GetProperty("abstract").GetString() ?? "", ""),
             item.GetProperty("issued").GetProperty("date-parts")[0][0].GetInt32(),
             item.GetProperty("author")
                 .EnumerateArray()
@@ -99,9 +100,9 @@ public partial class NormaliseWorks(DemoPace pace)
         List<string> references
     )
     {
-        title = Whitespace().Replace(title, " ").Trim();
-        @abstract = Whitespace().Replace(@abstract, " ").Trim();
-        authors = authors.Select(a => Whitespace().Replace(a, " ").Trim()).ToList();
+        title = Whitespace.Replace(title, " ").Trim();
+        @abstract = Whitespace.Replace(@abstract, " ").Trim();
+        authors = authors.Select(a => Whitespace.Replace(a, " ").Trim()).ToList();
         references = references.Order(StringComparer.Ordinal).ToList();
 
         var content = string.Join(
@@ -124,14 +125,18 @@ public partial class NormaliseWorks(DemoPace pace)
     private static string? Doi(string? raw) =>
         string.IsNullOrWhiteSpace(raw)
             ? null
-            : DoiResolver().Replace(raw.Trim(), "").ToLowerInvariant();
+            : DoiResolver.Replace(raw.Trim(), "").ToLowerInvariant();
 
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex Whitespace();
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
 
-    [GeneratedRegex(@"</?jats:[^>]*>")]
-    private static partial Regex JatsTag();
+    [GeneratedRegex(@"</?jats:[^>]*>", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex JatsTag { get; }
 
-    [GeneratedRegex(@"^https?://(dx\.)?doi\.org/", RegexOptions.IgnoreCase)]
-    private static partial Regex DoiResolver();
+    [GeneratedRegex(
+        @"^https?://(dx\.)?doi\.org/",
+        RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DoiResolver { get; }
 }

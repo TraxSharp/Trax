@@ -38,6 +38,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -55,6 +56,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -75,6 +77,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -95,6 +98,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -112,6 +116,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -134,6 +139,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(5),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -156,13 +162,16 @@ public class LambdaRetryHelperTests
         ]);
 
         var act = async () =>
-            await LambdaRetryHelper.InvokeWithRetryAsync(
-                client,
-                DefaultRequest,
-                FastOptions(3),
-                NullLogger.Instance,
-                CancellationToken.None
-            );
+            await LambdaRetryHelper
+                .InvokeWithRetryAsync(
+                    client,
+                    DefaultRequest,
+                    FastOptions(3),
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<AmazonServiceException>();
         client.InvokeCount.Should().Be(4); // 1 initial + 3 retries
@@ -180,13 +189,16 @@ public class LambdaRetryHelperTests
         ]);
 
         var act = async () =>
-            await LambdaRetryHelper.InvokeWithRetryAsync(
-                client,
-                DefaultRequest,
-                FastOptions(),
-                NullLogger.Instance,
-                CancellationToken.None
-            );
+            await LambdaRetryHelper
+                .InvokeWithRetryAsync(
+                    client,
+                    DefaultRequest,
+                    FastOptions(),
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ResourceNotFoundException>();
         client.InvokeCount.Should().Be(1);
@@ -200,13 +212,16 @@ public class LambdaRetryHelperTests
         ]);
 
         var act = async () =>
-            await LambdaRetryHelper.InvokeWithRetryAsync(
-                client,
-                DefaultRequest,
-                FastOptions(),
-                NullLogger.Instance,
-                CancellationToken.None
-            );
+            await LambdaRetryHelper
+                .InvokeWithRetryAsync(
+                    client,
+                    DefaultRequest,
+                    FastOptions(),
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidParameterValueException>();
         client.InvokeCount.Should().Be(1);
@@ -218,13 +233,16 @@ public class LambdaRetryHelperTests
         var client = new SequentialMockLambdaClient([Throw(HttpStatusCode.InternalServerError)]);
 
         var act = async () =>
-            await LambdaRetryHelper.InvokeWithRetryAsync(
-                client,
-                DefaultRequest,
-                FastOptions(),
-                NullLogger.Instance,
-                CancellationToken.None
-            );
+            await LambdaRetryHelper
+                .InvokeWithRetryAsync(
+                    client,
+                    DefaultRequest,
+                    FastOptions(),
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<AmazonServiceException>();
         client.InvokeCount.Should().Be(1);
@@ -243,13 +261,16 @@ public class LambdaRetryHelperTests
         ]);
 
         var act = async () =>
-            await LambdaRetryHelper.InvokeWithRetryAsync(
-                client,
-                DefaultRequest,
-                FastOptions(0),
-                NullLogger.Instance,
-                CancellationToken.None
-            );
+            await LambdaRetryHelper
+                .InvokeWithRetryAsync(
+                    client,
+                    DefaultRequest,
+                    FastOptions(0),
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<AmazonServiceException>();
         client.InvokeCount.Should().Be(1);
@@ -269,6 +290,7 @@ public class LambdaRetryHelperTests
             DefaultRequest,
             FastOptions(),
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -440,13 +462,16 @@ public class LambdaRetryHelperTests
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
         var act = async () =>
-            await LambdaRetryHelper.InvokeWithRetryAsync(
-                client,
-                DefaultRequest,
-                options,
-                NullLogger.Instance,
-                cts.Token
-            );
+            await LambdaRetryHelper
+                .InvokeWithRetryAsync(
+                    client,
+                    DefaultRequest,
+                    options,
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    cts.Token
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -470,7 +495,8 @@ public class LambdaRetryHelperTests
 
     #region SequentialMockLambdaClient
 
-    private class SequentialMockLambdaClient(List<Func<InvokeResponse>> behaviors) : IAmazonLambda
+    private sealed class SequentialMockLambdaClient(List<Func<InvokeResponse>> behaviors)
+        : IAmazonLambda
     {
         private int _callIndex;
         public int InvokeCount => _callIndex;

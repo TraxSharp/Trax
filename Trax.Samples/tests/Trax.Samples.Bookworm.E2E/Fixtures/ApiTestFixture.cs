@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Samples.Bookworm.Catalog.Context;
 using Trax.Samples.Bookworm.Catalog.Models.Books;
 using Trax.Samples.Bookworm.E2E.Utilities;
@@ -9,7 +11,11 @@ namespace Trax.Samples.Bookworm.E2E.Fixtures;
 [TestFixture]
 public abstract class ApiTestFixture
 {
-    protected GraphQLClient GraphQL { get; private set; } = null!;
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
 
     [SetUp]
     public void SetUp() => GraphQL = new GraphQLClient(SharedBookwormSetup.Factory.CreateClient());
@@ -20,7 +26,8 @@ public abstract class ApiTestFixture
     /// </summary>
     protected static async Task<int> NewBookAsync()
     {
-        using var scope = SharedBookwormSetup.Factory.Services.CreateScope();
+        var scope = SharedBookwormSetup.Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var catalog = scope.ServiceProvider.GetRequiredService<ICatalogDbContext>();
         var book = new Book
         {
@@ -29,18 +36,20 @@ public abstract class ApiTestFixture
             AuthorId = 1,
         };
         catalog.Books.Add(book);
-        await catalog.SaveChangesAsync();
+        await catalog.SaveChangesAsync().ConfigureAwait(false);
         return book.Id;
     }
 
     protected static string Borrow(int bookId) =>
-        $"mutation {{ dispatch {{ lending {{ borrowBook(input: {{ bookId: {bookId} }}) "
-        + "{ output { loanId } } } } }";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"mutation {{ dispatch {{ lending {{ borrowBook(input: {{ bookId: {bookId} }}) "
+        ) + "{ output { loanId } } } } }";
 
     /// <summary>Borrows <paramref name="bookId"/> as <paramref name="apiKey"/> and returns the loan id.</summary>
     protected async Task<int> BorrowAsync(int bookId, string apiKey)
     {
-        var doc = await GraphQL.PostAsync(Borrow(bookId), apiKey);
+        var doc = await GraphQL.PostAsync(Borrow(bookId), apiKey).ConfigureAwait(false);
         GraphQLClient.HasErrors(doc).Should().BeFalse(doc.RootElement.GetRawText());
         return doc
             .RootElement.GetProperty("data")

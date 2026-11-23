@@ -11,15 +11,19 @@ namespace Trax.Api.Services.HealthCheck;
 /// Replace it through <see cref="ITraxHealthService"/>.
 /// </summary>
 /// <param name="dataContextFactory">Opens the data context the counts are read from.</param>
-internal class TraxHealthService(IDataContextProviderFactory dataContextFactory)
-    : ITraxHealthService
+/// <param name="clock">The clock the last hour is counted back from.</param>
+internal sealed class TraxHealthService(
+    IDataContextProviderFactory dataContextFactory,
+    TimeProvider clock
+) : ITraxHealthService
 {
     /// <inheritdoc/>
     public async Task<HealthStatus> GetHealthAsync(CancellationToken ct = default)
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
-        var cutoff = DateTime.UtcNow.AddHours(-1);
+        var cutoff = clock.GetUtcNow().UtcDateTime.AddHours(-1);
 
         // Single round-trip: project all four counts from a constant source row.
         var counts = await db
@@ -32,15 +36,18 @@ internal class TraxHealthService(IDataContextProviderFactory dataContextFactory)
                     m.TrainState == TrainState.Failed && m.EndTime > cutoff
                 ),
             })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
 
         var queueDepth = await db
             .WorkQueues.AsNoTracking()
-            .CountAsync(w => w.Status == WorkQueueStatus.Queued, ct);
+            .CountAsync(w => w.Status == WorkQueueStatus.Queued, ct)
+            .ConfigureAwait(false);
 
         var deadLetters = await db
             .DeadLetters.AsNoTracking()
-            .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct);
+            .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct)
+            .ConfigureAwait(false);
 
         var inProgress = counts?.InProgress ?? 0;
         var failedLastHour = counts?.FailedLastHour ?? 0;

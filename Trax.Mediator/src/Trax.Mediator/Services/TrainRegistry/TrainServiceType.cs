@@ -39,7 +39,7 @@ internal static class TrainServiceType
 
         // Drop an interface another candidate extends: ITrain : IBaseTrain selects ITrain.
         var mostDerived = candidates
-            .Where(c => !candidates.Any(other => other != c && c.IsAssignableFrom(other)))
+            .Where(c => !candidates.Exists(other => other != c && c.IsAssignableFrom(other)))
             .ToList();
 
         if (mostDerived.Count == 1)

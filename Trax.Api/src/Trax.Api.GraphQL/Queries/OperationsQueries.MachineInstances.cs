@@ -56,8 +56,12 @@ public partial class OperationsQueries
             Stuck = stuck,
         };
 
-        var page = await operationsService.GetMachineInstancesAsync(query, ct);
-        var total = await operationsService.CountMachineInstancesAsync(query, ct);
+        var page = await operationsService
+            .GetMachineInstancesAsync(query, ct)
+            .ConfigureAwait(false);
+        var total = await operationsService
+            .CountMachineInstancesAsync(query, ct)
+            .ConfigureAwait(false);
 
         return new PagedResult<MachineInstance>(
             page.Items.Select(MachineInstance.From).ToList(),
@@ -116,19 +120,15 @@ public partial class OperationsQueries
             );
 
         var key = new MachineInstanceKey(machine, ownerKind, id, rowId);
-        var record = await operationsService.GetMachineInstanceAsync(key, ct);
+        var record = await operationsService.GetMachineInstanceAsync(key, ct).ConfigureAwait(false);
         if (record is null)
             return null;
 
         // The runs are read through the call the dashboard's instance page makes. Keyed by the
         // row the lookup found, so the runs are that row's even when no row id was passed.
-        var runs = await operationsService.GetMachineInstanceRunsAsync(
-            key with
-            {
-                RowId = record.RowId,
-            },
-            ct
-        );
+        var runs = await operationsService
+            .GetMachineInstanceRunsAsync(key with { RowId = record.RowId }, ct)
+            .ConfigureAwait(false);
         return MachineInstanceDetail.From(record, runs);
     }
 
@@ -146,7 +146,11 @@ public partial class OperationsQueries
         CancellationToken ct,
         string? machine = null
     ) =>
-        (await operationsService.GetMachineInstanceStateCountsAsync(machine, ct))
+        (
+            await operationsService
+                .GetMachineInstanceStateCountsAsync(machine, ct)
+                .ConfigureAwait(false)
+        )
             .Select(c => new MachineInstanceCount(c.Machine, c.State, c.OwnerKind, c.Count)
             {
                 Stuck = c.Stuck,

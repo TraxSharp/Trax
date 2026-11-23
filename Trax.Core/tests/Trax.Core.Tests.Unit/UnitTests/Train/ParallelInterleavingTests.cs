@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -39,6 +41,9 @@ public class ParallelInterleavingTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Every interleaving
 
     /// <summary>
@@ -57,11 +62,13 @@ public class ParallelInterleavingTests : TestSetup
         foreach (var policy in Enum.GetValues<BranchFailurePolicy>())
         {
             var chain = Flat(lengths, policy);
-            var branches = lengths.Select((_, i) => $"Parallel#0/b{i}").ToList();
+            var branches = lengths
+                .Select((_, i) => string.Create(CultureInfo.InvariantCulture, $"Parallel#0/b{i}"))
+                .ToList();
             var faultPoints = branches
                 .SelectMany((b, i) => Enumerable.Range(0, lengths[i]).Select(k => (b, k)))
                 .Select(p => ((string Branch, int Index)?)p)
-                .Prepend(null)
+                .Prepend(element: null)
                 .ToList();
             var mismatches = new List<string>();
             var runs = 0;
@@ -84,51 +91,72 @@ public class ParallelInterleavingTests : TestSetup
                         );
 
                 foreach (var run in explored)
-                {
-                    var where =
-                        $"[{policy}] fault {fault?.ToString() ?? "none"}, "
-                        + $"order {string.Join(" ", run.Runner.Trace)}";
-
-                    foreach (var difference in Differences(run.Result, oracle))
-                        mismatches.Add($"{where}: {difference}");
-
-                    if (run.Result.IsRight && run.Result.Snapshot != expected.Snapshot)
-                        mismatches.Add(
-                            $"{where}: Memory {run.Result.Snapshot}, not {expected.Snapshot}"
-                        );
-
-                    if (fault is not { } f || run.Result.Failure is not BranchesFailedException)
-                        continue;
-
-                    // Which siblings are stopped is the one thing an interleaving may change, and
-                    // it is decided: exactly those that had not finished when the failing branch
-                    // did.
-                    var finished = run.Runner.Finished.ToList();
-                    var predicted =
-                        policy == BranchFailurePolicy.WaitForAll
-                            ? []
-                            : branches
-                                .Except(finished.Take(finished.IndexOf(f.Branch)))
-                                .Where(b => b != f.Branch)
-                                .ToHashSet();
-
-                    if (!run.Result.Stopped.SetEquals(predicted))
-                        mismatches.Add(
-                            $"{where}: stopped [{string.Join(", ", run.Result.Stopped.Order())}], "
-                                + $"not [{string.Join(", ", predicted.Order())}]"
-                        );
-                }
+                    CheckInterleaving(run, oracle, expected, policy, fault, branches, mismatches);
             }
 
-            TestContext.Out.WriteLine(
-                $"{string.Join(",", lengths)} [{policy}]: {runs} runs over {faultPoints.Count} failure points"
-            );
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{string.Join(',', lengths)} [{policy}]: {runs} runs over {faultPoints.Count} failure points"
+                    )
+                )
+                .ConfigureAwait(false);
             mismatches
                 .Should()
                 .BeEmpty(
                     $"a concurrent Parallel is equivalent to its branches run in order ({Adr})"
                 );
         }
+    }
+
+    /// <summary>
+    /// Adds to <paramref name="mismatches"/> every way one interleaving's run differs from the
+    /// branches run in order, and, when a branch failed, which siblings it should have stopped.
+    /// </summary>
+    private static void CheckInterleaving(
+        Interleavings.Explored<Outcome> run,
+        Outcome oracle,
+        Expectation expected,
+        BranchFailurePolicy policy,
+        (string Branch, int Index)? fault,
+        List<string> branches,
+        List<string> mismatches
+    )
+    {
+        var where =
+            $"[{policy}] fault {fault?.ToString() ?? "none"}, "
+            + $"order {string.Join(' ', run.Runner.Trace)}";
+
+        foreach (var difference in Differences(run.Result, oracle))
+            mismatches.Add($"{where}: {difference}");
+
+        if (
+            run.Result.IsRight
+            && !string.Equals(run.Result.Snapshot, expected.Snapshot, StringComparison.Ordinal)
+        )
+            mismatches.Add($"{where}: Memory {run.Result.Snapshot}, not {expected.Snapshot}");
+
+        if (fault is not { } f || run.Result.Failure is not BranchesFailedException)
+            return;
+
+        // Which siblings are stopped is the one thing an interleaving may change, and
+        // it is decided: exactly those that had not finished when the failing branch
+        // did.
+        var finished = run.Runner.Finished.ToList();
+        var predicted =
+            policy == BranchFailurePolicy.WaitForAll
+                ? []
+                : branches
+                    .Except(finished.Take(finished.IndexOf(f.Branch)), StringComparer.Ordinal)
+                    .Where(b => !string.Equals(b, f.Branch, StringComparison.Ordinal))
+                    .ToHashSet(StringComparer.Ordinal);
+
+        if (!run.Result.Stopped.SetEquals(predicted))
+            mismatches.Add(
+                $"{where}: stopped [{string.Join(", ", run.Result.Stopped.Order(StringComparer.Ordinal))}], "
+                    + $"not [{string.Join(", ", predicted.Order(StringComparer.Ordinal))}]"
+            );
     }
 
     [Test]
@@ -141,7 +169,12 @@ public class ParallelInterleavingTests : TestSetup
         foreach (var policy in Enum.GetValues<BranchFailurePolicy>())
         foreach (
             var at in lengths.SelectMany(
-                (n, i) => Enumerable.Range(0, n).Select(k => ($"Parallel#0/b{i}", k))
+                (n, i) =>
+                    Enumerable
+                        .Range(0, n)
+                        .Select(k =>
+                            (string.Create(CultureInfo.InvariantCulture, $"Parallel#0/b{i}"), k)
+                        )
             )
         )
         {
@@ -155,12 +188,18 @@ public class ParallelInterleavingTests : TestSetup
                         BranchRunner = runner,
                         CancellationToken = cts.Token,
                     };
-                    return await Outcome.Of(train, "x").WaitAsync(Hang);
+                    return await Outcome
+                        .Of(train, "x")
+                        .WaitAsync(Hang, RealTime, CancellationToken.None)
+                        .ConfigureAwait(false);
                 },
                 (branch, index) =>
                 {
+                    // Cancelled synchronously, so the token's callbacks have run before this point
+                    // returns. CancelAsync would run them later on another thread, and the
+                    // interleaving explored would no longer be the one named.
                     if ((branch, index) == at)
-                        source.Value!.Cancel();
+                        source.Value.NotNull().Cancel(throwOnFirstException: false);
                 }
             );
 
@@ -196,7 +235,7 @@ public class ParallelInterleavingTests : TestSetup
         }
 
         explored
-            .Select(e => string.Join(" ", e.Runner.Trace))
+            .Select(e => string.Join(' ', e.Runner.Trace))
             .Should()
             .OnlyHaveUniqueItems("every sequence of choices is a different interleaving");
     }
@@ -212,7 +251,7 @@ public class ParallelInterleavingTests : TestSetup
         // handed the same dictionary. In order, the count ends at 2; interleaved as read, read,
         // write, write, one increment is lost. The suite has to find that order.
         var oracle = await Outcome.Of(
-            new RacyTrain(new Dictionary<string, int> { ["n"] = 0 })
+            new RacyTrain(new Dictionary<string, int>(StringComparer.Ordinal) { ["n"] = 0 })
             {
                 BranchRunner = new SequentialBranchRunner(),
             },
@@ -221,7 +260,10 @@ public class ParallelInterleavingTests : TestSetup
 
         var explored = await Interleavings.Every(runner =>
             Outcome.Of(
-                new RacyTrain(new Dictionary<string, int> { ["n"] = 0 }) { BranchRunner = runner },
+                new RacyTrain(new Dictionary<string, int>(StringComparer.Ordinal) { ["n"] = 0 })
+                {
+                    BranchRunner = runner,
+                },
                 "x"
             )
         );
@@ -243,9 +285,11 @@ public class ParallelInterleavingTests : TestSetup
     {
         // The first branch blocks its thread until the second has run. Started on the caller's
         // thread rather than the pool, the second would never start.
-        var signal = new TaskCompletionSource();
+        using var signal = new ManualResetEventSlim();
 
-        var result = await new BlockingTrain(signal, Hang).RunEither("x").WaitAsync(Hang * 2);
+        var result = await new BlockingTrain(signal, Hang)
+            .RunEither("x")
+            .WaitAsync(Hang * 2, RealTime);
 
         result.IsRight.Should().BeTrue($"branches start on the thread pool ({Adr})");
     }
@@ -253,7 +297,7 @@ public class ParallelInterleavingTests : TestSetup
     [Test]
     public async Task ABlockingJunction_RunInOrder_DoesStopItsSibling_SoTheBudgetCanFail()
     {
-        var signal = new TaskCompletionSource();
+        using var signal = new ManualResetEventSlim();
 
         // negative-wait: the blocked branch has to give up for the run to end at all.
         var result = await new BlockingTrain(signal, TimeSpan.FromMilliseconds(200))
@@ -261,7 +305,7 @@ public class ParallelInterleavingTests : TestSetup
             BranchRunner = new SequentialBranchRunner(),
         }
             .RunEither("x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result
             .Swap()
@@ -284,7 +328,7 @@ public class ParallelInterleavingTests : TestSetup
         var results = await Task.WhenAll(
                 Enumerable.Range(0, trains).Select(_ => new FourBranchTrain(meeting).RunEither("x"))
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         results.Should().OnlyContain(r => r.IsRight, $"branches wait without a thread ({Adr})");
         meeting.Arrived.Should().Be(trains * 4);
@@ -300,7 +344,7 @@ public class ParallelInterleavingTests : TestSetup
                 lengths
                     .Select(n => new Branch(
                         "",
-                        Enumerable.Range(0, n).Select(_ => (Element)new Link(false)).ToList()
+                        Enumerable.Range(0, n).Select(_ => (Element)new Link(Fails: false)).ToList()
                     ))
                     .ToList(),
                 policy
@@ -313,13 +357,18 @@ public class ParallelInterleavingTests : TestSetup
             : (branch, index) =>
             {
                 if ((branch, index) == f)
-                    throw new InvalidOperationException($"injected at {branch}#{index}");
+                    throw new InvalidOperationException(
+                        string.Create(
+                            global::System.Globalization.CultureInfo.InvariantCulture,
+                            $"injected at {branch}#{index}"
+                        )
+                    );
             };
 
     private static Task<Outcome> Run(IReadOnlyList<Element> chain, IBranchRunner runner) =>
         Outcome
             .Of(new ShapeTrain(chain, new RunLog()) { BranchRunner = runner }, "x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
     /// <summary>How a run differs from the oracle, in the terms the equivalence compares.</summary>
     private static IEnumerable<string> Differences(Outcome run, Outcome oracle)
@@ -328,9 +377,15 @@ public class ParallelInterleavingTests : TestSetup
             yield return $"{run}, where in order it is {oracle}";
         else if (run.IsRight)
         {
-            if (run.Result.ValueUnsafe() != oracle.Result.ValueUnsafe())
+            if (
+                !string.Equals(
+                    run.Result.ValueUnsafe(),
+                    oracle.Result.ValueUnsafe(),
+                    StringComparison.Ordinal
+                )
+            )
                 yield return $"returned {run.Result.ValueUnsafe()}, not {oracle.Result.ValueUnsafe()}";
-            if (run.Snapshot != oracle.Snapshot)
+            if (!string.Equals(run.Snapshot, oracle.Snapshot, StringComparison.Ordinal))
                 yield return $"Memory {run.Snapshot}, not {oracle.Snapshot}";
         }
         else if (!run.FailedBranches.SetEquals(oracle.FailedBranches))
@@ -377,13 +432,20 @@ public class ParallelInterleavingTests : TestSetup
     private sealed class Total(Dictionary<string, int> shared) : Junction<(WroteA, WroteB), string>
     {
         public override Task<string> Run((WroteA, WroteB) input) =>
-            Task.FromResult(shared["n"].ToString());
+            Task.FromResult(
+                shared["n"].ToString(System.Globalization.CultureInfo.InvariantCulture)
+            );
     }
 
     private sealed class RacyTrain(Dictionary<string, int> shared) : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
-            Chain(new ReadsCount<string>(shared, n => n.ToString()))
+            Chain(
+                    new ReadsCount<string>(
+                        shared,
+                        n => n.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    )
+                )
                 .Parallel(p =>
                     p.Branch(
                             "a",
@@ -414,28 +476,31 @@ public class ParallelInterleavingTests : TestSetup
                 .Resolve();
     }
 
-    // Blocks with Task.Wait, which the thread pool sees: it adds a thread at once for a pool thread
-    // blocked that way, so the sibling starts even when other work in the process holds every pool
-    // thread, instead of waiting for the pool's slow starvation injection.
-    private sealed class BlocksUntil(TaskCompletionSource signal, TimeSpan wait)
+    // Blocks its thread on purpose: that is the junction this test is about. An event, not a task,
+    // because blocking on a task is what the profile refuses. The pool does not add a thread at
+    // once for a thread blocked on an event, as it does for Task.Wait, so with every pool thread
+    // busy the sibling waits for the pool's starvation injection, which is well inside Hang.
+    private sealed class BlocksUntil(ManualResetEventSlim signal, TimeSpan wait)
         : Junction<string, ReadA>
     {
-        public override Task<ReadA> Run(string input) =>
-            signal.Task.Wait(wait)
-                ? Task.FromResult(new ReadA(1))
+        public override Task<ReadA> Run(string input) => Task.FromResult(WaitForTheSibling());
+
+        private ReadA WaitForTheSibling() =>
+            signal.Wait(wait, CancellationToken.None)
+                ? new ReadA(1)
                 : throw new TimeoutException("the sibling never ran");
     }
 
-    private sealed class Releases(TaskCompletionSource signal) : Junction<string, ReadB>
+    private sealed class Releases(ManualResetEventSlim signal) : Junction<string, ReadB>
     {
         public override Task<ReadB> Run(string input)
         {
-            signal.TrySetResult();
+            signal.Set();
             return Task.FromResult(new ReadB(1));
         }
     }
 
-    private sealed class BlockingTrain(TaskCompletionSource signal, TimeSpan wait)
+    private sealed class BlockingTrain(ManualResetEventSlim signal, TimeSpan wait)
         : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
@@ -469,7 +534,7 @@ public class ParallelInterleavingTests : TestSetup
     {
         public override async Task<TOut> Run(string input)
         {
-            await meeting.Arrive();
+            await meeting.Arrive().ConfigureAwait(false);
             return value;
         }
     }

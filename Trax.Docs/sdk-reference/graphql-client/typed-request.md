@@ -10,7 +10,11 @@ package: Trax.Api.GraphQL.Client.Typed
 namespace: Trax.Api.GraphQL.Client.Typed
 source:
   - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/TypedRequest.cs
-  - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/Attributes.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/GraphQLOperationAttribute.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/OperationType.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/GraphQLTypeAttribute.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/GraphQLArgumentAttribute.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/GraphQLFieldAttribute.cs
   - Trax.Api/src/Trax.Api.GraphQL.Client.Typed/TypedQueryGenerator.cs
 ---
 

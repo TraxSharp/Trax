@@ -22,7 +22,7 @@ public class DatabaseClockTests : TestSetup
     public void The_time_is_read_from_the_database_server()
     {
         var sql = DataContext
-            .Manifests.Select(_ => (DateTime?)DateTime.UtcNow)
+            .Manifests.Select(DatabaseClock.ServerNow<Trax.Effect.Models.Manifest.Manifest>())
             .Take(1)
             .ToQueryString();
 
@@ -43,10 +43,12 @@ public class DatabaseClockTests : TestSetup
 
         var now = await DatabaseClock.UtcNowAsync(
             DataContext.ManifestGroups.Where(g => g.Id == group.Id),
+            TimeProvider.System,
             CancellationToken.None
         );
 
         now.Kind.Should().Be(DateTimeKind.Utc);
-        now.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        now.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromMinutes(1));
     }
 }

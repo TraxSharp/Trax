@@ -89,7 +89,7 @@ to their principal's id:
 ```csharp from=Trax.Samples/samples/CheckIn/Trax.Samples.CheckIn.Api/TraxCallerSnapshotPrincipal.cs
 public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPrincipal
 {
-    public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal!.Id : null;
+    public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal.NotNull().Id : null;
 }
 ```
 

@@ -4,8 +4,8 @@ namespace Trax.Api.DTOs;
 
 /// <summary>
 /// Patch input for <c>operations.updateManifest</c>. Every field is independent: a
-/// <c>null</c> value leaves that field unchanged. Set <see cref="ClearTimeout"/> to remove
-/// the per-execution timeout (since a <c>null</c> <see cref="TimeoutSeconds"/> means "no
+/// <see langword="null"/> value leaves that field unchanged. Set <see cref="ClearTimeout"/> to remove
+/// the per-execution timeout (since a <see langword="null"/> <see cref="TimeoutSeconds"/> means "no
 /// change", not "clear").
 /// </summary>
 public record UpdateManifestInput(

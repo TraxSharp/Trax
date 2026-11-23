@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Services;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -32,7 +33,7 @@ public class SignalRSlowClientTests
             ExternalId: "ext-1",
             TrainName: "Some.ITrain",
             TrainState: "Failed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: reason,
             EventType: "Failed",
@@ -45,23 +46,12 @@ public class SignalRSlowClientTests
     [Test]
     public async Task A_client_that_stops_reading_must_not_stall_the_lifecycle_hook()
     {
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
-        builder.Services.AddSignalR();
-        var registry = new EffectRegistry();
-        builder.Services.AddSingleton<IEffectRegistry>(registry);
-        new TraxBuilder(builder.Services, registry).AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseSignalRHub())
-        );
-        await using var app = builder.Build();
+        var app = BuildApp();
+        await using var appDisposal = app.ConfigureAwait(false);
         app.MapTraxTrainEventHub(hub => hub.AllowAnonymous());
-        await app.StartAsync();
+        await app.StartAsync(CancellationToken.None);
 
-        var address = app
-            .Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()!
-            .Addresses.First();
-        var hubUri = new Uri(address.Replace("http://", "ws://") + "/hubs/trax-events");
+        var hubUri = HubUri(app);
 
         // Connect and complete the SignalR handshake, then stop reading from the socket.
         using var socket = new ClientWebSocket();
@@ -69,7 +59,7 @@ public class SignalRSlowClientTests
         await socket.SendAsync(
             Encoding.UTF8.GetBytes("{\"protocol\":\"json\",\"version\":1}\u001e"),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             CancellationToken.None
         );
         // Read the handshake response, so the connection is registered with the hub before the
@@ -77,7 +67,7 @@ public class SignalRSlowClientTests
         var handshake = new byte[256];
         await socket
             .ReceiveAsync(handshake, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
 
         var dispatcher = app.Services.GetRequiredService<SignalRTrainEventDispatcher>();
         var reason = new string('x', 256 * 1024);
@@ -88,10 +78,11 @@ public class SignalRSlowClientTests
         var slowest = TimeSpan.Zero;
         for (var i = 0; i < 64; i++)
         {
-            var started = System.Diagnostics.Stopwatch.StartNew();
+            var started = TimeProvider.System.GetTimestamp();
             await dispatcher.HandleAsync(Failed(reason), CancellationToken.None);
-            if (started.Elapsed > slowest)
-                slowest = started.Elapsed;
+            var elapsed = TimeProvider.System.GetElapsedTime(started);
+            if (elapsed > slowest)
+                slowest = elapsed;
         }
 
         slowest
@@ -103,6 +94,31 @@ public class SignalRSlowClientTests
             );
 
         socket.Abort();
-        await app.StopAsync();
+        await app.StopAsync(CancellationToken.None);
+    }
+
+    private static WebApplication BuildApp()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
+        builder.Services.AddSignalR();
+        var registry = new EffectRegistry();
+        builder.Services.AddSingleton<IEffectRegistry>(registry);
+        new TraxBuilder(builder.Services, registry).AddEffects(effects =>
+            effects.UseBroadcaster(b => b.UseSignalRHub())
+        );
+        return builder.Build();
+    }
+
+    private static Uri HubUri(WebApplication app)
+    {
+        var address = app
+            .Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()
+            .NotNull()
+            .Addresses.First();
+        return new Uri(
+            address.Replace("http://", "ws://", StringComparison.Ordinal) + "/hubs/trax-events"
+        );
     }
 }

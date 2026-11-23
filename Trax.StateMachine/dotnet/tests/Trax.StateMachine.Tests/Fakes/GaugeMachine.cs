@@ -3,19 +3,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum GaugeState
-{
-    Idle,
-    Reading,
-}
-
-public enum GaugeTrigger
-{
-    Lower,
-    Raise,
-    Settle,
-}
-
 /// <summary>
 /// A machine whose guards are the numeric comparisons other than <c>GreaterThan</c> and <c>EqualTo</c>: <c>Lower</c>
 /// takes a value below 13 (<c>lt</c>), <c>Raise</c> one of at least 2 (<c>gte</c>), and <c>Settle</c> needs a

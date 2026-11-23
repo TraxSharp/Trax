@@ -11,5 +11,14 @@
       Visible="false"
     />
     <Using Include="Trax.Testing.Red" />
+    <!-- Null.Of<T>(): a null passed on purpose, where the null-forgiving operator is banned. A
+         project that passes one compiles it (TraxTestsNull), so no other carries an unused type. -->
+    <Compile
+      Condition="'$(TraxTestsNull)' == 'true'"
+      Include="$(MSBuildThisFileDirectory)Null.cs"
+      Link="Null.cs"
+      Visible="false"
+    />
+    <Using Include="Trax.Testing" />
   </ItemGroup>
 </Project>

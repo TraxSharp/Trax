@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -39,12 +40,12 @@ public class TriggerRaceTests : TestSetup
         scheduler.BeforeTriggerInsert = async (attempt, ct) =>
         {
             if (attempt == 1)
-                collided = await QueueEntryAsync(manifest, ct);
+                collided = await QueueEntryAsync(manifest, ct).ConfigureAwait(false);
         };
         scheduler.AfterTriggerCollision = async (attempt, ct) =>
         {
             if (attempt == 1)
-                await DispatchAsync(manifest, collided!.Value, ct);
+                await DispatchAsync(manifest, collided.NotNull().Value, ct).ConfigureAwait(false);
         };
 
         var result = await scheduler.TriggerAsync(manifest.ExternalId, askAfresh: false);
@@ -52,7 +53,7 @@ public class TriggerRaceTests : TestSetup
         collided.Should().NotBeNull();
         result.Created.Should().BeTrue("the entry it met was dispatched, so its place was free");
         result.AlreadyDispatched.Should().BeFalse();
-        result.WorkQueueId.Should().NotBe(collided!.Value);
+        result.WorkQueueId.Should().NotBe(collided.NotNull().Value);
         DataContext.Reset();
         var queued = await DataContext
             .WorkQueues.AsNoTracking()
@@ -68,11 +69,11 @@ public class TriggerRaceTests : TestSetup
         var inserts = 0;
         long collided = 0;
         var seams = new TraxScheduler.TriggerSeams(
-            null,
+            BeforeRelease: null,
             async (_, ct) =>
             {
                 inserts++;
-                collided = await QueueEntryAsync(manifest, ct);
+                collided = await QueueEntryAsync(manifest, ct).ConfigureAwait(false);
             },
             (_, ct) => DispatchAsync(manifest, collided, ct)
         );
@@ -81,9 +82,10 @@ public class TriggerRaceTests : TestSetup
             TraxScheduler.TriggerManifestAsync(
                 DataContext,
                 manifest,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 askAfresh: false,
                 seams,
+                TimeProvider.System,
                 CancellationToken.None
             );
 
@@ -103,22 +105,23 @@ public class TriggerRaceTests : TestSetup
         var manifest = await ScheduleAsync("trigger-race-other");
         var inserts = 0;
         var seams = new TraxScheduler.TriggerSeams(
-            null,
+            BeforeRelease: null,
             (_, _) =>
             {
                 inserts++;
                 throw new DbUpdateException("not a queued-manifest conflict");
             },
-            null
+            AfterCollision: null
         );
 
         var trigger = () =>
             TraxScheduler.TriggerManifestAsync(
                 DataContext,
                 manifest,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 askAfresh: false,
                 seams,
+                TimeProvider.System,
                 CancellationToken.None
             );
 
@@ -135,18 +138,19 @@ public class TriggerRaceTests : TestSetup
         var manifest = await ScheduleAsync("trigger-race-untracked");
         DataContext.Reset();
         var seams = new TraxScheduler.TriggerSeams(
-            null,
+            BeforeRelease: null,
             (_, _) => throw new DbUpdateException("not a queued-manifest conflict"),
-            null
+            AfterCollision: null
         );
 
         var trigger = () =>
             TraxScheduler.TriggerManifestAsync(
                 DataContext,
                 manifest,
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 askAfresh: false,
                 seams,
+                TimeProvider.System,
                 CancellationToken.None
             );
 
@@ -160,60 +164,74 @@ public class TriggerRaceTests : TestSetup
     }
 
     private async Task<Manifest> ScheduleAsync(string externalId) =>
-        await (
-            (TraxScheduler)Scope.ServiceProvider.GetRequiredService<ITraxScheduler>()
-        ).ScheduleAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            externalId,
-            new SchedulerTestInput { Value = "race" },
-            Every.Minutes(5)
-        );
+        await ((TraxScheduler)Scope.ServiceProvider.GetRequiredService<ITraxScheduler>())
+            .ScheduleAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                externalId,
+                new SchedulerTestInput { Value = "race" },
+                Every.Minutes(5)
+            )
+            .ConfigureAwait(false);
 
     private async Task<long> QueueEntryAsync(Manifest manifest, CancellationToken ct)
     {
-        await using var db = await Scope
+        var db = await Scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(ct);
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = manifest.Name,
-                Input = manifest.Properties,
-                InputTypeName = manifest.PropertyTypeName,
-                ManifestId = manifest.Id,
-            }
-        );
-        await db.Track(entry);
-        await db.SaveChanges(ct);
-        return entry.Id;
+            .CreateDbContextAsync(ct)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = manifest.Name,
+                    Input = manifest.Properties,
+                    InputTypeName = manifest.PropertyTypeName,
+                    ManifestId = manifest.Id,
+                },
+                TimeProvider.System
+            );
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(ct).ConfigureAwait(false);
+            return entry.Id;
+        }
     }
 
     // As the dispatcher does: the entry moves to Dispatched, linked to the run it started.
     private async Task DispatchAsync(Manifest manifest, long entryId, CancellationToken ct)
     {
-        await using var db = await Scope
+        var db = await Scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(ct);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = manifest.Name,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-                ManifestId = manifest.Id,
-            }
-        );
-        run.TrainState = TrainState.Completed;
-        run.EndTime = DateTime.UtcNow;
-        await db.Track(run);
-        await db.SaveChanges(ct);
-        await db
-            .WorkQueues.Where(w => w.Id == entryId)
-            .ExecuteUpdateAsync(
-                s =>
-                    s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
-                        .SetProperty(w => w.MetadataId, run.Id)
-                        .SetProperty(w => w.DispatchedAt, DateTime.UtcNow),
-                ct
+            .CreateDbContextAsync(ct)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = manifest.Name,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                    ManifestId = manifest.Id,
+                },
+                TimeProvider.System
             );
+            run.TrainState = TrainState.Completed;
+            run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(ct).ConfigureAwait(false);
+            await db
+                .WorkQueues.Where(w => w.Id == entryId)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
+                            .SetProperty(w => w.MetadataId, run.Id)
+                            .SetProperty(
+                                w => w.DispatchedAt,
+                                TimeProvider.System.GetUtcNow().UtcDateTime
+                            ),
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
     }
 }

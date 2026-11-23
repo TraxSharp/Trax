@@ -6,7 +6,10 @@ using Trax.Mediator.Services.Principal;
 
 namespace Trax.Mediator.Services.RunStarters;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="IRunStarters"/> the mediator registers: compares the current principal's id
+/// with the starter hash a run's rows hold.
+/// </summary>
 internal sealed class RunStarters(
     IDataContextProviderFactory contexts,
     ICurrentPrincipalProvider principal
@@ -22,7 +25,8 @@ internal sealed class RunStarters(
         if (RunStarter.OfPrincipal(principal.GetCurrentPrincipalId()) is not { } starter)
             return false;
 
-        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
                 .Metadatas.AsNoTracking()
                 .AnyAsync(m => m.ExternalId == runId && m.StarterHash == starter, ct)
@@ -49,7 +53,8 @@ internal sealed class RunStarters(
         if (RunStarter.OfPrincipal(principal.GetCurrentPrincipalId()) is not { } starter)
             return null;
 
-        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .Metadatas.AsNoTracking()
             .Where(m => m.ExternalId == runId && m.StarterHash == starter)

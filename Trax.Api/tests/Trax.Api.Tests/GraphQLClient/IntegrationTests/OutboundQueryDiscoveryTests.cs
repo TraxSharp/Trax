@@ -43,7 +43,9 @@ public class OutboundQueryDiscoveryTests
     {
         var entries = OutboundQueryDiscovery.Discover(typeof(TaggedPlayerQuery).Assembly);
 
-        var byEndpoint = entries.GroupBy(e => e.Endpoint).ToDictionary(g => g.Key, g => g.ToList());
+        var byEndpoint = entries
+            .GroupBy(e => e.Endpoint, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
         byEndpoint["PlayerService"].Should().HaveCount(2);
         byEndpoint["BillingService"].Should().HaveCount(1);
@@ -67,14 +69,14 @@ public class OutboundQueryDiscoveryTests
     [Test]
     public void Discover_NullAssemblies_Throws()
     {
-        var act = () => OutboundQueryDiscovery.Discover(null!);
+        var act = () => OutboundQueryDiscovery.Discover(Null.Of<System.Reflection.Assembly[]>());
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Test]
     public void Attribute_NullOrWhitespaceEndpoint_Throws()
     {
-        var actNull = () => new TraxOutboundQueryAttribute(null!);
+        var actNull = () => new TraxOutboundQueryAttribute(Null.Of<string>());
         actNull.Should().Throw<ArgumentException>();
         var actEmpty = () => new TraxOutboundQueryAttribute("  ");
         actEmpty.Should().Throw<ArgumentException>();

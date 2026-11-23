@@ -12,6 +12,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -42,8 +43,11 @@ public class SocketJwtRunsTheSchemeHandlerTests
 
     // The bearer handler maps "sub" to NameIdentifier unless MapInboundClaims is off.
     private static bool IsRevoked(ClaimsPrincipal? principal) =>
-        (principal?.FindFirst(ClaimTypes.NameIdentifier) ?? principal?.FindFirst("sub"))?.Value
-        == "revoked";
+        string.Equals(
+            (principal?.FindFirst(ClaimTypes.NameIdentifier) ?? principal?.FindFirst("sub"))?.Value,
+            "revoked",
+            StringComparison.Ordinal
+        );
 
     private static TraxCompositeSocketInterceptor Composite(IServiceProvider services) =>
         new(new TraxApplicationServices(services));
@@ -74,7 +78,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
         interceptor
             .OnConnectAsync(
                 session,
-                Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+                Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
                 CancellationToken.None
             )
             .AsTask();
@@ -82,19 +86,22 @@ public class SocketJwtRunsTheSchemeHandlerTests
     [Test]
     public async Task A_host_OnTokenValidated_rejection_refuses_the_socket()
     {
-        await using var sp = SymmetricHost(options =>
-        {
-            var trax = options.Events.OnTokenValidated;
-            options.Events.OnTokenValidated = async context =>
+        await using var sp = SymmetricHost(
+            options =>
             {
-                if (IsRevoked(context.Principal))
+                var trax = options.Events.OnTokenValidated;
+                options.Events.OnTokenValidated = async context =>
                 {
-                    context.Fail("This user has been revoked.");
-                    return;
-                }
-                await trax(context);
-            };
-        });
+                    if (IsRevoked(context.Principal))
+                    {
+                        context.Fail("This user has been revoked.");
+                        return;
+                    }
+                    await trax(context).ConfigureAwait(false);
+                };
+            },
+            Tokens.Clock
+        );
         var interceptor = Composite(sp);
 
         var (revoked, revokedHttp) = NewSession();
@@ -106,7 +113,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
         refused
             .Accepted.Should()
             .BeFalse("the host's OnTokenValidated refused this token, per " + Adr);
-        revokedHttp.User.Identity?.IsAuthenticated.Should().NotBe(true);
+        revokedHttp.User.Identity?.IsAuthenticated.Should().NotBe(unexpected: true);
 
         var (alice, aliceHttp) = NewSession();
         var accepted = await ConnectAsync(
@@ -116,21 +123,24 @@ public class SocketJwtRunsTheSchemeHandlerTests
         );
         accepted.Accepted.Should().BeTrue();
         aliceHttp
-            .User.FindFirst(TraxAuthClaimTypes.PrincipalId)!
+            .User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
             .Value.Should()
             .Be("TraxJwt:alice");
-        aliceHttp.User.Identity!.AuthenticationType.Should().Be(JwtDefaults.SchemeName);
+        aliceHttp.User.Identity.NotNull().AuthenticationType.Should().Be(JwtDefaults.SchemeName);
     }
 
     [Test]
     public async Task A_host_OnMessageReceived_failure_refuses_the_socket()
     {
-        await using var sp = SymmetricHost(options =>
-            options.Events.OnMessageReceived = context =>
-            {
-                context.Fail("Tokens are not accepted from this client.");
-                return Task.CompletedTask;
-            }
+        await using var sp = SymmetricHost(
+            options =>
+                options.Events.OnMessageReceived = context =>
+                {
+                    context.Fail("Tokens are not accepted from this client.");
+                    return Task.CompletedTask;
+                },
+            Tokens.Clock
         );
 
         var (session, _) = NewSession();
@@ -164,7 +174,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
                                 context.Fail("This user has been revoked.");
                                 return;
                             }
-                            await trax(context);
+                            await trax(context).ConfigureAwait(false);
                         };
                     })
         );
@@ -181,7 +191,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
         (await ConnectAsync(interceptor, alice, Tokens.Mint(b => b.WithSubject("alice"))))
             .Accepted.Should()
             .BeTrue();
-        aliceHttp.User.Identity!.AuthenticationType.Should().Be("Customer");
+        aliceHttp.User.Identity.NotNull().AuthenticationType.Should().Be("Customer");
     }
 
     [Test]
@@ -202,7 +212,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
             await ConnectAsync(
                 interceptor,
                 first,
-                server.CreateIssuer(Audience).Mint(b => b.WithSubject("alice"))
+                server.CreateIssuer(Audience, Tokens.Clock).Mint(b => b.WithSubject("alice"))
             )
         )
             .Accepted.Should()
@@ -214,7 +224,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
         var status = await ConnectAsync(
             interceptor,
             second,
-            server.CreateIssuer(Audience).Mint(b => b.WithSubject("bob"))
+            server.CreateIssuer(Audience, Tokens.Clock).Mint(b => b.WithSubject("bob"))
         );
 
         status
@@ -225,7 +235,7 @@ public class SocketJwtRunsTheSchemeHandlerTests
     [Test]
     public async Task A_session_is_closed_when_its_token_expires()
     {
-        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var time = new ManualTimeProvider(TimeProvider.System.GetUtcNow());
         await using var sp = SymmetricHost(time: time);
         var expires = time.GetUtcNow().AddMinutes(10);
 
@@ -253,7 +263,13 @@ public class SocketJwtRunsTheSchemeHandlerTests
     private static IEnumerable<ConnectionCloseReason> Closes(ISocketSession session) =>
         session
             .Connection.ReceivedCalls()
-            .Where(call => call.GetMethodInfo().Name == nameof(ISocketConnection.CloseAsync))
+            .Where(call =>
+                string.Equals(
+                    call.GetMethodInfo().Name,
+                    nameof(ISocketConnection.CloseAsync),
+                    StringComparison.Ordinal
+                )
+            )
             .Select(call => call.GetArguments()[1])
             .OfType<ConnectionCloseReason>();
 }

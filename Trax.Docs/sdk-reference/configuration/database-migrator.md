@@ -27,6 +27,7 @@ namespace Trax.Effect.Data.Postgres.Utils;
 public static class DatabaseMigrator
 {
     public static Task Migrate(string connectionString);
+    public static Task Migrate(string connectionString, ILogger? logger);
     public static UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString);
 }
 ```
@@ -36,6 +37,7 @@ public static class DatabaseMigrator
 | Member | Description |
 |--------|-------------|
 | `Migrate(connectionString)` | Brings the database to the latest schema version. Throws the failing script's exception when a migration fails. |
+| `Migrate(connectionString, logger)` | The same, and logs each rerun of the pending scripts (warning) and the failure (error) to `logger`. |
 | `CreateEngineWithEmbeddedScripts(connectionString)` | A DbUp `UpgradeEngine` over the embedded scripts, journaling to `trax.migrations` and logging to trace output. It takes no lock and does not pin the time zone. |
 
 ## Behavior

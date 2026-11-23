@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Browser.Factories;
 using Trax.Samples.Recovery.Browser.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
@@ -29,7 +31,7 @@ namespace Trax.Samples.Recovery.Browser.Tests;
     "Trax.Docs/adr/0049-browser-tests-use-playwright-for-dotnet-in-test-projects-only.md"
 )]
 [TestFixture]
-public class TopicMapBrowserTests
+public partial class TopicMapBrowserTests
 {
     private const string Adr = "Trax.Docs/adr/0048";
 
@@ -84,28 +86,7 @@ public class TopicMapBrowserTests
             .Should()
             .Be(PersistedOperationRequired, "an ad-hoc generic mutation is refused like any other");
 
-        // And the schema has no generic mutation to persist a document for: the operator's own registered
-        // document naming one fails validation on the field, not on the transport.
-        var upload = await UploadDocumentAsync(
-            $"browser-generic-{Guid.NewGuid():N}",
-            "mutation { dispatch { stateMachine { __typename } } }"
-        );
-        var refused = JsonDocument
-            .Parse(upload)
-            .RootElement.GetProperty("data")
-            .GetProperty("persistedOperations")
-            .GetProperty("uploadPersistedOperation");
-        refused.GetProperty("success").GetBoolean().Should().BeFalse(upload);
-        var error = refused.GetProperty("errors").EnumerateArray().Single();
-        error.GetProperty("code").GetString().Should().Be("SCHEMA_VALIDATION_FAILED", upload);
-        error
-            .GetProperty("message")
-            .GetString()
-            .Should()
-            .Be(
-                "The field `stateMachine` does not exist on the type `DispatchMutations`.",
-                "the generic mutations are off: nothing exposes them"
-            );
+        await ExpectGenericMutationDocumentRefusedAsync();
     }
 
     [Test]
@@ -125,7 +106,7 @@ public class TopicMapBrowserTests
         await Expect(page.ReviewDeadline)
             .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Server.Ms() });
         var shown = DateTimeOffset.Parse(
-            (await page.ReviewDeadline.GetAttributeAsync("data-due-at"))!,
+            (await page.ReviewDeadline.GetAttributeAsync("data-due-at")).NotNull(),
             System.Globalization.CultureInfo.InvariantCulture
         );
         var held = await DraftRows.DueAtAsync((await DraftAsync(page)).Id);
@@ -133,7 +114,7 @@ public class TopicMapBrowserTests
         shown
             .Should()
             .BeCloseTo(
-                held!.Value,
+                held.NotNull().Value,
                 TimeSpan.FromMilliseconds(1),
                 $"the page shows the due time the server holds, pushed beside the snapshot ({Adr})"
             );
@@ -186,7 +167,7 @@ public class TopicMapBrowserTests
             "start",
             new { requestId = $"viewer-start-{Guid.NewGuid():N}" }
         );
-        var id = started.GetProperty("id").GetString()!;
+        var id = started.GetProperty("id").GetString().NotNull();
         await TypedAsync(
             page,
             ViewerKey,
@@ -246,7 +227,10 @@ public class TopicMapBrowserTests
         );
         var instancePage = new Uri(
             BrowserSetup.HostAddress,
-            $"/trax/dashboard/machines/topic-map/user/{draft.Id}?row={draft.RowId}"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"/trax/dashboard/machines/topic-map/user/{draft.Id}?row={draft.RowId}"
+            )
         ).ToString();
         await OpenTheConsoleAsync(console, instancePage);
         var runs = console.GetByRole(AriaRole.Region, new() { Name = "Invoked runs" });
@@ -258,27 +242,7 @@ public class TopicMapBrowserTests
 
         await BuildAsync(page);
 
-        // Once the build's run has started, both read it: the console loads the page again (the state does not
-        // move when the queued run starts), and GraphQL's operations.machineInstance is asked. The console holds
-        // its key in memory only, so a fresh load asks for it again.
-        (
-            await Polling.WaitUntilAsync(
-                async () => await DraftRows.RunStateAsync(draft.Id) == "in_progress",
-                BrowserTimeouts.Server,
-                TimeSpan.FromMilliseconds(25)
-            )
-        )
-            .Should()
-            .BeTrue("the build's run starts");
-        var reloaded = OpenTheConsoleAsync(console, instancePage);
-        var live = await MachineInstanceAsync(draft);
-        await reloaded;
-        var run = live.GetProperty("invokedRuns").EnumerateArray().Single();
-        run.GetProperty("isLive").GetBoolean().Should().BeTrue("the draft's state waits on it");
-        var runId = run.GetProperty("id").GetInt64();
-        (await DraftRows.LatestRunIdAsync(draft.Id))
-            .Should()
-            .Be(runId, "the run GraphQL lists is the one the build started");
+        var runId = await LiveRunIdAsync(console, instancePage, draft);
 
         await Expect(page.WizardState)
             .ToHaveTextAsync(Built, new() { Timeout = BrowserTimeouts.Server.Ms() });
@@ -288,22 +252,9 @@ public class TopicMapBrowserTests
                 "the console lists the same one live run while the map builds, per " + Adr
             )
             .Which.Should()
-            .EndWith($"/runs/{runId}");
+            .EndWith(string.Create(CultureInfo.InvariantCulture, $"/runs/{runId}"));
 
-        // Built: the typed get, operations.machineInstance and the console agree on the state, and on there
-        // being no live run.
-        var got = await TypedAsync(page, DemoKeysUser, "get", new { id = draft.Id });
-        var revision = await DraftRows.RevisionAsync(draft.Id);
-        got.GetProperty("state").GetString().Should().Be("Built");
-        got.GetProperty("revision").GetInt64().Should().Be(revision);
-        var built = await MachineInstanceAsync(draft);
-        built.GetProperty("state").GetString().Should().Be("Built");
-        built.GetProperty("revision").GetInt64().Should().Be(revision);
-        built
-            .GetProperty("invokedRuns")
-            .GetArrayLength()
-            .Should()
-            .Be(0, "the build's run has ended");
+        await ExpectBuiltWithNoLiveRunAsync(page, draft);
 
         await Expect(state)
             .ToHaveTextAsync("Built", new() { Timeout = BrowserTimeouts.Render.Ms() });
@@ -311,14 +262,106 @@ public class TopicMapBrowserTests
             .ToContainTextAsync("No runs to show", new() { Timeout = BrowserTimeouts.Render.Ms() });
     }
 
+    private static async Task ExpectGenericMutationDocumentRefusedAsync()
+    {
+        // And the schema has no generic mutation to persist a document for: the operator's own registered
+        // document naming one fails validation on the field, not on the transport.
+        var upload = await UploadDocumentAsync(
+                $"browser-generic-{Guid.NewGuid():N}",
+                "mutation { dispatch { stateMachine { __typename } } }"
+            )
+            .ConfigureAwait(false);
+        var refused = JsonDocument
+            .Parse(upload)
+            .RootElement.GetProperty("data")
+            .GetProperty("persistedOperations")
+            .GetProperty("uploadPersistedOperation");
+        refused.GetProperty("success").GetBoolean().Should().BeFalse(upload);
+        var error = refused.GetProperty("errors").EnumerateArray().Single();
+        error.GetProperty("code").GetString().Should().Be("SCHEMA_VALIDATION_FAILED", upload);
+        error
+            .GetProperty("message")
+            .GetString()
+            .Should()
+            .Be(
+                "The field `stateMachine` does not exist on the type `DispatchMutations`.",
+                "the generic mutations are off: nothing exposes them"
+            );
+    }
+
+    // The id of the build's run, once both the console and GraphQL show it live.
+    private static async Task<long> LiveRunIdAsync(
+        IPage console,
+        string instancePage,
+        (Guid Id, long RowId, string State) draft
+    )
+    {
+        // Once the build's run has started, both read it: the console loads the page again (the state does not
+        // move when the queued run starts), and GraphQL's operations.machineInstance is asked. The console holds
+        // its key in memory only, so a fresh load asks for it again.
+        (
+            await Polling
+                .WaitUntilAsync(
+                    async () =>
+                        string.Equals(
+                            await DraftRows.RunStateAsync(draft.Id).ConfigureAwait(false),
+                            "in_progress",
+                            StringComparison.Ordinal
+                        ),
+                    BrowserTimeouts.Server,
+                    TimeSpan.FromMilliseconds(25)
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .BeTrue("the build's run starts");
+        var reloaded = OpenTheConsoleAsync(console, instancePage);
+        var live = await MachineInstanceAsync(draft).ConfigureAwait(false);
+        await reloaded.ConfigureAwait(false);
+        var run = live.GetProperty("invokedRuns").EnumerateArray().Single();
+        run.GetProperty("isLive").GetBoolean().Should().BeTrue("the draft's state waits on it");
+        var runId = run.GetProperty("id").GetInt64();
+        (await DraftRows.LatestRunIdAsync(draft.Id).ConfigureAwait(false))
+            .Should()
+            .Be(runId, "the run GraphQL lists is the one the build started");
+
+        return runId;
+    }
+
+    private static async Task ExpectBuiltWithNoLiveRunAsync(
+        RecoveryPage page,
+        (Guid Id, long RowId, string State) draft
+    )
+    {
+        // Built: the typed get, operations.machineInstance and the console agree on the state, and on there
+        // being no live run.
+        var got = await TypedAsync(page, DemoKeysUser, "get", new { id = draft.Id })
+            .ConfigureAwait(false);
+        var revision = await DraftRows.RevisionAsync(draft.Id).ConfigureAwait(false);
+        got.GetProperty("state").GetString().Should().Be("Built");
+        got.GetProperty("revision").GetInt64().Should().Be(revision);
+        var built = await MachineInstanceAsync(draft).ConfigureAwait(false);
+        built.GetProperty("state").GetString().Should().Be("Built");
+        built.GetProperty("revision").GetInt64().Should().Be(revision);
+        built
+            .GetProperty("invokedRuns")
+            .GetArrayLength()
+            .Should()
+            .Be(0, "the build's run has ended");
+    }
+
     // Loads the operations console at a route and connects with the operator key, which it asks for on every load.
     private static async Task OpenTheConsoleAsync(IPage console, string url)
     {
-        await console.GotoAsync(url);
+        await console.GotoAsync(url).ConfigureAwait(false);
         await console
             .GetByLabel("API key", new() { Exact = true })
-            .FillAsync(DemoKeysOperator, new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await console.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
+            .FillAsync(DemoKeysOperator, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
+        await console
+            .GetByRole(AriaRole.Button, new() { Name = "Connect" })
+            .ClickAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -335,7 +378,7 @@ public class TopicMapBrowserTests
 
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await Expect(page.DraftId).ToHaveTextAsync(shown!);
+        await Expect(page.DraftId).ToHaveTextAsync(shown.NotNull());
         page.RequestsNaming("saveSnapshot")
             .Should()
             .BeEmpty(
@@ -398,7 +441,7 @@ public class TopicMapBrowserTests
         discarded.GetProperty("discarded").GetBoolean().Should().BeTrue();
 
         await Expect(page.DraftId)
-            .Not.ToHaveTextAsync(shown!, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .Not.ToHaveTextAsync(shown.NotNull(), new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
         var started = await DraftAsync(page);
@@ -431,7 +474,7 @@ public class TopicMapBrowserTests
         await page.Page.GetByRole(AriaRole.Button, new() { Name = "Start a new map" }).ClickAsync();
 
         await Expect(page.DraftId)
-            .Not.ToHaveTextAsync(shown!, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .Not.ToHaveTextAsync(shown.NotNull(), new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
         (await DraftRows.ExistsAsync(old.Id))
@@ -470,7 +513,7 @@ public class TopicMapBrowserTests
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.DraftId)
-            .ToHaveTextAsync(shown!, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ToHaveTextAsync(shown.NotNull(), new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(page.Page.Locator(".hint.error")).ToHaveCountAsync(0);
         (await DraftRows.FindAsync(draft.Id.ToString())).State.Should().Be("ChoosingFields");
         (await DraftRows.DueAtAsync(draft.Id))
@@ -492,22 +535,30 @@ public class TopicMapBrowserTests
     public async Task ADeployWithANewIR_ShowsClientOutdated()
     {
         // The page as it was built before a deploy changed the machine: the same code, an older IR hash.
-        var hash = CommittedIrHash();
+        var hash = await CommittedIrHashAsync().ConfigureAwait(false);
         var older = new string(hash.Reverse().ToArray());
-        await using var open = await BrowserSetup.NewPageAsync(
-            replace: (_, js) => js.Replace(hash, older, StringComparison.Ordinal)
-        );
-        var page = open.Recovery;
-        await page.Page.GotoAsync(RecoveryPage.PageOrigin + "/");
-        await RecoveryPage.ShowTheTopicMapAsync(page.Page);
+        var open = await BrowserSetup
+            .NewPageAsync(replace: (_, js) => js.Replace(hash, older, StringComparison.Ordinal))
+            .ConfigureAwait(false);
+        await using (open.ConfigureAwait(false))
+        {
+            var page = open.Recovery;
+            await page.Page.GotoAsync(RecoveryPage.PageOrigin + "/").ConfigureAwait(false);
+            await RecoveryPage.ShowTheTopicMapAsync(page.Page).ConfigureAwait(false);
 
-        await Expect(page.Page.GetByText("CLIENT_OUTDATED"))
-            .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
-        var afterRefusal = page.GraphQLRequests.Count;
-        await Expect(page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }))
-            .Not.ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
-        page.GraphQLRequests.Count.Should()
-            .Be(afterRefusal, $"an outdated client stops and makes no further requests ({Adr})");
+            await Expect(page.Page.GetByText("CLIENT_OUTDATED"))
+                .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+                .ConfigureAwait(false);
+            var afterRefusal = page.GraphQLRequests.Count;
+            await Expect(page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }))
+                .Not.ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() })
+                .ConfigureAwait(false);
+            page.GraphQLRequests.Count.Should()
+                .Be(
+                    afterRefusal,
+                    $"an outdated client stops and makes no further requests ({Adr})"
+                );
+        }
     }
 
     [Test]
@@ -521,7 +572,12 @@ public class TopicMapBrowserTests
         var draft = await DraftAsync(page);
         (
             await Polling.WaitUntilAsync(
-                async () => await DraftRows.RunStateAsync(draft.Id) == "in_progress",
+                async () =>
+                    string.Equals(
+                        await DraftRows.RunStateAsync(draft.Id).ConfigureAwait(false),
+                        "in_progress",
+                        StringComparison.Ordinal
+                    ),
                 BrowserTimeouts.Server,
                 TimeSpan.FromMilliseconds(100)
             )
@@ -552,9 +608,13 @@ public class TopicMapBrowserTests
 
     private static async Task ChooseFieldsAsync(RecoveryPage page)
     {
-        await page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }).ClickAsync();
+        await page
+            .Page.GetByRole(AriaRole.Button, new() { Name = "Next" })
+            .ClickAsync()
+            .ConfigureAwait(false);
         await Expect(page.WizardState)
-            .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() });
+            .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() })
+            .ConfigureAwait(false);
     }
 
     private static async Task BuildAsync(RecoveryPage page)
@@ -566,37 +626,49 @@ public class TopicMapBrowserTests
                 StringComparison.Ordinal
             )
         );
-        await page.Page.GetByRole(AriaRole.Button, new() { Name = "Build the map" }).ClickAsync();
-        await answered;
+        await page
+            .Page.GetByRole(AriaRole.Button, new() { Name = "Build the map" })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await answered.ConfigureAwait(false);
         await Expect(page.WizardState)
             .ToHaveTextAsync(
-                new Regex($"^({Regex.Escape(Building)}|{Built})$"),
+                new Regex(
+                    $"^(?:{Regex.Escape(Building)}|{Built})$",
+                    RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                ),
                 new() { Timeout = BrowserTimeouts.Render.Ms() }
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<(Guid Id, long RowId, string State)> DraftAsync(RecoveryPage page)
     {
-        var shown = (await page.DraftId.TextContentAsync())!;
-        return await DraftRows.FindAsync(shown.Replace("draft", "").Trim());
+        var shown = (await page.DraftId.TextContentAsync().ConfigureAwait(false)).NotNull();
+        return await DraftRows
+            .FindAsync(shown.Replace("draft", "", StringComparison.Ordinal).Trim())
+            .ConfigureAwait(false);
     }
 
     // A request the page's own code would not make, sent from inside the page.
     private static async Task<JsonElement> PostAsync(RecoveryPage page, string key, string query)
     {
-        var body = await page.Page.EvaluateAsync<string>(
-            """
-            async ([url, key, query]) => {
-              const response = await fetch(url, {
-                method: "POST",
-                headers: { "content-type": "application/json", "X-Api-Key": key },
-                body: JSON.stringify({ query }),
-              });
-              return await response.text();
-            }
-            """,
-            new object[] { RecoveryPage.GraphQLUrl, key, query }
-        );
+        var body = await page
+            .Page.EvaluateAsync<string>(
+                """
+                async ([url, key, query]) => {
+                  const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "content-type": "application/json", "X-Api-Key": key },
+                    body: JSON.stringify({ query }),
+                  });
+                  return await response.text();
+                }
+                """,
+                new object[] { RecoveryPage.GraphQLUrl, key, query }
+            )
+            .ConfigureAwait(false);
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
@@ -609,27 +681,33 @@ public class TopicMapBrowserTests
         object variables
     )
     {
-        var body = await page.Page.EvaluateAsync<string>(
-            """
-            async ([url, key, request]) => {
-              const response = await fetch(url, {
-                method: "POST",
-                headers: { "content-type": "application/json", "X-Api-Key": key },
-                body: request,
-              });
-              return await response.text();
-            }
-            """,
-            new object[]
-            {
-                RecoveryPage.GraphQLUrl,
-                key,
-                JsonSerializer.Serialize(
-                    new { id = await DocumentIdAsync(operation), variables },
-                    JsonSerializerOptions.Web
-                ),
-            }
-        );
+        var body = await page
+            .Page.EvaluateAsync<string>(
+                """
+                async ([url, key, request]) => {
+                  const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "content-type": "application/json", "X-Api-Key": key },
+                    body: request,
+                  });
+                  return await response.text();
+                }
+                """,
+                new object[]
+                {
+                    RecoveryPage.GraphQLUrl,
+                    key,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            id = await DocumentIdAsync(operation).ConfigureAwait(false),
+                            variables,
+                        },
+                        JsonSerializerOptions.Web
+                    ),
+                }
+            )
+            .ConfigureAwait(false);
         var response = JsonDocument.Parse(body).RootElement.Clone();
         var field = operation;
         response
@@ -646,9 +724,11 @@ public class TopicMapBrowserTests
     // The id of the topic map's document for an operation, from the committed client manifest the page is built from.
     private static async Task<string> DocumentIdAsync(string operation) =>
         ClientManifest
-            .Read(await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest))
-            .Machines.Single(m => m.Id == "topic-map")
-            .Documents.Single(d => d.Operation == operation)
+            .Read(
+                await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest).ConfigureAwait(false)
+            )
+            .Machines.Single(m => string.Equals(m.Id, "topic-map", StringComparison.Ordinal))
+            .Documents.Single(d => string.Equals(d.Operation, operation, StringComparison.Ordinal))
             .Id;
 
     private static GraphQLClient GraphQLForTest() => new(BrowserSetup.Host.Http);
@@ -679,19 +759,21 @@ public class TopicMapBrowserTests
     )
     {
         const string id = "browser-test-topic-map-instance-v1";
-        var upload = await UploadDocumentAsync(id, MachineInstanceDocument);
+        var upload = await UploadDocumentAsync(id, MachineInstanceDocument).ConfigureAwait(false);
         upload.Should().Contain("\"success\":true", upload);
-        using var response = await BrowserSetup.Host.Http.SendAsync(
-            new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
-            {
-                Content = JsonContent.Create(
-                    new { id, variables = new { id = draft.Id, rowId = draft.RowId } }
-                ),
-                Headers = { { "X-Api-Key", DemoKeysOperator } },
-            }
-        );
+        using var response = await BrowserSetup
+            .Host.Http.SendAsync(
+                new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
+                {
+                    Content = JsonContent.Create(
+                        new { id, variables = new { id = draft.Id, rowId = draft.RowId } }
+                    ),
+                    Headers = { { "X-Api-Key", DemoKeysOperator } },
+                }
+            )
+            .ConfigureAwait(false);
         var root = JsonDocument
-            .Parse(await response.Content.ReadAsStringAsync())
+            .Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))
             .RootElement.Clone();
         root.TryGetProperty("errors", out var errors).Should().BeFalse(errors.ToString());
         return root.GetProperty("data").GetProperty("operations").GetProperty("machineInstance");
@@ -712,21 +794,30 @@ public class TopicMapBrowserTests
                 """,
                 DemoKeysOperator,
                 new { input = new { id, document } }
-            );
+            )
+            .ConfigureAwait(false);
         return response.Root.GetRawText();
     }
 
-    private static string CommittedIrHash()
+    private static async Task<string> CommittedIrHashAsync()
     {
-        var twin = File.ReadAllText(
-            Path.Combine(
-                RecoveryClientBuild.ClientFolder,
-                "src",
-                "trax",
-                "topic-map",
-                "topic-map.machine.g.ts"
+        var twin = await File.ReadAllTextAsync(
+                Path.Combine(
+                    RecoveryClientBuild.ClientFolder,
+                    "src",
+                    "trax",
+                    "topic-map",
+                    "topic-map.machine.g.ts"
+                )
             )
-        );
-        return Regex.Match(twin, "irHash = \"(?<hash>[0-9a-f]{64})\"").Groups["hash"].Value;
+            .ConfigureAwait(false);
+        return IrHash.Match(twin).Groups["hash"].Value;
     }
+
+    [GeneratedRegex(
+        "irHash = \"(?<hash>[0-9a-f]{64})\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IrHash { get; }
 }

@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -40,7 +42,10 @@ public class MaxRetriesBoundaryTests : TestSetup
     {
         var manifest = await CreateManifest(maxRetries);
         for (var i = 0; i < failures; i++)
-            await CreateFailedRun(manifest, DateTime.UtcNow.AddMinutes(-10 - i));
+            await CreateFailedRun(
+                manifest,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10 - i)
+            );
 
         await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
 
@@ -52,17 +57,18 @@ public class MaxRetriesBoundaryTests : TestSetup
             .Should()
             .Be(
                 deadLettered ? 1 : 0,
-                $"MaxRetries({maxRetries}) allows {maxRetries + 1} attempts and {failures} failed. See "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"MaxRetries({maxRetries}) allows {maxRetries + 1} attempts and {failures} failed. See "
+                )
                     + "docs/adr/0014-a-manifests-retries-count-recent-failures-and-a-cancelled-run-consumes-its-occurrence.md"
             );
     }
 
     private async Task<Manifest> CreateManifest(int maxRetries)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -75,8 +81,8 @@ public class MaxRetriesBoundaryTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -86,16 +92,17 @@ public class MaxRetriesBoundaryTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "boundary" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Failed;
         run.StartTime = startTime;
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

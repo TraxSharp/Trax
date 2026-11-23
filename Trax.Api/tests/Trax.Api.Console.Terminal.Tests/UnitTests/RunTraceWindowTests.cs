@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Terminal.Gui.Input;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Screens;
 using Trax.Api.Console.Terminal.Tests.Fakes;
 using Trax.Api.Console.Terminal.Trace;
@@ -75,10 +77,17 @@ public class RunTraceWindowTests
         );
 
         await terminal.Until(
-            () => window.Entries.Any(e => e.Key == "step:2" && e.Text.Contains("FAILED")),
+            () =>
+                window.Entries.Any(e =>
+                    string.Equals(e.Key, "step:2", StringComparison.Ordinal)
+                    && e.Text.Contains("FAILED", StringComparison.Ordinal)
+                ),
             "the step's line shows it failed"
         );
-        window.Entries.Count(e => e.Key == "step:2").Should().Be(1);
+        window
+            .Entries.Count(e => string.Equals(e.Key, "step:2", StringComparison.Ordinal))
+            .Should()
+            .Be(1);
     }
 
     [Test]
@@ -96,7 +105,7 @@ public class RunTraceWindowTests
         await terminal.Press(Key.CursorDown);
         await terminal.Press(Key.O);
 
-        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
         window
             .CodeToOpen.Should()
             .Be("ChargeCard", "o closes the trace naming the step's junction");
@@ -125,7 +134,7 @@ public class RunTraceWindowTests
 
         await terminal.Until(() => window.Entries.Count == 4, "the trace is read");
         window
-            .Entries.Single(e => e.Key == "step:2")
+            .Entries.Single(e => string.Equals(e.Key, "step:2", StringComparison.Ordinal))
             .Text.Should()
             .Contain(
                 "FAILED",
@@ -168,7 +177,10 @@ public class RunTraceWindowTests
         await terminal.OnUi(() => { });
 
         window.Entries.Should().HaveCount(4);
-        window.Entries.Single(e => e.Key == "step:2").Text.Should().Contain("FAILED");
+        window
+            .Entries.Single(e => string.Equals(e.Key, "step:2", StringComparison.Ordinal))
+            .Text.Should()
+            .Contain("FAILED");
     }
 
     [Test]
@@ -183,7 +195,7 @@ public class RunTraceWindowTests
                         {
                             ["position"] = i,
                             ["kind"] = "JUNCTION",
-                            ["name"] = $"Step{i}",
+                            ["name"] = string.Create(CultureInfo.InvariantCulture, $"Step{i}"),
                             ["state"] = "COMPLETED",
                             ["startedAt"] = "2026-10-22T10:00:00Z",
                             ["durationMs"] = 1,
@@ -247,18 +259,19 @@ public class RunTraceWindowTests
 
         await terminal.Press(Key.Q);
 
-        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
-        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System);
         window.Entries.Should().BeEmpty();
     }
 
     private static string Failed(int sequence) =>
         """{"onJunctionEvent":{"metadataId":4812,"eventType":"JUNCTION_FAILED","timestamp":"2026-10-22T10:00:03Z","sequence":SEQ,"junction":{"position":2,"kind":"JUNCTION","name":"ChargeCard","state":"FAILED","startedAt":"2026-10-22T10:00:02Z","durationMs":1200,"failureException":"card_declined","replayed":false,"answerWithheld":false,"nameWithheld":false}}}""".Replace(
             "SEQ",
-            sequence.ToString()
+            sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            StringComparison.Ordinal
         );
 
-    private static JsonObject Parse(string data) => JsonNode.Parse(data)!.AsObject();
+    private static JsonObject Parse(string data) => JsonNode.Parse(data).NotNull().AsObject();
 
     private static Task<(TerminalHarness, RunTraceWindow)> Open(FakeHost host) =>
         TerminalHarness.StartAsync(app => new RunTraceWindow(

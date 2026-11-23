@@ -1,5 +1,7 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -20,7 +22,7 @@ public class ExcludedOutputHookCopyTests
 {
     private const int Ceiling = 1024;
     private static readonly OutputRecordingHook Hook = new();
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -45,12 +47,17 @@ public class ExcludedOutputHookCopyTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task An_excluded_output_is_not_serialized_in_full_for_the_hooks()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IBigFetchTrain>();
 
         await train.Run(Unit.Default);
@@ -82,13 +89,16 @@ public class ExcludedOutputHookCopyTests
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class BigFetchTrain : ServiceTrain<Unit, List<string>>, IBigFetchTrain
+    private sealed class BigFetchTrain : ServiceTrain<Unit, List<string>>, IBigFetchTrain
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
-                Enumerable.Range(0, 10_000).Select(i => $"row-{i}").ToList()
+                Enumerable
+                    .Range(0, 10_000)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"row-{i}"))
+                    .ToList()
             );
     }
 
-    public interface IBigFetchTrain : IServiceTrain<Unit, List<string>> { }
+    public interface IBigFetchTrain : IServiceTrain<Unit, List<string>>;
 }

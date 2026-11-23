@@ -4,7 +4,7 @@ namespace Trax.Mediator.Services.TrustedExecution;
 /// Marks the current async flow as trusted infrastructure, which switches off train
 /// authorization for every train run or queued on that flow until the scope is disposed.
 /// Resolve it from DI (<c>AddMediator</c> registers it as a singleton) and open it with
-/// <see cref="BeginTrusted"/> in a <c>using</c>.
+/// <see cref="BeginTrusted"/> in a <see langword="using"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -39,7 +39,7 @@ namespace Trax.Mediator.Services.TrustedExecution;
 /// </para>
 /// <para>
 /// <strong>How far it reaches.</strong> The state lives in a static <c>AsyncLocal</c>, so it is
-/// shared by every instance in the process (not per container), follows <c>await</c>, and does
+/// shared by every instance in the process (not per container), follows <see langword="await"/>, and does
 /// not reach unrelated requests. Await what you start inside a scope, and dispose the handle on the
 /// flow that opened it.
 /// </para>
@@ -62,7 +62,7 @@ public interface ITrustedExecutionScope
     bool IsTrusted { get; }
 
     /// <summary>
-    /// The reason passed to the innermost active <see cref="BeginTrusted"/> call, or <c>null</c>
+    /// The reason passed to the innermost active <see cref="BeginTrusted"/> call, or <see langword="null"/>
     /// when no scope is active. For logs only: never use it to decide whether to trust.
     /// </summary>
     string? CurrentReason { get; }

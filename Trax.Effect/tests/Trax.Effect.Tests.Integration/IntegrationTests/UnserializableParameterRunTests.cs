@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Enums;
@@ -18,7 +19,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// </summary>
 public class UnserializableParameterRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -38,17 +39,22 @@ public class UnserializableParameterRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task An_output_with_a_throwing_getter_completes_with_the_placeholder()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IThrowingGetterOutputTrain>();
 
         await train.Run(Unit.Default);
 
-        var metadata = ((ServiceTrain<Unit, ThrowingGetter>)train).Metadata!;
+        var metadata = ((ServiceTrain<Unit, ThrowingGetter>)train).Metadata.NotNull();
         metadata.TrainState.Should().Be(TrainState.Completed);
         metadata.Output.Should().Contain("_unserializable");
     }
@@ -56,12 +62,13 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_output_with_colliding_property_names_completes_with_the_placeholder()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICollidingNamesOutputTrain>();
 
         await train.Run(Unit.Default);
 
-        var metadata = ((ServiceTrain<Unit, CollidingNames>)train).Metadata!;
+        var metadata = ((ServiceTrain<Unit, CollidingNames>)train).Metadata.NotNull();
         metadata.TrainState.Should().Be(TrainState.Completed);
         metadata.Output.Should().Contain("_unserializable");
     }
@@ -69,19 +76,23 @@ public class UnserializableParameterRunTests
     [Test]
     public async Task An_input_with_a_throwing_getter_completes_with_the_placeholder()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IThrowingGetterInputTrain>();
 
         await train.Run(new ThrowingGetter());
 
-        var metadata = ((ServiceTrain<ThrowingGetter, Unit>)train).Metadata!;
+        var metadata = ((ServiceTrain<ThrowingGetter, Unit>)train).Metadata.NotNull();
         metadata.TrainState.Should().Be(TrainState.Completed);
         metadata.Input.Should().Contain("_unserializable");
     }
 
     public sealed class ThrowingGetter
     {
-        public string Broken => throw new InvalidOperationException("getter failed");
+        // An instance property, so the serializer reads it and the getter throws there.
+        private readonly string _failure = "getter failed";
+
+        public string Broken => throw new InvalidOperationException(_failure);
     }
 
     public sealed class CollidingNames
@@ -93,9 +104,9 @@ public class UnserializableParameterRunTests
         public int Second { get; set; } = 2;
     }
 
-    public interface IThrowingGetterOutputTrain : IServiceTrain<Unit, ThrowingGetter> { }
+    public interface IThrowingGetterOutputTrain : IServiceTrain<Unit, ThrowingGetter>;
 
-    private class ThrowingGetterOutputTrain
+    private sealed class ThrowingGetterOutputTrain
         : ServiceTrain<Unit, ThrowingGetter>,
             IThrowingGetterOutputTrain
     {
@@ -103,9 +114,9 @@ public class UnserializableParameterRunTests
             Task.FromResult<Either<Exception, ThrowingGetter>>(new ThrowingGetter());
     }
 
-    public interface ICollidingNamesOutputTrain : IServiceTrain<Unit, CollidingNames> { }
+    public interface ICollidingNamesOutputTrain : IServiceTrain<Unit, CollidingNames>;
 
-    private class CollidingNamesOutputTrain
+    private sealed class CollidingNamesOutputTrain
         : ServiceTrain<Unit, CollidingNames>,
             ICollidingNamesOutputTrain
     {
@@ -113,9 +124,9 @@ public class UnserializableParameterRunTests
             Task.FromResult<Either<Exception, CollidingNames>>(new CollidingNames());
     }
 
-    public interface IThrowingGetterInputTrain : IServiceTrain<ThrowingGetter, Unit> { }
+    public interface IThrowingGetterInputTrain : IServiceTrain<ThrowingGetter, Unit>;
 
-    private class ThrowingGetterInputTrain
+    private sealed class ThrowingGetterInputTrain
         : ServiceTrain<ThrowingGetter, Unit>,
             IThrowingGetterInputTrain
     {

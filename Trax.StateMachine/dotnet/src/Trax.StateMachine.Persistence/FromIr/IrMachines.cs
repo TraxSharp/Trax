@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.StateMachine.Features;
 
@@ -54,33 +56,7 @@ internal static class IrMachines
         string Refuse(string problem) =>
             $"The machine '{id}' cannot be served from its IR: {problem}";
 
-        // Read once by the engine, which refuses an IR it cannot read; then held to what a served machine can be.
-        try
-        {
-            _ = new IrMachine(ir);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new InvalidOperationException(Refuse(ex.Message), ex);
-        }
-        if (ir["id"]!.GetValue<string>() != id)
-            throw new InvalidOperationException(
-                Refuse($"the IR's id is '{ir["id"]}', and the host file's entry is '{id}'.")
-            );
-        foreach (var problem in Unservable(ir))
-            throw new InvalidOperationException(Refuse(problem));
-
-        // The host entry was derived from this IR, by its hash, not a hash of the file's bytes: the canonical IR's,
-        // which the store writes to every instance's ir_hash.
-        var canonical = CanonicalJson.Serialize(Canonicalizable(ir));
-        var hash = Hash(canonical);
-        if (host.SchemaHash != hash)
-            throw new InvalidOperationException(
-                Refuse(
-                    $"the host file's entry was derived from the IR {host.SchemaHash}, and this IR is {hash}. "
-                        + "Derive them again together."
-                )
-            );
+        var canonical = CheckServable(ir, host, Refuse);
 
         foreach (var problem in MachineFiles.HandlerProblems(host, ir))
             throw new InvalidOperationException(Refuse(problem));
@@ -108,33 +84,17 @@ internal static class IrMachines
         var replay = new IrReplay(ir, host, types, trains, corpus) { Handlers = handlers };
         var kind = host.IsSystem ? typeof(SystemIrMachine<,>) : typeof(ServedIrMachine<,>);
         var machine = (IMachine)
-            Activator.CreateInstance(
-                kind.MakeGenericType(types.State, types.Trigger),
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                binder: null,
-                args: [replay],
-                culture: null
-            )!;
-
-        // Built here, so a refusal names the machine at registration rather than at its first request.
-        string exported;
-        try
-        {
-            exported = machine.ExportIr();
-        }
-        catch (Exception ex)
-            when (ex is InvalidOperationException or ArgumentException or TargetInvocationException)
-        {
-            var cause = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
-            throw new InvalidOperationException(Refuse(cause.Message), cause);
-        }
-        if (exported != canonical)
-            throw new InvalidOperationException(
-                Refuse(
-                    "the machine built from it exports a different IR, so the server would not run what the file and "
-                        + $"every client generated from it say. First difference: {FirstDifference(canonical, exported)}."
+            Activator
+                .CreateInstance(
+                    kind.MakeGenericType(types.State, types.Trigger),
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    binder: null,
+                    args: [replay],
+                    culture: null
                 )
-            );
+                .NotNull();
+
+        CheckExport(machine, canonical, Refuse);
         return machine;
     }
 
@@ -173,11 +133,79 @@ internal static class IrMachines
     private static IEnumerable<string> Unservable(JsonObject ir)
     {
         foreach (var (name, outcome) in ir["outcomes"] as JsonObject ?? [])
-            if (outcome!["outcome"]!.GetValue<string>() != "done")
-                foreach (var edge in outcome["edges"]!.AsArray())
-                    if (edge!["guard"] is not null)
+            if (
+                !string.Equals(
+                    outcome.NotNull()["outcome"].NotNull().GetValue<string>(),
+                    "done",
+                    StringComparison.Ordinal
+                )
+            )
+                foreach (var edge in outcome["edges"].NotNull().AsArray())
+                    if (edge.NotNull()["guard"] is not null)
                         yield return $"the outcome {name} has a guarded edge, and only a done outcome's edges take "
                             + "a guard.";
+    }
+
+    // Refuses an IR the engine cannot read, one a served machine cannot be, or one the host entry was not derived
+    // from; answers the canonical IR.
+    private static string CheckServable(
+        JsonObject ir,
+        HostMachine host,
+        Func<string, string> refuse
+    )
+    {
+        var id = host.Id;
+        // Read once by the engine, which refuses an IR it cannot read; then held to what a served machine can be.
+        try
+        {
+            _ = new IrMachine(ir);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(refuse(ex.Message), ex);
+        }
+        if (!string.Equals(ir["id"].NotNull().GetValue<string>(), id, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                refuse($"the IR's id is '{ir["id"]}', and the host file's entry is '{id}'.")
+            );
+        foreach (var problem in Unservable(ir))
+            throw new InvalidOperationException(refuse(problem));
+
+        // The host entry was derived from this IR, by its hash, not a hash of the file's bytes: the canonical IR's,
+        // which the store writes to every instance's ir_hash.
+        var canonical = CanonicalJson.Serialize(Canonicalizable(ir));
+        var hash = Hash(canonical);
+        if (!string.Equals(host.SchemaHash, hash, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                refuse(
+                    $"the host file's entry was derived from the IR {host.SchemaHash}, and this IR is {hash}. "
+                        + "Derive them again together."
+                )
+            );
+        return canonical;
+    }
+
+    private static void CheckExport(IMachine machine, string canonical, Func<string, string> refuse)
+    {
+        // Built here, so a refusal names the machine at registration rather than at its first request.
+        string exported;
+        try
+        {
+            exported = machine.ExportIr();
+        }
+        catch (Exception ex)
+            when (ex is InvalidOperationException or ArgumentException or TargetInvocationException)
+        {
+            var cause = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            throw new InvalidOperationException(refuse(cause.Message), cause);
+        }
+        if (!string.Equals(exported, canonical, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                refuse(
+                    "the machine built from it exports a different IR, so the server would not run what the file and "
+                        + $"every client generated from it say. First difference: {FirstDifference(canonical, exported)}."
+                )
+            );
     }
 
     // The C# behind each effect, custom rule, custom reduction and migration the host entry names, each found by its full
@@ -190,48 +218,10 @@ internal static class IrMachines
         Func<string, string> refuse
     )
     {
-        Type Find(string name, string what)
-        {
-            var found = assemblies
-                .Select(a => a.GetType(name, throwOnError: false))
-                .OfType<Type>()
-                .Distinct()
-                .ToList();
-            return found.Count == 1
-                ? found[0]
-                : throw new InvalidOperationException(
-                    refuse(
-                        found.Count == 0
-                            ? $"{what} is {name}, which none of the assemblies given holds."
-                            : $"{what} is {name}, which more than one assembly given holds."
-                    )
-                );
-        }
-
-        T Create<T>(string name, string what)
-            where T : class
-        {
-            var type = Find(name, what);
-            if (
-                !typeof(T).IsAssignableFrom(type)
-                || type.IsAbstract
-                || type.IsInterface
-                || type.ContainsGenericParameters
-                || type.GetConstructor(Type.EmptyTypes) is null
-            )
-                throw new InvalidOperationException(
-                    refuse(
-                        $"{what} is {name}, which is not a class implementing {typeof(T).Name} with a public "
-                            + "parameterless constructor."
-                    )
-                );
-            return (T)Activator.CreateInstance(type)!;
-        }
-
         var effects = new Dictionary<string, Type>(StringComparer.Ordinal);
         foreach (var (trigger, name) in host.Effects)
         {
-            var type = Find(name, $"the effect {trigger} runs");
+            var type = FindHandler(assemblies, refuse, name, $"the effect {trigger} runs");
             if (!type.IsInterface || !typeof(ISnapshotEffect).IsAssignableFrom(type))
                 throw new InvalidOperationException(
                     refuse(
@@ -244,19 +234,88 @@ internal static class IrMachines
             effects,
             host.Rules.ToDictionary(
                 kv => kv.Key,
-                kv => Create<ICustomRule>(kv.Value, $"the custom rule '{kv.Key}'"),
+                kv =>
+                    CreateHandler<ICustomRule>(
+                        assemblies,
+                        refuse,
+                        kv.Value,
+                        $"the custom rule '{kv.Key}'"
+                    ),
                 StringComparer.Ordinal
             ),
             host.Reductions.ToDictionary(
                 kv => kv.Key,
-                kv => Create<ICustomReduction>(kv.Value, $"the custom reduction '{kv.Key}'"),
+                kv =>
+                    CreateHandler<ICustomReduction>(
+                        assemblies,
+                        refuse,
+                        kv.Value,
+                        $"the custom reduction '{kv.Key}'"
+                    ),
                 StringComparer.Ordinal
             ),
             host.Migrations.ToDictionary(
                 kv => kv.Key,
-                kv => Create<IMachineMigration>(kv.Value, $"the migration from version {kv.Key}")
+                kv =>
+                    CreateHandler<IMachineMigration>(
+                        assemblies,
+                        refuse,
+                        kv.Value,
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"the migration from version {kv.Key}"
+                        )
+                    )
             )
         );
+    }
+
+    private static Type FindHandler(
+        IReadOnlyCollection<Assembly> assemblies,
+        Func<string, string> refuse,
+        string name,
+        string what
+    )
+    {
+        var found = assemblies
+            .Select(a => a.GetType(name, throwOnError: false))
+            .OfType<Type>()
+            .Distinct()
+            .ToList();
+        return found.Count == 1
+            ? found[0]
+            : throw new InvalidOperationException(
+                refuse(
+                    found.Count == 0
+                        ? $"{what} is {name}, which none of the assemblies given holds."
+                        : $"{what} is {name}, which more than one assembly given holds."
+                )
+            );
+    }
+
+    private static T CreateHandler<T>(
+        IReadOnlyCollection<Assembly> assemblies,
+        Func<string, string> refuse,
+        string name,
+        string what
+    )
+        where T : class
+    {
+        var type = FindHandler(assemblies, refuse, name, what);
+        if (
+            !typeof(T).IsAssignableFrom(type)
+            || type.IsAbstract
+            || type.IsInterface
+            || type.ContainsGenericParameters
+            || type.GetConstructor(Type.EmptyTypes) is null
+        )
+            throw new InvalidOperationException(
+                refuse(
+                    $"{what} is {name}, which is not a class implementing {typeof(T).Name} with a public "
+                        + "parameterless constructor."
+                )
+            );
+        return (T)Activator.CreateInstance(type).NotNull();
     }
 
     // The train each invoking state runs: named by the host file, found by its full name in the assemblies given, and an
@@ -269,7 +328,7 @@ internal static class IrMachines
     )
     {
         var invoking = (ir["outcomes"] as JsonObject ?? [])
-            .Select(o => o.Value!["state"]!.GetValue<string>())
+            .Select(o => o.Value.NotNull()["state"].NotNull().GetValue<string>())
             .ToHashSet(StringComparer.Ordinal);
         foreach (var state in host.Invokes.Keys)
             if (!invoking.Contains(state))
@@ -327,16 +386,22 @@ internal static class IrMachines
     )
     {
         foreach (
-            var outcome in (ir["outcomes"] as JsonObject ?? []).Select(o => o.Value!.AsObject())
+            var outcome in (ir["outcomes"] as JsonObject ?? []).Select(o =>
+                o.Value.NotNull().AsObject()
+            )
         )
         {
             if (
-                outcome["outcome"]!.GetValue<string>() != "done"
+                !string.Equals(
+                    outcome["outcome"].NotNull().GetValue<string>(),
+                    "done",
+                    StringComparison.Ordinal
+                )
                 || outcome["output"] is not JsonObject declared
-                || !trains.TryGetValue(outcome["state"]!.GetValue<string>(), out var train)
+                || !trains.TryGetValue(outcome["state"].NotNull().GetValue<string>(), out var train)
             )
                 continue;
-            var state = outcome["state"]!.GetValue<string>();
+            var state = outcome["state"].NotNull().GetValue<string>();
             var output = TrainTypes(train).Output;
             JsonObject reflected;
             try
@@ -374,7 +439,7 @@ internal static class IrMachines
         static Dictionary<string, JsonObject> ByName(JsonArray? fields) =>
             (fields ?? [])
                 .OfType<JsonObject>()
-                .ToDictionary(f => f["name"]!.GetValue<string>(), StringComparer.Ordinal);
+                .ToDictionary(f => f["name"].NotNull().GetValue<string>(), StringComparer.Ordinal);
         var file = ByName(declared);
         var train = ByName(reflected);
         foreach (var (name, field) in train.Where(f => !file.ContainsKey(f.Key)))
@@ -399,8 +464,8 @@ internal static class IrMachines
         foreach (
             var key in declared
                 .Select(kv => kv.Key)
-                .Union(reflected.Select(kv => kv.Key))
-                .Where(k => k != "name")
+                .Union(reflected.Select(kv => kv.Key), StringComparer.Ordinal)
+                .Where(k => !string.Equals(k, "name", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal)
         )
         {
@@ -410,15 +475,20 @@ internal static class IrMachines
             var needs = reflected.ContainsKey(key);
             if (has && needs && nested.Contains(key))
             {
-                if (key == "fields")
+                if (string.Equals(key, "fields", StringComparison.Ordinal))
                     CompareFields(file as JsonArray, train as JsonArray, path, differences);
                 else
-                    CompareShape(file!.AsObject(), train!.AsObject(), $"{path}.{key}", differences);
+                    CompareShape(
+                        file.NotNull().AsObject(),
+                        train.NotNull().AsObject(),
+                        $"{path}.{key}",
+                        differences
+                    );
                 continue;
             }
             var written = has ? CanonicalJson.Serialize(file) : null;
             var wanted = needs ? CanonicalJson.Serialize(train) : null;
-            if (written == wanted)
+            if (string.Equals(written, wanted, StringComparison.Ordinal))
                 continue;
             differences.Add(
                 !has ? $"{path} has no \"{key}\"; write \"{key}\": {wanted}"
@@ -439,14 +509,14 @@ internal static class IrMachines
     }
 
     private static List<string> Names(JsonNode? node) =>
-        node!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+        node.NotNull().AsArray().Select(n => n.NotNull().GetValue<string>()).ToList();
 
     private static Dictionary<string, ContextSchema> Schemas(JsonNode? node) =>
-        node!
+        node.NotNull()
             .AsObject()
             .ToDictionary(
                 kv => kv.Key,
-                kv => IrMachine.ReadSchema(kv.Value!.AsObject()),
+                kv => IrMachine.ReadSchema(kv.Value.NotNull().AsObject()),
                 StringComparer.Ordinal
             );
 

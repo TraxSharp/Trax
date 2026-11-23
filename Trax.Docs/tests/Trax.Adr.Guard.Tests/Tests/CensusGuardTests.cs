@@ -10,9 +10,9 @@ public class CensusGuardTests
 {
     private const string CensusRoot = "tests/Some.Tests.Meta";
 
-    private static GuardResult Run(TempAdrRepo repo) =>
+    private static async Task<GuardResult> RunAsync(TempAdrRepo repo) =>
         CensusGuards.EveryGuardIsClassified(
-            AdrCorpus.Discover(repo.Options()),
+            (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
             repo.Options(censusRoot: CensusRoot)
         );
 
@@ -43,7 +43,8 @@ public class CensusGuardTests
     /// <summary>The plain guard, carrying the attribute that answers the sample ADR's claim.</summary>
     private static readonly string ClaimedGuard = PlainGuard.Replace(
         "[TestFixture]",
-        $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n[TestFixture]"
+        $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n[TestFixture]",
+        StringComparison.Ordinal
     );
 
     private static string GuardOptingOut(string reason) =>
@@ -64,12 +65,12 @@ public class CensusGuardTests
             """;
 
     [Test]
-    public void Census_WhenDisabled_RunsNothing()
+    public async Task Census_WhenDisabled_RunsNothing()
     {
         using var repo = TempAdrRepo.Valid();
 
         var result = CensusGuards.EveryGuardIsClassified(
-            AdrCorpus.Discover(repo.Options()),
+            (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
             repo.Options()
         );
 
@@ -78,12 +79,12 @@ public class CensusGuardTests
     }
 
     [Test]
-    public void Census_EmptyRoot_IsDisabled_NotPointedAtTheWholeRepository()
+    public async Task Census_EmptyRoot_IsDisabled_NotPointedAtTheWholeRepository()
     {
         using var repo = WithGuardSource("MigrationsIntegrityTests.cs", PlainGuard);
 
         var result = CensusGuards.EveryGuardIsClassified(
-            AdrCorpus.Discover(repo.Options()),
+            (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
             repo.Options(censusRoot: "")
         );
 
@@ -94,7 +95,7 @@ public class CensusGuardTests
     }
 
     [Test]
-    public void Census_GuardNamedByAnAdr_IsClassified()
+    public async Task Census_GuardNamedByAnAdr_IsClassified()
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
@@ -102,7 +103,7 @@ public class CensusGuardTests
             exemplars: "- `MigrationsIntegrityTests` pins the numbering."
         );
 
-        Run(repo).Passed.Should().BeTrue();
+        (await RunAsync(repo).ConfigureAwait(false)).Passed.Should().BeTrue();
     }
 
     /// <summary>
@@ -110,7 +111,7 @@ public class CensusGuardTests
     /// that only shares the claimed name is not credited by it.
     /// </summary>
     [Test]
-    public void Census_GuardNamedByAnAdrButNotClaimingItBack_IsNotCreditedByTheName()
+    public async Task Census_GuardNamedByAnAdrButNotClaimingItBack_IsNotCreditedByTheName()
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
@@ -118,7 +119,7 @@ public class CensusGuardTests
             exemplars: "- `MigrationsIntegrityTests` pins the numbering."
         );
 
-        Run(repo)
+        (await RunAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -126,11 +127,11 @@ public class CensusGuardTests
     }
 
     [Test]
-    public void Census_GuardNamedByNoAdrAndNotOptingOut_Fails()
+    public async Task Census_GuardNamedByNoAdrAndNotOptingOut_Fails()
     {
         using var repo = WithGuardSource("MigrationsIntegrityTests.cs", PlainGuard);
 
-        Run(repo)
+        (await RunAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -138,52 +139,61 @@ public class CensusGuardTests
     }
 
     [Test]
-    public void Census_GuardOptingOutWithARealReason_IsClassified()
+    public async Task Census_GuardOptingOutWithARealReason_IsClassified()
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
             GuardOptingOut("it pins a file naming convention nobody weighed an alternative for.")
         );
 
-        Run(repo).Passed.Should().BeTrue();
+        (await RunAsync(repo).ConfigureAwait(false)).Passed.Should().BeTrue();
     }
 
     [Test]
-    public void Census_GuardOptingOutWithADeferral_Fails()
+    public async Task Census_GuardOptingOutWithADeferral_Fails()
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
             GuardOptingOut("we have not recorded the decision yet, but somebody really should.")
         );
 
-        Run(repo).Offenders.Should().ContainSingle().Which.Should().Contain("reads as a deferral");
+        (await RunAsync(repo).ConfigureAwait(false))
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("reads as a deferral");
     }
 
     [Test]
-    public void Census_GuardBothNamedAndOptingOut_Fails_BecauseItIsAContradiction()
+    public async Task Census_GuardBothNamedAndOptingOut_Fails_BecauseItIsAContradiction()
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
             GuardOptingOut("it pins a file naming convention nobody weighed an alternative for.")
                 .Replace(
                     "[TestFixture]",
-                    $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n[TestFixture]"
+                    $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n[TestFixture]",
+                    StringComparison.Ordinal
                 ),
             exemplars: "- `MigrationsIntegrityTests` pins the numbering."
         );
 
-        Run(repo).Offenders.Should().ContainSingle().Which.Should().Contain("AND declares");
+        (await RunAsync(repo).ConfigureAwait(false))
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("AND declares");
     }
 
     [Test]
-    public void Census_HelperWithoutATestsSuffix_IsNotCounted()
+    public async Task Census_HelperWithoutATestsSuffix_IsNotCounted()
     {
         using var repo = WithGuardSource(
             "RepoRoot.cs",
             "namespace Some.Tests.Meta;\n\ninternal static class RepoRoot { }\n"
         );
 
-        var result = Run(repo);
+        var result = await RunAsync(repo).ConfigureAwait(false);
 
         result.Offenders.Should().BeEmpty("helpers are not guards");
         result.Inspected.Should().Be(0);
@@ -197,7 +207,7 @@ public class CensusGuardTests
     /// force a false "not ADR-enforcing" opt-out on every one of them.
     /// </summary>
     [Test]
-    public void Census_GuardCitingACentralAdr_IsClassified()
+    public async Task Census_GuardCitingACentralAdr_IsClassified()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -212,11 +222,11 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("CrossRepoPackageReferenceTests.cs", source);
 
-        Run(repo).Passed.Should().BeTrue();
+        (await RunAsync(repo).ConfigureAwait(false)).Passed.Should().BeTrue();
     }
 
     [Test]
-    public void Census_GuardCitingALocalAdr_IsAlsoClassified()
+    public async Task Census_GuardCitingALocalAdr_IsAlsoClassified()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -231,7 +241,7 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("MigrationsIntegrityTests.cs", source);
 
-        Run(repo).Passed.Should().BeTrue();
+        (await RunAsync(repo).ConfigureAwait(false)).Passed.Should().BeTrue();
     }
 
     /// <summary>
@@ -240,7 +250,7 @@ public class CensusGuardTests
     /// can read.
     /// </summary>
     [Test]
-    public void Census_GuardCitingALocalAdrThatDoesNotExist_IsUnclassified()
+    public async Task Census_GuardCitingALocalAdrThatDoesNotExist_IsUnclassified()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -255,7 +265,7 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("MigrationsIntegrityTests.cs", source);
 
-        Run(repo)
+        (await RunAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -267,7 +277,7 @@ public class CensusGuardTests
     /// there; only a consumer repo, which cannot see that corpus, takes it as written.
     /// </summary>
     [Test]
-    public void Census_CentralCitationOfAMissingAdr_IsUnclassifiedInTheCentralCorpus()
+    public async Task Census_CentralCitationOfAMissingAdr_IsUnclassifiedInTheCentralCorpus()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -281,7 +291,7 @@ public class CensusGuardTests
 
         CensusGuards
             .EveryGuardIsClassified(
-                AdrCorpus.Discover(repo.Options()),
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
                 repo.Options(censusRoot: CensusRoot, requireReposKey: true)
             )
             .Offenders.Should()
@@ -291,7 +301,7 @@ public class CensusGuardTests
     }
 
     [Test]
-    public void Census_GuardMentioningAdrsWithoutCitingOne_IsStillUnclassified()
+    public async Task Census_GuardMentioningAdrsWithoutCitingOne_IsStillUnclassified()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -304,7 +314,7 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("VagueTests.cs", source);
 
-        Run(repo)
+        (await RunAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -320,7 +330,7 @@ public class CensusGuardTests
     /// asked whether it was credited to anything.
     /// </summary>
     [Test]
-    public void Census_SecondClassInTheSameFile_IsAlsoAsked()
+    public async Task Census_SecondClassInTheSameFile_IsAlsoAsked()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -338,7 +348,7 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("TwoGuards.cs", source);
 
-        Run(repo)
+        (await RunAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -350,7 +360,7 @@ public class CensusGuardTests
     /// of a guard class was credited with the template's placeholder text as its reason.
     /// </summary>
     [Test]
-    public void Census_MarkerInsideARawStringLiteral_IsNotALiveOptOut()
+    public async Task Census_MarkerInsideARawStringLiteral_IsNotALiveOptOut()
     {
         var quote = new string('"', 3);
         var source =
@@ -364,7 +374,7 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("Fixture.cs", source);
 
-        var offenders = Run(repo).Offenders;
+        var offenders = (await RunAsync(repo).ConfigureAwait(false)).Offenders;
 
         offenders
             .Should()
@@ -380,7 +390,7 @@ public class CensusGuardTests
     }
 
     [Test]
-    public void Census_OptOutBelongingToAnotherClass_DoesNotCreditThisOne()
+    public async Task Census_OptOutBelongingToAnotherClass_DoesNotCreditThisOne()
     {
         const string source = """
             namespace Some.Tests.Meta;
@@ -397,7 +407,7 @@ public class CensusGuardTests
 
         using var repo = WithGuardSource("Neighbours.cs", source);
 
-        Run(repo)
+        (await RunAsync(repo).ConfigureAwait(false))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -407,13 +417,13 @@ public class CensusGuardTests
     #endregion
 
     [Test]
-    public void Census_MissingRoot_Fails_RatherThanPassingOverNothing()
+    public async Task Census_MissingRoot_Fails_RatherThanPassingOverNothing()
     {
         using var repo = TempAdrRepo.Valid();
 
         CensusGuards
             .EveryGuardIsClassified(
-                AdrCorpus.Discover(repo.Options()),
+                (await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false)),
                 repo.Options(censusRoot: "tests/DoesNotExist")
             )
             .Offenders.Should()

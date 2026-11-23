@@ -18,7 +18,7 @@ public class JunctionTests : TestSetup
         var result = await junction.Run(1);
 
         // Assert
-        result.Should().Be(input.ToString());
+        result.Should().Be(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Theory]
@@ -29,7 +29,9 @@ public class JunctionTests : TestSetup
         var junction = new TestExceptionJunction();
 
         // Act
-        await Assert.ThrowsAsync<NotImplementedException>(async () => await junction.Run(input));
+        await Assert.ThrowsAsync<NotImplementedException>(async () =>
+            await junction.Run(input).ConfigureAwait(false)
+        );
     }
 
     [Theory]
@@ -44,7 +46,10 @@ public class JunctionTests : TestSetup
 
         // Assert
         result.IsRight.Should().BeTrue();
-        result.ValueUnsafe().Should().Be(input.ToString());
+        result
+            .ValueUnsafe()
+            .Should()
+            .Be(input.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Theory]
@@ -64,7 +69,8 @@ public class JunctionTests : TestSetup
 
     public class TestJunction : Junction<int, string>
     {
-        public override async Task<string> Run(int input) => input.ToString();
+        public override async Task<string> Run(int input) =>
+            input.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public class TestExceptionJunction : Junction<int, string>

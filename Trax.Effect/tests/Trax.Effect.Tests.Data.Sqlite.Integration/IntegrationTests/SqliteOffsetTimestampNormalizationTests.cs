@@ -78,8 +78,16 @@ public class SqliteOffsetTimestampNormalizationTests
 
     private static int Number(string resourceName)
     {
-        var file = resourceName[(resourceName.IndexOf(".Migrations.") + ".Migrations.".Length)..];
-        return int.Parse(file[..file.IndexOf('_')]);
+        var file = resourceName[
+            (
+                resourceName.IndexOf(".Migrations.", StringComparison.Ordinal)
+                + ".Migrations.".Length
+            )..
+        ];
+        return int.Parse(
+            file[..file.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static void Exec(string connectionString, string sql)

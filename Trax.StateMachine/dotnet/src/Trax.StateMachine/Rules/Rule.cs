@@ -1,56 +1,5 @@
 namespace Trax.StateMachine;
 
-/// <summary>Where a rule reads its field from: the snapshot's context, or the trigger's input.</summary>
-public enum RuleSource
-{
-    /// <summary>The snapshot's context object.</summary>
-    Context,
-
-    /// <summary>The trigger's input; absent when the trigger was fired without input.</summary>
-    Input,
-}
-
-/// <summary>The JSON kinds a field can be constrained to.</summary>
-public enum JsonFieldType
-{
-    /// <summary>A JSON string.</summary>
-    String,
-
-    /// <summary>A JSON number (integer or fractional).</summary>
-    Number,
-
-    /// <summary>JSON <c>true</c> or <c>false</c>.</summary>
-    Boolean,
-
-    /// <summary>A JSON array.</summary>
-    Array,
-
-    /// <summary>A JSON object.</summary>
-    Object,
-
-    /// <summary>A JSON number with no fractional part (<c>2020</c> and <c>2020.0</c> both count).</summary>
-    Integer,
-}
-
-/// <summary>Numeric and count comparison operators.</summary>
-public enum CompareOp
-{
-    /// <summary>The field's value is strictly greater than the constant.</summary>
-    GreaterThan,
-
-    /// <summary>The field's value is greater than or equal to the constant.</summary>
-    GreaterOrEqual,
-
-    /// <summary>The field's value is strictly less than the constant.</summary>
-    LessThan,
-
-    /// <summary>The field's value is less than or equal to the constant.</summary>
-    LessOrEqual,
-
-    /// <summary>The field's value equals the constant.</summary>
-    EqualTo,
-}
-
 /// <summary>
 /// A declarative guard/validator predicate over a snapshot's context and a trigger's input. Rules are
 /// <b>data</b>, not closures: the engine evaluates them (<see cref="RuleEvaluator"/>), the IR exporter emits

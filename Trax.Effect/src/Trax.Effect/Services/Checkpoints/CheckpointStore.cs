@@ -1,7 +1,10 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Services.JunctionEvents;
 using Trax.Effect.Services.ServiceTrain;
@@ -18,8 +21,11 @@ namespace Trax.Effect.Services.Checkpoints;
 /// See Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
 /// A host without a data provider has no rows to write to, and its runs take no checkpoint.
 /// </remarks>
-internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, CheckpointOptions options)
-    : ICheckpointStore
+internal sealed partial class CheckpointStore(
+    IEnumerable<ICheckpointRows> rows,
+    CheckpointOptions options,
+    TimeProvider timeProvider
+) : ICheckpointStore
 {
     private readonly ICheckpointRows? _rows = rows.FirstOrDefault();
 
@@ -30,6 +36,44 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
 
         var step = $"checkpoint '{checkpoint.NodeId}'";
 
+        RefuseUnstorable(checkpoint, step, _rows);
+
+        var state = JsonSerializer.Serialize(checkpoint.State, checkpoint.StateType);
+
+        RefuseUnstorableState(checkpoint, step, state);
+
+        if (run.ChainHash is not { } chainHash)
+            throw Refused(
+                checkpoint,
+                $"The {step} cannot be stored: the train's chain could not be read, so a resume "
+                    + "could not tell whether it still matches the code."
+            );
+
+        await _rows
+            .Insert(
+                new Models.Checkpoint.Checkpoint
+                {
+                    MetadataId = run.MetadataId,
+                    NodeId = checkpoint.NodeId,
+                    BranchPath = checkpoint.BranchPath,
+                    StateType = checkpoint.StateType.FullName ?? checkpoint.StateType.Name,
+                    State = state,
+                    Tracks = Tracks(checkpoint.Tracks),
+                    ChainHash = chainHash,
+                    StateFingerprint = CheckpointState.Fingerprint(checkpoint.StateType),
+                    CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        run.Wrote = true;
+    }
+
+    // Refuses a checkpoint whose state type, track or step's data context means it must not
+    // be stored.
+    private void RefuseUnstorable(CheckpointTaken checkpoint, string step, ICheckpointRows rows)
+    {
         // Checked again at write time, not only at startup: the startup answer covers only the
         // assemblies loaded then.
         if (TraxRedaction.ReachesSensitiveMember(checkpoint.StateType))
@@ -57,16 +101,18 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
                     + "the routing step."
             );
 
-        if (checkpoint.Services is { } scope && _rows.HasUncommittedWork(scope))
+        if (checkpoint.Services is { } scope && rows.HasUncommittedWork(scope))
             throw Refused(
                 checkpoint,
                 $"The {step} was reached while the step's data context still held uncommitted "
                     + "changes or an open transaction. A run resumed after it would skip work that "
                     + "never committed. Commit before the checkpoint, or move it after the commit."
             );
+    }
 
-        var state = JsonSerializer.Serialize(checkpoint.State, checkpoint.StateType);
-
+    // Refuses a serialized state the store cannot keep as it is, or that is over the size cap.
+    private void RefuseUnstorableState(CheckpointTaken checkpoint, string step, string state)
+    {
         // Postgres cannot store a NUL, and its provider replaces one rather than fail the write, so
         // the state would read back as a different value. Refused on every provider alike.
         if (HoldsNul(state))
@@ -82,50 +128,32 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
         if (size > options.MaxStateBytes)
             throw Refused(
                 checkpoint,
-                $"The {step} holds '{checkpoint.StateType.FullName}' as {size} bytes of JSON; the "
-                    + $"cap is {options.MaxStateBytes}. Store pointers to the data rather than the "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The {step} holds '{checkpoint.StateType.FullName}' as {size} bytes of JSON; the "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"cap is {options.MaxStateBytes}. Store pointers to the data rather than the "
+                    )
                     + "data itself."
             );
-
-        if (run.ChainHash is not { } chainHash)
-            throw Refused(
-                checkpoint,
-                $"The {step} cannot be stored: the train's chain could not be read, so a resume "
-                    + "could not tell whether it still matches the code."
-            );
-
-        await _rows
-            .Insert(
-                new Models.Checkpoint.Checkpoint
-                {
-                    MetadataId = run.MetadataId,
-                    NodeId = checkpoint.NodeId,
-                    BranchPath = checkpoint.BranchPath,
-                    StateType = checkpoint.StateType.FullName ?? checkpoint.StateType.Name,
-                    State = state,
-                    Tracks = Tracks(checkpoint.Tracks),
-                    ChainHash = chainHash,
-                    StateFingerprint = CheckpointState.Fingerprint(checkpoint.StateType),
-                    CreatedAt = DateTime.UtcNow,
-                },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-
-        run.Wrote = true;
     }
 
     /// <summary>Whether a string or property name in the JSON text <paramref name="json"/> holds a NUL.</summary>
     internal static bool HoldsNul(string json)
     {
-        if (!json.Contains("\\u0000", StringComparison.OrdinalIgnoreCase) && !json.Contains('\0'))
+        if (
+            !json.Contains("\\u0000", StringComparison.OrdinalIgnoreCase)
+            && !json.Contains('\0', StringComparison.Ordinal)
+        )
             return false;
 
         var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
         while (reader.Read())
             if (
                 reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName
-                && reader.GetString()!.Contains('\0')
+                && reader.GetString().NotNull().Contains('\0', StringComparison.Ordinal)
             )
                 return true;
 
@@ -152,9 +180,9 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
                 new JsonObject
                 {
                     ["key"] = key.FullName,
-                    ["track"] = (string?)type.GetProperty("Track")!.GetValue(track),
+                    ["track"] = (string?)type.GetProperty("Track").NotNull().GetValue(track),
                     ["fallbackReason"] = (string?)
-                        type.GetProperty("FallbackReason")!.GetValue(track),
+                        type.GetProperty("FallbackReason").NotNull().GetValue(track),
                 }
             );
         }
@@ -181,11 +209,6 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
         return null;
     }
 
-    private static readonly System.Text.RegularExpressions.Regex RoutingSegment = new(
-        @"^(Switch|Gate|Scale)<(?<key>.+)>#\d+$",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant
-    );
-
     private static TrainException Refused(CheckpointTaken checkpoint, string reason)
     {
         var refusal = new TrainException(reason);
@@ -200,32 +223,11 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
         };
         return refusal;
     }
-}
 
-/// <summary>
-/// What the store needs to know about the run on this flow: its row, and its chain's hash, read only
-/// when the run reaches a checkpoint, so a train that declares none never has its chain read. Set by
-/// <c>ServiceTrain.Run</c> for the run and everything it awaits.
-/// </summary>
-internal sealed class CheckpointRun(long metadataId, Func<string?> chainHash)
-{
-    private readonly Lazy<string?> _chainHash = new(chainHash);
-
-    /// <summary>The run's row.</summary>
-    public long MetadataId { get; } = metadataId;
-
-    /// <summary>The run's chain hash, or null when its chain cannot be read.</summary>
-    public string? ChainHash => _chainHash.Value;
-
-    /// <summary>True once the run stored a checkpoint, so a completed run knows it has some to delete.</summary>
-    public bool Wrote { get; set; }
-
-    private static readonly AsyncLocal<CheckpointRun?> Run = new();
-
-    /// <summary>The run on this flow, or null outside a run that can take checkpoints.</summary>
-    public static CheckpointRun? Current
-    {
-        get => Run.Value;
-        set => Run.Value = value;
-    }
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"^(Switch|Gate|Scale)<(?<key>.+)>#\d+$",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex RoutingSegment { get; }
 }

@@ -33,10 +33,13 @@ internal static class ServiceTrainExtensions
                 ExternalId = serviceTrain.ExternalId,
                 Input = null,
                 ParentId = serviceTrain.ParentId,
-            }
+            },
+            serviceTrain.Clock
         );
 
-        return await serviceTrain.InitializeServiceTrain(metadata, preCreated: false);
+        return await serviceTrain
+            .InitializeServiceTrain(metadata, preCreated: false)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -61,7 +64,7 @@ internal static class ServiceTrainExtensions
                 $"Cannot start a train with state ({metadata.TrainState}), must be Pending."
             );
 
-        await serviceTrain.EffectRunner.Track(metadata);
+        await serviceTrain.EffectRunner.Track(metadata).ConfigureAwait(false);
         serviceTrain.Logger?.LogTrace("Initializing ({TrainName})", serviceTrain.TrainName);
         serviceTrain.Metadata = metadata;
 
@@ -70,7 +73,7 @@ internal static class ServiceTrainExtensions
         // and decisions the run records name a different run from the one it is.
         serviceTrain.ExternalId = metadata.ExternalId;
 
-        return await serviceTrain.StartServiceTrain(metadata, preCreated);
+        return await serviceTrain.StartServiceTrain(metadata, preCreated).ConfigureAwait(false);
     }
 
     internal static async Task<Unit> StartServiceTrain<TIn, TOut>(
@@ -95,7 +98,9 @@ internal static class ServiceTrainExtensions
         // on tracking.
         if (
             preCreated
-            && !await serviceTrain.EffectRunner.TryClaimPendingRun(metadata, CancellationToken.None)
+            && !await serviceTrain
+                .EffectRunner.TryClaimPendingRun(metadata, CancellationToken.None)
+                .ConfigureAwait(false)
         )
             throw new TrainAlreadyStartedException(metadata.Id, serviceTrain.TrainName);
 
@@ -117,7 +122,7 @@ internal static class ServiceTrainExtensions
                 : null;
         }
 
-        await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
+        await serviceTrain.EffectRunner.Update(serviceTrain.Metadata).ConfigureAwait(false);
 
         return Unit.Default;
     }
@@ -139,13 +144,13 @@ internal static class ServiceTrainExtensions
             serviceTrain.JunctionEffectRunner
             is Services.JunctionEffectRunner.JunctionEffectRunner junctionEffects
         )
-            await junctionEffects.Settle();
+            await junctionEffects.Settle().ConfigureAwait(false);
 
         var failureReason = result.IsRight ? null : result.Swap().ValueUnsafe();
 
         var resultState =
             result.IsRight ? TrainState.Completed
-            : serviceTrain.IsRequestedCancellation(failureReason!) ? TrainState.Cancelled
+            : serviceTrain.IsRequestedCancellation(failureReason.NotNull()) ? TrainState.Cancelled
             : TrainState.Failed;
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to ({ResultState}).",
@@ -153,7 +158,7 @@ internal static class ServiceTrainExtensions
             resultState.ToString()
         );
         serviceTrain.Metadata.TrainState = resultState;
-        serviceTrain.Metadata.EndTime = DateTime.UtcNow;
+        serviceTrain.Metadata.EndTime = serviceTrain.Clock.GetUtcNow().UtcDateTime;
         serviceTrain.Metadata.CurrentlyRunningJunction = null;
         serviceTrain.Metadata.JunctionStartedAt = null;
 
@@ -181,7 +186,7 @@ internal static class ServiceTrainExtensions
                 serviceTrain.Metadata.FailureClass = failureClass;
         }
 
-        await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
+        await serviceTrain.EffectRunner.Update(serviceTrain.Metadata).ConfigureAwait(false);
 
         return Unit.Default;
     }
@@ -387,7 +392,11 @@ internal static class ServiceTrainExtensions
     {
         if (
             failureReason.Data["TrainExceptionData"] is TrainExceptionData data
-            && data.TrainExternalId == serviceTrain.ExternalId
+            && string.Equals(
+                data.TrainExternalId,
+                serviceTrain.ExternalId,
+                StringComparison.Ordinal
+            )
         )
             data.TrainName = serviceTrain.TrainName;
     }

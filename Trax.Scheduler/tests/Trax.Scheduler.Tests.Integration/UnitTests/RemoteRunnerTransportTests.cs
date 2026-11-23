@@ -208,7 +208,8 @@ public class RemoteRunnerTransportTests
                 Retry = new HttpRetryOptions { MaxRetries = 0 },
                 MaxResponseBodyBytes = limit,
             },
-            NullLogger<HttpRunExecutor>.Instance
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
 
     private static Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> Run(

@@ -47,7 +47,7 @@ public class ResourceLoadingTests
     [Test]
     public void GraphQLQueryResourceAttribute_NullOrWhitespaceName_ThrowsArgument()
     {
-        var actNull = () => new GraphQLQueryResourceAttribute(null!);
+        var actNull = () => new GraphQLQueryResourceAttribute(Null.Of<string>());
         actNull.Should().Throw<ArgumentException>();
 
         var actEmpty = () => new GraphQLQueryResourceAttribute("");

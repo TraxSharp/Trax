@@ -272,25 +272,34 @@ public class FraudRulesTests
         new(
             "PlaceOrder",
             risk,
-            [new YesNoQuestion(QuestionKey.For<LooksFraudulent>(), "Does this order look like fraud?", null, null)]
+            [
+                new YesNoQuestion(
+                    QuestionKey.For<LooksFraudulent>(),
+                    "Does this order look like fraud?",
+                    Yes: null,
+                    No: null
+                ),
+            ]
         );
 
     private static async Task<double> ProbabilityOfYes(IDecider decider, OrderRisk risk)
     {
-        var result = await decider.Decide(Asking(risk), CancellationToken.None);
+        var result = await decider
+            .Decide(Asking(risk), CancellationToken.None)
+            .ConfigureAwait(false);
         return ((YesNoAnswer)result.Answers[QuestionKey.For<LooksFraudulent>()]).Probability;
     }
 
-    [TestCase(99.99, true, 0.0)]
-    [TestCase(100.00, true, 1.0)]
-    [TestCase(500.00, false, 0.0)]
+    [TestCase("99.99", true, 0.0)]
+    [TestCase("100.00", true, 1.0)]
+    [TestCase("500.00", false, 0.0)]
     public async Task Live_HoldsFirstOrdersFrom100(decimal total, bool firstOrder, double yes) =>
         (await ProbabilityOfYes(FraudRules.Live(), new OrderRisk("ada", total, firstOrder)))
             .Should()
             .Be(yes);
 
-    [TestCase(59.99, true, 0.0)]
-    [TestCase(60.00, true, 1.0)]
+    [TestCase("59.99", true, 0.0)]
+    [TestCase("60.00", true, 1.0)]
     public async Task Stricter_HoldsFirstOrdersFrom60(decimal total, bool firstOrder, double yes) =>
         (await ProbabilityOfYes(new StricterFraudRules(), new OrderRisk("ada", total, firstOrder)))
             .Should()

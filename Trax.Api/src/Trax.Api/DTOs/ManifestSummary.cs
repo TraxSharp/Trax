@@ -15,7 +15,7 @@ namespace Trax.Api.DTOs;
 /// <param name="CronExpression">The cron expression, for a cron-scheduled manifest.</param>
 /// <param name="IntervalSeconds">The interval in seconds, for an interval-scheduled manifest.</param>
 /// <param name="MaxRetries">How many times a failed run is retried before it is dead-lettered.</param>
-/// <param name="TimeoutSeconds">The run timeout in seconds, or <c>null</c> for none.</param>
+/// <param name="TimeoutSeconds">The run timeout in seconds, or <see langword="null"/> for none.</param>
 /// <param name="LastSuccessfulRun">When the manifest last ran successfully (UTC).</param>
 /// <param name="ManifestGroupId">The id of the manifest group it belongs to.</param>
 /// <param name="DependsOnManifestId">The manifest this one runs after, for a dependent manifest.</param>

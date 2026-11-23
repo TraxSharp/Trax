@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -17,23 +18,24 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteManifestManagerTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
-    private SchedulerConfiguration _config = null!;
+    private IManifestManagerTrain? _train;
+    private SchedulerConfiguration? _config;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _config.StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
-        _config.PromoteStaleStagedEntries = false;
+        _config.NotNull().StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
+        _config.NotNull().PromoteStaleStagedEntries = false;
     }
 
     [TearDown]
     public async Task ManifestManagerTestsTearDown()
     {
-        _config.StaleStagedEntryTimeout = new SchedulerConfiguration().StaleStagedEntryTimeout;
-        _config.PromoteStaleStagedEntries = false;
+        _config.NotNull().StaleStagedEntryTimeout =
+            new SchedulerConfiguration().StaleStagedEntryTimeout;
+        _config.NotNull().PromoteStaleStagedEntries = false;
 
         if (_train is IDisposable disposable)
             disposable.Dispose();
@@ -52,7 +54,7 @@ public class SqliteManifestManagerTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -76,12 +78,12 @@ public class SqliteManifestManagerTests : TestSetup
 
         // Set LastSuccessfulRun to now so it won't be due for another hour
         manifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
-        manifest.LastSuccessfulRun = DateTime.UtcNow;
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -103,7 +105,7 @@ public class SqliteManifestManagerTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -138,7 +140,7 @@ public class SqliteManifestManagerTests : TestSetup
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -169,7 +171,7 @@ public class SqliteManifestManagerTests : TestSetup
         var justInsideTimeout = await Stage(age: TimeSpan.FromMinutes(9));
         var confirmed = await Stage(age: TimeSpan.FromDays(1), confirm: true);
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         (await Load(daysOld)).Status.Should().Be(WorkQueueStatus.Cancelled);
         (await Load(justPastTimeout)).Status.Should().Be(WorkQueueStatus.Cancelled);
@@ -186,11 +188,11 @@ public class SqliteManifestManagerTests : TestSetup
     [Test]
     public async Task ManifestManager_StaleStagedEntry_IsPromotedWhenTheHostOptsIn()
     {
-        _config.PromoteStaleStagedEntries = true;
+        _config.NotNull().PromoteStaleStagedEntries = true;
         var stale = await Stage(age: TimeSpan.FromMinutes(11));
         var recent = await Stage(age: TimeSpan.FromMinutes(9));
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         var promoted = await Load(stale);
         promoted.Status.Should().Be(WorkQueueStatus.Queued);
@@ -203,16 +205,17 @@ public class SqliteManifestManagerTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 DeferPromotion = !confirm,
-            }
+            },
+            TimeProvider.System
         );
-        entry.CreatedAt = DateTime.UtcNow - age;
+        entry.CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime - age;
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry.Id;
     }
@@ -220,7 +223,10 @@ public class SqliteManifestManagerTests : TestSetup
     private async Task<WorkQueue> Load(long id)
     {
         DataContext.Reset();
-        return await DataContext.WorkQueues.AsNoTracking().FirstAsync(w => w.Id == id);
+        return await DataContext
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -234,10 +240,8 @@ public class SqliteManifestManagerTests : TestSetup
         string inputValue = "TestValue"
     )
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -253,8 +257,8 @@ public class SqliteManifestManagerTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

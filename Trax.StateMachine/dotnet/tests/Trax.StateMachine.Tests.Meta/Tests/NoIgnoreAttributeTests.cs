@@ -21,12 +21,11 @@ public class NoIgnoreAttributeTests
     [TestCase("[Test, Ignore(\"later\")] public void T() { }")]
     [TestCase("[TestCase(1, Ignore = \"later\")] public void T(int i) { }")]
     [TestCase("[NUnit.Framework.IgnoreAttribute(\"later\")] public void T() { }")]
-    public void Guard_fails_on_a_skip_attribute(string member)
+    public async Task Guard_fails_on_a_skip_attribute(string member)
     {
-        using var repo = new SyntheticRepo().Write(
-            "tests/Sample/SampleTests.cs",
-            $"public class SampleTests {{ {member} }}"
-        );
+        using var repo = new SyntheticRepo();
+        await repo.Write("tests/Sample/SampleTests.cs", $"public class SampleTests {{ {member} }}")
+            .ConfigureAwait(false);
 
         var act = () => AssertClean(repo.Root);
 

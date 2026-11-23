@@ -10,6 +10,7 @@ package: Trax.Api.GraphQL.Audit
 namespace: Trax.Api.GraphQL.Audit
 source:
   - Trax.Api/src/Trax.Api.GraphQL.Audit/ITraxAuditRedactor.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Audit/DefaultAuditRedactor.cs
 ---
 
 # ITraxAuditRedactor

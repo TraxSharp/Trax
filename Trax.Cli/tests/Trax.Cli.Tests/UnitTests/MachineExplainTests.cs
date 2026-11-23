@@ -70,7 +70,7 @@ public class MachineExplainTests
             Then the shop is open
         """;
 
-    private string _dir = null!;
+    private string _dir = "";
     private string Features => Path.Combine(_dir, "features");
 
     [SetUp]
@@ -85,24 +85,26 @@ public class MachineExplainTests
     [TearDown]
     public void TearDown() => Directory.Delete(_dir, recursive: true);
 
-    private (int Exit, string Out, string Err) Run(string? scenario = null)
+    private async Task<(int Exit, string Out, string Err)> RunAsync(string? scenario = null)
     {
         using var stdout = new StringWriter();
         using var stderr = new StringWriter();
-        var exit = MachineCommand.RunExplain(
-            Features,
-            Path.Combine(Features, "glossary.json"),
-            scenario,
-            stdout,
-            stderr
-        );
+        var exit = await MachineCommand
+            .RunExplainAsync(
+                Features,
+                Path.Combine(Features, "glossary.json"),
+                scenario,
+                stdout,
+                stderr
+            )
+            .ConfigureAwait(false);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
     [Test]
-    public void Each_scenario_lists_the_edges_timers_policies_and_grants_it_gave()
+    public async Task Each_scenario_lists_the_edges_timers_policies_and_grants_it_gave()
     {
-        var (exit, output, err) = Run();
+        var (exit, output, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         output.Should().Contain("shop.feature:2 A baker clocking in opens the shop");
@@ -116,14 +118,18 @@ public class MachineExplainTests
     }
 
     [Test]
-    public void A_rule_is_every_role_set_and_any_one_role_within_a_set()
+    public async Task A_rule_is_every_role_set_and_any_one_role_within_a_set()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "glossary.json"),
-            Glossary.Replace("\"roles\": [\"baker\"]", "\"roles\": [\"baker\", \"staff\"]")
+            Glossary.Replace(
+                "\"roles\": [\"baker\"]",
+                "\"roles\": [\"baker\", \"staff\"]",
+                StringComparison.Ordinal
+            )
         );
 
-        var (exit, output, err) = Run();
+        var (exit, output, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(0, err);
         output.Should().Contain("grant: shift ClockIn is served to baker or staff");
@@ -134,29 +140,29 @@ public class MachineExplainTests
     }
 
     [Test]
-    public void A_filter_keeps_the_scenarios_whose_name_or_place_matches()
+    public async Task A_filter_keeps_the_scenarios_whose_name_or_place_matches()
     {
-        var byName = Run("OVEN FIRES");
+        var byName = await RunAsync("OVEN FIRES").ConfigureAwait(false);
         byName.Exit.Should().Be(0, byName.Err);
         byName.Out.Should().Contain("The oven fires").And.NotContain("clocking in");
 
-        var byPlace = Run("shop.feature:2");
+        var byPlace = await RunAsync("shop.feature:2").ConfigureAwait(false);
         byPlace.Out.Should().Contain("clocking in").And.NotContain("The oven fires");
 
-        var none = Run("no such scenario");
+        var none = await RunAsync("no such scenario").ConfigureAwait(false);
         none.Exit.Should().Be(1);
         none.Err.Should().Contain("No scenario");
     }
 
     [Test]
-    public void Features_that_do_not_derive_are_their_problems_and_exit_1()
+    public async Task Features_that_do_not_derive_are_their_problems_and_exit_1()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(Features, "bad.feature"),
             "Feature: Bad\n  Scenario: Kit juggles\n    When Kit juggles\n"
         );
 
-        var (exit, output, err) = Run();
+        var (exit, output, err) = await RunAsync().ConfigureAwait(false);
 
         exit.Should().Be(1);
         output.Should().BeEmpty();

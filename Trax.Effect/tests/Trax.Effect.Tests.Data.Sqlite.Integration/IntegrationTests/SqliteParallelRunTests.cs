@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -27,11 +28,11 @@ namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 [NonParallelizable]
 public class SqliteParallelRunTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly LiteParDecider Decider = new();
 
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -44,7 +45,7 @@ public class SqliteParallelRunTests
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
                 effects
-                    .UseSqlite($"Data Source={_dbPath}")
+                    .UseSqlite($"Data Source={_dbPath.NotNull()}")
                     .AddJunctionEvents()
                     .AddDecisionRecording()
             )
@@ -56,9 +57,17 @@ public class SqliteParallelRunTests
     [OneTimeTearDown]
     public async Task DisposeProvider()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
 
-        foreach (var path in new[] { _dbPath, _dbPath + "-wal", _dbPath + "-shm" })
+        foreach (
+            var path in new[]
+            {
+                _dbPath.NotNull(),
+                _dbPath.NotNull() + "-wal",
+                _dbPath.NotNull() + "-shm",
+            }
+        )
             if (File.Exists(path))
                 File.Delete(path);
     }
@@ -67,7 +76,7 @@ public class SqliteParallelRunTests
     public async Task Branches_asking_one_question_each_get_a_row_and_a_requeue_replays_each()
     {
         Decider.Script(
-            new()
+            new(StringComparer.Ordinal)
             {
                 [""] = [LiteParLane.Express, LiteParLane.Ground],
                 ["Parallel#0/a"] = [LiteParLane.Ground],
@@ -106,16 +115,19 @@ public class SqliteParallelRunTests
         var run = await Run();
 
         var rows = await Rows(run);
-        rows.Where(r => r.Name == nameof(LiteParTookGround))
+        rows.Where(r => string.Equals(r.Name, nameof(LiteParTookGround), StringComparison.Ordinal))
             .Select(r => r.BranchPath)
             .Should()
             .BeEquivalentTo([null, "Parallel#0/a", "Parallel#0/b", null]);
-        rows.Single(r => r.Name == nameof(LiteParFinish)).BranchPath.Should().BeNull();
+        rows.Single(r => string.Equals(r.Name, nameof(LiteParFinish), StringComparison.Ordinal))
+            .BranchPath.Should()
+            .BeNull();
     }
 
     private async Task<long> Run(long? replayDecisionsOf = null)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<LiteParOrder, string>)
                 (object)scope.ServiceProvider.GetRequiredService<ILiteParAskEverywhereTrain>();
@@ -123,130 +135,48 @@ public class SqliteParallelRunTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILiteParAskEverywhereTrain).FullName!,
+                Name = typeof(ILiteParAskEverywhereTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ReplayDecisionsOf = replayDecisionsOf,
-            }
+            },
+            TestTime.Clock
         );
 
-        await train.Run(input, metadata);
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
-        return train.Metadata!.Id;
+        await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
+        await _provider
+            .NotNull()
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<List<Models.RecordedDecision.RecordedDecision>> Recorded(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await context
             .RecordedDecisions.AsNoTracking()
             .Where(d => d.MetadataId == metadataId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
-}
-
-public sealed record LiteParOrder(string Id);
-
-[Asks("Which lane does this order take?")]
-public enum LiteParLane
-{
-    Express,
-    Ground,
-}
-
-/// <summary>Answers by the branch asking, in order, Ground once a branch's script runs out.</summary>
-internal sealed class LiteParDecider : IDecider
-{
-    private Dictionary<string, Queue<LiteParLane>> _byBranch = [];
-    private int _asked;
-
-    public int Asked => _asked;
-
-    public void Script(Dictionary<string, LiteParLane[]> byBranch)
-    {
-        _byBranch = byBranch.ToDictionary(b => b.Key, b => new Queue<LiteParLane>(b.Value));
-        _asked = 0;
-    }
-
-    public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken)
-    {
-        Interlocked.Increment(ref _asked);
-
-        var branch = ChainGraph.CurrentBranchPath ?? "";
-        LiteParLane lane;
-        lock (_byBranch)
-            lane =
-                _byBranch.TryGetValue(branch, out var queue) && queue.Count > 0
-                    ? queue.Dequeue()
-                    : LiteParLane.Ground;
-
-        return new ScriptedDecider().Choose(lane).Decide(request, cancellationToken);
-    }
-}
-
-internal static class LiteParTook
-{
-    private static readonly ConcurrentQueue<(long Run, string Branch, string Track)> Taken = new();
-
-    public static void Note(long run, string track) =>
-        Taken.Enqueue((run, ChainGraph.CurrentBranchPath ?? "", track));
-
-    public static List<(string Branch, string Track)> Of(long run) =>
-        Taken.Where(t => t.Run == run).Select(t => (t.Branch, t.Track)).ToList();
-}
-
-public class LiteParTookExpress : EffectJunction<LiteParOrder, Unit>
-{
-    public override Task<Unit> Run(LiteParOrder input)
-    {
-        LiteParTook.Note(Metadata!.TrainMetadataId, nameof(LiteParLane.Express));
-        return Task.FromResult(Unit.Default);
-    }
-}
-
-public class LiteParTookGround : EffectJunction<LiteParOrder, Unit>
-{
-    public override Task<Unit> Run(LiteParOrder input)
-    {
-        LiteParTook.Note(Metadata!.TrainMetadataId, nameof(LiteParLane.Ground));
-        return Task.FromResult(Unit.Default);
-    }
-}
-
-public class LiteParFinish : EffectJunction<LiteParOrder, string>
-{
-    public override Task<string> Run(LiteParOrder input) => Task.FromResult("done");
-}
-
-public interface ILiteParAskEverywhereTrain : IServiceTrain<LiteParOrder, string>;
-
-/// <summary>Asks one question before the fork, in each of two branches, and after the join.</summary>
-public class LiteParAskEverywhereTrain
-    : ServiceTrain<LiteParOrder, string>,
-        ILiteParAskEverywhereTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Switch<LiteParOrder, LiteParLane>(Lanes)
-            .Parallel(p =>
-                p.Branch("a", b => b.Switch<LiteParOrder, LiteParLane>(Lanes))
-                    .Branch("b", b => b.Switch<LiteParOrder, LiteParLane>(Lanes))
-            )
-            .Switch<LiteParOrder, LiteParLane>(Lanes)
-            .Chain<LiteParFinish>()
-            .Resolve();
-
-    private static Tracks<LiteParOrder, string, LiteParLane> Lanes(
-        Tracks<LiteParOrder, string, LiteParLane> tracks
-    ) =>
-        tracks
-            .When(LiteParLane.Express, t => t.Chain<LiteParTookExpress>())
-            .When(LiteParLane.Ground, t => t.Chain<LiteParTookGround>());
 }

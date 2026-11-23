@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -26,7 +27,8 @@ public class PostgresContextTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = Metadata.Create(
             new CreateMetadata
@@ -34,7 +36,8 @@ public class PostgresContextTests : TestSetup
                 Name = "TestMetadata",
                 Input = Unit.Default,
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(metadata);
@@ -59,7 +62,7 @@ public class PostgresContextTests : TestSetup
         var train = await TrainBus.RunAsync<ITestTrain>(new TestTrainInput());
 
         // Assert
-        var metadata = train!.Metadata!;
+        var metadata = train.NotNull().Metadata.NotNull();
         metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         metadata.FailureException.Should().BeNullOrEmpty();
         metadata.FailureReason.Should().BeNullOrEmpty();
@@ -76,7 +79,7 @@ public class PostgresContextTests : TestSetup
         await TrainBus.RunAsync<Unit>(new TestTrainWithoutInterfaceInput());
 
         // Assert
-        var metadata = train!.Metadata!;
+        var metadata = train.NotNull().Metadata.NotNull();
         metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         metadata.FailureException.Should().BeNullOrEmpty();
         metadata.FailureReason.Should().BeNullOrEmpty();
@@ -98,20 +101,21 @@ public class PostgresContextTests : TestSetup
         );
 
         // Assert
-        var trainMetadata = train!.Metadata!;
+        var trainMetadata = train.NotNull().Metadata.NotNull();
         trainMetadata.Name.Should().Be(typeof(ITestTrainWithinTrain).FullName);
         trainMetadata.FailureException.Should().BeNullOrEmpty();
         trainMetadata.FailureReason.Should().BeNullOrEmpty();
         trainMetadata.FailureJunction.Should().BeNullOrEmpty();
         trainMetadata.TrainState.Should().Be(TrainState.Completed);
-        var innerTrainMetadata = innerTrain!.Metadata!;
+        var innerTrainMetadata = innerTrain.NotNull().Metadata.NotNull();
         innerTrainMetadata.Name.Should().Be(typeof(ITestTrain).FullName);
         innerTrainMetadata.FailureException.Should().BeNullOrEmpty();
         innerTrainMetadata.FailureReason.Should().BeNullOrEmpty();
         innerTrainMetadata.FailureJunction.Should().BeNullOrEmpty();
         innerTrainMetadata.TrainState.Should().Be(TrainState.Completed);
 
-        using var dataContext = (IDataContext)dataContextProvider.Create();
+        var dataContext = (IDataContext)dataContextProvider.Create();
+        await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
         var parentTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
             x.Id == trainMetadata.Id
@@ -120,13 +124,13 @@ public class PostgresContextTests : TestSetup
             x.Id == innerTrainMetadata.Id
         );
         parentTrainResult.Should().NotBeNull();
-        parentTrainResult!.Id.Should().Be(trainMetadata.Id);
-        parentTrainResult!.TrainState.Should().Be(TrainState.Completed);
+        parentTrainResult.NotNull().Id.Should().Be(trainMetadata.Id);
+        parentTrainResult.NotNull().TrainState.Should().Be(TrainState.Completed);
         parentTrainResult.Input.Should().NotBeNull();
         parentTrainResult.Output.Should().NotBeNull();
 
         childTrainResult.Should().NotBeNull();
-        childTrainResult!.Id.Should().Be(innerTrainMetadata.Id);
+        childTrainResult.NotNull().Id.Should().Be(innerTrainMetadata.Id);
         childTrainResult.TrainState.Should().Be(TrainState.Completed);
         childTrainResult.Input.Should().NotBeNull();
         childTrainResult.Output.Should().NotBeNull();
@@ -138,7 +142,10 @@ public class PostgresContextTests : TestSetup
         logLevel.Should().Be(1);
     }
 
-    internal class TestTrain : ServiceTrain<TestTrainInput, ITestTrain>, ITestTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class TestTrain : ServiceTrain<TestTrainInput, ITestTrain>, ITestTrain
     {
         // The train is its own output so the test can read the Metadata of the run. Seeding it
         // under its interface is what makes that expressible as a declaration.
@@ -148,16 +155,23 @@ public class PostgresContextTests : TestSetup
 
     // Deliberately has no dedicated interface: the canonical name falls back to the concrete
     // type. Nothing asserts on its output, so it declares a chain of no junctions.
-    internal class TestTrainWithoutInterface : ServiceTrain<TestTrainWithoutInterfaceInput, Unit>
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class TestTrainWithoutInterface
+        : ServiceTrain<TestTrainWithoutInterfaceInput, Unit>
     {
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }
 
-    internal record TestTrainWithoutInterfaceInput;
+    internal sealed record TestTrainWithoutInterfaceInput;
 
-    internal record TestTrainInput;
+    internal sealed record TestTrainInput;
 
-    internal class TestTrainWithinTrain()
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class TestTrainWithinTrain()
         : ServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>,
             ITestTrainWithinTrain
     {
@@ -167,16 +181,18 @@ public class PostgresContextTests : TestSetup
             AddServices<ITestTrainWithinTrain>(this).Chain<JunctionToRunTestTrain>().Resolve();
     }
 
-    internal record TestTrainWithinTrainInput;
+    internal sealed record TestTrainWithinTrainInput;
 
-    internal class JunctionToRunTestTrain(
+    internal sealed class JunctionToRunTestTrain(
         ITrainBus trainBus,
         ILogger<JunctionToRunTestTrain> logger
     ) : EffectJunction<Unit, ITestTrain>
     {
         public override async Task<ITestTrain> Run(Unit input)
         {
-            var testTrain = await trainBus.RunAsync<ITestTrain>(new TestTrainInput());
+            var testTrain = await trainBus
+                .RunAsync<ITestTrain>(new TestTrainInput(), CancellationToken.None)
+                .ConfigureAwait(false);
 
             logger.LogCritical("Ran {TrainName}", "TestTrain");
 
@@ -184,8 +200,8 @@ public class PostgresContextTests : TestSetup
         }
     }
 
-    internal interface ITestTrain : IServiceTrain<TestTrainInput, ITestTrain> { }
+    internal interface ITestTrain : IServiceTrain<TestTrainInput, ITestTrain>;
 
     internal interface ITestTrainWithinTrain
-        : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)> { }
+        : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>;
 }

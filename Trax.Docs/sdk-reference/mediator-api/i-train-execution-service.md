@@ -10,6 +10,10 @@ package: Trax.Mediator
 namespace: Trax.Mediator.Services.TrainExecution
 source:
   - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/ITrainExecutionService.cs
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/QueueTrainResult.cs
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/QueueTrainOptions.cs
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/RunTrainOptions.cs
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/RunTrainResult.cs
   - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/TrainExecutionService.cs
   - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/PreparedTrain.cs
 redirect_from:

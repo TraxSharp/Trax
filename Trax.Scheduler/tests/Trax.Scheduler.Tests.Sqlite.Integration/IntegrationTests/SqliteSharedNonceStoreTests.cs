@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -21,7 +23,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 public class SqliteSharedNonceStoreTests
 {
     private static readonly byte[] Key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [SetUp]
     public void CreateDatabasePath() =>
@@ -31,15 +33,15 @@ public class SqliteSharedNonceStoreTests
     public void DeleteDatabase()
     {
         foreach (var suffix in new[] { "", "-wal", "-shm" })
-            if (File.Exists(_dbPath + suffix))
-                File.Delete(_dbPath + suffix);
+            if (File.Exists(_dbPath.NotNull() + suffix))
+                File.Delete(_dbPath.NotNull() + suffix);
     }
 
     private ServiceProvider RunnerInstance() =>
         new ServiceCollection()
             .AddLogging()
             .AddTrax(trax =>
-                trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath}"))
+                trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath.NotNull()}"))
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
             )
             .AddTraxJobRunner(runner => runner.SigningKey = Key)
@@ -51,7 +53,12 @@ public class SqliteSharedNonceStoreTests
         await using var first = RunnerInstance();
         await using var second = RunnerInstance();
         var body = Encoding.UTF8.GetBytes("""{"trainName":"x"}""");
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         (
             await first
@@ -77,7 +84,7 @@ public class SqliteSharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
 
         (await store.TryRecordAsync("a", now.AddMinutes(-1), now, CancellationToken.None))
             .Should()
@@ -100,7 +107,7 @@ public class SqliteSharedNonceStoreTests
             first.GetRequiredService<INonceStore>(),
             second.GetRequiredService<INonceStore>(),
         };
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
 
         var recorded = await Task.WhenAll(
             Enumerable
@@ -122,11 +129,16 @@ public class SqliteSharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         await store.TryRecordAsync("expired", now.AddMinutes(-1), now, CancellationToken.None);
 
         for (var i = 0; i < DatabaseNonceStore.SweepEvery; i++)
-            await store.TryRecordAsync($"live-{i}", now.AddMinutes(5), now, CancellationToken.None);
+            await store.TryRecordAsync(
+                string.Create(CultureInfo.InvariantCulture, $"live-{i}"),
+                now.AddMinutes(5),
+                now,
+                CancellationToken.None
+            );
 
         (await Scalar("SELECT count(*) FROM runner_nonce WHERE nonce = 'expired'"))
             .Should()
@@ -138,7 +150,7 @@ public class SqliteSharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         (await store.TryRecordAsync("first", now.AddMinutes(5), now, CancellationToken.None))
             .Should()
             .BeTrue();
@@ -160,10 +172,18 @@ public class SqliteSharedNonceStoreTests
 
     private async Task<long> Scalar(string sql)
     {
-        await using var connection = new SqliteConnection($"Data Source={_dbPath}");
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        return await command.ExecuteScalarAsync() is long value ? value : 0;
+        var connection = new SqliteConnection($"Data Source={_dbPath.NotNull()}");
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = sql;
+                return await command.ExecuteScalarAsync().ConfigureAwait(false) is long value
+                    ? value
+                    : 0;
+            }
+        }
     }
 }

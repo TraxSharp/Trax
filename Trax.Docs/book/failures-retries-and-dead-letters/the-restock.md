@@ -42,7 +42,7 @@ public record Delivery(string Sku, int Units);
 ```csharp compile=app file=Trains/Restock/Models/ShortProducts.cs
 namespace Shopfront.Trains.Restock.Models;
 
-internal record ShortProducts(List<string> Skus);
+internal sealed record ShortProducts(List<string> Skus);
 ```
 
 `Trains/Restock/RestockOutput.cs`:
@@ -52,7 +52,7 @@ using Shopfront.Trains.Restock.Models;
 
 namespace Shopfront.Trains.Restock;
 
-public record RestockOutput(List<Delivery> Delivered);
+public record RestockOutput(IReadOnlyList<Delivery> Delivered);
 ```
 
 `Trains/Restock/IRestockTrain.cs`:
@@ -75,7 +75,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.Restock.Junctions;
 
-internal class FindShortProductsJunction(IShopfrontDbContext db)
+internal sealed class FindShortProductsJunction(IShopfrontDbContext db)
     : EffectJunction<RestockInput, ShortProducts>
 {
     public override async Task<ShortProducts> Run(RestockInput input) =>
@@ -85,6 +85,7 @@ internal class FindShortProductsJunction(IShopfrontDbContext db)
                 .OrderBy(p => p.Sku)
                 .Select(p => p.Sku)
                 .ToListAsync(CancellationToken)
+                .ConfigureAwait(false)
         );
 }
 ```
@@ -100,7 +101,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.Restock.Junctions;
 
-internal class ReceiveDeliveryJunction(
+internal sealed class ReceiveDeliveryJunction(
     ISupplier supplier,
     IShopfrontDbContext db,
     ILogger<ReceiveDeliveryJunction> logger
@@ -108,7 +109,9 @@ internal class ReceiveDeliveryJunction(
 {
     public override async Task<RestockOutput> Run(ShortProducts shortProducts)
     {
-        var delivered = await supplier.Deliver(shortProducts.Skus, CancellationToken);
+        var delivered = await supplier
+            .Deliver(shortProducts.Skus, CancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var (sku, units) in delivered)
             await db
@@ -116,7 +119,8 @@ internal class ReceiveDeliveryJunction(
                 .ExecuteUpdateAsync(
                     set => set.SetProperty(p => p.Stock, p => p.Stock + units),
                     CancellationToken
-                );
+                )
+                .ConfigureAwait(false);
 
         logger.LogInformation("Received {Count} deliveries", delivered.Count);
         return new RestockOutput([.. delivered.Select(d => new Delivery(d.Sku, d.Units))]);

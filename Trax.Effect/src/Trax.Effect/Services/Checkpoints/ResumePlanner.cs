@@ -2,242 +2,12 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Utils;
 using Trax.Effect.Services.JunctionEvents;
 
 namespace Trax.Effect.Services.Checkpoints;
-
-/// <summary>
-/// Whether a run can resume, and where: what an operator surface shows and what a resumed run
-/// acts on.
-/// </summary>
-/// <param name="CanResume">True when the run can resume as asked.</param>
-/// <param name="Code">Why it cannot, as a stable code (<c>no-checkpoint</c>, <c>missing-input</c>, <c>chain-changed</c> and the rest), or null.</param>
-/// <param name="Reason">Why it cannot, phrased for an operator, or null.</param>
-/// <param name="Target">The step the resumed run skips to, or null to run its main chain from the top.</param>
-/// <param name="Checkpoint">The checkpoint its main chain restores, or null.</param>
-internal sealed record ResumeVerdict(
-    bool CanResume,
-    string? Code,
-    string? Reason,
-    string? Target,
-    string? Checkpoint
-);
-
-/// <summary>
-/// Decides whether a failed run can resume, from its checkpoints and its train's declared chain,
-/// without running anything. The operator's resume and the scheduler's retries ask it before they
-/// queue a resumed run; the resumed run asks again when it starts.
-/// </summary>
-/// <remarks>See Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.</remarks>
-internal interface IRunResumes
-{
-    /// <summary>
-    /// Whether the run <paramref name="runId"/> of <paramref name="train"/> can resume at
-    /// <paramref name="resumeAt"/>, or after its latest checkpoint when that is null.
-    /// </summary>
-    /// <param name="train">The train's class.</param>
-    /// <param name="chain">Its declared chain.</param>
-    /// <param name="input">Its input type.</param>
-    /// <param name="output">Its output type.</param>
-    /// <param name="runId">The run to resume.</param>
-    /// <param name="resumeAt">The step to resume at, or null.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    Task<ResumeVerdict> Check(
-        Type train,
-        ChainRecorder chain,
-        Type input,
-        Type output,
-        long runId,
-        string? resumeAt,
-        CancellationToken cancellationToken
-    );
-
-    /// <summary>
-    /// Whether the run <paramref name="runId"/> of <paramref name="train"/> can resume after its
-    /// latest checkpoint and at each of <paramref name="points"/>, from one read of its lineage,
-    /// with the nodes that hold a checkpoint it can resume from and, when it is itself a resumed
-    /// run, the nodes it restored rather than ran. What an operator's run graph shows; each verdict
-    /// is the one <see cref="Check"/> gives for that point.
-    /// </summary>
-    /// <remarks>
-    /// An implementation that predates it asks <see cref="Check"/> once per point and reports no
-    /// checkpoints and no restored nodes.
-    /// </remarks>
-    /// <param name="train">The train's class.</param>
-    /// <param name="chain">Its declared chain.</param>
-    /// <param name="input">Its input type.</param>
-    /// <param name="output">Its output type.</param>
-    /// <param name="runId">The run.</param>
-    /// <param name="points">The node ids to check a resume at.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    async Task<ResumeChecks> CheckMany(
-        Type train,
-        ChainRecorder chain,
-        Type input,
-        Type output,
-        long runId,
-        IReadOnlyCollection<string> points,
-        CancellationToken cancellationToken
-    )
-    {
-        var latest = await Check(train, chain, input, output, runId, null, cancellationToken)
-            .ConfigureAwait(false);
-        var at = new Dictionary<string, ResumeVerdict>(StringComparer.Ordinal);
-
-        foreach (var point in points)
-            at[point] = await Check(train, chain, input, output, runId, point, cancellationToken)
-                .ConfigureAwait(false);
-
-        return new ResumeChecks(latest, at, [], [], []);
-    }
-}
-
-/// <summary>
-/// A run's resume verdicts and checkpoints, as <see cref="IRunResumes.CheckMany"/> reads them. It
-/// names nodes only: never a checkpoint's stored state or the tracks stored with it.
-/// </summary>
-/// <param name="Latest">Whether the run can resume after its latest checkpoint.</param>
-/// <param name="At">Whether it can resume at each point asked about, by node id.</param>
-/// <param name="Checkpoints">
-/// The nodes holding a checkpoint the run can resume from: those it wrote, and for a resumed run,
-/// those the runs it resumed wrote before the point it resumed at.
-/// </param>
-/// <param name="Written">The nodes at which the run itself wrote a checkpoint.</param>
-/// <param name="Restored">
-/// For a resumed run, the nodes before the point it resumed at, which it skipped and whose work
-/// the checkpoint restored; empty for any other run, or when the resume can no longer be planned
-/// against the running chain.
-/// </param>
-internal sealed record ResumeChecks(
-    ResumeVerdict Latest,
-    IReadOnlyDictionary<string, ResumeVerdict> At,
-    IReadOnlyCollection<string> Checkpoints,
-    IReadOnlyCollection<string> Written,
-    IReadOnlyCollection<string> Restored
-)
-{
-    /// <summary>
-    /// For a resumed run, the track each routing step before the point it resumed at took, by
-    /// node id, as the checkpoint it restored stored it. The run recorded no step for those
-    /// routing steps, so this is how the tracks it passed over show as skipped. A route the
-    /// checkpoint withheld (its key is marked sensitive) is not here.
-    /// </summary>
-    public IReadOnlyDictionary<string, string> RestoredTracks { get; init; } =
-        new Dictionary<string, string>();
-}
-
-/// <inheritdoc />
-internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProvider services)
-    : IRunResumes
-{
-    public async Task<ResumeVerdict> Check(
-        Type train,
-        ChainRecorder chain,
-        Type input,
-        Type output,
-        long runId,
-        string? resumeAt,
-        CancellationToken cancellationToken
-    )
-    {
-        if (rows.FirstOrDefault() is not { } store)
-            return ResumePlanner.NoRows;
-
-        if (await Done(store, runId, cancellationToken).ConfigureAwait(false) is { } done)
-            return done;
-
-        var lineage = await store.Lineage(runId, cancellationToken).ConfigureAwait(false);
-
-        return ResumePlanner
-            .Check(
-                chain,
-                ChainGraph.From(chain, train, input, output).Hash,
-                input,
-                output,
-                services.GetService<IServiceProviderIsService>(),
-                ResumePlanner.Chosen(chain, lineage),
-                resumeAt
-            )
-            .Verdict;
-    }
-
-    public async Task<ResumeChecks> CheckMany(
-        Type train,
-        ChainRecorder chain,
-        Type input,
-        Type output,
-        long runId,
-        IReadOnlyCollection<string> points,
-        CancellationToken cancellationToken
-    )
-    {
-        if (rows.FirstOrDefault() is not { } store)
-            return new ResumeChecks(
-                ResumePlanner.NoRows,
-                points
-                    .Distinct(StringComparer.Ordinal)
-                    .ToDictionary(p => p, _ => ResumePlanner.NoRows, StringComparer.Ordinal),
-                [],
-                [],
-                []
-            );
-
-        // One lineage read for every point, without any row's state: a verdict needs only the
-        // rows' nodes, hashes and fingerprints.
-        var lineage = await store.Lineage(runId, cancellationToken).ConfigureAwait(false);
-        var hash = ChainGraph.From(chain, train, input, output).Hash;
-        var container = services.GetService<IServiceProviderIsService>();
-        var chosen = ResumePlanner.Chosen(chain, lineage);
-        var done = await Done(store, runId, cancellationToken).ConfigureAwait(false);
-
-        ResumeVerdict At(string? point) =>
-            done
-            ?? ResumePlanner.Check(chain, hash, input, output, container, chosen, point).Verdict;
-
-        var (restored, restoredTracks) = ResumePlanner.Resumed(
-            chain,
-            input,
-            output,
-            container,
-            lineage
-        );
-
-        return new ResumeChecks(
-            At(null),
-            points
-                .Distinct(StringComparer.Ordinal)
-                .ToDictionary(p => p, p => At(p), StringComparer.Ordinal),
-            chosen.Keys.ToList(),
-            lineage.Count > 0 ? lineage[0].Rows.Select(r => r.NodeId).Distinct().ToList() : [],
-            restored
-        )
-        {
-            RestoredTracks = restoredTracks,
-        };
-    }
-
-    /// <summary>
-    /// The refusal for a run a resume of which already completed, whose work is done, at any
-    /// point; null for any other run.
-    /// </summary>
-    private static async Task<ResumeVerdict?> Done(
-        ICheckpointRows store,
-        long runId,
-        CancellationToken cancellationToken
-    ) =>
-        await store.Source(runId, cancellationToken).ConfigureAwait(false)
-            is { ResumedToCompletion: true }
-            ? new ResumeVerdict(
-                false,
-                ResumeSources.AlreadyResumed,
-                "A" + ResumeSources.AlreadyResumedReason(runId)[1..],
-                null,
-                null
-            )
-            : null;
-}
 
 /// <summary>
 /// Builds a resume from a run's lineage: which checkpoints count, whether the chain allows the
@@ -250,11 +20,11 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
 internal static class ResumePlanner
 {
     internal static readonly ResumeVerdict NoRows = new(
-        false,
+        CanResume: false,
         ResumeRefusals.NoCheckpoint,
         "This host stores no checkpoints, so a run can only run again from the top.",
-        null,
-        null
+        Target: null,
+        Checkpoint: null
     );
 
     /// <summary>
@@ -295,7 +65,7 @@ internal static class ResumePlanner
         );
 
         if (!outcome.CanResume)
-            return (Refused(outcome.RefusalCode!, outcome.Refusal!), null);
+            return (Refused(outcome.RefusalCode.NotNull(), outcome.Refusal.NotNull()), null);
 
         foreach (var (_, node) in Targets(outcome))
         {
@@ -311,11 +81,17 @@ internal static class ResumePlanner
                 ) is
                 { } changed
             )
-                return (Refused(changed.RefusalCode!, changed.Refusal!), null);
+                return (Refused(changed.RefusalCode.NotNull(), changed.Refusal.NotNull()), null);
         }
 
         return (
-            new ResumeVerdict(true, null, null, outcome.Target, outcome.MainCheckpoint),
+            new ResumeVerdict(
+                CanResume: true,
+                Code: null,
+                Reason: null,
+                outcome.Target,
+                outcome.MainCheckpoint
+            ),
             outcome
         );
     }
@@ -369,7 +145,7 @@ internal static class ResumePlanner
                 cancellationToken
             )
             .ConfigureAwait(false);
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
 
         foreach (var (key, node) in targets)
         {
@@ -427,7 +203,7 @@ internal static class ResumePlanner
     )
     {
         var order = Order(chain);
-        var chosen = new Dictionary<string, Models.Checkpoint.Checkpoint>();
+        var chosen = new Dictionary<string, Models.Checkpoint.Checkpoint>(StringComparer.Ordinal);
         var limit = int.MaxValue;
 
         foreach (var run in lineage)
@@ -507,7 +283,8 @@ internal static class ResumePlanner
         foreach (var taken in Tracks(chosen[main].Tracks, outcome.TrackTypes[main]))
         {
             var key = taken.GetType().GetGenericArguments()[0].ReadableName();
-            var name = (string)taken.GetType().GetProperty("Track")!.GetValue(taken)!;
+            var name = (string)
+                taken.GetType().GetProperty("Track").NotNull().GetValue(taken).NotNull();
 
             foreach (var id in restored)
             {
@@ -528,7 +305,7 @@ internal static class ResumePlanner
         ChainVerification
             .NodeOrder(chain)
             .Select((id, i) => (id, i))
-            .ToDictionary(n => n.id, n => n.i);
+            .ToDictionary(n => n.id, n => n.i, StringComparer.Ordinal);
 
     /// <summary>
     /// The stored routes read back as the <c>TrackTaken</c> values the chain declares. A route
@@ -541,17 +318,21 @@ internal static class ResumePlanner
         foreach (var node in JsonNode.Parse(json)?.AsArray() ?? [])
         {
             var key = node?["key"]?.GetValue<string>();
-            var type = declared.FirstOrDefault(t => t.GetGenericArguments()[0].FullName == key);
+            var type = declared.FirstOrDefault(t =>
+                string.Equals(t.GetGenericArguments()[0].FullName, key, StringComparison.Ordinal)
+            );
 
             if (type is null)
                 continue;
 
             tracks.Add(
-                Activator.CreateInstance(
-                    type,
-                    node!["track"]?.GetValue<string>(),
-                    node["fallbackReason"]?.GetValue<string>()
-                )!
+                Activator
+                    .CreateInstance(
+                        type,
+                        node.NotNull()["track"]?.GetValue<string>(),
+                        node["fallbackReason"]?.GetValue<string>()
+                    )
+                    .NotNull()
             );
         }
 
@@ -559,5 +340,5 @@ internal static class ResumePlanner
     }
 
     private static ResumeVerdict Refused(string code, string reason) =>
-        new(false, code, reason, null, null);
+        new(CanResume: false, code, reason, Target: null, Checkpoint: null);
 }

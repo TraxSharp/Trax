@@ -9,6 +9,10 @@ updates:
     # hijacked version is usually caught and pulled first. Security updates are
     # not delayed by this.
     cooldown: { default-days: 7 }
+    # The versions the copied analyzer tests compile their snippets against, pinned so the restore
+    # downloads them. A bump there only breaks the test that names the old version.
+    exclude-paths:
+      - "Trax.Analyzers/tests/Trax.Analyzers.Tests.Pins/**"
     # One config now covers what ten repositories each limited to three. A bump that needs
     # a human costs a review either way, and a deep pile only outlasts the week's attention.
     open-pull-requests-limit: 5

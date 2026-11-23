@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -21,11 +22,11 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class CancelTimedOutJobsJunctionTests : TestSetup
 {
-    private IManifestManagerTrain _train = null!;
+    private IManifestManagerTrain? _train;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
     }
 
@@ -47,11 +48,11 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-120)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-120)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -72,11 +73,11 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-30)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-30)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -99,16 +100,16 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var timedOutMetadata = await CreateMetadata(
             shortTimeout,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-90)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-90)
         );
         var okMetadata = await CreateMetadata(
             longTimeout,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-90)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-90)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -132,20 +133,20 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-120)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-120)
         );
 
         // Set CancellationRequested to true before the junction runs
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken.None
             );
         DataContext.Reset();
 
         // Act — should complete without errors (idempotent)
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -157,7 +158,7 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await CreateMetadata(manifest, TrainState.Completed);
 
         // Act
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -174,11 +175,11 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await CreateMetadata(
             manifest,
             TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddSeconds(-120)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(-120)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert — no dead letter created (cancelled, not failed)
         DataContext.Reset();
@@ -192,10 +193,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
 
     private async Task<Manifest> CreateManifest(int? timeoutSeconds = null, int maxRetries = 3)
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -211,8 +210,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -227,16 +226,17 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "TimeoutTest" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         if (startTime.HasValue)
         {
@@ -246,7 +246,8 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.StartTime, startTime.Value),
                     CancellationToken.None
-                );
+                )
+                .ConfigureAwait(false);
         }
 
         DataContext.Reset();

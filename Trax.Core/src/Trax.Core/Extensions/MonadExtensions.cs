@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -34,28 +35,12 @@ internal static class MonadExtensions
     {
         var junctionType = typeof(TJunction);
 
-        var cached = ConstructorCache.GetOrAdd(
-            junctionType,
-            type =>
-            {
-                if (JunctionConstructorProblem(type) is not null)
-                    return null;
-
-                var constructors = type.GetConstructors();
-
-                var parameterTypes = constructors[0]
-                    .GetParameters()
-                    .Select(x => x.ParameterType)
-                    .ToArray();
-
-                return (constructors[0], parameterTypes);
-            }
-        );
+        var cached = ConstructorCache.GetOrAdd(junctionType, JunctionConstructor);
 
         if (cached is null)
         {
             monad.Exception ??= new TrainException(
-                JunctionConstructorProblem(junctionType, monad.Train.GetType())!
+                JunctionConstructorProblem(junctionType, monad.Train.GetType()).NotNull()
             );
             return null;
         }
@@ -104,6 +89,24 @@ internal static class MonadExtensions
     }
 
     /// <summary>
+    /// The one public constructor Trax builds <paramref name="type"/> with and its parameter
+    /// types, or null when it cannot build the junction at all.
+    /// </summary>
+    private static (ConstructorInfo Constructor, Type[] ParameterTypes)? JunctionConstructor(
+        Type type
+    )
+    {
+        if (JunctionConstructorProblem(type) is not null)
+            return null;
+
+        var constructors = type.GetConstructors();
+
+        var parameterTypes = constructors[0].GetParameters().Select(x => x.ParameterType).ToArray();
+
+        return (constructors[0], parameterTypes);
+    }
+
+    /// <summary>
     /// Extracts multiple types from Memory.
     /// </summary>
     public static dynamic?[] ExtractTypesFromMemory<TInput, TReturn>(
@@ -141,7 +144,7 @@ internal static class MonadExtensions
         Type tIn
     )
     {
-        if (tIn.IsGenericType == false || tIn.GetGenericTypeDefinition() != typeof(ILogger<>))
+        if (!tIn.IsGenericType || tIn.GetGenericTypeDefinition() != typeof(ILogger<>))
             return null;
 
         // Without a factory the caller reports the logger as missing, saying who needed it.
@@ -158,7 +161,7 @@ internal static class MonadExtensions
                 $"Incorrect number of generic arguments for input type ({tIn}). Found ({generics.Length}) generics with types ({string.Join(", ", generics.Select(x => x.Name))})."
             );
 
-        return loggerFactory.CreateGenericLogger(generics.First());
+        return loggerFactory.CreateGenericLogger(generics[0]);
     }
 
     /// <summary>
@@ -296,7 +299,10 @@ internal static class MonadExtensions
         if (count == 1)
             return null;
 
-        return $"Junction '{junctionType.ReadableName()}'{train} has {count} public constructors; "
+        return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Junction '{junctionType.ReadableName()}'{train} has {count} public constructors; "
+            )
             + "Trax builds a junction through its single public constructor. Give it exactly one.";
     }
 

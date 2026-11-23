@@ -174,7 +174,9 @@ builder.Services.AddTrax(trax =>
                         new ProcessChargingSessionInput
                         {
                             StationId = $"EVC-{zone.ToUpperInvariant()}",
-                            SessionType = zone == "parking" ? "Wireless" : "Wired",
+                            SessionType = string.Equals(zone, "parking", StringComparison.Ordinal)
+                                ? "Wireless"
+                                : "Wired",
                         }
                     )),
                     Every.Minutes(2).WithVariance(TimeSpan.FromSeconds(30)),
@@ -244,9 +246,16 @@ app.MapHealthChecks("/trax/health");
 if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 namespace Trax.Samples.EnergyHub.Hub
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

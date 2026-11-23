@@ -10,11 +10,11 @@ namespace Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 /// </summary>
 public class ArrayLoggingProvider : IArrayLoggingProvider
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed = false;
 
     /// <inheritdoc/>
-    public List<ArrayLoggerEffect> Loggers { get; } = [];
+    public IList<ArrayLoggerEffect> Loggers { get; } = [];
 
     /// <summary>
     /// Disposes every logger (which empties its <see cref="ArrayLoggerEffect.Logs"/>) and empties

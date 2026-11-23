@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Services.Runs;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -42,17 +44,20 @@ namespace Trax.Api.Tests;
 public class OperationsParityReadsTests
 {
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     private IOperationsService Operations =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );
@@ -64,20 +69,21 @@ public class OperationsParityReadsTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         await ((DbContext)db).Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.log, trax.dead_letter, trax.work_queue, trax.metadata, "
                 + "trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
@@ -95,7 +101,7 @@ public class OperationsParityReadsTests
         var externalId = await ExternalIdOf(wanted);
 
         var page = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             externalId: externalId
         );
@@ -113,7 +119,11 @@ public class OperationsParityReadsTests
         var second = await SeedRun(m => m.ParentId = parent);
         await SeedRun();
 
-        var page = await new OperationsQueries().GetExecutions(_factory, default, parentId: parent);
+        var page = await new OperationsQueries().GetExecutions(
+            _factory.NotNull(),
+            default,
+            parentId: parent
+        );
 
         page.Items.Select(e => e.Id).Should().Equal(second, first);
         page.Items.Should().OnlyContain(e => e.ParentId == parent);
@@ -128,7 +138,7 @@ public class OperationsParityReadsTests
         await SeedRun(m => m.HostName = null);
 
         var page = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             hostName: "host-a"
         );
@@ -145,7 +155,7 @@ public class OperationsParityReadsTests
         await SeedRun();
 
         var page = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             failureReasonContains: "CARD declined"
         );
@@ -170,7 +180,7 @@ public class OperationsParityReadsTests
         await SeedFailedRun(notMatching);
 
         var page = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             failureReasonContains: term
         );
@@ -188,7 +198,7 @@ public class OperationsParityReadsTests
         await SeedFailedRun("permission denied", "ChargeCard", "host-a");
 
         var page = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             trainState: TrainState.Failed,
             hostName: "host-a",
@@ -209,7 +219,7 @@ public class OperationsParityReadsTests
         await SeedRun();
 
         var page = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             failureJunction: "ChargeCard"
         );
@@ -224,25 +234,7 @@ public class OperationsParityReadsTests
         SortOrder order
     )
     {
-        // More runs than the window, with matches near each end and in the middle, so a page
-        // starts in the window and finishes past it, whichever end it reads from.
-        var rows = OperationsQueries.FailureTextWindow + 20_000;
-        await using (var db = await _factory.CreateDbContextAsync(default))
-            await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-                $"""
-                INSERT INTO trax.metadata (external_id, name, train_state, start_time, failure_reason)
-                SELECT lpad(g::text, 32, '0'), 'Trax.X.Parity', 'failed'::trax.train_state, now(),
-                       'attempt ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
-                    - 2}) THEN ' Needle' ELSE '' END
-                FROM generate_series(1, {rows}) g
-                """
-            );
-        List<long> matching;
-        await using (var db = await _factory.CreateDbContextAsync(default))
-            matching = await db
-                .Metadatas.Where(m => m.FailureReason!.EndsWith(" Needle"))
-                .Select(m => m.Id)
-                .ToListAsync();
+        var matching = await SeedNeedleRunsAcrossTheWindow();
         var expected =
             order == SortOrder.Oldest
                 ? matching.Order().ToList()
@@ -250,7 +242,7 @@ public class OperationsParityReadsTests
         var queries = new OperationsQueries();
 
         var whole = await queries.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 500,
             order: order,
@@ -259,27 +251,12 @@ public class OperationsParityReadsTests
         whole.Items.Select(e => e.Id).Should().Equal(expected);
         whole.TotalCount.Should().Be(expected.Count);
 
-        var paged = new List<long>();
-        long? cursor = null;
-        do
-        {
-            var page = await queries.GetExecutions(
-                _factory,
-                default,
-                take: 7,
-                order: order,
-                afterId: cursor,
-                failureReasonContains: "needle"
-            );
-            paged.AddRange(page.Items.Select(e => e.Id));
-            page.TotalCount.Should().Be(expected.Count, "the cursor never changes the total");
-            cursor = page.Items.Count == 7 ? page.NextCursor : null;
-        } while (cursor is not null);
+        var paged = await ReadNeedlePagesByCursor(queries, order, expected.Count);
 
         paged.Should().Equal(expected, "paging by cursor reads the same rows in the same order");
 
         var bySkip = await queries.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             skip: 7,
             take: 7,
@@ -292,10 +269,72 @@ public class OperationsParityReadsTests
             .Equal(expected.Skip(7).Take(7), "an offset page reads the same order");
     }
 
+    private async Task<List<long>> SeedNeedleRunsAcrossTheWindow()
+    {
+        // More runs than the window, with matches near each end and in the middle, so a page
+        // starts in the window and finishes past it, whichever end it reads from.
+        var rows = OperationsQueries.FailureTextWindow + 20_000;
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+                await ((DbContext)db)
+                    .Database.ExecuteSqlInterpolatedAsync(
+                        $"""
+                INSERT INTO trax.metadata (external_id, name, train_state, start_time, failure_reason)
+                SELECT lpad(g::text, 32, '0'), 'Trax.X.Parity', 'failed'::trax.train_state, now(),
+                       'attempt ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
+                    - 2}) THEN ' Needle' ELSE '' END
+                FROM generate_series(1, {rows}) g
+                """
+                    )
+                    .ConfigureAwait(false);
+        }
+        List<long> matching;
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+                matching = await db
+                    .Metadatas.Where(m =>
+                        m.FailureReason != null && m.FailureReason.EndsWith(" Needle")
+                    )
+                    .Select(m => m.Id)
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+        }
+        return matching;
+    }
+
+    private async Task<List<long>> ReadNeedlePagesByCursor(
+        OperationsQueries queries,
+        SortOrder order,
+        int expectedCount
+    )
+    {
+        var paged = new List<long>();
+        long? cursor = null;
+        do
+        {
+            var page = await queries
+                .GetExecutions(
+                    _factory.NotNull(),
+                    default,
+                    take: 7,
+                    order: order,
+                    afterId: cursor,
+                    failureReasonContains: "needle"
+                )
+                .ConfigureAwait(false);
+            paged.AddRange(page.Items.Select(e => e.Id));
+            page.TotalCount.Should().Be(expectedCount, "the cursor never changes the total");
+            cursor = page.Items.Count == 7 ? page.NextCursor : null;
+        } while (cursor is not null);
+        return paged;
+    }
+
     [Test]
     public async Task Executions_AFailureTextFilter_CountsUpToTheCap_AndSaysWhenItStopped()
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
                 $"""
                 INSERT INTO trax.metadata (external_id, name, train_state, start_time, failure_reason, failure_junction)
@@ -307,16 +346,20 @@ public class OperationsParityReadsTests
         var queries = new OperationsQueries();
 
         var capped = await queries.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             failureReasonContains: "retrying"
         );
         var exact = await queries.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             failureReasonContains: "retrying 1000"
         );
-        var byJunction = await queries.GetExecutions(_factory, default, failureJunction: "Retry");
+        var byJunction = await queries.GetExecutions(
+            _factory.NotNull(),
+            default,
+            failureJunction: "Retry"
+        );
 
         capped.TotalCount.Should().Be(OperationsQueries.FailureTextCountCap);
         capped.IsCountCapped.Should().BeTrue();
@@ -342,12 +385,12 @@ public class OperationsParityReadsTests
         });
         var queries = new OperationsQueries();
 
-        var listed = (await queries.GetExecutions(_factory, default)).Items.Single();
-        var single = await queries.GetExecutionDetail(running, _factory, default);
+        var listed = (await queries.GetExecutions(_factory.NotNull(), default)).Items.Single();
+        var single = await queries.GetExecutionDetail(running, _factory.NotNull(), default);
 
         listed.CurrentlyRunningJunction.Should().Be("ChargeCard");
         listed.ParentId.Should().BeNull();
-        single!.CurrentlyRunningJunction.Should().Be("ChargeCard");
+        single.NotNull().CurrentlyRunningJunction.Should().Be("ChargeCard");
     }
 
     [Test]
@@ -358,7 +401,7 @@ public class OperationsParityReadsTests
 
         var children = await new OperationsQueries().GetExecutionChildren(
             parent,
-            _factory,
+            _factory.NotNull(),
             default
         );
 
@@ -376,10 +419,12 @@ public class OperationsParityReadsTests
         });
         var queries = new OperationsQueries();
 
-        (await queries.GetExecutionDetail(abandoned, _factory, default))!
+        (await queries.GetExecutionDetail(abandoned, _factory.NotNull(), default))
+            .NotNull()
             .ReplayAbandoned.Should()
             .BeTrue();
-        (await queries.GetExecutionDetail(original, _factory, default))!
+        (await queries.GetExecutionDetail(original, _factory.NotNull(), default))
+            .NotNull()
             .ReplayAbandoned.Should()
             .BeFalse();
     }
@@ -396,8 +441,8 @@ public class OperationsParityReadsTests
         await SeedManifest(group, AdminTrains.FullNames[0]);
         var queries = new OperationsQueries();
 
-        var hidden = await queries.GetManifests(_factory, default, hideAdminTrains: true);
-        var all = await queries.GetManifests(_factory, default);
+        var hidden = await queries.GetManifests(_factory.NotNull(), default, hideAdminTrains: true);
+        var all = await queries.GetManifests(_factory.NotNull(), default);
 
         hidden.Items.Should().ContainSingle().Which.Id.Should().Be(own);
         hidden.TotalCount.Should().Be(1);
@@ -416,7 +461,7 @@ public class OperationsParityReadsTests
         await SeedDeadLetter(other);
 
         var page = await new DeadLetterQueries().GetDeadLetters(
-            _factory,
+            _factory.NotNull(),
             default,
             manifestId: wanted
         );
@@ -439,8 +484,16 @@ public class OperationsParityReadsTests
         );
         var queries = new WorkQueueQueries();
 
-        var bySubject = await queries.GetWorkQueues(_factory, default, subjectKey: "order-7");
-        var byManifest = await queries.GetWorkQueues(_factory, default, manifestId: manifest);
+        var bySubject = await queries.GetWorkQueues(
+            _factory.NotNull(),
+            default,
+            subjectKey: "order-7"
+        );
+        var byManifest = await queries.GetWorkQueues(
+            _factory.NotNull(),
+            default,
+            manifestId: manifest
+        );
 
         bySubject.Items.Should().ContainSingle().Which.Id.Should().Be(onSubject);
         bySubject.TotalCount.Should().Be(1);
@@ -456,7 +509,7 @@ public class OperationsParityReadsTests
         );
         var queries = new WorkQueueQueries();
 
-        (await queries.GetWorkQueues(_factory, default))
+        (await queries.GetWorkQueues(_factory.NotNull(), default))
             .Items.Single()
             .ReplayDecisionsOf.Should()
             .Be(original);
@@ -465,13 +518,14 @@ public class OperationsParityReadsTests
                 replaying,
                 new OperationsService(
                     Substitute.For<ITrainDiscoveryService>(),
-                    _factory,
+                    _factory.NotNull(),
                     new SchedulerConfiguration(),
                     Substitute.For<ITrainExecutionService>()
                 ),
                 default
             )
-        )!
+        )
+            .NotNull()
             .ReplayDecisionsOf.Should()
             .Be(original);
     }
@@ -490,7 +544,7 @@ public class OperationsParityReadsTests
 
         var page = await new LogQueries().GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             messageContains: "CARD"
         );
@@ -509,7 +563,7 @@ public class OperationsParityReadsTests
 
         var page = await new LogQueries().GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             categoryContains: "ship"
         );
@@ -522,12 +576,12 @@ public class OperationsParityReadsTests
     {
         var run = await SeedRun();
         for (var i = 0; i < 5; i++)
-            await SeedLog(run, $"step {i}", "Shop");
+            await SeedLog(run, string.Create(CultureInfo.InvariantCulture, $"step {i}"), "Shop");
         var queries = new LogQueries();
 
         var first = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 2,
             metadataId: run,
@@ -535,7 +589,7 @@ public class OperationsParityReadsTests
         );
         var second = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 2,
             metadataId: run,
@@ -552,7 +606,7 @@ public class OperationsParityReadsTests
     public async Task Logs_ATextFilter_CountsUpToTheCap_AndSaysWhenItStopped()
     {
         var run = await SeedRun();
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
                 $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {run}, 0, 'information'::trax.log_level, 'retrying ' || g, 'Shop' FROM generate_series(1, {OperationsService.LogCountCap + 5}) g"
             );
@@ -560,17 +614,17 @@ public class OperationsParityReadsTests
 
         var capped = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             messageContains: "retrying"
         );
         var exact = await queries.GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             messageContains: "retrying 1000"
         );
-        var byRun = await queries.GetLogs(Operations, _factory, default, metadataId: run);
+        var byRun = await queries.GetLogs(Operations, _factory.NotNull(), default, metadataId: run);
 
         capped.TotalCount.Should().Be(OperationsService.LogCountCap);
         capped.IsCountCapped.Should().BeTrue();
@@ -594,7 +648,7 @@ public class OperationsParityReadsTests
 
         var page = await new LogQueries().GetLogs(
             Operations,
-            _factory,
+            _factory.NotNull(),
             default,
             messageContains: "100%"
         );
@@ -699,10 +753,15 @@ public class OperationsParityReadsTests
         var graphs = Substitute.For<ITrainChainGraphs>();
         graphs.Find("Trax.X.Parity").Returns(ParityOperationsOverHttpTests.RoutedGraph);
 
-        var graph = await new OperationsQueries().GetRunGraph(run, _factory, graphs, default);
-        var steps = await new OperationsQueries().GetJunctionRuns(run, _factory, default);
+        var graph = await new OperationsQueries().GetRunGraph(
+            run,
+            _factory.NotNull(),
+            graphs,
+            default
+        );
+        var steps = await new OperationsQueries().GetJunctionRuns(run, _factory.NotNull(), default);
 
-        graph!.Train.Should().Be("Trax.X.Parity");
+        graph.NotNull().Train.Should().Be("Trax.X.Parity");
         graph.HasGraph.Should().BeTrue();
         graph.Hash.Should().Be(ParityOperationsOverHttpTests.RoutedGraph.Hash);
         graph
@@ -721,7 +780,7 @@ public class OperationsParityReadsTests
     public async Task RunGraph_OfAnIdWithNoRun_IsNull_AndOfAnUnregisteredTrain_HasNoGraph()
     {
         var graphs = Substitute.For<ITrainChainGraphs>();
-        (await new OperationsQueries().GetRunGraph(424242, _factory, graphs, default))
+        (await new OperationsQueries().GetRunGraph(424242, _factory.NotNull(), graphs, default))
             .Should()
             .BeNull();
 
@@ -730,9 +789,14 @@ public class OperationsParityReadsTests
             run,
             ("Fetch", JunctionRunKind.Junction, JunctionRunState.Completed, "Fetch#0", null)
         );
-        var graph = await new OperationsQueries().GetRunGraph(run, _factory, graphs, default);
+        var graph = await new OperationsQueries().GetRunGraph(
+            run,
+            _factory.NotNull(),
+            graphs,
+            default
+        );
 
-        graph!.HasGraph.Should().BeFalse();
+        graph.NotNull().HasGraph.Should().BeFalse();
         graph.Nodes.Should().BeEmpty();
         graph.UnmatchedSteps.Should().ContainSingle().Which.NodeId.Should().Be("Fetch#0");
     }
@@ -748,24 +812,27 @@ public class OperationsParityReadsTests
         )[] steps
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var position = 0;
-        foreach (var step in steps)
-            db.JunctionRuns.Add(
-                new JunctionRun
-                {
-                    MetadataId = run,
-                    Position = position++,
-                    Kind = step.Kind,
-                    Name = step.Name,
-                    State = step.State,
-                    StartedAt = DateTime.UtcNow,
-                    QuestionKey = step.Kind == JunctionRunKind.Junction ? null : step.Name,
-                    Answer = step.Answer,
-                    NodeId = step.NodeId,
-                }
-            );
-        await db.SaveChanges(default);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var position = 0;
+            foreach (var step in steps)
+                db.JunctionRuns.Add(
+                    new JunctionRun
+                    {
+                        MetadataId = run,
+                        Position = position++,
+                        Kind = step.Kind,
+                        Name = step.Name,
+                        State = step.State,
+                        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                        QuestionKey = step.Kind == JunctionRunKind.Junction ? null : step.Name,
+                        Answer = step.Answer,
+                        NodeId = step.NodeId,
+                    }
+                );
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     #endregion
@@ -779,18 +846,22 @@ public class OperationsParityReadsTests
         discovery
             .DiscoverTrains()
             .Returns([
-                Registration(typeof(ISubjectTrain), true),
-                Registration(typeof(IPlainTrain), false),
+                Registration(typeof(ISubjectTrain), hasSubjectKey: true),
+                Registration(typeof(IPlainTrain), hasSubjectKey: false),
             ]);
 
         var trains = new OperationsQueries().GetTrains(discovery);
 
         trains
-            .Single(t => t.FullName == typeof(ISubjectTrain).FullName)
+            .Single(t =>
+                string.Equals(t.FullName, typeof(ISubjectTrain).FullName, StringComparison.Ordinal)
+            )
             .HasQueueSubjectKey.Should()
             .BeTrue();
         trains
-            .Single(t => t.FullName == typeof(IPlainTrain).FullName)
+            .Single(t =>
+                string.Equals(t.FullName, typeof(IPlainTrain).FullName, StringComparison.Ordinal)
+            )
             .HasQueueSubjectKey.Should()
             .BeFalse();
     }
@@ -825,19 +896,23 @@ public class OperationsParityReadsTests
 
     private async Task<long> SeedRun(Action<Metadata>? configure = null)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.Parity",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        configure?.Invoke(meta);
-        await db.Track(meta);
-        await db.SaveChanges(default);
-        return meta.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Parity",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
+            );
+            configure?.Invoke(meta);
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return meta.Id;
+        }
     }
 
     /// <summary>
@@ -850,96 +925,132 @@ public class OperationsParityReadsTests
         string? hostName = null
     )
     {
-        var id = await SeedRun(m => m.HostName = hostName);
-        await using var db = await _factory.CreateDbContextAsync(default);
-        await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE trax.metadata SET train_state = 'failed', failure_reason = {reason}, failure_junction = {junction} WHERE id = {id}"
-        );
-        return id;
+        var id = await SeedRun(m => m.HostName = hostName).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await ((DbContext)db)
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE trax.metadata SET train_state = 'failed', failure_reason = {reason}, failure_junction = {junction} WHERE id = {id}"
+                )
+                .ConfigureAwait(false);
+            return id;
+        }
     }
 
     private async Task<string> ExternalIdOf(long id)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        return await db.Metadatas.Where(m => m.Id == id).Select(m => m.ExternalId).SingleAsync();
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .Metadatas.Where(m => m.Id == id)
+                .Select(m => m.ExternalId)
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<long> SeedGroup()
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var group = new ManifestGroup
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = $"group-{Guid.NewGuid():N}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(group);
-        await db.SaveChanges(default);
-        return group.Id;
+            var group = new ManifestGroup
+            {
+                Name = $"group-{Guid.NewGuid():N}",
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            };
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return group.Id;
+        }
     }
 
     private async Task<long> SeedManifest(long groupId, string? name = null)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IPlainTrain) });
-        manifest.ManifestGroupId = groupId;
-        if (name is not null)
-            manifest.Name = name;
-        await db.Track(manifest);
-        await db.SaveChanges(default);
-        return manifest.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(IPlainTrain) });
+            manifest.ManifestGroupId = groupId;
+            if (name is not null)
+                manifest.Name = name;
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return manifest.Id;
+        }
     }
 
     private async Task SeedDeadLetter(long manifestId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var manifest = await db.Manifests.SingleAsync(m => m.Id == manifestId);
-        await db.Track(
-            DeadLetter.Create(
-                new CreateDeadLetter
-                {
-                    Manifest = manifest,
-                    Reason = "failed",
-                    RetryCount = 3,
-                }
-            )
-        );
-        await db.SaveChanges(default);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var manifest = await db
+                .Manifests.SingleAsync(m => m.Id == manifestId)
+                .ConfigureAwait(false);
+            await db.Track(
+                    DeadLetter.Create(
+                        new CreateDeadLetter
+                        {
+                            Manifest = manifest,
+                            Reason = "failed",
+                            RetryCount = 3,
+                        },
+                        TimeProvider.System
+                    )
+                )
+                .ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<long> SeedEntry(CreateWorkQueue create)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var entry = WorkQueue.Create(create);
-        await db.Track(entry);
-        await db.SaveChanges(default);
-        return entry.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var entry = WorkQueue.Create(create, TimeProvider.System);
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return entry.Id;
+        }
     }
 
     private async Task SeedLog(long metadataId, string message, string category)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, {LogLevel.Information.ToString().ToLowerInvariant()}::trax.log_level, {message}, {category})"
-        );
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await ((DbContext)db)
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, {nameof(LogLevel.Information).ToLowerInvariant()}::trax.log_level, {message}, {category})"
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task SeedDecision(long metadataId, string key, int occurrence, string answer)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        db.RecordedDecisions.Add(
-            new RecordedDecision
-            {
-                MetadataId = metadataId,
-                QuestionKey = key,
-                Occurrence = occurrence,
-                Fingerprint = new string('0', 64),
-                Kind = "choice",
-                Question = "{}",
-                Answer = answer,
-                DecidedAt = DateTime.UtcNow,
-            }
-        );
-        await db.SaveChanges(default);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            db.RecordedDecisions.Add(
+                new RecordedDecision
+                {
+                    MetadataId = metadataId,
+                    QuestionKey = key,
+                    Occurrence = occurrence,
+                    Fingerprint = new string('0', 64),
+                    Kind = "choice",
+                    Question = "{}",
+                    Answer = answer,
+                    DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                }
+            );
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 }

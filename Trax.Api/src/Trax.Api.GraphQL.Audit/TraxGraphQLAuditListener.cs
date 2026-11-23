@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Audit;
 
@@ -254,13 +255,13 @@ public sealed class TraxGraphQLAuditListener(
                 PrincipalId: principal.Item1,
                 PrincipalType: principal.Item2,
                 OperationName: Truncate(operationName, _options.MaxOperationNameLength),
-                Document: Truncate(text, _options.MaxDocumentLength)!,
+                Document: Truncate(text, _options.MaxDocumentLength).NotNull(),
                 Variables: null,
                 DurationMs: 0,
                 Timestamp: timeProvider.GetUtcNow(),
                 Success: false,
                 ErrorText: Truncate(errorText, _options.MaxErrorTextLength),
-                Metadata: new Dictionary<string, string>
+                Metadata: new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [SubscriptionEventKey] = "error",
                     [SubscriptionEventErrorCountKey] = errorCount.ToString(

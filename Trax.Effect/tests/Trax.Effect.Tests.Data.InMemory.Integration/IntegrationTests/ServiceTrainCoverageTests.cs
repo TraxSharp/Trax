@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Enums;
@@ -35,11 +36,14 @@ public class ServiceTrainCoverageTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run("input", cts.Token);
+        var act = async () => await train.Run("input", cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.OnCancelledCalled.Should().BeTrue();
-        ((ServiceTrain<string, int>)train).Metadata!.TrainState.Should().Be(TrainState.Cancelled);
+        ((ServiceTrain<string, int>)train)
+            .Metadata.NotNull()
+            .TrainState.Should()
+            .Be(TrainState.Cancelled);
     }
 
     [Test]
@@ -54,7 +58,7 @@ public class ServiceTrainCoverageTests : TestSetup
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await train.Run("x", cts.Token);
+        var act = async () => await train.Run("x", cts.Token).ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -66,14 +70,16 @@ public class ServiceTrainCoverageTests : TestSetup
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
             {
-                Name = typeof(ICancellingJunctionTrain).FullName!,
+                Name = typeof(ICancellingJunctionTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.InProgress;
 
-        var act = async () => await train.Run("x", metadata);
+        var act = async () =>
+            await train.Run("x", metadata, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Trax.Core.Exceptions.TrainException>();
     }
@@ -88,14 +94,19 @@ public class ServiceTrainCoverageTests : TestSetup
         // The train completed successfully even though the post-success
         // output-serialization fallback could not serialize the cyclic graph.
         result.Should().NotBeNull();
-        ((ServiceTrain<Unit, Cyclic>)train).Metadata!.TrainState.Should().Be(TrainState.Completed);
+        ((ServiceTrain<Unit, Cyclic>)train)
+            .Metadata.NotNull()
+            .TrainState.Should()
+            .Be(TrainState.Completed);
     }
 
     #region Fakes
 
-    private interface ICancellingJunctionTrain : IServiceTrain<string, int> { }
+    private interface ICancellingJunctionTrain : IServiceTrain<string, int>;
 
-    private class CancellingJunctionTrain : ServiceTrain<string, int>, ICancellingJunctionTrain
+    private sealed class CancellingJunctionTrain
+        : ServiceTrain<string, int>,
+            ICancellingJunctionTrain
     {
         public bool OnCancelledCalled { get; private set; }
 
@@ -112,15 +123,15 @@ public class ServiceTrainCoverageTests : TestSetup
         }
     }
 
-    private class CancellingJunction : Junction<string, int>
+    private sealed class CancellingJunction : Junction<string, int>
     {
         public override Task<int> Run(string input) =>
             throw new OperationCanceledException("cancel via junction");
     }
 
-    private interface IThrowingHookCancelJunctionTrain : IServiceTrain<string, int> { }
+    private interface IThrowingHookCancelJunctionTrain : IServiceTrain<string, int>;
 
-    private class ThrowingHookCancelJunctionTrain
+    private sealed class ThrowingHookCancelJunctionTrain
         : ServiceTrain<string, int>,
             IThrowingHookCancelJunctionTrain
     {
@@ -138,9 +149,11 @@ public class ServiceTrainCoverageTests : TestSetup
         public Cyclic? Self { get; set; }
     }
 
-    private interface IUnserializableOutputTrain : IServiceTrain<Unit, Cyclic> { }
+    private interface IUnserializableOutputTrain : IServiceTrain<Unit, Cyclic>;
 
-    private class UnserializableOutputTrain : ServiceTrain<Unit, Cyclic>, IUnserializableOutputTrain
+    private sealed class UnserializableOutputTrain
+        : ServiceTrain<Unit, Cyclic>,
+            IUnserializableOutputTrain
     {
         protected override async Task<Either<Exception, Cyclic>> Junctions()
         {

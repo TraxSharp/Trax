@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using AwesomeAssertions;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
@@ -15,7 +17,7 @@ using Trax.Effect.Extensions;
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
 [TestFixture]
-public class DataContextLoggingProviderTests
+public partial class DataContextLoggingProviderTests
 {
     #region DataContextLogger — direct tests
 
@@ -42,10 +44,16 @@ public class DataContextLoggingProviderTests
     {
         var logger = BuildLogger(out var channel);
 
-        logger.Log(LogLevel.Warning, new EventId(7, "evt"), "msg", null, (_, _) => "rendered");
+        logger.Log(
+            LogLevel.Warning,
+            new EventId(7, "evt"),
+            "msg",
+            exception: null,
+            (_, _) => "rendered"
+        );
 
         channel.Reader.TryRead(out var written).Should().BeTrue();
-        written!.Level.Should().Be(LogLevel.Warning);
+        written.NotNull().Level.Should().Be(LogLevel.Warning);
         written.Message.Should().Be("rendered");
         written.Category.Should().Be("MyApp.Foo");
         written.EventId.Should().Be(7);
@@ -56,7 +64,7 @@ public class DataContextLoggingProviderTests
     {
         var logger = BuildLogger(out var channel, minLevel: LogLevel.Warning);
 
-        logger.Log(LogLevel.Debug, default, "x", null, (_, _) => "x");
+        logger.Log(LogLevel.Debug, default, "x", exception: null, (_, _) => "x");
 
         channel.Reader.TryRead(out _).Should().BeFalse();
     }
@@ -71,7 +79,7 @@ public class DataContextLoggingProviderTests
             categoryName: "Microsoft.EntityFrameworkCore.Database.Command"
         );
 
-        logger.Log(LogLevel.Critical, default, "x", null, (_, _) => "x");
+        logger.Log(LogLevel.Critical, default, "x", exception: null, (_, _) => "x");
 
         channel.Reader.TryRead(out _).Should().BeFalse();
     }
@@ -85,7 +93,7 @@ public class DataContextLoggingProviderTests
             exact: ["Noisy.Thing"]
         );
 
-        logger.Log(LogLevel.Information, default, "m", null, (_, _) => "m");
+        logger.Log(LogLevel.Information, default, "m", exception: null, (_, _) => "m");
 
         channel.Reader.TryRead(out _).Should().BeFalse();
     }
@@ -93,14 +101,13 @@ public class DataContextLoggingProviderTests
     [Test]
     public void Log_WildcardBlacklisted_Skipped()
     {
-        var pattern = new Regex(@"^Microsoft\..*$", RegexOptions.Compiled);
         var logger = BuildLogger(
             out var channel,
             categoryName: "Microsoft.SomethingNoisy",
-            wildcards: [pattern]
+            wildcards: [Pattern]
         );
 
-        logger.Log(LogLevel.Information, default, "m", null, (_, _) => "m");
+        logger.Log(LogLevel.Information, default, "m", exception: null, (_, _) => "m");
 
         channel.Reader.TryRead(out _).Should().BeFalse();
     }
@@ -131,7 +138,7 @@ public class DataContextLoggingProviderTests
     private sealed class FakeConfig : IDataContextLoggingProviderConfiguration
     {
         public LogLevel MinimumLogLevel { get; init; } = LogLevel.Information;
-        public List<string> Blacklist { get; init; } = [];
+        public IReadOnlyList<string> Blacklist { get; init; } = [];
     }
 
     private static (DataContextLoggingProvider provider, IDataContext context) BuildProvider(
@@ -172,9 +179,9 @@ public class DataContextLoggingProviderTests
         var wildcardLogger = provider.CreateLogger("EntityFramework.Internal.Stuff");
         var passLogger = provider.CreateLogger("Allowed.Category");
 
-        literalLogger.Log(LogLevel.Warning, default, "x", null, (_, _) => "x");
-        wildcardLogger.Log(LogLevel.Warning, default, "x", null, (_, _) => "x");
-        passLogger.Log(LogLevel.Warning, default, "x", null, (_, _) => "x");
+        literalLogger.Log(LogLevel.Warning, default, "x", exception: null, (_, _) => "x");
+        wildcardLogger.Log(LogLevel.Warning, default, "x", exception: null, (_, _) => "x");
+        passLogger.Log(LogLevel.Warning, default, "x", exception: null, (_, _) => "x");
 
         // The provider's flush loop will eventually persist the un-filtered log.
         // Dispose writes what is queued before it returns.
@@ -190,14 +197,20 @@ public class DataContextLoggingProviderTests
 
         var logger = provider.CreateLogger("TestCategory");
         for (var i = 0; i < 5; i++)
-            logger.Log(LogLevel.Information, default, i, null, (s, _) => $"msg {s}");
+            logger.Log(
+                LogLevel.Information,
+                default,
+                i,
+                exception: null,
+                (s, _) => string.Create(CultureInfo.InvariantCulture, $"msg {s}")
+            );
 
         // Poll for the flush loop to land at least one batch instead of waiting a fixed
         // window: CI scheduling can delay the background writer, and once any log is
         // persisted the flush path is known to work.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(15);
         var landed = 0;
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             context.Reset();
             landed = await context
@@ -233,7 +246,13 @@ public class DataContextLoggingProviderTests
 
         const int count = 1000;
         for (var i = 0; i < count; i++)
-            logger.Log(LogLevel.Information, default, i, null, (s, _) => $"msg {s}");
+            logger.Log(
+                LogLevel.Information,
+                default,
+                i,
+                exception: null,
+                (s, _) => string.Create(CultureInfo.InvariantCulture, $"msg {s}")
+            );
 
         provider.Dispose();
 
@@ -265,7 +284,8 @@ public class DataContextLoggingProviderTests
         var provider = new DataContextLoggingProvider(factory, new FakeConfig());
         var logger = provider.CreateLogger("Writer.Failed");
 
-        var log = () => logger.Log(LogLevel.Information, default, "m", null, (_, _) => "m");
+        var log = () =>
+            logger.Log(LogLevel.Information, default, "m", exception: null, (_, _) => "m");
         Action dispose = () => provider.Dispose();
 
         log.Should().NotThrow("logging never throws into the caller");
@@ -291,7 +311,7 @@ public class DataContextLoggingProviderTests
             try
             {
                 // negative-wait: a database that never answers; only the writer's cancellation ends it.
-                await Task.Delay(Timeout.Infinite, token);
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -311,7 +331,7 @@ public class DataContextLoggingProviderTests
                 .CreateDbContextAsync(Arg.Any<CancellationToken>())
                 .Returns(async call =>
                 {
-                    await Hang(call.Arg<CancellationToken>());
+                    await Hang(call.Arg<CancellationToken>()).ConfigureAwait(false);
                     return context;
                 });
         else
@@ -320,19 +340,22 @@ public class DataContextLoggingProviderTests
 
         provider
             .CreateLogger("Writer.Stuck")
-            .Log(LogLevel.Information, default, "m", null, (_, _) => "m");
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            .Log(LogLevel.Information, default, "m", exception: null, (_, _) => "m");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         // measuring-interval: the stopwatch measures how long shutdown is held up.
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         provider.Dispose();
-        clock.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(started);
 
         cancelled
             .Task.IsCompleted.Should()
             .BeTrue("the writer is cancelled once the drain runs out");
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
+        elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
     }
+
+    [GeneratedRegex(@"^Microsoft\..*$", RegexOptions.Compiled, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Pattern { get; }
 
     #endregion
 }

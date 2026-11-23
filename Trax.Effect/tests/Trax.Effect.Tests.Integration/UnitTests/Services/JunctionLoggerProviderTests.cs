@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -39,10 +40,12 @@ public class JunctionLoggerProviderTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         typeof(ServiceTrain<string, string>)
-            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)
+            .NotNull()
             .SetValue(train, trainMeta);
 
         var junction = new TestEffectJunction();
@@ -58,7 +61,8 @@ public class JunctionLoggerProviderTests
             trainMeta
         );
         typeof(EffectJunction<string, string>)
-            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)
+            .NotNull()
             .SetValue(junction, junctionMeta);
 
         return (train, junction);
@@ -97,7 +101,7 @@ public class JunctionLoggerProviderTests
                 .Subject;
             values.Should().NotContain(kv => kv.Key.StartsWith('@'));
             values
-                .Where(kv => kv.Key != "{OriginalFormat}")
+                .Where(kv => !string.Equals(kv.Key, "{OriginalFormat}", StringComparison.Ordinal))
                 .Should()
                 .AllSatisfy(kv => kv.Value.Should().BeOfType<string>());
         }
@@ -133,7 +137,9 @@ public class JunctionLoggerProviderTests
         );
 
         Func<Task> act = async () =>
-            await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .BeforeJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Metadata*");
     }
@@ -149,7 +155,9 @@ public class JunctionLoggerProviderTests
         );
 
         Func<Task> act = async () =>
-            await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .AfterJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Metadata*");
     }
@@ -169,8 +177,8 @@ public class JunctionLoggerProviderTests
 
         await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
-        junction.Metadata!.OutputJson.Should().NotBeNull();
-        junction.Metadata.OutputJson!.Should().Contain("hello-out");
+        junction.Metadata.NotNull().OutputJson.Should().NotBeNull();
+        junction.Metadata.OutputJson.NotNull().Should().Contain("hello-out");
     }
 
     [Test]
@@ -187,7 +195,7 @@ public class JunctionLoggerProviderTests
 
         await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
-        junction.Metadata!.OutputJson.Should().BeNull();
+        junction.Metadata.NotNull().OutputJson.Should().BeNull();
     }
 
     [Test]
@@ -196,7 +204,8 @@ public class JunctionLoggerProviderTests
         var (train, _) = BuildPair("AfterSensitive");
         var junction = new SensitiveEffectJunction();
         typeof(EffectJunction<string, Token>)
-            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)
+            .NotNull()
             .SetValue(
                 junction,
                 JunctionMetadata.Create(
@@ -208,7 +217,7 @@ public class JunctionLoggerProviderTests
                         OutputType = typeof(Token),
                         State = EitherStatus.IsRight,
                     },
-                    train.Metadata!
+                    train.Metadata.NotNull()
                 )
             );
         await junction.RailwayJunction(Either<Exception, string>.Right("ada"), train);
@@ -219,7 +228,7 @@ public class JunctionLoggerProviderTests
         );
         await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
-        junction.Metadata!.OutputJson.Should().Contain("ada").And.NotContain("tok-secret");
+        junction.Metadata.NotNull().OutputJson.Should().Contain("ada").And.NotContain("tok-secret");
     }
 
     public sealed class Token
@@ -230,7 +239,7 @@ public class JunctionLoggerProviderTests
         public string Value { get; set; } = "";
     }
 
-    private class SensitiveEffectJunction : EffectJunction<string, Token>
+    private sealed class SensitiveEffectJunction : EffectJunction<string, Token>
     {
         public override Task<Token> Run(string input) =>
             Task.FromResult(new Token { User = input, Value = "tok-secret" });
@@ -239,18 +248,24 @@ public class JunctionLoggerProviderTests
     [Test]
     public async Task AfterJunctionExecution_OutputHoldingAType_WritesAPlaceholderInsteadOfThrowing()
     {
-        var (train, junction) = BuildTypedPair<HoldsAType>(new HoldsAType { T = typeof(string) });
+        var (train, junction) = await BuildTypedPair<HoldsAType>(
+                new HoldsAType { T = typeof(string) }
+            )
+            .ConfigureAwait(false);
 
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
             NullLogger<JunctionLoggerProvider>.Instance
         );
         var act = async () =>
-            await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .AfterJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should()
-            .NotThrowAsync("the junction already succeeded; logging it must not fail the train");
-        junction.Metadata!.OutputJson.Should().Contain("\"_unserializable\":true");
+            .NotThrowAsync("the junction already succeeded; logging it must not fail the train")
+            .ConfigureAwait(false);
+        junction.Metadata.NotNull().OutputJson.Should().Contain("\"_unserializable\":true");
     }
 
     [Test]
@@ -260,23 +275,25 @@ public class JunctionLoggerProviderTests
         var cursor = deep;
         for (var i = 0; i < 10; i++)
             cursor = cursor.Next = new Nested();
-        var (train, junction) = BuildTypedPair(deep);
+        var (train, junction) = await BuildTypedPair(deep).ConfigureAwait(false);
 
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
             NullLogger<JunctionLoggerProvider>.Instance
         );
         var act = async () =>
-            await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .AfterJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
-        await act.Should().NotThrowAsync();
-        junction.Metadata!.OutputJson.Should().Contain("\"_unserializable\":true");
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
+        junction.Metadata.NotNull().OutputJson.Should().Contain("\"_unserializable\":true");
     }
 
     [Test]
     public async Task AfterJunctionExecution_OutputOverTheCeiling_IsTruncated()
     {
-        var (train, junction) = BuildTypedPair(new string('x', 4096));
+        var (train, junction) = await BuildTypedPair(new string('x', 4096)).ConfigureAwait(false);
         var policy = new FixedOutputPolicy(1024);
 
         var provider = new JunctionLoggerProvider(
@@ -284,25 +301,33 @@ public class JunctionLoggerProviderTests
             NullLogger<JunctionLoggerProvider>.Instance,
             policy
         );
-        await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
-        junction.Metadata!.OutputJson.Should().Be(TraxBoundedJson.TruncatedPlaceholder(1024));
+        junction
+            .Metadata.NotNull()
+            .OutputJson.Should()
+            .Be(TraxBoundedJson.TruncatedPlaceholder(1024));
         policy.AskedFor.Should().Equal(train.TrainName);
     }
 
     [Test]
     public async Task AfterJunctionExecution_ForATrainWhoseOutputIsExcluded_SerializesNothing()
     {
-        var (train, junction) = BuildTypedPair("keep me out of the log");
+        var (train, junction) = await BuildTypedPair("keep me out of the log")
+            .ConfigureAwait(false);
 
         var provider = new JunctionLoggerProvider(
             TestConfig(serializeJunctionData: true),
             NullLogger<JunctionLoggerProvider>.Instance,
-            new FixedOutputPolicy(null)
+            new FixedOutputPolicy(ceiling: null)
         );
-        await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await provider
+            .AfterJunctionExecution(junction, train, CancellationToken.None)
+            .ConfigureAwait(false);
 
-        junction.Metadata!.OutputJson.Should().BeNull();
+        junction.Metadata.NotNull().OutputJson.Should().BeNull();
     }
 
     [Test]
@@ -314,11 +339,13 @@ public class JunctionLoggerProviderTests
         );
 
         var act = async () =>
-            await provider.BeforeJunctionExecution(
-                new TestEffectJunction(),
-                new TestTrain(),
-                CancellationToken.None
-            );
+            await provider
+                .BeforeJunctionExecution(
+                    new TestEffectJunction(),
+                    new TestTrain(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<TrainException>())
             .Which.Message.Should()
@@ -351,12 +378,15 @@ public class JunctionLoggerProviderTests
         public override Task<T> Run(string input) => Task.FromResult(value);
     }
 
-    private static (TestTrain train, ReturnsJunction<T> junction) BuildTypedPair<T>(T value)
+    private static async Task<(TestTrain train, ReturnsJunction<T> junction)> BuildTypedPair<T>(
+        T value
+    )
     {
         var (train, _) = BuildPair(typeof(T).Name);
         var junction = new ReturnsJunction<T>(value);
         typeof(EffectJunction<string, T>)
-            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)
+            .NotNull()
             .SetValue(
                 junction,
                 JunctionMetadata.Create(
@@ -368,13 +398,12 @@ public class JunctionLoggerProviderTests
                         OutputType = typeof(T),
                         State = EitherStatus.IsRight,
                     },
-                    train.Metadata!
+                    train.Metadata.NotNull()
                 )
             );
-        junction
+        await junction
             .RailwayJunction(Either<Exception, string>.Right("in"), train)
-            .GetAwaiter()
-            .GetResult();
+            .ConfigureAwait(false);
         return (train, junction);
     }
 
@@ -390,7 +419,7 @@ public class JunctionLoggerProviderTests
         act.Should().NotThrow();
     }
 
-    private class TestTrain : ServiceTrain<string, string>
+    private sealed class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_263>().Resolve();
@@ -401,7 +430,7 @@ public class JunctionLoggerProviderTests
         }
     }
 
-    private class TestEffectJunction : EffectJunction<string, string>
+    private sealed class TestEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "-out");
     }

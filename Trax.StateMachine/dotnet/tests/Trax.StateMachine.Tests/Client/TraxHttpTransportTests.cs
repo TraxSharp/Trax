@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -109,9 +110,9 @@ public class TraxHttpTransportTests
     {
         var answer = await Transport(new Never(), TimeSpan.FromMilliseconds(200))
             .ExecuteAsync(Request)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
-        answer.Failure!.Message.Should().Contain("did not answer");
+        answer.Failure.NotNull().Message.Should().Contain("did not answer");
     }
 
     [Test]
@@ -121,9 +122,9 @@ public class TraxHttpTransportTests
 
         var answer = await Transport(new Answers(body), TimeSpan.FromMilliseconds(500))
             .ExecuteAsync(Request)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
-        answer.Failure!.Message.Should().Contain("did not answer");
+        answer.Failure.NotNull().Message.Should().Contain("did not answer");
         body.Disposed.Should().BeTrue();
     }
 
@@ -147,11 +148,12 @@ public class TraxHttpTransportTests
                 http,
                 new Uri("https://api.example.com/trax/graphql"),
                 new JsonObject(),
-                requestTimeout: TimeSpan.FromMilliseconds(requestMilliseconds)
+                requestTimeout: TimeSpan.FromMilliseconds(requestMilliseconds),
+                time: TimeProvider.System
             )
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
-        answer.Failure!.Message.Should().Be("The host did not answer within 0.2 seconds.");
+        answer.Failure.NotNull().Message.Should().Be("The host did not answer within 0.2 seconds.");
     }
 
     [Test]
@@ -169,16 +171,17 @@ public class TraxHttpTransportTests
             http,
             new Uri("https://api.example.com/trax/graphql"),
             new JsonObject(),
-            requestTimeout: Timeout.InfiniteTimeSpan
+            requestTimeout: Timeout.InfiniteTimeSpan,
+            time: TimeProvider.System
         );
         // negative-wait: with no timeout there is no signal that one did not fire; the request waits, then is answered.
         await Task.Delay(300);
         answer.IsCompleted.Should().BeFalse();
         answering.SetResult();
 
-        var answered = await answer.WaitAsync(TimeSpan.FromSeconds(10));
+        var answered = await answer.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         answered.Failure.Should().BeNull();
-        answered.Data!["x"]!.GetValue<int>().Should().Be(1);
+        answered.Data.NotNull()["x"].NotNull().GetValue<int>().Should().Be(1);
     }
 
     [Test]
@@ -188,7 +191,7 @@ public class TraxHttpTransportTests
 
         var answer = await Transport(new Answers(body)).ExecuteAsync(Request);
 
-        answer.Failure!.Message.Should().Contain("could not be reached");
+        answer.Failure.NotNull().Message.Should().Contain("could not be reached");
         body.Disposed.Should().BeTrue();
     }
 
@@ -200,7 +203,7 @@ public class TraxHttpTransportTests
         var answer = await Transport(new Answers(body, length: 4096), max: 1024)
             .ExecuteAsync(Request);
 
-        answer.Failure!.Message.Should().Contain("larger than 1024");
+        answer.Failure.NotNull().Message.Should().Contain("larger than 1024");
         body.Disposed.Should().BeTrue();
     }
 
@@ -240,7 +243,7 @@ public class TraxHttpTransportTests
         )
         {
             // allowed-delay: ends only when the request is cancelled, which is what the test waits for.
-            await Task.Delay(Timeout.Infinite, cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("Unreachable.");
         }
     }
@@ -269,7 +272,7 @@ public class TraxHttpTransportTests
             CancellationToken cancellationToken
         )
         {
-            await answer.WaitAsync(cancellationToken);
+            await answer.WaitAsync(cancellationToken).ConfigureAwait(false);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"data":{"x":1}}"""),
@@ -327,7 +330,7 @@ public class TraxHttpTransportTests
         )
         {
             // allowed-delay: the trickle itself; the test waits on the transport's timeout, not on this.
-            await Task.Delay(50, cancellationToken);
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             buffer.Span[0] = (byte)' ';
             return 1;
         }

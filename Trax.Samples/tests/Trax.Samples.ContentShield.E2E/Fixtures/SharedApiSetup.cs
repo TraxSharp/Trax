@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.ContentShield.E2E.Factories;
 using Trax.Samples.ContentShield.E2E.Fixtures;
 
@@ -6,9 +7,17 @@ namespace Trax.Samples.ContentShield.E2E.ApiTests;
 [SetUpFixture]
 public class SharedApiSetup
 {
-    public static ContentShieldApiFactory Factory { get; private set; } = null!;
+    public static ContentShieldApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
-    internal static TestRunner Runner { get; private set; } = null!;
+    internal static TestRunner Runner
+    {
+        get => field.NotNull(nameof(Runner));
+        private set;
+    }
 
     [OneTimeSetUp]
     public void OneTimeSetUp()

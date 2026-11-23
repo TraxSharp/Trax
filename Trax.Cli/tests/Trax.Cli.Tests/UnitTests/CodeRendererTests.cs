@@ -6,7 +6,7 @@ namespace Trax.Cli.Tests.UnitTests;
 
 public class CodeRendererTests
 {
-    private CodeRenderer _renderer = null!;
+    private CodeRenderer _renderer = new();
 
     [SetUp]
     public void SetUp()
@@ -65,11 +65,11 @@ public class CodeRendererTests
     #region RenderTrainInterface
 
     [Test]
-    public void RenderTrainInterface_QueryOperation_ContainsIServiceTrain()
+    public async Task RenderTrainInterface_QueryOperation_ContainsIServiceTrain()
     {
         var op = MakeOperation("GetPlayer", OperationKind.Query);
 
-        var result = _renderer.RenderTrainInterface(op, "MyApi");
+        var result = await _renderer.RenderTrainInterfaceAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("IServiceTrain");
         result.Should().NotContain("[TraxQuery]");
@@ -77,7 +77,7 @@ public class CodeRendererTests
     }
 
     [Test]
-    public void RenderTrainInterface_UnitOutput_QualifiesTraxUnit()
+    public async Task RenderTrainInterface_UnitOutput_QualifiesTraxUnit()
     {
         var unitOutput = new ApiType
         {
@@ -87,7 +87,7 @@ public class CodeRendererTests
         };
         var op = MakeOperation("DeletePlayer", OperationKind.Mutation, output: unitOutput);
 
-        var result = _renderer.RenderTrainInterface(op, "MyApi");
+        var result = await _renderer.RenderTrainInterfaceAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("global::Trax.Core.Functional.Unit");
     }
@@ -97,37 +97,40 @@ public class CodeRendererTests
     #region RenderTrainImplementation
 
     [Test]
-    public void RenderTrainImplementation_MutationOperation_ContainsTraxMutationAttribute()
+    public async Task RenderTrainImplementation_MutationOperation_ContainsTraxMutationAttribute()
     {
         var op = MakeOperation("CreatePlayer", OperationKind.Mutation);
 
-        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+        var result = await _renderer
+            .RenderTrainImplementationAsync(op, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("[TraxMutation");
     }
 
     [Test]
-    public void RenderTrainImplementation_QueryOperation_ContainsTraxQueryAttribute()
+    public async Task RenderTrainImplementation_QueryOperation_ContainsTraxQueryAttribute()
     {
         var op = MakeOperation("GetPlayer", OperationKind.Query);
 
-        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+        var result = await _renderer
+            .RenderTrainImplementationAsync(op, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("[TraxQuery");
     }
 
     [Test]
-    public void RenderTrainImplementation_RequiresTheUserRole()
+    public async Task RenderTrainImplementation_RequiresTheUserRole()
     {
         // An exposed train must declare [TraxAuthorize] or [TraxAllowAnonymous] or the
         // scaffolded host fails at startup. A generated train requires the User role, as the
         // hub's own trains do, and the hub's Development demo key carries it.
         foreach (var kind in new[] { OperationKind.Query, OperationKind.Mutation })
         {
-            var result = _renderer.RenderTrainImplementation(
-                MakeOperation("GetPlayer", kind),
-                "MyApi"
-            );
+            var result = await _renderer
+                .RenderTrainImplementationAsync(MakeOperation("GetPlayer", kind), "MyApi")
+                .ConfigureAwait(false);
 
             result.Should().Contain("[TraxAuthorize(Roles = \"User\")]");
             result.Should().NotContain("[TraxAllowAnonymous]");
@@ -139,7 +142,7 @@ public class CodeRendererTests
     #region RenderInput
 
     [Test]
-    public void RenderInput_RequiredAndOptionalFields_RendersCorrectly()
+    public async Task RenderInput_RequiredAndOptionalFields_RendersCorrectly()
     {
         var input = new ApiType
         {
@@ -163,7 +166,7 @@ public class CodeRendererTests
         };
         var op = MakeOperation("CreatePlayer", OperationKind.Mutation, input: input);
 
-        var result = _renderer.RenderInput(op, "MyApi");
+        var result = await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("required string");
         result.Should().Contain("?");
@@ -174,7 +177,7 @@ public class CodeRendererTests
     #region RenderJunction
 
     [Test]
-    public void RenderJunction_WithHttpInfo_ContainsMethodAndPathInComment()
+    public async Task RenderJunction_WithHttpInfo_ContainsMethodAndPathInComment()
     {
         var op = MakeOperation(
             "GetPlayer",
@@ -183,7 +186,7 @@ public class CodeRendererTests
             httpPath: "/players/{id}"
         );
 
-        var result = _renderer.RenderJunction(op, "MyApi");
+        var result = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("GET");
         result.Should().Contain("/players/{id}");
@@ -194,7 +197,7 @@ public class CodeRendererTests
     #region RenderEnum
 
     [Test]
-    public void RenderEnum_ProducesValidEnumDeclaration()
+    public async Task RenderEnum_ProducesValidEnumDeclaration()
     {
         var apiEnum = new ApiEnum
         {
@@ -202,7 +205,7 @@ public class CodeRendererTests
             Values = ["Active", "Inactive", "Banned"],
         };
 
-        var result = _renderer.RenderEnum(apiEnum, "MyApi");
+        var result = await _renderer.RenderEnumAsync(apiEnum, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("public enum");
         result.Should().Contain("Active");
@@ -216,9 +219,9 @@ public class CodeRendererTests
     #region RenderTrainsCsproj
 
     [Test]
-    public void RenderTrainsCsproj_IsClassLibraryWithTraxReferences()
+    public async Task RenderTrainsCsproj_IsClassLibraryWithTraxReferences()
     {
-        var result = _renderer.RenderTrainsCsproj();
+        var result = await _renderer.RenderTrainsCsprojAsync().ConfigureAwait(false);
 
         result.Should().Contain("Microsoft.NET.Sdk");
         result.Should().NotContain("Microsoft.NET.Sdk.Web");
@@ -233,7 +236,7 @@ public class CodeRendererTests
     #region RenderManifestNames
 
     [Test]
-    public void RenderManifestNames_ProducesStaticClassWithConstants()
+    public async Task RenderManifestNames_ProducesStaticClassWithConstants()
     {
         var operations = new List<ApiOperation>
         {
@@ -241,7 +244,9 @@ public class CodeRendererTests
             MakeOperation("CreatePlayer", OperationKind.Mutation),
         };
 
-        var result = _renderer.RenderManifestNames(operations, "MyApi");
+        var result = await _renderer
+            .RenderManifestNamesAsync(operations, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("namespace MyApi.Trains;");
         result.Should().Contain("public static class ManifestNames");
@@ -256,11 +261,13 @@ public class CodeRendererTests
     #region RenderGraphQLNamespaces
 
     [Test]
-    public void RenderGraphQLNamespaces_ProducesStaticClassWithConstants()
+    public async Task RenderGraphQLNamespaces_ProducesStaticClassWithConstants()
     {
         var groups = new[] { "Players", "Matches", "Leaderboard" };
 
-        var result = _renderer.RenderGraphQLNamespaces(groups, "MyApi");
+        var result = await _renderer
+            .RenderGraphQLNamespacesAsync(groups, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("namespace MyApi.Trains;");
         result.Should().Contain("public static class GraphQLNamespaces");
@@ -273,22 +280,26 @@ public class CodeRendererTests
     }
 
     [Test]
-    public void RenderGraphQLNamespaces_EmptyGroups_ProducesEmptyClass()
+    public async Task RenderGraphQLNamespaces_EmptyGroups_ProducesEmptyClass()
     {
         var groups = Array.Empty<string>();
 
-        var result = _renderer.RenderGraphQLNamespaces(groups, "MyApi");
+        var result = await _renderer
+            .RenderGraphQLNamespacesAsync(groups, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("public static class GraphQLNamespaces");
         result.Should().NotContain("public const string");
     }
 
     [Test]
-    public void RenderGraphQLNamespaces_SingleGroup_ProducesSingleConstant()
+    public async Task RenderGraphQLNamespaces_SingleGroup_ProducesSingleConstant()
     {
         var groups = new[] { "Users" };
 
-        var result = _renderer.RenderGraphQLNamespaces(groups, "MyApi");
+        var result = await _renderer
+            .RenderGraphQLNamespacesAsync(groups, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("Users");
         result.Should().Contain("\"users\"");
@@ -299,22 +310,26 @@ public class CodeRendererTests
     #region RenderTrainImplementation_Namespace
 
     [Test]
-    public void RenderTrainImplementation_WithGroup_ContainsNamespaceAttribute()
+    public async Task RenderTrainImplementation_WithGroup_ContainsNamespaceAttribute()
     {
         var op = MakeOperation("LookupPlayer", OperationKind.Query, group: "Players");
 
-        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+        var result = await _renderer
+            .RenderTrainImplementationAsync(op, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("Namespace = GraphQLNamespaces.Players");
         result.Should().Contain("using MyApi.Trains;");
     }
 
     [Test]
-    public void RenderTrainImplementation_MutationWithGroup_ContainsNamespaceAttribute()
+    public async Task RenderTrainImplementation_MutationWithGroup_ContainsNamespaceAttribute()
     {
         var op = MakeOperation("BanPlayer", OperationKind.Mutation, group: "Players");
 
-        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+        var result = await _renderer
+            .RenderTrainImplementationAsync(op, "MyApi")
+            .ConfigureAwait(false);
 
         result.Should().Contain("[TraxMutation(Namespace = GraphQLNamespaces.Players");
     }
@@ -324,7 +339,7 @@ public class CodeRendererTests
     #region RenderTypeRecord
 
     [Test]
-    public void RenderTypeRecord_NamespaceIncludesTrainsModels()
+    public async Task RenderTypeRecord_NamespaceIncludesTrainsModels()
     {
         var type = new ApiType
         {
@@ -340,7 +355,9 @@ public class CodeRendererTests
             ],
         };
 
-        var result = _renderer.RenderTypeRecord(type, "MyApi", null);
+        var result = await _renderer
+            .RenderTypeRecordAsync(type, "MyApi", group: null)
+            .ConfigureAwait(false);
 
         result.Should().Contain("namespace MyApi.Trains.Models;");
     }

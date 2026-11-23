@@ -24,13 +24,17 @@ public class SendToRestaurant(
         faults.ClaimNextOrder(owner, order.OrderId);
         try
         {
-            await restaurant.SendAsync(order.OrderId, owner, attempt: 1, CancellationToken);
+            await restaurant
+                .SendAsync(order.OrderId, owner, attempt: 1, CancellationToken)
+                .ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             // Wait a moment before trying the tablet again.
-            await Task.Delay(pace.TabletRetryBackoff, CancellationToken);
-            await restaurant.SendAsync(order.OrderId, owner, attempt: 2, CancellationToken);
+            await Task.Delay(pace.TabletRetryBackoff, CancellationToken).ConfigureAwait(false);
+            await restaurant
+                .SendAsync(order.OrderId, owner, attempt: 2, CancellationToken)
+                .ConfigureAwait(false);
         }
         return new SentToRestaurant(order.OrderId);
     }

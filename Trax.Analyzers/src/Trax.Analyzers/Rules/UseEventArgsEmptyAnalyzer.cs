@@ -1,0 +1,51 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UseEventArgsEmptyAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UseEventArgsEmpty,
+        title: "Use EventArgs.Empty",
+        messageFormat: "Use EventArgs.Empty instead of new EventArgs()",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseEventArgsEmpty));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            var type = context.Compilation.GetTypeByMetadataName("System.EventArgs");
+            if (type is null)
+                return;
+
+            context.RegisterOperationAction(context => Analyze(context, type), OperationKind.ObjectCreation);
+        });
+    }
+
+    private static void Analyze(OperationAnalysisContext context, INamedTypeSymbol type)
+    {
+        var operation = (IObjectCreationOperation)context.Operation;
+        if (operation is null || operation.Constructor is null)
+            return;
+
+        if (operation.Arguments.Length > 0)
+            return;
+
+        // [EventArgs] is invalid code, but the compiler binds it as an object creation that cannot be replaced by EventArgs.Empty
+        if (operation.Parent is IAttributeOperation)
+            return;
+
+        if (operation.Constructor.ContainingType.IsEqualTo(type))
+        {
+            context.ReportDiagnostic(Rule, operation);
+        }
+    }
+}

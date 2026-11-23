@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.Board.Auth;
 using Trax.Samples.Board.E2E.Utilities;
 
@@ -6,13 +7,41 @@ namespace Trax.Samples.Board.E2E.Fixtures;
 /// <summary>Gives each test the board's five workers, each with its own key, and a way to file a fresh ticket.</summary>
 public abstract class BoardTestFixture
 {
-    protected HttpClient Http { get; private set; } = null!;
-    protected GraphQLClient GraphQL { get; private set; } = null!;
-    protected BoardWorker Triage { get; private set; } = null!;
-    protected BoardWorker Repro { get; private set; } = null!;
-    protected BoardWorker Fix { get; private set; } = null!;
-    protected BoardWorker Qa { get; private set; } = null!;
-    protected BoardWorker Sam { get; private set; } = null!;
+    protected HttpClient Http
+    {
+        get => field.NotNull(nameof(Http));
+        private set;
+    }
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
+    protected BoardWorker Triage
+    {
+        get => field.NotNull(nameof(Triage));
+        private set;
+    }
+    protected BoardWorker Repro
+    {
+        get => field.NotNull(nameof(Repro));
+        private set;
+    }
+    protected BoardWorker Fix
+    {
+        get => field.NotNull(nameof(Fix));
+        private set;
+    }
+    protected BoardWorker Qa
+    {
+        get => field.NotNull(nameof(Qa));
+        private set;
+    }
+    protected BoardWorker Sam
+    {
+        get => field.NotNull(nameof(Sam));
+        private set;
+    }
 
     [SetUp]
     public void OpenConnections()
@@ -33,11 +62,13 @@ public abstract class BoardTestFixture
     protected async Task<string> FileAsync(string report)
     {
         var id = $"T-{Guid.NewGuid():N}"[..14];
-        var response = await GraphQL.SendAsync(
-            "mutation($i: FileTicketInput!) { dispatch { fileTicket(input: $i) { output { id state } } } }",
-            BoardKeys.Sam,
-            new { i = new { id, report } }
-        );
+        var response = await GraphQL
+            .SendAsync(
+                "mutation($i: FileTicketInput!) { dispatch { fileTicket(input: $i) { output { id state } } } }",
+                BoardKeys.Sam,
+                new { i = new { id, report } }
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         response
             .GetData("dispatch", "fileTicket", "output", "state")
@@ -50,21 +81,24 @@ public abstract class BoardTestFixture
     /// <summary>Files a ticket and has triage-bot send it to Reproduce.</summary>
     protected async Task<string> TriagedAsync(string report)
     {
-        var id = await FileAsync(report);
-        await Triage.ClaimAndStartAsync("triage", id);
-        var triaged = await Triage.SubmitAsync(
-            id,
-            "triage",
-            "TriageInput",
-            new { area = "shipping" }
-        );
+        var id = await FileAsync(report).ConfigureAwait(false);
+        await Triage.ClaimAndStartAsync("triage", id).ConfigureAwait(false);
+        var triaged = await Triage
+            .SubmitAsync(id, "triage", "TriageInput", new { area = "shipping" })
+            .ConfigureAwait(false);
         triaged.State.Should().Be("Accepted");
         return id;
     }
 
     protected async Task<string> LaneOf(string ticketId) =>
-        (await Sam.TicketAsync(ticketId)).GetProperty("lane").GetString()!;
+        (await Sam.TicketAsync(ticketId).ConfigureAwait(false))
+            .GetProperty("lane")
+            .GetString()
+            .NotNull();
 
     protected async Task<string> StateOf(string ticketId) =>
-        (await Sam.TicketAsync(ticketId)).GetProperty("state").GetString()!;
+        (await Sam.TicketAsync(ticketId).ConfigureAwait(false))
+            .GetProperty("state")
+            .GetString()
+            .NotNull();
 }

@@ -3,6 +3,7 @@ using Shopfront.Couriers;
 using Shopfront.Extensions;
 using Shopfront.Trains.FulfilOrder;
 using Shopfront.Warehouse;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -13,7 +14,7 @@ namespace Shopfront.Tests.IntegrationTests;
 [TestFixture]
 public class FulfilOrderTrainTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [SetUp]
     public void BuildTheContainer()
@@ -34,13 +35,30 @@ public class FulfilOrderTrainTests
     }
 
     [TearDown]
-    public ValueTask DisposeTheContainer() => _provider.DisposeAsync();
+    public async ValueTask DisposeTheContainer()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
+    }
 
     [Test]
     public async Task RunAsync_JoinsTheBranchesAndPacksUnderTheLabel()
     {
-        var orderId = Guid.Parse("3179f9c4-07ba-4f64-ac64-e7026995cc89");
-        var bus = _provider.GetRequiredService<ITrainBus>();
+        // 3179f9c4-07ba-4f64-ac64-e7026995cc89
+        var orderId = new Guid(
+            0x3179f9c4,
+            0x07ba,
+            0x4f64,
+            0xac,
+            0x64,
+            0xe7,
+            0x02,
+            0x69,
+            0x95,
+            0xcc,
+            0x89
+        );
+        var bus = _provider.NotNull().GetRequiredService<ITrainBus>();
 
         var parcel = await bus.RunAsync<FulfilOrderOutput>(
             new FulfilOrderInput { OrderId = orderId, Items = 3 }

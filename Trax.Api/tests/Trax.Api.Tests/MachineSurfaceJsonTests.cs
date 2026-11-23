@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -31,15 +32,17 @@ public class MachineSurfaceJsonTests
             .SerializeToNode(
                 new OrderInput(3, 4) { Line = new OrderLine { Units = 5 } },
                 MachineSurface.Json
-            )!
+            )
+            .NotNull()
             .AsObject();
 
         json.Select(kv => kv.Key)
             .Should()
             .BeEquivalentTo(["qty", "price", "line"], "the input's schema has no field for Total");
-        json["line"]!.AsObject().Select(kv => kv.Key).Should().BeEquivalentTo(["units"]);
+        json["line"].NotNull().AsObject().Select(kv => kv.Key).Should().BeEquivalentTo(["units"]);
         JsonSerializer
-            .Deserialize<OrderInput>(json.ToJsonString(), MachineSurface.Json)!
+            .Deserialize<OrderInput>(json.ToJsonString(), MachineSurface.Json)
+            .NotNull()
             .Total.Should()
             .Be(12, "a record written without its computed property reads back the same");
     }

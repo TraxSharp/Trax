@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -62,21 +63,26 @@ public class GlossaryStateShapesTests
         """;
 
     [Test]
-    public void A_committed_state_with_a_rule_and_its_own_context_is_written_into_the_IR_and_served_as_written()
+    public async Task A_committed_state_with_a_rule_and_its_own_context_is_written_into_the_IR_and_served_as_written()
     {
-        var derived = Derive(Receipts, ("paying.feature", Paying));
+        var derived = await Derive(Receipts, ("paying.feature", Paying)).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var ir = JsonNode.Parse(derived.Irs["checkout"])!.AsObject();
-        ir["version"]!.GetValue<int>().Should().Be(3);
-        ir["committedStates"]!.ToJsonString().Should().Be("""["Paid"]""");
-        ir["invariants"]!["Paid"]!["rule"]!.GetValue<string>().Should().Be("nonEmpty");
-        ir["invariants"]!.AsObject().ContainsKey("Cart").Should().BeFalse();
-        ir["initialContext"]!.ToJsonString().Should().Be("""{"receipt":null}""");
-        ir["context"]!["Paid"]!["fields"]![0]!["nullable"]!.GetValue<bool>().Should().BeFalse();
-        ir["context"]!["Cart"]!["fields"]![0]!["nullable"]!.GetValue<bool>().Should().BeTrue();
+        var ir = JsonNode.Parse(derived.Irs["checkout"]).NotNull().AsObject();
+        ir["version"].NotNull().GetValue<int>().Should().Be(3);
+        ir["committedStates"].NotNull().ToJsonString().Should().Be("""["Paid"]""");
+        ir["invariants"]
+            .NotNull()["Paid"]
+            .NotNull()["rule"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("nonEmpty");
+        ir["invariants"].NotNull().AsObject().ContainsKey("Cart").Should().BeFalse();
+        ir["initialContext"].NotNull().ToJsonString().Should().Be("""{"receipt":null}""");
+        AssertReceiptNullableOnlyInCart(ir);
 
-        var host = HostFile.Read(derived.Host!);
+        var host = HostFile.Read(derived.Host.NotNull());
         IrMachines
             .Create(
                 new IrMachines.Source(ir, host.Machines["checkout"]),
@@ -105,12 +111,39 @@ public class GlossaryStateShapesTests
             .BeOfType<RehydrationResult.Ok>();
     }
 
+    // Paid's own context holds the receipt as not nullable; Cart's holds it nullable.
+    private static void AssertReceiptNullableOnlyInCart(JsonObject ir)
+    {
+        ir["context"]
+            .NotNull()["Paid"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["nullable"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeFalse();
+        ir["context"]
+            .NotNull()["Cart"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["nullable"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeTrue();
+    }
+
     [Test]
     public void A_state_shape_with_a_key_the_glossary_does_not_have_is_refused()
     {
         var act = () =>
             Glossary.Read(
-                Receipts.Replace("\"committed\": true,", "\"committed\": true, \"final\": true,")
+                Receipts.Replace(
+                    "\"committed\": true,",
+                    "\"committed\": true, \"final\": true,",
+                    StringComparison.Ordinal
+                )
             );
 
         act.Should().Throw<FormatException>().WithMessage("*/machines/checkout/states/Paid*final*");
@@ -214,25 +247,26 @@ public class GlossaryStateShapesTests
         """;
 
     [Test]
-    public void A_turnstile_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
+    public async Task A_turnstile_written_as_features_derives_exactly_the_IR_its_fluent_copy_exports()
     {
-        var derived = Derive(TurnstileGlossary, ("turnstile.feature", Turnstile));
+        var derived = await Derive(TurnstileGlossary, ("turnstile.feature", Turnstile))
+            .ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
         derived.Irs["turnstile"].Should().Be(FluentTurnstile());
     }
 
     [Test]
-    public void A_differential_block_is_derived_from_what_the_scenarios_sent_and_set_up()
+    public async Task A_differential_block_is_derived_from_what_the_scenarios_sent_and_set_up()
     {
         var glossary = TurnstileGlossary.Replace(
             "\"initial\": \"Locked\",",
-            "\"initial\": \"Locked\", \"differential\": true,"
+            "\"initial\": \"Locked\", \"differential\": true,",
+            StringComparison.Ordinal
         );
         var features =
             Turnstile
             + """
-
 
                   Scenario: Pushing an unlocked turnstile it was left in
                     Given Ada's turnstile is unlocked
@@ -240,11 +274,12 @@ public class GlossaryStateShapesTests
                     Then Ada's turnstile is locked
                 """;
 
-        var derived = Derive(glossary, ("turnstile.feature", features));
+        var derived = await Derive(glossary, ("turnstile.feature", features)).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var ir = JsonNode.Parse(derived.Irs["turnstile"])!.AsObject();
-        ir["differential"]!
+        var ir = JsonNode.Parse(derived.Irs["turnstile"]).NotNull().AsObject();
+        ir["differential"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be(
@@ -253,7 +288,7 @@ public class GlossaryStateShapesTests
             );
 
         // The host replays the block into the builder the exporter reads it back from.
-        var host = HostFile.Read(derived.Host!);
+        var host = HostFile.Read(derived.Host.NotNull());
         IrMachines
             .Create(new IrMachines.Source(ir, host.Machines["turnstile"]), [])
             .ExportIr()
@@ -262,48 +297,45 @@ public class GlossaryStateShapesTests
     }
 
     [Test]
-    public void A_differential_block_with_nothing_in_it_is_a_problem()
+    public async Task A_differential_block_with_nothing_in_it_is_a_problem()
     {
-        var derived = Derive(
-            """
-            {
-              "version": 1,
-              "actors": { "member": { "noun": "a member", "anyAuthenticated": true } },
-              "machines": {
-                "note": {
-                  "ownedBy": "member",
-                  "noun": "note",
-                  "start": "has a note",
-                  "initial": "Open",
-                  "differential": true,
-                  "states": { "Open": "is open", "Closed": "is closed" },
-                  "triggers": { "Close": { "phrase": "closes {subject}" } }
-                }
-              }
-            }
-            """,
-            (
-                "notes.feature",
-                """
-                Feature: Notes
-                  Scenario: Closing a note
-                    Given Ada is a member
-                    And Ada has a note
-                    When Ada closes her note
-                    Then Ada's note is closed
-                """
-            )
+        var derived = (
+            await Derive(
+                    """
+                    {
+                      "version": 1,
+                      "actors": { "member": { "noun": "a member", "anyAuthenticated": true } },
+                      "machines": {
+                        "note": {
+                          "ownedBy": "member",
+                          "noun": "note",
+                          "start": "has a note",
+                          "initial": "Open",
+                          "differential": true,
+                          "states": { "Open": "is open", "Closed": "is closed" },
+                          "triggers": { "Close": { "phrase": "closes {subject}" } }
+                        }
+                      }
+                    }
+                    """,
+                    (
+                        "notes.feature",
+                        """
+                        Feature: Notes
+                          Scenario: Closing a note
+                            Given Ada is a member
+                            And Ada has a note
+                            When Ada closes her note
+                            Then Ada's note is closed
+                        """
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("differential");
     }
 
-    private static Derived Derive(string glossary, params (string, string)[] features) =>
-        FeatureDerivation.Derive(Glossary.Read(glossary), features);
-}
-
-/// <summary>A migration that keeps the snapshot as it was, for a machine whose versions differ in nothing stored.</summary>
-public sealed class KeepsTheSnapshot : IMachineMigration
-{
-    public MigrationResult Migrate(string state, JsonObject context) => new(state, context);
+    private static Task<Derived> Derive(string glossary, params (string, string)[] features) =>
+        FeatureDerivation.DeriveAsync(Glossary.Read(glossary), features);
 }

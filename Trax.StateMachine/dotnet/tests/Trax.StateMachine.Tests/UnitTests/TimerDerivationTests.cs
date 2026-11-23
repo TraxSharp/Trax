@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -64,39 +65,45 @@ public class TimerDerivationTests
         """;
 
     [Test]
-    public void Waits_add_up_on_the_scenarios_clock()
+    public async Task Waits_add_up_on_the_scenarios_clock()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: The door closes after a while
-                    Given Cy's door is open
-                    When 2 seconds pass
-                    And 2 seconds pass
-                    Then Cy's door is closing
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: The door closes after a while
+                            Given Cy's door is open
+                            When 2 seconds pass
+                            And 2 seconds pass
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
-        Timer(derived, "door", "Open")["after"]!.GetValue<string>().Should().Be("PT4S");
+        Timer(derived, "door", "Open")["after"].NotNull().GetValue<string>().Should().Be("PT4S");
     }
 
     [Test]
-    public void Still_after_time_passes_is_a_stay_the_timer_must_be_longer_than()
+    public async Task Still_after_time_passes_is_a_stay_the_timer_must_be_longer_than()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Not yet
-                    Given Cy's door is open
-                    When 3 seconds pass
-                    Then Cy's door is still open
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Not yet
+                            Given Cy's door is open
+                            When 3 seconds pass
+                            Then Cy's door is still open
 
-                  Scenario: Then it closes
-                    Given Cy's door is open
-                    When 2 seconds pass
-                    Then Cy's door is closing
-                """
+                          Scenario: Then it closes
+                            Given Cy's door is open
+                            When 2 seconds pass
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -107,37 +114,43 @@ public class TimerDerivationTests
     }
 
     [Test]
-    public void A_stay_shorter_than_the_timer_agrees_with_it()
+    public async Task A_stay_shorter_than_the_timer_agrees_with_it()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Not yet, then closing
-                    Given Cy's door is open
-                    When 1 second passes
-                    Then Cy's door is still open
-                    When 1 second passes
-                    Then Cy's door is closing
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Not yet, then closing
+                            Given Cy's door is open
+                            When 1 second passes
+                            Then Cy's door is still open
+                            When 1 second passes
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
-        Timer(derived, "door", "Open")["after"]!.GetValue<string>().Should().Be("PT2S");
+        Timer(derived, "door", "Open")["after"].NotNull().GetValue<string>().Should().Be("PT2S");
     }
 
     [Test]
-    public void A_second_machine_changing_after_time_passes_is_a_policy_not_a_timer_of_its_own()
+    public async Task A_second_machine_changing_after_time_passes_is_a_policy_not_a_timer_of_its_own()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: The lamp goes out with the door
-                    Given Cy's door is open
-                    And Cy's lamp is on
-                    When 5 seconds pass
-                    Then Cy's door is closing
-                    And Cy's lamp is off
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: The lamp goes out with the door
+                            Given Cy's door is open
+                            And Cy's lamp is on
+                            When 5 seconds pass
+                            Then Cy's door is closing
+                            And Cy's lamp is off
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -151,22 +164,26 @@ public class TimerDerivationTests
     }
 
     [Test]
-    public void A_derived_timed_machine_is_served_with_the_timer_rules_its_access_makes()
+    public async Task A_derived_timed_machine_is_served_with_the_timer_rules_its_access_makes()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: The door closes
-                    Given Cy's door is open
-                    When 2 seconds pass
-                    Then Cy's door is closing
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: The door closes
+                            Given Cy's door is open
+                            When 2 seconds pass
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
-        var ir = JsonNode.Parse(derived.Irs["door"])!.AsObject();
-        Timer(derived, "door", "Open")["rules"]!
+        var ir = JsonNode.Parse(derived.Irs["door"]).NotNull().AsObject();
+        Timer(derived, "door", "Open")["rules"]
+            .NotNull()
             .AsArray()
-            .Select(r => r!.GetValue<string>())
+            .Select(r => r.NotNull().GetValue<string>())
             .Should()
             .Equal(
                 ["AnyAuthenticated"],
@@ -174,7 +191,7 @@ public class TimerDerivationTests
             );
 
         var served = IrMachines.Create(
-            new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["door"]),
+            new IrMachines.Source(ir, HostFile.Read(derived.Host.NotNull()).Machines["door"]),
             []
         );
 
@@ -182,46 +199,53 @@ public class TimerDerivationTests
     }
 
     [Test]
-    public void A_role_gated_entry_is_in_the_timers_rules()
+    public async Task A_role_gated_entry_is_in_the_timers_rules()
     {
-        var derived = Derive(
-            """
-            Feature: Gates
-              Scenario: The gate comes down on its own
-                Given Kit is a keeper
-                And Kit has a gate
-                When Kit raises his gate
-                Then Kit's gate is up
-                When 10 seconds pass
-                Then Kit's gate is lowering
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Gates
+                      Scenario: The gate comes down on its own
+                        Given Kit is a keeper
+                        And Kit has a gate
+                        When Kit raises his gate
+                        Then Kit's gate is up
+                        When 10 seconds pass
+                        Then Kit's gate is lowering
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
-        Timer(derived, "gate", "Up")["rules"]!
+        Timer(derived, "gate", "Up")["rules"]
+            .NotNull()
             .AsArray()
-            .Select(r => r!.GetValue<string>())
+            .Select(r => r.NotNull().GetValue<string>())
             .Should()
             .Equal(["Requires(keeper)"]);
-        var ir = JsonNode.Parse(derived.Irs["gate"])!.AsObject();
+        var ir = JsonNode.Parse(derived.Irs["gate"]).NotNull().AsObject();
         var served = IrMachines.Create(
-            new IrMachines.Source(ir, HostFile.Read(derived.Host!).Machines["gate"]),
+            new IrMachines.Source(ir, HostFile.Read(derived.Host.NotNull()).Machines["gate"]),
             []
         );
         served.ExportIr().Should().Be(derived.Irs["gate"]);
     }
 
     [Test]
-    public void Leaving_a_state_with_no_time_passing_there_is_a_problem()
+    public async Task Leaving_a_state_with_no_time_passing_there_is_a_problem()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Instantly
-                    Given Cy's door is open
-                    When 0 seconds pass
-                    Then Cy's door is closing
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Instantly
+                            Given Cy's door is open
+                            When 0 seconds pass
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -232,16 +256,19 @@ public class TimerDerivationTests
     }
 
     [Test]
-    public void A_wait_longer_than_a_clock_holds_is_refused_as_a_problem()
+    public async Task A_wait_longer_than_a_clock_holds_is_refused_as_a_problem()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Forever
-                    Given Cy's door is open
-                    When 999999999 days pass
-                    Then Cy's door is closing
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Forever
+                            Given Cy's door is open
+                            When 999999999 days pass
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -250,29 +277,42 @@ public class TimerDerivationTests
     }
 
     [Test]
-    public void Waits_that_add_up_past_what_a_clock_holds_are_refused_as_a_problem()
+    public async Task Waits_that_add_up_past_what_a_clock_holds_are_refused_as_a_problem()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Forever, twice
-                    Given Cy's door is open
-                    When 9999999 days pass
-                    And 9999999 days pass
-                    Then Cy's door is closing
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Forever, twice
+                            Given Cy's door is open
+                            When 9999999 days pass
+                            And 9999999 days pass
+                            Then Cy's door is closing
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("adds up");
     }
 
     private static JsonNode Timer(Derived derived, string machine, string state) =>
-        JsonNode.Parse(derived.Irs[machine])!["timers"]!
+        JsonNode
+            .Parse(derived.Irs[machine])
+            .NotNull()["timers"]
+            .NotNull()
             .AsArray()
-            .Single(t => t!["state"]!.GetValue<string>() == state)!;
+            .Single(t =>
+                string.Equals(
+                    t.NotNull()["state"].NotNull().GetValue<string>(),
+                    state,
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull();
 
-    private static Derived Derive(string feature) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(Glossary),
             [("doors.feature", feature)]
         );

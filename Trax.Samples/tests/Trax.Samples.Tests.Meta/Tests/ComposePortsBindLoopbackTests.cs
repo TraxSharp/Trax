@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -17,7 +19,7 @@ public class ComposePortsBindLoopbackTests
             .EnumerateFiles(RepoRoot.Path, "*.yml", SearchOption.AllDirectories)
             .Concat(Directory.EnumerateFiles(RepoRoot.Path, "*.yaml", SearchOption.AllDirectories))
             .Where(IsComposeFile)
-            .OrderBy(p => p, StringComparer.Ordinal);
+            .Order(StringComparer.Ordinal);
 
     private static bool IsComposeFile(string path)
     {
@@ -52,7 +54,9 @@ public class ComposePortsBindLoopbackTests
     {
         var offenders = PublishedPorts(File.ReadAllLines(composePath))
             .Where(p => !p.Mapping.StartsWith("127.0.0.1:", StringComparison.Ordinal))
-            .Select(p => $"line {p.Line}: \"{p.Mapping}\"")
+            .Select(p =>
+                string.Create(CultureInfo.InvariantCulture, $"line {p.Line}: \"{p.Mapping}\"")
+            )
             .ToList();
 
         offenders
@@ -62,7 +66,7 @@ public class ComposePortsBindLoopbackTests
                     + "each with 127.0.0.1: so the service, and the password written beside it, is "
                     + "reachable only from this machine. See "
                     + "docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 

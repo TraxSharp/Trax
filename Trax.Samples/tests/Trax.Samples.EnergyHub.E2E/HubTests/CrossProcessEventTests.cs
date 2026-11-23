@@ -44,17 +44,23 @@ public class CrossProcessEventTests : HubTestFixture
 
         // Other trains, and other hosts on the same broker running this very train, may complete
         // meanwhile: wait for the run this test queued.
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(45);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(45);
         while (true)
         {
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime;
             remaining.Should().BePositive("the worker's completion should reach the hub");
 
             var payload = await socket.ReceiveNextAsync(remaining);
             if (!payload.TryGetProperty("data", out var data))
                 continue;
             var completed = data.GetProperty("onTrainCompleted");
-            if (completed.GetProperty("externalId").GetString() != externalId)
+            if (
+                !string.Equals(
+                    completed.GetProperty("externalId").GetString(),
+                    externalId,
+                    StringComparison.Ordinal
+                )
+            )
                 continue;
 
             completed

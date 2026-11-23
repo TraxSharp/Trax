@@ -52,16 +52,18 @@ public static class DevJwt
         "shopfront-dev-signing-key-do-not-use-in-production"
     );
 
-    public static string Mint(string user, string role) =>
+    public static string Mint(string user, string role, TimeProvider clock) =>
         new JsonWebTokenHandler().CreateToken(
             new SecurityTokenDescriptor
             {
                 Issuer = Issuer,
                 Audience = Audience,
-                Subject = new ClaimsIdentity(
-                    [new Claim("sub", user), new Claim("name", user), new Claim("role", role)]
-                ),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Subject = new ClaimsIdentity([
+                    new Claim("sub", user),
+                    new Claim("name", user),
+                    new Claim("role", role),
+                ]),
+                Expires = clock.GetUtcNow().UtcDateTime.AddHours(1),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(Key),
                     SecurityAlgorithms.HmacSha256
@@ -70,6 +72,9 @@ public static class DevJwt
         );
 }
 ```
+
+`Mint` takes the clock as a `TimeProvider` rather than reading `DateTime.UtcNow`: the endpoint that
+signs readers in asks the container for it, and a test can hand it a clock of its own.
 
 Trax reads the token's `sub` as the caller's id, `name` as their display name and `role` as their
 roles. It qualifies the id with the scheme that signed the caller in, so `ada` signed in by JWT is

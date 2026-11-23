@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -91,7 +92,7 @@ public class TraxPrincipalInjectionTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -105,7 +106,10 @@ public class TraxPrincipalInjectionTests
                         "alice",
                         "Alice Liddell",
                         ["User", "Tenant.Admin"],
-                        Claims: new Dictionary<string, string> { ["tenant"] = "acme" },
+                        Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["tenant"] = "acme",
+                        },
                         PrincipalType: "apikey"
                     )
                 )
@@ -116,7 +120,7 @@ public class TraxPrincipalInjectionTests
         var response = await client.GetFromJsonAsync<JunctionResponse>("/junction");
 
         response.Should().NotBeNull();
-        response!.Greeting.Should().Be("Alice Liddell (TraxApiKey:alice)");
+        response.NotNull().Greeting.Should().Be("Alice Liddell (TraxApiKey:alice)");
         response.Roles.Should().BeEquivalentTo(["User", "Tenant.Admin"]);
         response.Tenant.Should().Be("acme");
     }
@@ -133,14 +137,14 @@ public class TraxPrincipalInjectionTests
 
         var response = await client.GetFromJsonAsync<JunctionResponse>("/direct");
 
-        response!.Greeting.Should().Be("Bob (TraxApiKey:bob)");
+        response.NotNull().Greeting.Should().Be("Bob (TraxApiKey:bob)");
         response.Roles.Should().BeEquivalentTo(["Admin"]);
     }
 
     [Test]
     public async Task TwoConcurrentRequests_EachSeeOwnPrincipal()
     {
-        var principals = new Dictionary<string, TraxPrincipal>
+        var principals = new Dictionary<string, TraxPrincipal>(StringComparer.Ordinal)
         {
             ["alice-key"] = new("alice", "Alice", ["User"]),
             ["bob-key"] = new("bob", "Bob", ["Admin"]),
@@ -172,7 +176,9 @@ public class TraxPrincipalInjectionTests
                 };
                 var client = host.GetTestClient();
                 client.DefaultRequestHeaders.Add("X-Api-Key", key);
-                var response = await client.GetFromJsonAsync<JunctionResponse>("/junction");
+                var response = await client
+                    .GetFromJsonAsync<JunctionResponse>("/junction")
+                    .ConfigureAwait(false);
                 return (expected, actual: response?.Greeting);
             });
 
@@ -208,7 +214,7 @@ public class TraxPrincipalInjectionTests
         using var host = await CreateHost((_, _) => ValueTask.FromResult<TraxPrincipal?>(null));
         var client = host.GetTestClient();
 
-        var act = async () => await client.GetAsync("/direct");
+        var act = async () => await client.GetAsync("/direct").ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TraxPrincipalNotAvailableException>();
     }

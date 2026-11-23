@@ -57,6 +57,7 @@ internal sealed class TraxHttpAuthenticationInterceptor(GraphQLConfiguration con
                 await services
                     .GetRequiredService<IAuthorizationPolicyProvider>()
                     .GetPolicyAsync(EndpointPolicy.Name(configuration))
+                    .ConfigureAwait(false)
                 ?? throw new InvalidOperationException(
                     $"The GraphQL endpoint policy '{EndpointPolicy.Name(configuration)}' is not registered."
                 );
@@ -64,19 +65,21 @@ internal sealed class TraxHttpAuthenticationInterceptor(GraphQLConfiguration con
             if (policy.AuthenticationSchemes.Count > 0)
                 await services
                     .GetRequiredService<IPolicyEvaluator>()
-                    .AuthenticateAsync(policy, context);
+                    .AuthenticateAsync(policy, context)
+                    .ConfigureAwait(false);
             else
-                await AuthenticateWithAnySchemeAsync(context);
+                await AuthenticateWithAnySchemeAsync(context).ConfigureAwait(false);
 
             // The policy itself is evaluated in the request pipeline, which refuses the request
             // from inside execution so the refusal is instrumented like any other request.
         }
         else
         {
-            await AuthenticateWithAnySchemeAsync(context);
+            await AuthenticateWithAnySchemeAsync(context).ConfigureAwait(false);
         }
 
-        await base.OnCreateAsync(context, requestExecutor, requestBuilder, cancellationToken);
+        await base.OnCreateAsync(context, requestExecutor, requestBuilder, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -92,9 +95,9 @@ internal sealed class TraxHttpAuthenticationInterceptor(GraphQLConfiguration con
         if (schemes is null)
             return;
 
-        foreach (var scheme in await schemes.GetAllSchemesAsync())
+        foreach (var scheme in await schemes.GetAllSchemesAsync().ConfigureAwait(false))
         {
-            var result = await context.AuthenticateAsync(scheme.Name);
+            var result = await context.AuthenticateAsync(scheme.Name).ConfigureAwait(false);
             if (result.Succeeded && result.Principal is not null)
             {
                 context.User = result.Principal;

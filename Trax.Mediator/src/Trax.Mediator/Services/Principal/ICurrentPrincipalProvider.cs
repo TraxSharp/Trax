@@ -7,7 +7,7 @@ namespace Trax.Mediator.Services.Principal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>AddMediator</c> registers a default that always returns <c>null</c>, so the per-principal
+/// <c>AddMediator</c> registers a default that always returns <see langword="null"/>, so the per-principal
 /// limit does nothing until a real provider replaces it. Trax.Api's <c>AddTraxApi</c> replaces it
 /// with one that reads the id from the current <c>HttpContext</c>. A host outside ASP.NET Core that
 /// wants the per-principal limit registers its own as a singleton after <c>AddMediator</c>.
@@ -29,8 +29,8 @@ namespace Trax.Mediator.Services.Principal;
 public interface ICurrentPrincipalProvider
 {
     /// <summary>
-    /// The stable identifier of the current authenticated principal, or <c>null</c> when there is
-    /// none (a scheduler, a remote worker, an anonymous request). A run with a <c>null</c> or empty
+    /// The stable identifier of the current authenticated principal, or <see langword="null"/> when there is
+    /// none (a scheduler, a remote worker, an anonymous request). A run with a <see langword="null"/> or empty
     /// id is not limited per principal, though per-train and global limits still apply. The
     /// comparison is ordinal; the claim it comes from is the host's choice.
     /// </summary>

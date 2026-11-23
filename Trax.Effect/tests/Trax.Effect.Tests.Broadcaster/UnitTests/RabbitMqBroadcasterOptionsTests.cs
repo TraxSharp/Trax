@@ -43,7 +43,7 @@ public class RabbitMqBroadcasterOptionsTests
     public async Task Receiver_PrefetchCountZero_RefusesToStartBeforeConnecting()
     {
         // The URI points nowhere: the refusal must come before any connection attempt.
-        await using var receiver = new RabbitMqTrainEventReceiver(
+        var receiver = new RabbitMqTrainEventReceiver(
             new RabbitMqBroadcasterOptions
             {
                 ConnectionString = "amqp://trax:trax123@127.0.0.1:1/",
@@ -51,6 +51,7 @@ public class RabbitMqBroadcasterOptionsTests
                 SigningKey = TestBroadcastKey.Value,
             }
         );
+        await using var receiverDisposal = receiver.ConfigureAwait(false);
 
         var act = () => receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
 
@@ -107,7 +108,8 @@ public class RabbitMqBroadcasterOptionsTests
                 b.UseRabbitMq("amqp://localhost", o => o.AllowUnsignedMessages())
             )
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         provider
             .GetRequiredService<RabbitMqTrainEventReceiver>()

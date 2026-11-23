@@ -55,7 +55,11 @@ public class ExcerptsTests
     [Test]
     public void ChangedLine_Fails_NamingTheChunk() =>
         Excerpts
-            .Match("var app = builder.Build();\napp.MapGet(\"/\", () => \"OK\");", Program, null)
+            .Match(
+                "var app = builder.Build();\napp.MapGet(\"/\", () => \"OK\");",
+                Program,
+                region: null
+            )
             .Should()
             .Contain("chunk 1 of 1 (fence line 1) does not occur in the file");
 
@@ -66,7 +70,7 @@ public class ExcerptsTests
                 "trax.AddEffects(effects => effects.UsePostgres(connectionString))  \n"
                     + "    .AddMediator(typeof(Program).Assembly)",
                 Program,
-                null
+                region: null
             )
             .Should()
             .BeNull("a chunk lifted out of a nested call drops the indentation it had");
@@ -78,7 +82,7 @@ public class ExcerptsTests
                 "trax.AddEffects(effects => effects.UsePostgres(connectionString))\n"
                     + ".AddMediator(typeof(Program).Assembly)",
                 Program,
-                null
+                region: null
             )
             .Should()
             .NotBeNull();
@@ -103,7 +107,7 @@ public class ExcerptsTests
                 "var builder = WebApplication.CreateBuilder(args);\n\n"
                     + "builder.Services.AddTrax(trax =>",
                 Program,
-                null
+                region: null
             )
             .Should()
             .BeNull();
@@ -162,7 +166,7 @@ public class ExcerptsTests
 
     [Test]
     public void EmptyFence_Fails() =>
-        Excerpts.Match("\n// ...\n", Program, null).Should().NotBeNull();
+        Excerpts.Match("\n// ...\n", Program, region: null).Should().NotBeNull();
 
     [TestCase("../etc/passwd", "relative to the repository root")]
     [TestCase("/Trax.Samples/x.cs", "relative to the repository root")]

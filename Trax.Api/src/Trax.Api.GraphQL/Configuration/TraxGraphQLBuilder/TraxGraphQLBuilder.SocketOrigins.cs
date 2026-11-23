@@ -4,7 +4,7 @@ public partial class TraxGraphQLBuilder
 {
     /// <summary>
     /// The origins configured through <see cref="AllowSocketOrigins"/>, normalized, or
-    /// <c>null</c> when the method was not called and the CORS default policy applies.
+    /// <see langword="null"/> when the method was not called and the CORS default policy applies.
     /// </summary>
     internal IReadOnlyList<string>? SocketAllowedOrigins { get; private set; }
 

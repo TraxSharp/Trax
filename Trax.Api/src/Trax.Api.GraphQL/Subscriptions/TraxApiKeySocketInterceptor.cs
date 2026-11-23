@@ -89,7 +89,7 @@ public sealed class TraxApiKeySocketInterceptor : DefaultSocketSessionIntercepto
         TraxPrincipal? principal;
         try
         {
-            principal = await ResolveAsync(apiKey, cancellationToken);
+            principal = await ResolveAsync(apiKey, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -106,7 +106,8 @@ public sealed class TraxApiKeySocketInterceptor : DefaultSocketSessionIntercepto
         var claimsPrincipal = principal.ToClaimsPrincipal("TraxApiKey");
         AttachPrincipalToRequest(session, claimsPrincipal);
 
-        var status = await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
+        var status = await base.OnConnectAsync(session, connectionInitMessage, cancellationToken)
+            .ConfigureAwait(false);
         if (status.Accepted)
             RecheckKey(session, apiKey, principal);
         return status;
@@ -122,9 +123,14 @@ public sealed class TraxApiKeySocketInterceptor : DefaultSocketSessionIntercepto
         CancellationToken cancellationToken
     )
     {
-        await using var scope = _applicationServices.Services.CreateAsyncScope();
-        var resolver = scope.ServiceProvider.GetRequiredService<ITraxPrincipalResolver<string>>();
-        return await resolver.ResolveAsync(apiKey, cancellationToken);
+        var scope = _applicationServices.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var resolver = scope.ServiceProvider.GetRequiredService<
+                ITraxPrincipalResolver<string>
+            >();
+            return await resolver.ResolveAsync(apiKey, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -143,7 +149,8 @@ public sealed class TraxApiKeySocketInterceptor : DefaultSocketSessionIntercepto
             )
             .RecheckEvery(
                 _recheckInterval,
-                async ct => SamePrincipal(await ResolveAsync(apiKey, ct), connectedAs)
+                async ct =>
+                    SamePrincipal(await ResolveAsync(apiKey, ct).ConfigureAwait(false), connectedAs)
             );
     }
 
@@ -153,8 +160,8 @@ public sealed class TraxApiKeySocketInterceptor : DefaultSocketSessionIntercepto
     /// </summary>
     internal static bool SamePrincipal(TraxPrincipal? current, TraxPrincipal connectedAs) =>
         current is not null
-        && current.Id == connectedAs.Id
-        && current.PrincipalType == connectedAs.PrincipalType
+        && string.Equals(current.Id, connectedAs.Id, StringComparison.Ordinal)
+        && string.Equals(current.PrincipalType, connectedAs.PrincipalType, StringComparison.Ordinal)
         && current.Roles.ToHashSet(StringComparer.Ordinal).SetEquals(connectedAs.Roles)
         && SameClaims(current.Claims, connectedAs.Claims);
 
@@ -163,10 +170,13 @@ public sealed class TraxApiKeySocketInterceptor : DefaultSocketSessionIntercepto
         IReadOnlyDictionary<string, string>? b
     )
     {
-        a ??= new Dictionary<string, string>();
-        b ??= new Dictionary<string, string>();
+        a ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        b ??= new Dictionary<string, string>(StringComparer.Ordinal);
         return a.Count == b.Count
-            && a.All(pair => b.TryGetValue(pair.Key, out var value) && value == pair.Value);
+            && a.All(pair =>
+                b.TryGetValue(pair.Key, out var value)
+                && string.Equals(value, pair.Value, StringComparison.Ordinal)
+            );
     }
 
     private static void AttachPrincipalToRequest(

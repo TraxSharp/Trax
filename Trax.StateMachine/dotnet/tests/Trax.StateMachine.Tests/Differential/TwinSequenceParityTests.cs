@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -86,14 +88,25 @@ public class TwinSequenceParityTests
             Machine = machine,
             Version = 1,
             State = state,
-            Context = (JsonObject)JsonNode.Parse(context.ToJsonString())!,
+            Context = (JsonObject)JsonNode.Parse(context.ToJsonString()).NotNull(),
         };
 
     private static JsonObject Export<TState, TTrigger>(BuiltMachine<TState, TTrigger> built)
         where TState : struct, Enum
-        where TTrigger : struct, Enum => (JsonObject)JsonNode.Parse(IrExporter.Export(built))!;
+        where TTrigger : struct, Enum =>
+        (JsonObject)JsonNode.Parse(IrExporter.Export(built)).NotNull();
 
-    private static IEnumerable<Subject> Subjects(string machinesRoot)
+    private static IEnumerable<Subject> Subjects(JsonObject checkoutIr)
+    {
+        foreach (var subject in TurnstileAndCheckout(checkoutIr))
+            yield return subject;
+        foreach (var subject in IngestAndReminder())
+            yield return subject;
+        foreach (var subject in Wait())
+            yield return subject;
+    }
+
+    private static IEnumerable<Subject> TurnstileAndCheckout(JsonObject checkoutIr)
     {
         yield return For(
             "turnstile",
@@ -118,10 +131,7 @@ public class TwinSequenceParityTests
         yield return For(
             "checkout",
             DeclarativeCheckout.Machine,
-            (JsonObject)
-                JsonNode.Parse(
-                    File.ReadAllText(Path.Combine(machinesRoot, "checkout", "checkout.ir.json"))
-                )!,
+            checkoutIr,
             [
                 Snap(
                     "checkout",
@@ -150,7 +160,10 @@ public class TwinSequenceParityTests
             [],
             [null, new JsonObject(), new JsonObject { ["receipt"] = "r-1" }]
         );
+    }
 
+    private static IEnumerable<Subject> IngestAndReminder()
+    {
         var output = IngestMachine.Built.Invokes[IngestState.Fetching];
         yield return For(
             "ingest",
@@ -183,7 +196,10 @@ public class TwinSequenceParityTests
             ["Review.after"],
             [null]
         );
+    }
 
+    private static IEnumerable<Subject> Wait()
+    {
         // A timer that reads its duration from the context: the duration grammar is ASCII in both engines, so a
         // duration written with other digits is invalid-input in each.
         var fetched = WaitMachine.Built.Invokes[WaitState.Fetching];
@@ -230,14 +246,14 @@ public class TwinSequenceParityTests
             Op.Timer when subject.TimerTriggers.Count > 0 => new Step(
                 Op.Timer,
                 subject.TimerTriggers[pick % subject.TimerTriggers.Count],
-                null
+                Input: null
             ),
             _ => new Step(Op.Advance, subject.Triggers[pick % subject.Triggers.Count], input),
         };
     }
 
     [Test]
-    public void Random_event_sequences_with_timers_fired_at_random_points_agree()
+    public async Task Random_event_sequences_with_timers_fired_at_random_points_agree()
     {
         if (!NodeIsAvailable())
             Unavailable("node is not on PATH.");
@@ -246,29 +262,67 @@ public class TwinSequenceParityTests
 
         // An empty request first: it skips the test when the engine's dependencies are absent, which cannot be
         // done from inside a sample.
-        RunTool(
-            engineRoot,
-            new JsonObject
-            {
-                ["engineSrc"] = Path.Combine(engineRoot, "src"),
-                ["machines"] = new JsonObject(),
-                ["sequences"] = new JsonArray(),
-            }.ToJsonString()
-        );
+        await RunTool(
+                engineRoot,
+                new JsonObject
+                {
+                    ["engineSrc"] = Path.Combine(engineRoot, "src"),
+                    ["machines"] = new JsonObject(),
+                    ["sequences"] = new JsonArray(),
+                }.ToJsonString()
+            )
+            .ConfigureAwait(false);
 
-        foreach (var subject in Subjects(machinesRoot))
-            Sequences(subject)
+        var checkoutIr = (JsonObject)
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(machinesRoot, "checkout", "checkout.ir.json")
+                        )
+                        .ConfigureAwait(false)
+                )
+                .NotNull();
+        foreach (var subject in Subjects(checkoutIr))
+            await Sequences(subject)
                 .Array[500]
-                .Sample(batch => AgreeOn(subject, batch, engineRoot), iter: 1);
+                .SampleAsync(batch => AgreeOn(subject, batch, engineRoot), iter: 1)
+                .ConfigureAwait(false);
     }
 
-    private static void AgreeOn(
+    private static async Task AgreeOn(
         Subject subject,
         (int Start, Step[] Steps)[] batch,
         string engineRoot
     )
     {
-        var request = new JsonObject
+        var request = TwinRequest(subject, batch, engineRoot);
+
+        var twin = (JsonArray)
+            JsonNode
+                .Parse(await RunTool(engineRoot, request.ToJsonString()).ConfigureAwait(false))
+                .NotNull();
+
+        var diffs = new List<string>();
+        for (var i = 0; i < batch.Length; i++)
+        {
+            var current = subject.Starts[batch[i].Start];
+            var answers = (JsonArray)twin[i].NotNull();
+            CompareSequence(subject, batch[i], current, answers, i, diffs);
+        }
+
+        diffs
+            .Should()
+            .BeEmpty(
+                $"the engines agree after every step ({Adr}):\n" + string.Join('\n', diffs.Take(10))
+            );
+    }
+
+    private static JsonObject TwinRequest(
+        Subject subject,
+        (int Start, Step[] Steps)[] batch,
+        string engineRoot
+    ) =>
+        new JsonObject
         {
             ["engineSrc"] = Path.Combine(engineRoot, "src"),
             ["machines"] = new JsonObject
@@ -301,59 +355,67 @@ public class TwinSequenceParityTests
             ),
         };
 
-        var twin = (JsonArray)JsonNode.Parse(RunTool(engineRoot, request.ToJsonString()))!;
-
-        var diffs = new List<string>();
-        for (var i = 0; i < batch.Length; i++)
+    // Steps both engines through one sequence, and records the first step they disagree on.
+    private static void CompareSequence(
+        Subject subject,
+        (int Start, Step[] Steps) sequence,
+        Snapshot current,
+        JsonArray answers,
+        int i,
+        List<string> diffs
+    )
+    {
+        for (var n = 0; n < sequence.Steps.Length; n++)
         {
-            var current = subject.Starts[batch[i].Start];
-            var answers = (JsonArray)twin[i]!;
-            for (var n = 0; n < batch[i].Steps.Length; n++)
+            var step = sequence.Steps[n];
+            var result = subject.Apply(current, step);
+            if (result is AdvanceResult.Transitioned t)
+                current = t.Snapshot;
+            var (outcome, reason) = result switch
             {
-                var step = batch[i].Steps[n];
-                var result = subject.Apply(current, step);
-                if (result is AdvanceResult.Transitioned t)
-                    current = t.Snapshot;
-                var (outcome, reason) = result switch
-                {
-                    AdvanceResult.Transitioned => ("transitioned", (string?)null),
-                    AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
-                    _ => ("unknown", null),
-                };
-                var wire = subject.Serialize(current);
+                AdvanceResult.Transitioned => ("transitioned", (string?)null),
+                AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
+                _ => ("unknown", null),
+            };
+            var wire = subject.Serialize(current);
 
-                // The C# half of the contract: an outcome or a timer is never applied through advance.
-                if (
-                    step.Op == Op.Advance
-                    && (
-                        subject.OutcomeTriggers.Contains(step.Trigger)
-                        || subject.TimerTriggers.Contains(step.Trigger)
-                    )
-                    && outcome != "rejected"
+            // The C# half of the contract: an outcome or a timer is never applied through advance.
+            if (
+                step.Op == Op.Advance
+                && (
+                    subject.OutcomeTriggers.Contains(step.Trigger, StringComparer.Ordinal)
+                    || subject.TimerTriggers.Contains(step.Trigger, StringComparer.Ordinal)
                 )
-                    diffs.Add($"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}");
+                && !string.Equals(outcome, "rejected", StringComparison.Ordinal)
+            )
+                diffs.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[{subject.Name} #{i} step {n}] C# advance applied {step.Trigger}"
+                    )
+                );
 
-                var answer = (JsonObject)answers[n]!;
-                var twinOutcome = answer["outcome"]!.GetValue<string>();
-                var twinReason = answer["reason"]?.GetValue<string>();
-                var twinWire = answer["wire"]!.GetValue<string>();
-                if (outcome != twinOutcome || reason != twinReason || wire != twinWire)
-                {
-                    diffs.Add(
+            var answer = (JsonObject)answers[n].NotNull();
+            var twinOutcome = answer["outcome"].NotNull().GetValue<string>();
+            var twinReason = answer["reason"]?.GetValue<string>();
+            var twinWire = answer["wire"].NotNull().GetValue<string>();
+            if (
+                !string.Equals(outcome, twinOutcome, StringComparison.Ordinal)
+                || !string.Equals(reason, twinReason, StringComparison.Ordinal)
+                || !string.Equals(wire, twinWire, StringComparison.Ordinal)
+            )
+            {
+                diffs.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
                         $"[{subject.Name} #{i} step {n}: {step.Op} {step.Trigger} "
-                            + $"{step.Input?.ToJsonString()}] C# {outcome} {reason ?? wire}, "
-                            + $"twin {twinOutcome} {twinReason ?? twinWire}"
-                    );
-                    break;
-                }
+                    )
+                        + $"{step.Input?.ToJsonString()}] C# {outcome} {reason ?? wire}, "
+                        + $"twin {twinOutcome} {twinReason ?? twinWire}"
+                );
+                break;
             }
         }
-
-        diffs
-            .Should()
-            .BeEmpty(
-                $"the engines agree after every step ({Adr}):\n" + string.Join("\n", diffs.Take(10))
-            );
     }
 
     private static JsonObject ToJson(Snapshot snapshot) =>
@@ -365,7 +427,7 @@ public class TwinSequenceParityTests
             ["context"] = snapshot.Context.DeepClone(),
         };
 
-    private static string RunTool(string engineRoot, string request)
+    private static async Task<string> RunTool(string engineRoot, string request)
     {
         var start = new ProcessStartInfo("node", "tools/replay-sequences.mjs")
         {
@@ -375,10 +437,10 @@ public class TwinSequenceParityTests
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.StandardInput.Write(request);
+        await process.StandardInput.WriteAsync(request).ConfigureAwait(false);
         process.StandardInput.Close();
 
         // The test owns its wait (ADR 0014): the twin answers well within it, or the test fails.
@@ -394,8 +456,8 @@ public class TwinSequenceParityTests
             );
         process
             .ExitCode.Should()
-            .Be(0, $"replay-sequences.mjs failed: {stderr.GetAwaiter().GetResult()}");
-        return stdout.GetAwaiter().GetResult();
+            .Be(0, $"replay-sequences.mjs failed: {await stderr.ConfigureAwait(false)}");
+        return await stdout.ConfigureAwait(false);
     }
 
     /// <summary>

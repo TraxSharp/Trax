@@ -92,7 +92,9 @@ public class ConfigQueries
                 {
                     ConfiguredLevel = section.Value,
                 })
-                .OrderBy(entry => entry.Category == "Default" ? 0 : 1)
+                .OrderBy(entry =>
+                    string.Equals(entry.Category, "Default", StringComparison.Ordinal) ? 0 : 1
+                )
                 .ThenBy(entry => entry.Category, StringComparer.OrdinalIgnoreCase)
                 .ToList()
             : logLevels

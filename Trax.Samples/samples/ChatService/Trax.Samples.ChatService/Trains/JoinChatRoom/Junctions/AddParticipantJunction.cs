@@ -9,12 +9,13 @@ namespace Trax.Samples.ChatService.Trains.JoinChatRoom.Junctions;
 public class AddParticipantJunction(
     ChatDbContext db,
     TraxPrincipal caller,
-    ILogger<AddParticipantJunction> logger
+    ILogger<AddParticipantJunction> logger,
+    TimeProvider clock
 ) : Junction<JoinChatRoomInput, JoinChatRoomOutput>
 {
     public override async Task<JoinChatRoomOutput> Run(JoinChatRoomInput input)
     {
-        var now = DateTime.UtcNow;
+        var now = clock.GetUtcNow().UtcDateTime;
 
         db.ChatParticipants.Add(
             new ChatParticipant
@@ -26,7 +27,7 @@ public class AddParticipantJunction(
                 JoinedAt = now,
             }
         );
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "User {UserId} joined room {ChatRoomId}",

@@ -1,7 +1,10 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
+using Trax.Core.Extensions;
+using Trax.Samples.GraphQLClient;
 using Trax.Samples.GraphQLClient.Requests;
 using Trax.Samples.GraphQLClient.Requests.A_RawString;
 using Trax.Samples.GraphQLClient.Requests.D_Typed;
@@ -37,58 +40,74 @@ app.MapGraphQL("/graphql");
 app.Urls.Add(url);
 
 // StartAsync returns once Kestrel is listening, so the client below never races the server.
-await app.StartAsync();
+await app.StartAsync().ConfigureAwait(false);
 
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
 var executor = app.Services.GetRequiredService<IGraphQLClientExecutor>();
 
-Console.WriteLine("Running three modes against the same player:");
-Console.WriteLine();
+output.Say("Running three modes against the same player:");
+output.Say("");
 
-var modeA = await executor.Run(new GetPlayerByRawStringRequest { Id = "player-1" });
+var modeA = await executor
+    .Run(new GetPlayerByRawStringRequest { Id = "player-1" })
+    .ConfigureAwait(false);
 Print("A: raw string ", modeA);
 
-var modeE = await executor.Run(new GetPlayerByResourceRequest { Id = "player-1" });
+var modeE = await executor
+    .Run(new GetPlayerByResourceRequest { Id = "player-1" })
+    .ConfigureAwait(false);
 Print("E: .graphql   ", modeE);
 
-var modeD = await executor.Run(new GetPlayerByTypedRequest { Id = "player-1" });
+var modeD = await executor
+    .Run(new GetPlayerByTypedRequest { Id = "player-1" })
+    .ConfigureAwait(false);
 PrintTyped("D: POCO-typed", modeD);
 
 // Same player, fetched through the Trax-style discover.{namespace} envelope. The Path
 // attribute on the request keeps the consumer in typed mode for nested schemas instead
 // of forcing a raw-string fallback.
-var modeDNested = await executor.Run(new LookupPlayerByNestedPathRequest { Id = "player-1" });
-PrintTyped("D: nested path", modeDNested!);
+var modeDNested = await executor
+    .Run(new LookupPlayerByNestedPathRequest { Id = "player-1" })
+    .ConfigureAwait(false);
+PrintTyped("D: nested path", modeDNested.NotNull());
 
-Console.WriteLine();
+output.Say("");
 var aeMatch =
-    modeA.Id == modeE.Id
-    && modeA.Name == modeE.Name
+    string.Equals(modeA.Id, modeE.Id, StringComparison.Ordinal)
+    && string.Equals(modeA.Name, modeE.Name, StringComparison.Ordinal)
     && modeA.Level == modeE.Level
-    && modeA.Rank == modeE.Rank
+    && string.Equals(modeA.Rank, modeE.Rank, StringComparison.Ordinal)
     && modeA.Inventory.SequenceEqual(modeE.Inventory);
 var adMatch =
-    modeA.Id == modeD.Id
-    && modeA.Name == modeD.Name
+    string.Equals(modeA.Id, modeD.Id, StringComparison.Ordinal)
+    && string.Equals(modeA.Name, modeD.Name, StringComparison.Ordinal)
     && modeA.Level == modeD.Level
-    && modeA.Rank == modeD.Rank
+    && string.Equals(modeA.Rank, modeD.Rank, StringComparison.Ordinal)
     && modeA.Inventory.Count == modeD.Inventory.Count;
-Console.WriteLine($"  A == E (raw vs resource) : {aeMatch}");
-Console.WriteLine($"  A ~ D (raw vs typed)     : {adMatch}");
+output.Say($"  A == E (raw vs resource) : {aeMatch}");
+output.Say($"  A ~ D (raw vs typed)     : {adMatch}");
 
-await app.StopAsync();
+await app.StopAsync().ConfigureAwait(false);
 
 // The point of the sample is that the modes agree, so a disagreement fails the run.
 if (aeMatch && adMatch)
     return 0;
-Console.Error.WriteLine("The modes returned different players.");
+output.Fail("The modes returned different players.");
 return 1;
 
-static void Print(string label, PlayerProfile p) =>
-    Console.WriteLine(
-        $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+void Print(string label, PlayerProfile p) =>
+    output.Say(
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+        )
     );
 
-static void PrintTyped(string label, TypedPlayerProfile p) =>
-    Console.WriteLine(
-        $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+void PrintTyped(string label, TypedPlayerProfile p) =>
+    output.Say(
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"  {label} -> {p.Name} (level {p.Level}, rank {p.Rank}, {p.Inventory.Count} items)"
+        )
     );

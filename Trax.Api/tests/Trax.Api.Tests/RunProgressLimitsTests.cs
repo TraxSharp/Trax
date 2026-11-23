@@ -1,5 +1,7 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -37,7 +39,10 @@ public class RunProgressLimitsTests
     {
         var limits = new RunProgressLimits();
         for (var i = 0; i < RunProgressLimits.PerPrincipal; i++)
-            limits.TryAcquire("alice", $"run-{i}").Should().NotBeNull();
+            limits
+                .TryAcquire("alice", string.Create(CultureInfo.InvariantCulture, $"run-{i}"))
+                .Should()
+                .NotBeNull();
 
         limits
             .TryAcquire("alice", "one-more")
@@ -51,7 +56,7 @@ public class RunProgressLimitsTests
         var limits = new RunProgressLimits();
         var held = Enumerable
             .Range(0, RunProgressLimits.PerRun)
-            .Select(_ => limits.TryAcquire("alice", "run")!)
+            .Select(_ => limits.TryAcquire("alice", "run").NotNull())
             .ToList();
 
         held[0].Dispose();

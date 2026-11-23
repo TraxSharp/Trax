@@ -11,7 +11,7 @@ namespace Trax.Effect.Data.Sqlite.Services.SqliteContextFactory;
 /// data access. Infrastructure registered by <c>UseSqlite</c>; not intended to be constructed directly.
 /// </summary>
 /// <param name="dbContextFactory">The EF Core factory configured with the SQLite connection string.</param>
-internal class SqliteContextProviderFactory(
+internal sealed class SqliteContextProviderFactory(
     IDbContextFactory<SqliteContext.SqliteContext> dbContextFactory
 ) : IDataContextProviderFactory
 {
@@ -39,7 +39,9 @@ internal class SqliteContextProviderFactory(
     /// <remarks>The caller owns the returned context and must dispose it.</remarks>
     public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
     {
-        var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var context = await dbContextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
         Interlocked.Increment(ref _count);
         return context;
     }

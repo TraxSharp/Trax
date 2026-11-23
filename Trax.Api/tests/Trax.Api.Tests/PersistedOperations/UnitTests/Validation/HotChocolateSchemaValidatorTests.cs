@@ -30,7 +30,8 @@ public class HotChocolateSchemaValidatorTests
     [Test]
     public async Task ValidateAsync_SchemaWithAuthorizeDirective_DoesNotThrowMissingStateException()
     {
-        await using var sp = BuildSchemaProvider(addAuthorization: true);
+        var sp = BuildSchemaProvider(addAuthorization: true);
+        await using var spDisposal = sp.ConfigureAwait(false);
         var validator = new HotChocolateSchemaValidator(sp);
 
         // hello has @authorize on the schema; this document is otherwise valid.
@@ -42,7 +43,8 @@ public class HotChocolateSchemaValidatorTests
     [Test]
     public async Task ValidateAsync_SchemaWithAuthorize_InvalidField_ReportsValidationFailure()
     {
-        await using var sp = BuildSchemaProvider(addAuthorization: true);
+        var sp = BuildSchemaProvider(addAuthorization: true);
+        await using var spDisposal = sp.ConfigureAwait(false);
         var validator = new HotChocolateSchemaValidator(sp);
 
         var act = () => validator.ValidateAsync("query Q { ghost }", CancellationToken.None);
@@ -56,7 +58,8 @@ public class HotChocolateSchemaValidatorTests
     {
         // Hosts that never wire @authorize must keep working: the validator
         // gracefully resolves a missing IAuthorizationHandler.
-        await using var sp = BuildSchemaProvider(addAuthorization: false);
+        var sp = BuildSchemaProvider(addAuthorization: false);
+        await using var spDisposal = sp.ConfigureAwait(false);
         var validator = new HotChocolateSchemaValidator(sp);
 
         var act = () => validator.ValidateAsync("query Q { hello }", CancellationToken.None);
@@ -67,7 +70,8 @@ public class HotChocolateSchemaValidatorTests
     [Test]
     public async Task ValidateAsync_SyntaxError_ThrowsParseException()
     {
-        await using var sp = BuildSchemaProvider(addAuthorization: true);
+        var sp = BuildSchemaProvider(addAuthorization: true);
+        await using var spDisposal = sp.ConfigureAwait(false);
         var validator = new HotChocolateSchemaValidator(sp);
 
         var act = () => validator.ValidateAsync("query Q { hello", CancellationToken.None);
@@ -82,7 +86,8 @@ public class HotChocolateSchemaValidatorTests
         // on first use. Hitting the cache on the second call has to keep
         // working with the @authorize handler-injection path; this case
         // exercises both the cache-miss and cache-hit branches.
-        await using var sp = BuildSchemaProvider(addAuthorization: true);
+        var sp = BuildSchemaProvider(addAuthorization: true);
+        await using var spDisposal = sp.ConfigureAwait(false);
         var validator = new HotChocolateSchemaValidator(sp);
 
         await validator.ValidateAsync("query Q { hello }", CancellationToken.None);
@@ -94,14 +99,15 @@ public class HotChocolateSchemaValidatorTests
     [Test]
     public async Task ValidateAsync_PreCancelledToken_Throws()
     {
-        await using var sp = BuildSchemaProvider(addAuthorization: true);
+        var sp = BuildSchemaProvider(addAuthorization: true);
+        await using var spDisposal = sp.ConfigureAwait(false);
         var validator = new HotChocolateSchemaValidator(sp);
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         var act = () => validator.ValidateAsync("query Q { hello }", cts.Token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     private static ServiceProvider BuildSchemaProvider(bool addAuthorization)

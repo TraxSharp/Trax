@@ -1,7 +1,9 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
@@ -17,9 +19,9 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class SetEffectEnabledTests
 {
-    private sealed class ToggleableFactory;
+    private static class ToggleableFactory;
 
-    private sealed class FixedFactory;
+    private static class FixedFactory;
 
     public sealed class SinkSettings
     {
@@ -41,69 +43,73 @@ public class SetEffectEnabledTests
         public Type GetConfigurationType() => typeof(SinkSettings);
     }
 
-    private EffectRegistry _registry = null!;
-    private SinkFactory _sink = null!;
-    private ServiceProvider _services = null!;
-    private IEffectSettingsService _settings = null!;
+    private EffectRegistry? _registry;
+    private SinkFactory? _sink;
+    private ServiceProvider? _services;
+    private IEffectSettingsService? _settings;
 
     [SetUp]
     public void SetUp()
     {
         _registry = new EffectRegistry();
-        _registry.Register(typeof(ToggleableFactory), enabled: true, toggleable: true);
-        _registry.Register(typeof(FixedFactory), enabled: true, toggleable: false);
-        _registry.Register(typeof(SinkFactory), enabled: true, toggleable: true);
+        _registry.NotNull().Register(typeof(ToggleableFactory), enabled: true, toggleable: true);
+        _registry.NotNull().Register(typeof(FixedFactory), enabled: true, toggleable: false);
+        _registry.NotNull().Register(typeof(SinkFactory), enabled: true, toggleable: true);
         _sink = new SinkFactory();
         _services = new ServiceCollection()
-            .AddSingleton<IEffectRegistry>(_registry)
-            .AddSingleton(_sink)
+            .AddSingleton<IEffectRegistry>(_registry.NotNull())
+            .AddSingleton(_sink.NotNull())
             .BuildServiceProvider();
-        _settings = new EffectSettingsService(_services);
+        _settings = new EffectSettingsService(_services.NotNull());
     }
 
     [TearDown]
-    public void TearDown() => _services.Dispose();
+    public void TearDown() => _services?.Dispose();
 
     [Test]
     public void Disabling_AToggleableEffect_TurnsItOff()
     {
         var result = new OperationsMutations().SetEffectEnabled(
-            typeof(ToggleableFactory).FullName!,
-            false,
-            _settings
+            typeof(ToggleableFactory).FullName.NotNull(),
+            enabled: false,
+            _settings.NotNull()
         );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(1);
         result.Message.Should().Be("Effect disabled in this process");
-        _registry.IsEnabled(typeof(ToggleableFactory)).Should().BeFalse();
+        _registry.NotNull().IsEnabled(typeof(ToggleableFactory)).Should().BeFalse();
     }
 
     [Test]
     public void Enabling_ADisabledEffect_TurnsItBackOn()
     {
-        _registry.Disable(typeof(ToggleableFactory));
+        _registry.NotNull().Disable(typeof(ToggleableFactory));
 
         new OperationsMutations()
-            .SetEffectEnabled(typeof(ToggleableFactory).FullName!, true, _settings)
+            .SetEffectEnabled(
+                typeof(ToggleableFactory).FullName.NotNull(),
+                enabled: true,
+                _settings.NotNull()
+            )
             .Success.Should()
             .BeTrue();
 
-        _registry.IsEnabled(typeof(ToggleableFactory)).Should().BeTrue();
+        _registry.NotNull().IsEnabled(typeof(ToggleableFactory)).Should().BeTrue();
     }
 
     [Test]
     public void ANotToggleableEffect_IsRefused_AndStaysAsItWas()
     {
         var result = new OperationsMutations().SetEffectEnabled(
-            typeof(FixedFactory).FullName!,
-            false,
-            _settings
+            typeof(FixedFactory).FullName.NotNull(),
+            enabled: false,
+            _settings.NotNull()
         );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("not toggleable");
-        _registry.IsEnabled(typeof(FixedFactory)).Should().BeTrue();
+        _registry.NotNull().IsEnabled(typeof(FixedFactory)).Should().BeTrue();
     }
 
     [Test]
@@ -111,8 +117,8 @@ public class SetEffectEnabledTests
     {
         var result = new OperationsMutations().SetEffectEnabled(
             "No.Such.Factory",
-            false,
-            _settings
+            enabled: false,
+            _settings.NotNull()
         );
 
         result.Success.Should().BeFalse();
@@ -124,13 +130,13 @@ public class SetEffectEnabledTests
     {
         new OperationsMutations()
             .SetEffectEnabled(
-                typeof(ToggleableFactory).FullName!.ToUpperInvariant(),
-                false,
-                _settings
+                typeof(ToggleableFactory).FullName.NotNull().ToUpperInvariant(),
+                enabled: false,
+                _settings.NotNull()
             )
             .Success.Should()
             .BeFalse();
-        _registry.IsEnabled(typeof(ToggleableFactory)).Should().BeTrue();
+        _registry.NotNull().IsEnabled(typeof(ToggleableFactory)).Should().BeTrue();
     }
 
     [Test]
@@ -140,8 +146,8 @@ public class SetEffectEnabledTests
 
         new OperationsMutations()
             .SetEffectEnabled(
-                typeof(ToggleableFactory).FullName!,
-                false,
+                typeof(ToggleableFactory).FullName.NotNull(),
+                enabled: false,
                 new EffectSettingsService(empty)
             )
             .Success.Should()
@@ -156,9 +162,12 @@ public class SetEffectEnabledTests
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(2);
         result.Errors.Should().BeEmpty();
-        _sink.Settings.BatchSize.Should().Be(200);
-        _sink.Settings.ApiKey.Should().Be("sk-rotated", "a sensitive setting can be written");
-        _sink.Settings.Target.Should().Be("sink");
+        _sink.NotNull().Settings.BatchSize.Should().Be(200);
+        _sink
+            .NotNull()
+            .Settings.ApiKey.Should()
+            .Be("sk-rotated", "a sensitive setting can be written");
+        _sink.NotNull().Settings.Target.Should().Be("sink");
     }
 
     [Test]
@@ -169,8 +178,8 @@ public class SetEffectEnabledTests
         result.Success.Should().BeFalse();
         result.Count.Should().Be(0);
         result.Errors.Should().ContainSingle().Which.Field.Should().Be("BatchSize");
-        _sink.Settings.Target.Should().Be("sink", "the change is all or nothing");
-        _sink.Settings.BatchSize.Should().Be(50);
+        _sink.NotNull().Settings.Target.Should().Be("sink", "the change is all or nothing");
+        _sink.NotNull().Settings.BatchSize.Should().Be(50);
     }
 
     [Test]
@@ -189,7 +198,7 @@ public class SetEffectEnabledTests
 
         result.Success.Should().BeFalse();
         result.Errors.Should().ContainSingle().Which.Field.Should().Be("BatchSize");
-        _sink.Settings.BatchSize.Should().Be(50);
+        _sink.NotNull().Settings.BatchSize.Should().Be(50);
     }
 
     [Test]
@@ -197,13 +206,16 @@ public class SetEffectEnabledTests
     {
         var values = Enumerable
             .Range(0, 1001)
-            .Select(i => new EffectSettingValueInput($"S{i}", "1"))
+            .Select(i => new EffectSettingValueInput(
+                string.Create(CultureInfo.InvariantCulture, $"S{i}"),
+                "1"
+            ))
             .ToList();
 
         var result = new OperationsMutations().ConfigureEffect(
-            typeof(SinkFactory).FullName!,
+            typeof(SinkFactory).FullName.NotNull(),
             values,
-            _settings
+            _settings.NotNull()
         );
 
         result.Success.Should().BeFalse();
@@ -214,9 +226,9 @@ public class SetEffectEnabledTests
     public void ConfigureEffect_AnEffectWithNoSettings_IsRefused()
     {
         var result = new OperationsMutations().ConfigureEffect(
-            typeof(ToggleableFactory).FullName!,
+            typeof(ToggleableFactory).FullName.NotNull(),
             [new EffectSettingValueInput("BatchSize", "1")],
-            _settings
+            _settings.NotNull()
         );
 
         result.Success.Should().BeFalse();
@@ -224,5 +236,9 @@ public class SetEffectEnabledTests
     }
 
     private ConfigureEffectResponse Configure(params EffectSettingValueInput[] values) =>
-        new OperationsMutations().ConfigureEffect(typeof(SinkFactory).FullName!, values, _settings);
+        new OperationsMutations().ConfigureEffect(
+            typeof(SinkFactory).FullName.NotNull(),
+            values,
+            _settings.NotNull()
+        );
 }

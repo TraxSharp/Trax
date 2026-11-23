@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Trax.Samples.Bookworm.Auth;
 using Trax.Samples.Bookworm.E2E.Fixtures;
@@ -17,11 +18,14 @@ public class ReturnBookTests : ApiTestFixture
     // Borrows a book no other test has on loan and returns the loan id, so each test owns the loan
     // it returns.
     private async Task<int> BorrowLoanAsync() =>
-        await BorrowAsync(await NewBookAsync(), ApiKeyDefaults.MemberKey);
+        await BorrowAsync(await NewBookAsync().ConfigureAwait(false), ApiKeyDefaults.MemberKey)
+            .ConfigureAwait(false);
 
     private static string ReturnMutation(int loanId) =>
-        $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) "
-        + "{ output { loanId returnedAt } } } } }";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) "
+        ) + "{ output { loanId returnedAt } } } } }";
 
     [Test]
     public async Task ReturnBook_AuthenticatedMember_StampsReturnedAtAndPersists()
@@ -40,13 +44,17 @@ public class ReturnBookTests : ApiTestFixture
             .GetProperty("output");
 
         result.GetProperty("loanId").GetInt32().Should().Be(loanId);
-        result.GetProperty("returnedAt").GetDateTime().Should().BeOnOrBefore(DateTime.UtcNow);
+        result
+            .GetProperty("returnedAt")
+            .GetDateTime()
+            .Should()
+            .BeOnOrBefore(TimeProvider.System.GetUtcNow().UtcDateTime);
 
         // The stamp persists: re-reading this exact loan through the query model (filtered by id, so
         // pagination can't hide it) shows a non-null returnedAt.
         var readBack = await GraphQL.PostAsync(
             "{ discover { lending { loans(where: { id: { eq: "
-                + loanId
+                + loanId.ToString(CultureInfo.InvariantCulture)
                 + " } }) { nodes { id returnedAt } } } } }",
             ApiKeyDefaults.MemberKey
         );

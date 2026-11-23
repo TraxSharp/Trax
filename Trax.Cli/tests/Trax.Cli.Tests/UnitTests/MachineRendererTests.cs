@@ -10,7 +10,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <c>trax machine show</c> draws a machine from its IR. The renderer is pure, so these pin its output from IR
 /// text: the turnstile the other machine tests use, and a hand-written IR with every mark the text form has.
 /// </summary>
-public class MachineRendererTests
+public partial class MachineRendererTests
 {
     private static readonly string Turnstile = new DeclarativeTurnstileMachine().ExportIr();
 
@@ -151,10 +151,8 @@ public class MachineRendererTests
     private static readonly string Reminder = new DeclarativeReminderMachine().ExportIr();
 
     // The timer edge Review → Expired, labelled with its duration as the IR spells it or as a reader would.
-    private static readonly Regex TimerDuration = new(
-        @"\b(PT10M|10m|10 min)",
-        RegexOptions.Compiled
-    );
+    [GeneratedRegex(@"\b(?:PT10M|10m|10 min)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex TimerDuration { get; }
 
     [Test]
     [Property(
@@ -265,7 +263,9 @@ public class MachineRendererTests
     [TestCase("dot", "\"Dealing\" -> \"Guessing\" [label=\"Dealing.done")]
     public void Diagrams_draw_outcome_edges(string name, string edge)
     {
-        var format = name == "dot" ? MachineFormat.Dot : MachineFormat.Mermaid;
+        var format = string.Equals(name, "dot", StringComparison.Ordinal)
+            ? MachineFormat.Dot
+            : MachineFormat.Mermaid;
 
         MachineRenderer.Render(Cards, format).Should().Contain(edge);
     }
@@ -358,71 +358,64 @@ public class MachineRendererTests
     }
 
     [Test]
-    public void Show_prints_the_machine_from_an_assembly()
+    public async Task Show_prints_the_machine_from_an_assembly()
     {
         using var output = new StringWriter();
-        var exit = MachineCommand.RunShow(
-            typeof(DeclarativeTurnstileMachine).Assembly.Location,
-            typeof(DeclarativeTurnstileMachine).FullName,
-            null,
-            false,
-            output
-        );
+        var exit = await MachineCommand
+            .RunShowAsync(
+                typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                typeof(DeclarativeTurnstileMachine).FullName,
+                format: null,
+                ascii: false,
+                output,
+                TextWriter.Null
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         output.ToString().Should().StartWith("turnstile  v1   initial: Locked");
     }
 
     [Test]
-    public void Show_with_several_machines_and_none_named_gives_the_error_generate_does()
+    public async Task Show_with_several_machines_and_none_named_gives_the_error_generate_does()
     {
-        var original = Console.Error;
-        using var error = new StringWriter();
-        Console.SetError(error);
-        int exit;
-        try
-        {
-            exit = MachineCommand.RunShow(
-                typeof(DeclarativeTurnstileMachine).Assembly.Location,
-                null,
-                null,
-                false,
-                new StringWriter()
-            );
-        }
-        finally
-        {
-            Console.SetError(original);
-        }
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    MachineCommand.RunShowAsync(
+                        typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                        machineName: null,
+                        format: null,
+                        ascii: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
 
-        exit.Should().Be(1);
-        error.ToString().Should().Contain("pass --machine <FullName> to pick one");
+        run.ExitCode.Should().Be(1);
+        run.Stderr.Should().Contain("pass --machine <FullName> to pick one");
     }
 
     [Test]
-    public void Show_refuses_an_unknown_format()
+    public async Task Show_refuses_an_unknown_format()
     {
-        var original = Console.Error;
-        using var error = new StringWriter();
-        Console.SetError(error);
-        try
-        {
-            MachineCommand
-                .RunShow(
-                    typeof(DeclarativeTurnstileMachine).Assembly.Location,
-                    typeof(DeclarativeTurnstileMachine).FullName,
-                    "svg",
-                    false,
-                    new StringWriter()
-                )
-                .Should()
-                .Be(1);
-        }
-        finally
-        {
-            Console.SetError(original);
-        }
-        error.ToString().Should().Contain("--format must be");
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    MachineCommand.RunShowAsync(
+                        typeof(DeclarativeTurnstileMachine).Assembly.Location,
+                        typeof(DeclarativeTurnstileMachine).FullName,
+                        "svg",
+                        ascii: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+
+        run.ExitCode.Should().Be(1);
+        run.Stderr.Should().Contain("--format must be");
     }
 
     [Test]
@@ -454,7 +447,9 @@ public class MachineRendererTests
     [TestCase("dot")]
     public void Diagram_sources_do_not_pass_control_characters_either(string name)
     {
-        var format = name == "dot" ? MachineFormat.Dot : MachineFormat.Mermaid;
+        var format = string.Equals(name, "dot", StringComparison.Ordinal)
+            ? MachineFormat.Dot
+            : MachineFormat.Mermaid;
         const string ir = """
             {
               "id": "evil", "version": 1, "initialState": "Start",

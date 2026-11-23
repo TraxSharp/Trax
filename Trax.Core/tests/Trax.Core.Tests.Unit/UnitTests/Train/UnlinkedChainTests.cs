@@ -49,13 +49,13 @@ public class UnlinkedChainTests : TestSetup
     public void ALinkedChain_StillVerifies() =>
         new LinkedTrain().DeclaredChain().Refusals.Should().BeEmpty();
 
-    public interface IA { }
+    public interface IA;
 
-    public interface IB { }
+    public interface IB;
 
-    private sealed class A : IA { }
+    private sealed class A : IA;
 
-    private sealed class B : IB { }
+    private sealed class B : IB;
 
     public sealed class Holder
     {
@@ -81,7 +81,7 @@ public class UnlinkedChainTests : TestSetup
     {
         protected override Task<Either<Exception, bool>> Junctions()
         {
-            Chain<StringToInt>();
+            _ = Chain<StringToInt>();
             return Chain<IntToBool>().Resolve();
         }
     }
@@ -100,9 +100,9 @@ public class UnlinkedChainTests : TestSetup
     {
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await Chain<StringToHolder>();
+            await Chain<StringToHolder>().ConfigureAwait(false);
             Extract<Holder, int>();
-            return await Chain<IntToBool>().Resolve();
+            return await Chain<IntToBool>().Resolve().ConfigureAwait(false);
         }
     }
 
@@ -118,7 +118,7 @@ public class UnlinkedChainTests : TestSetup
         {
             await Chain<StringToHolder>().ConfigureAwait(false);
             Extract<Holder, int>();
-            return await Chain<IntToBool>().Resolve();
+            return await Chain<IntToBool>().Resolve().ConfigureAwait(false);
         }
     }
 
@@ -126,9 +126,9 @@ public class UnlinkedChainTests : TestSetup
     {
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await Chain<StringToHolder>().AsTask();
+            await Chain<StringToHolder>().AsTask().ConfigureAwait(false);
             Extract<Holder, int>();
-            return await Chain<IntToBool>().Resolve();
+            return await Chain<IntToBool>().Resolve().ConfigureAwait(false);
         }
     }
 
@@ -137,9 +137,9 @@ public class UnlinkedChainTests : TestSetup
         protected override async Task<Either<Exception, bool>> Junctions()
         {
             Task<Monad<string, bool>> first = Chain<StringToHolder>();
-            await first;
+            await first.ConfigureAwait(false);
             Extract<Holder, int>();
-            return await Chain<IntToBool>().Resolve();
+            return await Chain<IntToBool>().Resolve().ConfigureAwait(false);
         }
     }
 }

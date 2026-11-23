@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
@@ -14,7 +15,7 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task TrainBus_TrainWithAnAsyncOnlyDisposableDependency_ReturnsItsOutput()
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _serviceProvider.NotNull().CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         (await bus.RunAsync<string>(new AsyncScopedInput())).Should().Be("ran");
@@ -22,24 +23,28 @@ public partial class RunAndQueueExecutionTests
             .Should()
             .Be("ran");
 
-        var untyped = async () => await bus.RunAsync(new AsyncScopedInput());
+        var untyped = async () => await bus.RunAsync(new AsyncScopedInput()).ConfigureAwait(false);
         await untyped.Should().NotThrowAsync();
 
         var untypedWithToken = async () =>
-            await bus.RunAsync(new AsyncScopedInput(), CancellationToken.None);
+            await bus.RunAsync(new AsyncScopedInput(), CancellationToken.None)
+                .ConfigureAwait(false);
         await untypedWithToken.Should().NotThrowAsync();
     }
 
     [Test]
     public async Task TrainBus_FailingTrainWithAnAsyncOnlyDisposableDependency_SurfacesItsOwnFailure()
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _serviceProvider.NotNull().CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = async () =>
-            await bus.RunAsync<string>(new FailingAsyncScopedInput(), CancellationToken.None);
+            await bus.RunAsync<string>(new FailingAsyncScopedInput(), CancellationToken.None)
+                .ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*the train's own failure*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*the train's own failure*");
     }
 
     [Test]
@@ -55,7 +60,8 @@ public partial class RunAndQueueExecutionTests
             provider
         );
 
-        var act = async () => await validator.StartingAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartingAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -91,7 +97,7 @@ public partial class RunAndQueueExecutionTests
 
         protected override Task<Either<Exception, string>> Junctions() =>
             Task.FromResult<Either<Exception, string>>(
-                new ArgumentException("the train's own failure")
+                new InvalidOperationException("the train's own failure")
             );
     }
 

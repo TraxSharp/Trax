@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -31,9 +32,10 @@ public class EnqueueScopedServicesTests : TestSetup
     public async Task ClearAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
-            .WorkQueues.Where(w => w.TrainName!.StartsWith("EnqueueScope."))
+            .WorkQueues.Where(w => w.TrainName != null && w.TrainName.StartsWith("EnqueueScope."))
             .ExecuteDeleteAsync();
     }
 
@@ -41,20 +43,24 @@ public class EnqueueScopedServicesTests : TestSetup
     public async Task A_hook_whose_scoped_write_failed_does_not_fail_the_next_enqueue_from_that_scope()
     {
         var poisoned = async () =>
-            await Execution.QueueAsync(
-                typeof(IScopedWriterTrain).FullName!,
-                """{"poison":true,"label":"first"}"""
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IScopedWriterTrain).FullName.NotNull(),
+                    """{"poison":true,"label":"first"}"""
+                )
+                .ConfigureAwait(false);
 
         await poisoned
             .Should()
             .ThrowAsync<DbUpdateException>("the hook's write breaks a unique index");
 
         var clean = async () =>
-            await Execution.QueueAsync(
-                typeof(IScopedWriterTrain).FullName!,
-                """{"poison":false,"label":"second"}"""
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IScopedWriterTrain).FullName.NotNull(),
+                    """{"poison":false,"label":"second"}"""
+                )
+                .ConfigureAwait(false);
 
         await clean
             .Should()
@@ -65,7 +71,8 @@ public class EnqueueScopedServicesTests : TestSetup
             );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync(w => w.TrainName == "EnqueueScope.Marker.second"))
             .Should()
             .Be(1, "the second hook's own write landed");
@@ -89,7 +96,7 @@ public class EnqueueScopedServicesTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            var input = metadata.GetInput<ScopedWriterInput>()!;
+            var input = metadata.GetInput<ScopedWriterInput>().NotNull();
 
             if (input.Poison)
             {
@@ -97,12 +104,12 @@ public class EnqueueScopedServicesTests : TestSetup
                 var first = Row("EnqueueScope.Duplicate");
                 var second = Row("EnqueueScope.Duplicate");
                 second.ExternalId = first.ExternalId;
-                await scoped.Track(first);
-                await scoped.Track(second);
+                await scoped.Track(first).ConfigureAwait(false);
+                await scoped.Track(second).ConfigureAwait(false);
             }
 
-            await scoped.Track(Row($"EnqueueScope.Marker.{input.Label}"));
-            await scoped.SaveChanges(ct);
+            await scoped.Track(Row($"EnqueueScope.Marker.{input.Label}")).ConfigureAwait(false);
+            await scoped.SaveChanges(ct).ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
@@ -114,7 +121,8 @@ public class EnqueueScopedServicesTests : TestSetup
                     TrainName = name,
                     Input = "{}",
                     InputTypeName = typeof(ScopedWriterInput).FullName,
-                }
+                },
+                TimeProvider.System
             );
     }
 }

@@ -46,6 +46,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Samples.Auth;
 using Trax.Samples.Auth.Audit;
 using Trax.Samples.Auth.Auth;
 using Trax.Samples.Auth.Data;
@@ -173,8 +174,8 @@ var app = builder.Build();
 
 // Create the newsroom schema and seed it. EnsureSchemaCreatedAsync is for demos and tests; use
 // migrations in production.
-await app.Services.EnsureSchemaCreatedAsync<NewsroomDbContext>();
-await SeedAsync(app.Services);
+await app.Services.EnsureSchemaCreatedAsync<NewsroomDbContext>().ConfigureAwait(false);
+await SeedAsync(app.Services).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -186,22 +187,24 @@ if (app.Environment.IsDevelopment())
     // Mints a demo token for a demo user. Development only, like the key that signs it.
     app.MapGet(
             "/dev/token/{user}",
-            (string user) =>
+            (string user, TimeProvider clock) =>
                 DemoCredentials.Users.TryGetValue(user, out var demoUser)
-                    ? Results.Ok(new { token = DemoCredentials.MintToken(demoUser) })
+                    ? Results.Ok(new { token = DemoCredentials.MintToken(demoUser, clock) })
                     : Results.NotFound()
         )
         .AllowAnonymous();
 }
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 static async Task SeedAsync(IServiceProvider services)
 {
-    using var scope = services.CreateScope();
+    var scope = services.CreateAsyncScope();
+    await using var scopeDisposal = scope.ConfigureAwait(false);
     var db = scope.ServiceProvider.GetRequiredService<INewsroomDbContext>();
+    var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
 
-    if (await db.Articles.AnyAsync())
+    if (await db.Articles.AnyAsync().ConfigureAwait(false))
         return;
 
     db.Articles.AddRange(
@@ -210,7 +213,7 @@ static async Task SeedAsync(IServiceProvider services)
             Title = "Trax ships an auth sample",
             Body = "Two schemes, one principal, and an audit trail that says who did what.",
             AuthorId = "TraxApiKey:alice",
-            PublishedAt = DateTime.UtcNow.AddHours(-2),
+            PublishedAt = now.AddHours(-2),
             EditorNote = new EditorNote { Text = "Check the quote with legal before Friday." },
         },
         new Article
@@ -218,16 +221,20 @@ static async Task SeedAsync(IServiceProvider services)
             Title = "Reading the audit trail",
             Body = "Auditors query it over GraphQL like any other model.",
             AuthorId = "TraxJwt:alice",
-            PublishedAt = DateTime.UtcNow.AddHours(-1),
+            PublishedAt = now.AddHours(-1),
         }
     );
-    await db.SaveChangesAsync();
+    await db.SaveChangesAsync().ConfigureAwait(false);
 }
-
-/// <summary>A production API key as configuration holds it: never the key itself.</summary>
-internal sealed record ConfiguredApiKey(string Id, string Salt, string Hash, string[] Roles);
 
 namespace Trax.Samples.Auth
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

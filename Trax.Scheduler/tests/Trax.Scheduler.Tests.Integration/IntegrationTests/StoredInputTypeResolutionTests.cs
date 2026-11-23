@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -53,14 +54,14 @@ public class StoredInputTypeResolutionTests : TestSetup
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         NotATrainInput.ResetCount();
     }
 
     [Test]
     public async Task Dispatch_does_not_read_a_work_queue_row_whose_input_type_no_train_takes()
     {
-        var entry = await SaveWorkQueueEntry(typeof(NotATrainInput).FullName!);
+        var entry = await SaveWorkQueueEntry(typeof(NotATrainInput).FullName.NotNull());
 
         await RunDispatcher();
 
@@ -88,8 +89,8 @@ public class StoredInputTypeResolutionTests : TestSetup
     {
         var entry = await SaveWorkQueueEntry(
             assemblyQualified
-                ? typeof(SchedulerTestInput).AssemblyQualifiedName!
-                : typeof(SchedulerTestInput).FullName!
+                ? typeof(SchedulerTestInput).AssemblyQualifiedName.NotNull()
+                : typeof(SchedulerTestInput).FullName.NotNull()
         );
 
         await RunDispatcher();
@@ -106,10 +107,11 @@ public class StoredInputTypeResolutionTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "stored-type" },
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -120,7 +122,8 @@ public class StoredInputTypeResolutionTests : TestSetup
                 MetadataId = metadata.Id,
                 Input = """{"value":"x"}""",
                 InputType = typeof(NotATrainInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -141,13 +144,18 @@ public class StoredInputTypeResolutionTests : TestSetup
 
         await worker.StartAsync(cts.Token);
         var drained = await WaitForJobAbsent(job.Id, TimeSpan.FromSeconds(15));
-        cts.Cancel();
-        await worker.StopAsync(CancellationToken.None);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         drained.Should().BeTrue("the worker deletes a job it could not run");
         NotATrainInput.Constructed.Should().Be(0);
         DataContext.Reset();
-        var after = await DataContext.Metadatas.FirstAsync(m => m.Id == metadata.Id);
+        var after = await DataContext
+            .Metadatas.FirstAsync(
+                m => m.Id == metadata.Id,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
         after
             .TrainState.Should()
             .Be(TrainState.Failed, "the job is gone, so the worker fails the run it never started");
@@ -159,22 +167,24 @@ public class StoredInputTypeResolutionTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":"stored-type"}""",
                 InputTypeName = inputTypeName,
-            }
+            },
+            TimeProvider.System
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
 
     private async Task RunDispatcher()
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default).ConfigureAwait(false);
     }
 
     private async Task<bool> WaitForJobAbsent(long jobId, TimeSpan timeout)
@@ -184,17 +194,16 @@ public class StoredInputTypeResolutionTests : TestSetup
         {
             DataContext.Reset();
             if (
-                await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-                    j => j.Id == jobId,
-                    CancellationToken.None
-                )
+                await DataContext
+                    .BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, CancellationToken.None)
+                    .ConfigureAwait(false)
                 is null
             )
                 return true;
             try
             {
                 // allowed-delay: the pause between polls of the completion condition
-                await Task.Delay(50, cts.Token);
+                await Task.Delay(50, cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

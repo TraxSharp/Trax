@@ -39,7 +39,7 @@ internal static class BookProject
     }
 
     /// <summary>Each file the book shows, by its path in the reader's project, and the fence that last shows it.</summary>
-    public static IReadOnlyDictionary<string, Fence> Files()
+    public static async Task<IReadOnlyDictionary<string, Fence>> FilesAsync()
     {
         var last = LastPage();
         var files = new Dictionary<string, Fence>(StringComparer.Ordinal);
@@ -56,9 +56,13 @@ internal static class BookProject
                 files.Remove(file);
             }
 
-            var markdown = File.ReadAllText(RepoRoot.Combine(page.Split('/')));
-            foreach (var fence in Fences.In(page, markdown).Where(f => f.File is not null))
-                files[fence.File!] = fence;
+            var markdown = await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')))
+                .ConfigureAwait(false);
+            foreach (var fence in Fences.In(page, markdown))
+            {
+                if (fence.File is { } file)
+                    files[file] = fence;
+            }
         }
         return files;
     }

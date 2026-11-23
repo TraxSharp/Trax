@@ -55,7 +55,9 @@ public class TrainAuthorizationServiceTests
     /// </summary>
     private static async Task AssertDeniedWithReason(Func<Task> act, string reasonPattern)
     {
-        var assertion = await act.Should().ThrowAsync<TrainAuthorizationException>();
+        var assertion = await act.Should()
+            .ThrowAsync<TrainAuthorizationException>()
+            .ConfigureAwait(false);
         assertion.Which.Message.Should().Be(TrainAuthorizationException.PublicMessage);
         assertion.Which.Reason.Should().Match(reasonPattern);
     }
@@ -164,7 +166,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*No authenticated user*"
         );
     }
@@ -173,12 +175,13 @@ public class TrainAuthorizationServiceTests
     public async Task BareAttribute_NoUserOnContext_Denies()
     {
         var ctx = new DefaultHttpContext();
-        ctx.User = null!;
+        ctx.User = Null.Of<System.Security.Claims.ClaimsPrincipal>();
         var service = CreateService(ctx);
         var reg = Registration(hasAuthorize: true);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () =>
+                await service.AuthorizeAsync(reg, ct: CancellationToken.None).ConfigureAwait(false),
             "*No authenticated user*"
         );
     }
@@ -199,7 +202,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*No request context and no trusted execution scope*"
         );
     }
@@ -235,7 +238,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AdminPolicy]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             $"*Policy '{AdminPolicy}' not satisfied*"
         );
     }
@@ -247,7 +250,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AdminPolicy]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*No authenticated user*"
         );
     }
@@ -273,7 +276,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AdminPolicy, TenantInternalPolicy]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             $"*Policy '{TenantInternalPolicy}' not satisfied*"
         );
     }
@@ -285,7 +288,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AlwaysFailPolicy, AdminPolicy]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             $"*Policy '{AlwaysFailPolicy}' not satisfied*"
         );
     }
@@ -319,7 +322,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, roles: ["Admin", "Manager"]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*User lacks required role*Admin*Manager*"
         );
     }
@@ -331,7 +334,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, roles: ["Admin"]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*No authenticated user*"
         );
     }
@@ -360,7 +363,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, roles: [required]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*User lacks required role*"
         );
     }
@@ -388,7 +391,7 @@ public class TrainAuthorizationServiceTests
 
         // "admin" only appears under a non-Role claim type; the check must deny.
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*User lacks required role*"
         );
     }
@@ -413,7 +416,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AdminPolicy], roles: ["Reader"]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             $"*Policy '{AdminPolicy}' not satisfied*"
         );
     }
@@ -425,7 +428,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AdminPolicy], roles: ["Reader"]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*User lacks required role*Reader*"
         );
     }
@@ -438,7 +441,7 @@ public class TrainAuthorizationServiceTests
         var reg = Registration(hasAuthorize: true, policies: [AdminPolicy], roles: ["Reader"]);
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             $"*Policy '{AdminPolicy}' not satisfied*"
         );
     }
@@ -461,7 +464,7 @@ public class TrainAuthorizationServiceTests
         );
 
         await AssertDeniedWithReason(
-            async () => await service.AuthorizeAsync(reg),
+            async () => await service.AuthorizeAsync(reg).ConfigureAwait(false),
             "*No request context and no trusted execution scope*"
         );
     }
@@ -500,7 +503,7 @@ public class TrainAuthorizationServiceTests
         var service = CreateService(httpContext: null, trustedScope: scope);
         var reg = Registration(hasAuthorize: true);
 
-        var act = async () => await service.AuthorizeAsync(reg);
+        var act = async () => await service.AuthorizeAsync(reg).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainAuthorizationException>();
     }
@@ -549,13 +552,17 @@ public class TrainAuthorizationServiceTests
         {
             using var _ = scope.BeginTrusted("flow-a");
             opened.SetResult();
-            await read.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await read
+                .Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
             return scope.IsTrusted;
         });
 
         var untrustedFlow = Task.Run(async () =>
         {
-            await opened.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await opened
+                .Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
             var trusted = scope.IsTrusted;
             read.SetResult();
             return trusted;
@@ -578,7 +585,7 @@ public class TrainAuthorizationServiceTests
         var service = CreateService(AnonymousContext());
         var reg = Registration(hasAuthorize: true, serviceTypeName: "MyNamespace.IDangerousTrain");
 
-        var act = async () => await service.AuthorizeAsync(reg);
+        var act = async () => await service.AuthorizeAsync(reg).ConfigureAwait(false);
 
         var ex = (await act.Should().ThrowAsync<TrainAuthorizationException>()).Which;
         ex.TrainName.Should().Be("MyNamespace.IDangerousTrain");
@@ -667,7 +674,7 @@ public class TrainAuthorizationServiceTests
 
     [TraxAuthorize(Roles = "Admin")]
     [TraxAuthorize(Roles = "Support")]
-    private sealed class TwoRoleAttributeTrain;
+    private static class TwoRoleAttributeTrain;
 
     [TraxAuthorize(Roles = "Admin")]
     private interface IAdminGatedTrain;
@@ -683,7 +690,7 @@ public class TrainAuthorizationServiceTests
     private sealed class InterfaceAndClassRoleTrain : ISupportGatedTrain;
 
     [TraxAuthorize(Roles = "Admin, Support")]
-    private sealed class OneRoleListTrain;
+    private static class OneRoleListTrain;
 
     #endregion
 }

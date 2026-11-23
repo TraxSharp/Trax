@@ -25,6 +25,8 @@ public static class TypedSurfaceJson
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             UnmappedMemberHandling = unmapped,
             TypeInfoResolver = new DefaultJsonTypeInfoResolver

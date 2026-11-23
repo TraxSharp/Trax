@@ -88,7 +88,7 @@ internal static class JwtSocketAuthentication
 
     /// <summary>
     /// When the credential expires: the handler's <c>ExpiresUtc</c>, which it takes from the token,
-    /// or the token's own <c>exp</c>. <c>null</c> when neither is known.
+    /// or the token's own <c>exp</c>. <see langword="null"/> when neither is known.
     /// </summary>
     public static DateTimeOffset? ExpiresAt(AuthenticateResult result, string token)
     {

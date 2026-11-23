@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -30,13 +31,13 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
 
     private const string Machine = "declarative-turnstile";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static string LockedJson(string machine) =>
         new JsonObject
@@ -71,11 +72,14 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             case "junction":
             {
                 var id = Guid.NewGuid();
-                await _host.SeedDraft(User, id, LockedJson(Machine));
+                await _host
+                    .NotNull()
+                    .SeedDraft(User, id, LockedJson(Machine))
+                    .ConfigureAwait(false);
                 return new Path(
                     id,
                     SnapshotOwnerKind.User,
-                    path == "service"
+                    string.Equals(path, "service", StringComparison.Ordinal)
                         ? input => ViaService(id, input)
                         : input => ViaJunction(id, input)
                 );
@@ -83,7 +87,10 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             case "instances":
             {
                 var key = MachineKey.Of("input", Guid.NewGuid().ToString());
-                var instance = await _host.Start<SystemDeclarativeTurnstileMachine>(key);
+                var instance = await _host
+                    .NotNull()
+                    .Start<SystemDeclarativeTurnstileMachine>(key)
+                    .ConfigureAwait(false);
                 return new Path(
                     instance.Id,
                     SnapshotOwnerKind.System,
@@ -91,41 +98,48 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
                 );
             }
             default:
-                throw new ArgumentOutOfRangeException(nameof(path), path, null);
+                throw new ArgumentOutOfRangeException(nameof(path), path, message: null);
         }
     }
 
     private async Task<RefusalCode?> ViaService(Guid id, JsonNode? input, string? requestId = null)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return Code(
-            await _host.Service(scope, Machine).Advance(User, id, "Coin", input, requestId)
+            await _host
+                .NotNull()
+                .Service(scope, Machine)
+                .Advance(User, id, "Coin", input, requestId)
+                .ConfigureAwait(false)
         );
     }
 
     private async Task<RefusalCode?> ViaJunction(Guid id, JsonNode? input)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
-        var output = await new AdvanceSnapshotJunction(registry, new FakePrincipal(User)).Run(
-            new AdvanceSnapshotInput
-            {
-                Machine = Machine,
-                Id = id,
-                Trigger = "Coin",
-                Input = input?.ToJsonString(),
-            }
-        );
+        var output = await new AdvanceSnapshotJunction(registry, new FakePrincipal(User))
+            .Run(
+                new AdvanceSnapshotInput
+                {
+                    Machine = Machine,
+                    Id = id,
+                    Trigger = "Coin",
+                    Input = input?.ToJsonString(),
+                }
+            )
+            .ConfigureAwait(false);
         return output.Problem?.Code;
     }
 
     private async Task<RefusalCode?> ViaInstances(MachineKey key, JsonNode? input)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return Code(
             await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
                 .Advance<SystemDeclarativeTurnstileMachine>(key, "Coin", input)
+                .ConfigureAwait(false)
         );
     }
 
@@ -146,7 +160,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
     public async Task Every_path_validates_trigger_input_and_refuses_unknown_fields(string path)
     {
         var arranged = await Arrange(path);
-        var before = (await _host.Rows(arranged.Id)).Single();
+        var before = (await _host.NotNull().Rows(arranged.Id)).Single();
 
         var refused = await arranged.Fire(UnknownField);
 
@@ -156,11 +170,11 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
                 RefusalCode.InvalidInput,
                 $"a field the input type does not declare is refused on every path, trusted or not. See {Adr}"
             );
-        var after = (await _host.Rows(arranged.Id)).Single();
+        var after = (await _host.NotNull().Rows(arranged.Id)).Single();
         after.State.Should().Be(before.State);
         after.Context.Should().Be(before.Context);
         after.ConcurrencyToken.Should().Be(before.ConcurrencyToken, "nothing was written");
-        (await _host.Revision(arranged.Id, arranged.Kind))
+        (await _host.NotNull().Revision(arranged.Id, arranged.Kind))
             .Should()
             .Be(1, "the row was written once, when it was created");
     }
@@ -170,7 +184,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
     public async Task Input_size_is_capped_before_validation_on_every_path(string path)
     {
         var arranged = await Arrange(path);
-        var before = (await _host.Rows(arranged.Id)).Single();
+        var before = (await _host.NotNull().Rows(arranged.Id)).Single();
 
         var refused = await arranged.Fire(TenMegabytes);
 
@@ -180,7 +194,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
                 RefusalCode.TooLarge,
                 $"an input past the cap is refused before it is parsed or validated, on every path. See {Adr}"
             );
-        var after = (await _host.Rows(arranged.Id)).Single();
+        var after = (await _host.NotNull().Rows(arranged.Id)).Single();
         after.ConcurrencyToken.Should().Be(before.ConcurrencyToken, "nothing was written");
         after.Context.Should().Be(before.Context);
     }
@@ -193,16 +207,22 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         (await ViaService(arranged.Id, UnknownField, requestId: "r1"))
             .Should()
             .Be(RefusalCode.InvalidInput, $"the input carries a field CoinInput lacks. See {Adr}");
-        var refused = (await _host.Rows(arranged.Id)).Single();
+        var refused = (await _host.NotNull().Rows(arranged.Id)).Single();
         refused.LastRequestId.Should().BeNull("a refused request records nothing to replay");
         refused.State.Should().Be("Locked");
 
         (await ViaService(arranged.Id, new JsonObject { ["coin"] = "quarter" }, requestId: "r1"))
             .Should()
             .BeNull("the corrected retry under the same id fires as a new request");
-        var fired = (await _host.Rows(arranged.Id)).Single();
+        var fired = (await _host.NotNull().Rows(arranged.Id)).Single();
         fired.State.Should().Be("Unlocked");
-        JsonNode.Parse(fired.Context)!["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        JsonNode
+            .Parse(fired.Context)
+            .NotNull()["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("quarter");
         fired.LastRequestId.Should().Be("r1");
     }
 
@@ -211,13 +231,14 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         // The generic save does not serve a machine with an effect, so the draft is written through the store.
-        await _host.Seed(User, id, TestDb.Parse(ReceiptOrderMachine.ReviewJson));
+        await _host.NotNull().Seed(User, id, TestDb.Parse(ReceiptOrderMachine.ReviewJson));
 
         AdvanceOutcome sent;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             sent = await scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                .EffectRunner(ReceiptOrderMachine.Id)!
+                .EffectRunner(ReceiptOrderMachine.Id)
+                .NotNull()
                 .Run(User, id, "send-1");
 
         sent.Should()
@@ -226,8 +247,14 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
             )
             .Which.Snapshot.State.Should()
             .Be("Placed");
-        var row = (await _host.Rows(id)).Single();
+        var row = (await _host.NotNull().Rows(id)).Single();
         row.State.Should().Be("Placed");
-        JsonNode.Parse(row.Context)!["receipt"]!.GetValue<string>().Should().StartWith("receipt-");
+        JsonNode
+            .Parse(row.Context)
+            .NotNull()["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .StartWith("receipt-");
     }
 }

@@ -18,7 +18,7 @@ namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider;
 /// <param name="logger">The logger entries are written to.</param>
 /// <param name="outputPolicy">Decides whether a junction output is serialized and under what ceiling; the
 /// default policy when none is registered.</param>
-internal class JunctionLoggerProvider(
+internal sealed class JunctionLoggerProvider(
     ITraxEffectConfiguration configuration,
     ILogger<JunctionLoggerProvider> logger,
     ILifecycleHookOutputPolicy? outputPolicy = null

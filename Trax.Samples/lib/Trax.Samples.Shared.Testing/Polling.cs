@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Trax.Samples.Shared.Testing;
 
 /// <summary>
@@ -24,17 +22,19 @@ public static class Polling
         ArgumentNullException.ThrowIfNull(condition);
 
         var interval = pollInterval ?? TimeSpan.FromMilliseconds(25);
-        var stopwatch = Stopwatch.StartNew();
+        // A test waits on the real clock: the condition is a host doing real work.
+        var clock = TimeProvider.System;
+        var started = clock.GetTimestamp();
 
-        while (stopwatch.Elapsed < timeout)
+        while (clock.GetElapsedTime(started) < timeout)
         {
-            if (await condition())
+            if (await condition().ConfigureAwait(false))
                 return true;
 
-            await Task.Delay(interval, cancellationToken);
+            await Task.Delay(interval, clock, cancellationToken).ConfigureAwait(false);
         }
 
-        return await condition();
+        return await condition().ConfigureAwait(false);
     }
 
     /// <summary>Synchronous-condition overload of <see cref="WaitUntilAsync(Func{Task{bool}}, TimeSpan, TimeSpan?, CancellationToken)"/>.</summary>

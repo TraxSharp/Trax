@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Trax.Api.GraphQL.Client.Checks;
 
 namespace Trax.Api.GraphQL.Client;
 
@@ -31,7 +32,7 @@ public static class GraphQLClientValidatorExtensions
     /// </summary>
     /// <param name="validator">The client's validator.</param>
     /// <param name="assemblies">The assemblies to scan.</param>
-    /// <param name="typeFilter">Which request types to validate; <c>null</c> for all.</param>
+    /// <param name="typeFilter">Which request types to validate; <see langword="null"/> for all.</param>
     /// <param name="cancellationToken">Cancels validation.</param>
     /// <exception cref="GraphQLValidationException">A request's query is not valid against the schema.</exception>
     /// <exception cref="GraphQLSchemaIntrospectionException">The schema could not be loaded.</exception>
@@ -52,12 +53,12 @@ public static class GraphQLClientValidatorExtensions
     /// <summary>
     /// Validates the request types that belong to the client registered under
     /// <paramref name="serviceKey"/> (see <see cref="GraphQLClientAttribute"/>): for a key, the
-    /// types marked with it; for <c>null</c>, the unmarked types. Finding none is refused, since a
+    /// types marked with it; for <see langword="null"/>, the unmarked types. Finding none is refused, since a
     /// validation that checks nothing is a request someone forgot to mark, not a passing check.
     /// </summary>
     /// <param name="validator">The client's validator.</param>
     /// <param name="assemblies">The assemblies to scan.</param>
-    /// <param name="serviceKey">The client's key, or <c>null</c> for the unkeyed client.</param>
+    /// <param name="serviceKey">The client's key, or <see langword="null"/> for the unkeyed client.</param>
     /// <param name="isRegisteredKey">
     /// Whether a client is registered under a key. Every key a request in
     /// <paramref name="assemblies"/> is marked with must be one, or that request is validated by
@@ -109,9 +110,11 @@ public static class GraphQLClientValidatorExtensions
     )
     {
         var orphans = RequestTypes(assemblies)
-            .Select(t => (Type: t, Mark: t.GetCustomAttribute<GraphQLClientAttribute>(false)))
+            .Select(t =>
+                (Type: t, Mark: t.GetCustomAttribute<GraphQLClientAttribute>(inherit: false))
+            )
             .Where(r => r.Mark is not null && !isRegisteredKey(r.Mark.Key))
-            .Select(r => $"{r.Type.FullName} [GraphQLClient({r.Mark!.Key})]")
+            .Select(r => $"{r.Type.FullName} [GraphQLClient({r.Mark.NotNull().Key})]")
             .ToList();
 
         if (orphans.Count == 0)
@@ -129,10 +132,12 @@ public static class GraphQLClientValidatorExtensions
     private static IEnumerable<Type> RequestTypes(IEnumerable<Assembly> assemblies) =>
         assemblies
             .SelectMany(a => a.GetTypes())
-            // An open generic type is a shape closed requests share, not a request: it has no
-            // query of its own and cannot be instantiated.
-            .Where(t => t.IsClass && !t.IsAbstract && !t.ContainsGenericParameters)
-            .Where(t => typeof(IGenericGraphQLClientRequest).IsAssignableFrom(t));
+            .Where(t =>
+                t.IsClass
+                && !t.IsAbstract
+                && !t.ContainsGenericParameters
+                && typeof(IGenericGraphQLClientRequest).IsAssignableFrom(t)
+            );
 
     private static async Task<int> ValidateMatchingAsync(
         IGraphQLClientValidator validator,

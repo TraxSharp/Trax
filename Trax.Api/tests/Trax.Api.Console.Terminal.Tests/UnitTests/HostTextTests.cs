@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Machines;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Api.Console.Terminal.Screens;
@@ -27,7 +28,11 @@ public class HostTextTests
             .Console()
             .Answer(
                 "Executions",
-                HostData.Runs(1, null, HostData.Run(4812, $"Send{Hostile}Invoice", reason: Clear))
+                HostData.Runs(
+                    1,
+                    next: null,
+                    HostData.Run(4812, $"Send{Hostile}Invoice", reason: Clear)
+                )
             );
         var (terminal, window) = await TerminalHarness.StartAsync(app => new MainWindow(
             new ConsoleContext(
@@ -91,28 +96,31 @@ public class HostTextTests
     [Test]
     public void An_escape_sequence_in_a_machines_names_never_reaches_its_graph()
     {
-        var machine = JsonSerializer.Deserialize<MachinesResultOperationsMachines>(
-            $$"""
-            {"name":"m","version":1,"systemOwned":false,"initialState":"Open",
-             "states":[{"name":"Open","isInitial":true,"isFinal":false,"isCommitted":false},
-                       {"name":"Shut{{Hostile}}","isInitial":false,"isFinal":true,"isCommitted":false,"invokesTrain":"T{{Clear}}"}],
-             "transitions":[{"from":"Open","command":"Close{{Clear}}","to":"Shut{{Hostile}}","kind":"COMMAND"}],
-             "timers":[]}
-            """,
-            TraxJson.Options
-        )!;
+        var machine = JsonSerializer
+            .Deserialize<MachinesResultOperationsMachines>(
+                $$"""
+                {"name":"m","version":1,"systemOwned":false,"initialState":"Open",
+                 "states":[{"name":"Open","isInitial":true,"isFinal":false,"isCommitted":false},
+                           {"name":"Shut{{Hostile}}","isInitial":false,"isFinal":true,"isCommitted":false,"invokesTrain":"T{{Clear}}"}],
+                 "transitions":[{"from":"Open","command":"Close{{Clear}}","to":"Shut{{Hostile}}","kind":"COMMAND"}],
+                 "timers":[]}
+                """,
+                TraxJson.Options
+            )
+            .NotNull();
 
         var lines = MachineGraph.Lines(machine, current: $"Shut\u001b]52;c;ZXZpbA==\u0007");
-        TestContext.Out.WriteLine(string.Join("\n", lines));
+        TestContext.Out.WriteLine(string.Join('\n', lines));
 
         lines.SelectMany(Controls).Should().BeEmpty();
-        string.Join("\n", lines)
+        string.Join('\n', lines)
             .Should()
             .Contain("║ Shut�]52;c;ZXZpbA==�", "the current state is still found");
     }
 
     private static string Host(string json) =>
-        json.Replace("HOSTILE", Hostile).Replace("CLEAR", Clear);
+        json.Replace("HOSTILE", Hostile, StringComparison.Ordinal)
+            .Replace("CLEAR", Clear, StringComparison.Ordinal);
 
     private static IEnumerable<char> Controls(string text) =>
         text.Where(c => char.IsControl(c) && c != '\n');

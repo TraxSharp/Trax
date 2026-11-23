@@ -14,7 +14,7 @@ public partial class TraxMediatorBuilder
     private ServiceLifetime _lifetime = ServiceLifetime.Transient;
     private readonly List<Assembly> _assemblies = [];
     private int? _globalMaxConcurrentRun;
-    private readonly Dictionary<string, int> _concurrencyOverrides = new();
+    private readonly Dictionary<string, int> _concurrencyOverrides = new(StringComparer.Ordinal);
     private bool _allowMissingAuthorizationService;
     private bool _skipChainVerification;
     private int _maxInputJsonBytes = 262_144;

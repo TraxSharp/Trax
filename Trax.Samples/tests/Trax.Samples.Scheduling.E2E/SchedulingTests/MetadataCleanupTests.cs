@@ -74,11 +74,14 @@ public class MetadataCleanupTests : SchedulingTestFixture
         }
     }
 
-    private static Task Backdate(long metadataId, TimeSpan age) =>
-        Db.Query(dc =>
+    private static Task Backdate(long metadataId, TimeSpan age)
+    {
+        var startTime = TimeProvider.System.GetUtcNow().UtcDateTime - age;
+        return Db.Query(dc =>
             dc.Metadatas.Where(m => m.Id == metadataId)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, DateTime.UtcNow - age))
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartTime, startTime))
         );
+    }
 
     private static Task<bool> Exists(long metadataId) =>
         Db.Query(dc => dc.Metadatas.AnyAsync(m => m.Id == metadataId));
@@ -89,8 +92,9 @@ public class MetadataCleanupTests : SchedulingTestFixture
     /// </summary>
     private static async Task RunCleanup()
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var cleanup = scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
-        await cleanup.Run(new MetadataCleanupRequest());
+        await cleanup.Run(new MetadataCleanupRequest()).ConfigureAwait(false);
     }
 }

@@ -12,7 +12,7 @@ public class GetChatRoomPeopleTests
     [Test]
     public async Task FetchRoomPeople_ForANonMember_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new FetchRoomPeopleJunction(db, ChatUsers.Charlie, ChatUsers.Directory());
 
@@ -24,7 +24,7 @@ public class GetChatRoomPeopleTests
     [Test]
     public async Task FetchRoomPeople_ListsEveryoneElse_MarkingWhoIsInTheRoom()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice, ChatUsers.Bob);
         var junction = new FetchRoomPeopleJunction(db, ChatUsers.Alice, ChatUsers.Directory());
 
@@ -32,7 +32,15 @@ public class GetChatRoomPeopleTests
 
         output.People.Should().HaveCount(2);
         output.People.Should().NotContain(p => p.UserId == ChatUsers.Alice.Id);
-        output.People.Single(p => p.UserId == ChatUsers.Bob.Id).IsMember.Should().BeTrue();
-        output.People.Single(p => p.UserId == ChatUsers.Charlie.Id).IsMember.Should().BeFalse();
+        output
+            .People.Single(p => string.Equals(p.UserId, ChatUsers.Bob.Id, StringComparison.Ordinal))
+            .IsMember.Should()
+            .BeTrue();
+        output
+            .People.Single(p =>
+                string.Equals(p.UserId, ChatUsers.Charlie.Id, StringComparison.Ordinal)
+            )
+            .IsMember.Should()
+            .BeFalse();
     }
 }

@@ -10,6 +10,7 @@ namespace Trax.Api.Auth.Jwt.Testing
         public System.Collections.Generic.IReadOnlyList<string> SigningKeyIds { get; }
         public string AddSigningKey(System.Security.Cryptography.RSA? rsa = null) { }
         public Trax.Api.Auth.Jwt.Testing.TestTokenIssuer CreateIssuer(string audience) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenIssuer CreateIssuer(string audience, System.TimeProvider clock) { }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
         public bool RemoveSigningKey(string kid) { }
         public static System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Testing.TestJwksServer> StartAsync(System.Threading.CancellationToken ct = default) { }
@@ -37,6 +38,8 @@ namespace Trax.Api.Auth.Jwt.Testing
     {
         public TestTokenIssuer(string issuer, string defaultAudience, Microsoft.IdentityModel.Tokens.SigningCredentials credentials) { }
         public TestTokenIssuer(string issuer, string defaultAudience, Microsoft.IdentityModel.Tokens.SigningCredentials credentials, System.Collections.Generic.IReadOnlyDictionary<string, Microsoft.IdentityModel.Tokens.SigningCredentials>? keyset) { }
+        public TestTokenIssuer(string issuer, string defaultAudience, Microsoft.IdentityModel.Tokens.SigningCredentials credentials, System.Collections.Generic.IReadOnlyDictionary<string, Microsoft.IdentityModel.Tokens.SigningCredentials>? keyset, System.TimeProvider clock) { }
+        public System.TimeProvider Clock { get; }
         public Microsoft.IdentityModel.Tokens.SigningCredentials Credentials { get; }
         public string DefaultAudience { get; }
         public string Issuer { get; }

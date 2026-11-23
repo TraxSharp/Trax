@@ -43,7 +43,12 @@ public class PersistedOperationValidationExceptionTests
     [Test]
     public void Ctor_NullFailures_ThrowsArgumentNullException()
     {
-        Action a = () => new PersistedOperationValidationException(null!);
+        Action a = () =>
+            new PersistedOperationValidationException(
+                Null.Of<
+                    IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions.ValidationFailure>
+                >()
+            );
         a.Should().Throw<ArgumentNullException>();
     }
 

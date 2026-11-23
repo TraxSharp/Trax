@@ -2,9 +2,11 @@ using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate.Subscriptions;
 using Moq;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Samples.ChatService.Hooks;
 using Trax.Samples.ChatService.Subscriptions;
+using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.CreateChatRoom;
 using Trax.Samples.ChatService.Trains.InviteToChatRoom;
 using Trax.Samples.ChatService.Trains.JoinChatRoom;
@@ -15,14 +17,14 @@ namespace Trax.Samples.ChatService.Tests.UnitTests;
 [TestFixture]
 public class ChatLifecycleHookTests
 {
-    private Mock<ITopicEventSender> _eventSender = null!;
-    private ChatLifecycleHook _hook = null!;
+    private Mock<ITopicEventSender>? _eventSender;
+    private ChatLifecycleHook? _hook;
 
     [SetUp]
     public void SetUp()
     {
         _eventSender = new Mock<ITopicEventSender>();
-        _hook = new ChatLifecycleHook(_eventSender.Object);
+        _hook = new ChatLifecycleHook(_eventSender.NotNull().Object, TestClock.Fixed());
     }
 
     #region OnCompleted — SendMessage
@@ -38,24 +40,26 @@ public class ChatLifecycleHookTests
             SenderUserId = "alice",
             SenderDisplayName = "Alice",
             Content = "Hello!",
-            SentAt = DateTime.UtcNow,
+            SentAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(ISendMessageTrain), output);
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    $"ChatRoom:{chatRoomId}",
-                    It.Is<ChatSubscriptionEvent>(e =>
-                        e.ChatRoomId == chatRoomId && e.EventType == "MessageSent"
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        $"ChatRoom:{chatRoomId}",
+                        It.Is<ChatSubscriptionEvent>(e =>
+                            e.ChatRoomId == chatRoomId && e.EventType == "MessageSent"
+                        ),
+                        It.IsAny<CancellationToken>()
                     ),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+                Times.Once
+            );
     }
 
     [Test]
@@ -69,13 +73,14 @@ public class ChatLifecycleHookTests
             SenderUserId = "bob",
             SenderDisplayName = "Bob",
             Content = "Test message",
-            SentAt = DateTime.UtcNow,
+            SentAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(ISendMessageTrain), output);
         ChatSubscriptionEvent? capturedEvent = null;
 
         _eventSender
+            .NotNull()
             .Setup(s =>
                 s.SendAsync(
                     It.IsAny<string>(),
@@ -87,10 +92,10 @@ public class ChatLifecycleHookTests
                 (_, e, _) => capturedEvent = e
             );
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
         capturedEvent.Should().NotBeNull();
-        capturedEvent!.Payload.Should().Contain("Test message");
+        capturedEvent.NotNull().Payload.Should().Contain("Test message");
         capturedEvent.TrainExternalId.Should().Be(metadata.ExternalId);
     }
 
@@ -106,22 +111,24 @@ public class ChatLifecycleHookTests
         {
             ChatRoomId = chatRoomId,
             Name = "General",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(ICreateChatRoomTrain), output);
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    $"ChatRoom:{chatRoomId}",
-                    It.Is<ChatSubscriptionEvent>(e => e.EventType == "RoomCreated"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        $"ChatRoom:{chatRoomId}",
+                        It.Is<ChatSubscriptionEvent>(e => e.EventType == "RoomCreated"),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Once
+            );
     }
 
     #endregion
@@ -137,22 +144,24 @@ public class ChatLifecycleHookTests
             ChatRoomId = chatRoomId,
             UserId = "charlie",
             DisplayName = "Charlie",
-            JoinedAt = DateTime.UtcNow,
+            JoinedAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(IJoinChatRoomTrain), output);
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    $"ChatRoom:{chatRoomId}",
-                    It.Is<ChatSubscriptionEvent>(e => e.EventType == "UserJoined"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        $"ChatRoom:{chatRoomId}",
+                        It.Is<ChatSubscriptionEvent>(e => e.EventType == "UserJoined"),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Once
+            );
     }
 
     [Test]
@@ -165,22 +174,24 @@ public class ChatLifecycleHookTests
             UserId = "TraxApiKey:bob",
             DisplayName = "Bob",
             InvitedByDisplayName = "Alice",
-            JoinedAt = DateTime.UtcNow,
+            JoinedAt = TestClock.Now.UtcDateTime,
         };
 
         var metadata = CreateMetadata(typeof(IInviteToChatRoomTrain), output);
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    $"ChatRoom:{chatRoomId}",
-                    It.Is<ChatSubscriptionEvent>(e => e.EventType == "UserJoined"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        $"ChatRoom:{chatRoomId}",
+                        It.Is<ChatSubscriptionEvent>(e => e.EventType == "UserJoined"),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Once
+            );
     }
 
     #endregion
@@ -195,20 +206,22 @@ public class ChatLifecycleHookTests
             Name = "SomeOther.Namespace.IUnrelatedTrain",
             ExternalId = Guid.NewGuid().ToString(),
             Output = """{"someField": "value"}""",
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<ChatSubscriptionEvent>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<ChatSubscriptionEvent>(),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Never
+            );
     }
 
     #endregion
@@ -220,23 +233,25 @@ public class ChatLifecycleHookTests
     {
         var metadata = new Metadata
         {
-            Name = typeof(ISendMessageTrain).FullName!,
+            Name = typeof(ISendMessageTrain).FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = null,
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<ChatSubscriptionEvent>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<ChatSubscriptionEvent>(),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Never
+            );
     }
 
     [Test]
@@ -244,23 +259,25 @@ public class ChatLifecycleHookTests
     {
         var metadata = new Metadata
         {
-            Name = typeof(ISendMessageTrain).FullName!,
+            Name = typeof(ISendMessageTrain).FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = "not valid json",
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<ChatSubscriptionEvent>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<ChatSubscriptionEvent>(),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Never
+            );
     }
 
     [Test]
@@ -268,23 +285,25 @@ public class ChatLifecycleHookTests
     {
         var metadata = new Metadata
         {
-            Name = typeof(ISendMessageTrain).FullName!,
+            Name = typeof(ISendMessageTrain).FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = """{"someOtherField": "value"}""",
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
 
-        await _hook.OnCompleted(metadata, CancellationToken.None);
+        await _hook.NotNull().OnCompleted(metadata, CancellationToken.None);
 
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<ChatSubscriptionEvent>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
+        _eventSender
+            .NotNull()
+            .Verify(
+                s =>
+                    s.SendAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<ChatSubscriptionEvent>(),
+                        It.IsAny<CancellationToken>()
+                    ),
+                Times.Never
+            );
     }
 
     #endregion
@@ -295,10 +314,10 @@ public class ChatLifecycleHookTests
     {
         return new Metadata
         {
-            Name = trainInterface.FullName!,
+            Name = trainInterface.FullName.NotNull(),
             ExternalId = Guid.NewGuid().ToString(),
             Output = JsonSerializer.Serialize(output),
-            EndTime = DateTime.UtcNow,
+            EndTime = TestClock.Now.UtcDateTime,
         };
     }
 

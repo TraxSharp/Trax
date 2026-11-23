@@ -12,7 +12,7 @@ public interface ITrainExecutionService
     /// The scheduler picks it up and dispatches it on its own machine.
     /// </summary>
     /// <param name="trainName">The fully qualified service type name of the train.</param>
-    /// <param name="inputJson">JSON-serialized input for the train. Null or blank is read as an empty object, which is refused with <see cref="System.Text.Json.JsonException"/> when the input type needs values: a constructor parameter with no default, or a <c>required</c> member.</param>
+    /// <param name="inputJson">JSON-serialized input for the train. Null or blank is read as an empty object, which is refused with <see cref="System.Text.Json.JsonException"/> when the input type needs values: a constructor parameter with no default, or a <see langword="required"/> member.</param>
     /// <param name="priority">Dispatch priority (0–31, higher runs first).</param>
     /// <param name="scheduledAt">Earliest time the entry may be dispatched, stored as UTC: a local time is converted and an unspecified kind is taken as UTC. Null dispatches as soon as a worker is free.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -21,7 +21,7 @@ public interface ITrainExecutionService
     /// <exception cref="Exceptions.AmbiguousTrainNameException">The name matches more than one registered train.</exception>
     /// <exception cref="UnauthorizedAccessException">The train's <c>[TraxAuthorize]</c> requirements refuse the caller (<c>TrainAuthorizationException</c> is one).</exception>
     /// <exception cref="Exceptions.TrainInputValidationException">The input is larger than <c>MaxInputJsonBytes</c>.</exception>
-    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, is the JSON literal <c>null</c>, or is missing and the input type needs values.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, is the JSON literal <see langword="null"/>, or is missing and the input type needs values.</exception>
     /// <exception cref="InvalidOperationException">The train declares <c>[TraxAuthorize]</c> and no <c>ITrainAuthorizationService</c> is registered, outside a trusted scope; or its <c>QueueSubjectKey</c> returned a key <c>WorkQueue.Create</c> refuses: empty or whitespace, containing an unpaired surrogate, or longer than <c>WorkQueue.MaxSubjectKeyLength</c> Unicode characters.</exception>
     /// <exception cref="Exceptions.QueuedWorkCancelledException">The train defers promotion and its staged entry was cancelled while its <c>OnQueue</c> hook ran. The work will not run, but the hook's side-effect may have landed.</exception>
     /// <remarks>
@@ -75,7 +75,7 @@ public interface ITrainExecutionService
     /// <exception cref="Exceptions.AmbiguousTrainNameException">The name matches more than one registered train.</exception>
     /// <exception cref="UnauthorizedAccessException">The train's <c>[TraxAuthorize]</c> requirements refuse the caller (<c>TrainAuthorizationException</c> is one).</exception>
     /// <exception cref="Exceptions.TrainInputValidationException">The input is larger than <c>MaxInputJsonBytes</c>.</exception>
-    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, is the JSON literal <c>null</c>, or is missing and the input type needs values.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, is the JSON literal <see langword="null"/>, or is missing and the input type needs values.</exception>
     /// <exception cref="InvalidOperationException">The train declares <c>[TraxAuthorize]</c> and no <c>ITrainAuthorizationService</c> is registered, outside a trusted scope.</exception>
     Task<RunTrainResult> RunAsync(
         string trainName,
@@ -109,7 +109,7 @@ public interface ITrainExecutionService
     /// <exception cref="Exceptions.AmbiguousTrainNameException">The name matches more than one registered train.</exception>
     /// <exception cref="UnauthorizedAccessException">The train's <c>[TraxAuthorize]</c> requirements refuse the caller.</exception>
     /// <exception cref="Exceptions.TrainInputValidationException">The input is larger than <c>MaxInputJsonBytes</c>.</exception>
-    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, names a property twice, is the JSON literal <c>null</c>, or is missing and the input type needs values.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, names a property twice, is the JSON literal <see langword="null"/>, or is missing and the input type needs values.</exception>
     /// <exception cref="InvalidOperationException">The train declares <c>[TraxAuthorize]</c> and no <c>ITrainAuthorizationService</c> is registered, outside a trusted scope.</exception>
     /// <exception cref="NotSupportedException">This implementation predates the method. It refuses rather than skip authorization.</exception>
     Task<PreparedTrain> PrepareAsync(
@@ -122,70 +122,3 @@ public interface ITrainExecutionService
                 + "from dependency injection to get the mediator's implementation."
         );
 }
-
-/// <summary>The work queue entry <c>ITrainExecutionService.QueueAsync</c> created.</summary>
-/// <param name="WorkQueueId">The entry's database id.</param>
-/// <param name="ExternalId">
-/// The entry's external id, a 32-character hex GUID. The run the scheduler later dispatches
-/// carries the same external id, and the train's <c>OnQueue</c> hook saw it too, so it
-/// correlates the enqueue with its run.
-/// </param>
-public record QueueTrainResult(long WorkQueueId, string ExternalId);
-
-/// <summary>
-/// How a train is queued, beyond its name and input.
-/// </summary>
-public sealed record QueueTrainOptions
-{
-    /// <summary>Dispatch priority (0–31, higher runs first).</summary>
-    public int Priority { get; init; }
-
-    /// <summary>
-    /// Earliest time the entry may be dispatched, stored as UTC. Null dispatches as soon as a
-    /// worker is free.
-    /// </summary>
-    public DateTime? ScheduledAt { get; init; }
-
-    /// <summary>
-    /// The metadata id of an earlier run whose recorded decisions the new run replays, so it takes
-    /// the tracks that run took instead of asking its deciders again. Set when repeating a run, by
-    /// the operations service only, which checks the run it names first; an implementation reads it.
-    /// </summary>
-    public long? ReplayDecisionsOf { get; internal init; }
-
-    /// <summary>
-    /// The metadata id of a failed run the new run resumes, skipping to the step after its latest
-    /// checkpoint (or to <see cref="ResumeAt"/>) instead of running every step again. See
-    /// Trax.Docs/adr/0047. Set by the operations service only, which checks the run it names
-    /// first; the resumed run checks it again as it starts.
-    /// </summary>
-    public long? ResumeFrom { get; internal init; }
-
-    /// <summary>The step the new run resumes at, or null for after the latest checkpoint.</summary>
-    public string? ResumeAt { get; internal init; }
-
-    /// <summary>
-    /// Records the current caller (<c>ICurrentPrincipalProvider</c>) as the run's starter, so that caller, and only
-    /// that caller, may follow the run's progress (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md). Set by the GraphQL mutations; a queue from
-    /// host code, the dashboard or the operations namespace leaves it off, and its run has no starter.
-    /// </summary>
-    public bool RecordCaller { get; init; }
-
-    /// <summary>The starter to record whatever the caller is: a requeue keeps the original run's. Trax only.</summary>
-    internal string? StarterHash { get; init; }
-}
-
-/// <summary>How a train is run, beyond its name and input.</summary>
-public sealed record RunTrainOptions
-{
-    /// <summary>Records the current caller as the run's starter, as <see cref="QueueTrainOptions.RecordCaller"/> does.</summary>
-    public bool RecordCaller { get; init; }
-}
-
-/// <summary>A completed run from <see cref="ITrainExecutionService.RunAsync(string, string, CancellationToken)"/> or <c>IRunExecutor</c>.</summary>
-/// <param name="MetadataId">The id of the run's metadata record.</param>
-/// <param name="ExternalId">The run's external id.</param>
-/// <param name="Output">
-/// The train's output, typed as its <c>TOut</c>; null for a train whose output is <c>Unit</c>.
-/// </param>
-public record RunTrainResult(long MetadataId, string ExternalId, object? Output = null);

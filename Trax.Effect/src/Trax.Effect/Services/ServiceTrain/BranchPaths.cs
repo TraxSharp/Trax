@@ -30,7 +30,7 @@ internal static class BranchPaths
     /// </summary>
     public static bool Encloses(string outer, string inner) =>
         outer.Length == 0
-        || inner == outer
+        || string.Equals(inner, outer, StringComparison.Ordinal)
         || (
             inner.Length > outer.Length
             && inner[outer.Length] == '/'
@@ -45,7 +45,11 @@ internal static class BranchPaths
     {
         var paths = new List<string> { Run };
 
-        for (var i = path.IndexOf('/'); i >= 0; i = path.IndexOf('/', i + 1))
+        for (
+            var i = path.IndexOf('/', StringComparison.Ordinal);
+            i >= 0;
+            i = path.IndexOf('/', i + 1)
+        )
             paths.Add(path[..i]);
 
         if (path.Length > 0)
@@ -71,7 +75,7 @@ internal static class BranchPaths
         var right = b.Length == 0 ? [] : b.Split('/');
 
         for (var i = 0; i < Math.Min(left.Length, right.Length); i++)
-            if (left[i] != right[i])
+            if (!string.Equals(left[i], right[i], StringComparison.Ordinal))
                 return i % 2 == 1;
 
         return false;

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Tests.Meta.Tests;
 
 /// <summary>
@@ -22,7 +24,7 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0014-postgres-migrations-are-serialized-and-rerunnable.md")]
 [TestFixture]
-public class PostgresMigrationRerunTests
+public partial class PostgresMigrationRerunTests
 {
     private const string Adr = "docs/adr/0014-postgres-migrations-are-serialized-and-rerunnable.md";
 
@@ -43,9 +45,12 @@ public class PostgresMigrationRerunTests
                 RepoRoot.Combine("src/Trax.Effect.Data.Postgres", "Migrations"),
                 "*.sql"
             )
-            .Select(path => Path.GetFileName(path)!)
-            .Where(name => int.Parse(name[..3]) >= FirstRerunnable)
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Select(path => Path.GetFileName(path).NotNull())
+            .Where(name =>
+                int.Parse(name[..3], System.Globalization.CultureInfo.InvariantCulture)
+                >= FirstRerunnable
+            )
+            .Order(StringComparer.Ordinal)
             .Select(name => new TestCaseData(name).SetName($"{{m}}({name})"));
 
     [TestCaseSource(nameof(Scripts))]
@@ -119,49 +124,58 @@ public class PostgresMigrationRerunTests
     /// <summary>What is wrong with <paramref name="statement"/>, or null when it can run again.</summary>
     private static string? Problem(string statement)
     {
-        var s = Regex.Replace(statement, @"\s+", " ").Trim().ToUpperInvariant();
+        var s = Whitespace.Replace(statement, " ").Trim().ToUpperInvariant();
 
-        if (s.StartsWith("DO "))
-            return Regex.IsMatch(s, @"\bIF\b")
+        if (s.StartsWith("DO ", StringComparison.Ordinal))
+            return IfGuard.IsMatch(s)
                 ? null
                 : "a DO block must check the state before it changes it (an IF), or it is not a "
                     + "check at all";
 
-        if (Regex.IsMatch(s, @"^CREATE (UNIQUE )?INDEX\b"))
+        if (CreateIndex.IsMatch(s))
         {
-            if (!s.Contains("IF NOT EXISTS"))
+            if (!s.Contains("IF NOT EXISTS", StringComparison.Ordinal))
                 return "CREATE INDEX without IF NOT EXISTS";
-            var table = Regex.Match(s, @" ON (?:ONLY )?(?:TRAX\.)?""?(\w+)""?").Groups[1].Value;
-            if (HotTables.Contains(table.ToLowerInvariant()) && !s.Contains(" CONCURRENTLY "))
+            var table = IndexedTable.Match(s).Groups["table"].Value;
+            if (
+                HotTables.Contains(table.ToLowerInvariant())
+                && !s.Contains(" CONCURRENTLY ", StringComparison.Ordinal)
+            )
                 return $"an index on {table.ToLowerInvariant()} must be built CONCURRENTLY: a plain "
                     + "CREATE INDEX blocks every write to the table while it builds";
             return null;
         }
 
-        if (s.StartsWith("CREATE OR REPLACE "))
+        if (s.StartsWith("CREATE OR REPLACE ", StringComparison.Ordinal))
             return null;
 
-        if (Regex.IsMatch(s, @"^CREATE (TABLE|SCHEMA|SEQUENCE|EXTENSION)\b"))
-            return s.Contains("IF NOT EXISTS") ? null : "CREATE without IF NOT EXISTS";
+        if (CreateObject.IsMatch(s))
+            return s.Contains("IF NOT EXISTS", StringComparison.Ordinal)
+                ? null
+                : "CREATE without IF NOT EXISTS";
 
-        if (s.StartsWith("DROP "))
-            return s.Contains("IF EXISTS") ? null : "DROP without IF EXISTS";
+        if (s.StartsWith("DROP ", StringComparison.Ordinal))
+            return s.Contains("IF EXISTS", StringComparison.Ordinal)
+                ? null
+                : "DROP without IF EXISTS";
 
-        if (s.StartsWith("ALTER TABLE "))
+        if (s.StartsWith("ALTER TABLE ", StringComparison.Ordinal))
             return AlterTableProblem(s);
 
-        if (s.StartsWith("ALTER TYPE "))
-            return s.Contains("ADD VALUE IF NOT EXISTS")
+        if (s.StartsWith("ALTER TYPE ", StringComparison.Ordinal))
+            return s.Contains("ADD VALUE IF NOT EXISTS", StringComparison.Ordinal)
                 ? null
                 : "ALTER TYPE must be ADD VALUE IF NOT EXISTS; anything else goes in a DO block that "
                     + "checks first";
 
-        if (s.StartsWith("INSERT "))
-            return s.Contains(" ON CONFLICT ") || s.Contains("NOT EXISTS")
+        if (s.StartsWith("INSERT ", StringComparison.Ordinal))
+            return
+                s.Contains(" ON CONFLICT ", StringComparison.Ordinal)
+                || s.Contains("NOT EXISTS", StringComparison.Ordinal)
                 ? null
                 : "an INSERT must say what happens ON CONFLICT, or insert WHERE NOT EXISTS";
 
-        if (Regex.IsMatch(s, @"^(UPDATE|DELETE|SELECT|COMMENT ON|ANALYZE)\b"))
+        if (DataStatement.IsMatch(s))
             return null;
 
         return "no rule covers this statement: add one here, or put it in a DO block that checks "
@@ -170,24 +184,21 @@ public class PostgresMigrationRerunTests
 
     private static string? AlterTableProblem(string s)
     {
-        var body = Regex.Replace(s, @"^ALTER TABLE (IF EXISTS )?(ONLY )?\S+ ", "");
+        var body = AlterTablePrefix.Replace(s, "");
         foreach (var clause in SplitTopLevel(body, ','))
         {
             var c = clause.Trim();
-            if (c.StartsWith("ADD COLUMN "))
+            if (c.StartsWith("ADD COLUMN ", StringComparison.Ordinal))
             {
-                if (!c.StartsWith("ADD COLUMN IF NOT EXISTS "))
+                if (!c.StartsWith("ADD COLUMN IF NOT EXISTS ", StringComparison.Ordinal))
                     return "ADD COLUMN without IF NOT EXISTS";
             }
-            else if (c.StartsWith("DROP "))
+            else if (c.StartsWith("DROP ", StringComparison.Ordinal))
             {
-                if (!c.Contains("IF EXISTS"))
+                if (!c.Contains("IF EXISTS", StringComparison.Ordinal))
                     return "DROP without IF EXISTS";
             }
-            else if (
-                Regex.IsMatch(c, @"^ALTER (COLUMN )?\S+ (SET|DROP) (DEFAULT|NOT NULL)\b")
-                || Regex.IsMatch(c, @"^ALTER (COLUMN )?\S+ SET DEFAULT ")
-            )
+            else if (AlterColumnDefaultOrNotNull.IsMatch(c) || AlterSetDefault.IsMatch(c))
             {
                 // Setting or dropping a default or NOT NULL leaves the same state however often
                 // it runs.
@@ -243,7 +254,7 @@ public class PostgresMigrationRerunTests
 
         void Add()
         {
-            var statement = Regex.Replace(current.ToString(), @"\s+", " ").Trim();
+            var statement = Whitespace.Replace(current.ToString(), " ").Trim();
             if (statement.Length > 0)
                 statements.Add(statement);
             current.Clear();
@@ -268,4 +279,59 @@ public class PostgresMigrationRerunTests
         }
         yield return text[start..];
     }
+
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
+
+    [GeneratedRegex(@"\bIF\b", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex IfGuard { get; }
+
+    [GeneratedRegex(
+        @"^ALTER (COLUMN )?\S+ SET DEFAULT ",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AlterSetDefault { get; }
+
+    [GeneratedRegex(
+        @"^ALTER (COLUMN )?\S+ (SET|DROP) (DEFAULT|NOT NULL)\b",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AlterColumnDefaultOrNotNull { get; }
+
+    [GeneratedRegex(
+        @"^ALTER TABLE (IF EXISTS )?(ONLY )?\S+ ",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AlterTablePrefix { get; }
+
+    [GeneratedRegex(
+        @"^(UPDATE|DELETE|SELECT|COMMENT ON|ANALYZE)\b",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DataStatement { get; }
+
+    [GeneratedRegex(
+        @"^CREATE (TABLE|SCHEMA|SEQUENCE|EXTENSION)\b",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CreateObject { get; }
+
+    [GeneratedRegex(
+        @" ON (?:ONLY )?(?:TRAX\.)?""?(?<table>\w+)""?",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IndexedTable { get; }
+
+    [GeneratedRegex(
+        @"^CREATE (UNIQUE )?INDEX\b",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CreateIndex { get; }
 }

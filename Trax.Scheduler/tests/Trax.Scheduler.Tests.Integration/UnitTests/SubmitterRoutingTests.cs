@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
@@ -12,11 +13,11 @@ public class SubmitterRoutingTests
 {
     #region Test Types
 
-    private interface ITrainA { }
+    private interface ITrainA;
 
-    private interface ITrainB { }
+    private interface ITrainB;
 
-    private interface ITrainC { }
+    private interface ITrainC;
 
     #endregion
 
@@ -38,9 +39,9 @@ public class SubmitterRoutingTests
         routing.ForTrain<ITrainA>().ForTrain<ITrainB>().ForTrain<ITrainC>();
 
         routing.TrainNames.Should().HaveCount(3);
-        routing.TrainNames.Should().Contain(typeof(ITrainA).FullName!);
-        routing.TrainNames.Should().Contain(typeof(ITrainB).FullName!);
-        routing.TrainNames.Should().Contain(typeof(ITrainC).FullName!);
+        routing.TrainNames.Should().Contain(typeof(ITrainA).FullName.NotNull());
+        routing.TrainNames.Should().Contain(typeof(ITrainB).FullName.NotNull());
+        routing.TrainNames.Should().Contain(typeof(ITrainC).FullName.NotNull());
     }
 
     [Test]

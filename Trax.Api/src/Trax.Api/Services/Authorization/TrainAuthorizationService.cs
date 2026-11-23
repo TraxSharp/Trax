@@ -72,7 +72,9 @@ public class TrainAuthorizationService(
 
         foreach (var policy in registration.RequiredPolicies)
         {
-            var result = await authorizationService.AuthorizeAsync(user, policy);
+            var result = await authorizationService
+                .AuthorizeAsync(user, policy)
+                .ConfigureAwait(false);
             if (!result.Succeeded)
                 throw new TrainAuthorizationException(
                     registration.ServiceTypeName,

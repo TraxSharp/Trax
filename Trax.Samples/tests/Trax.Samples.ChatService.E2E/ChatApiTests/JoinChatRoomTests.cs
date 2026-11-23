@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ChatService.E2E.Fixtures;
 
@@ -9,26 +10,29 @@ public class JoinChatRoomTests : ChatApiTestFixture
 {
     private async Task<string> CreateRoom()
     {
-        var result = await GraphQL.SendAsync(
-            """
-            mutation {
-                dispatch {
-                    createChatRoom(
-                        input: { name: "Join Test Room" }
-                    ) {
-                        output { chatRoomId }
+        var result = await GraphQL
+            .SendAsync(
+                """
+                mutation {
+                    dispatch {
+                        createChatRoom(
+                            input: { name: "Join Test Room" }
+                        ) {
+                            output { chatRoomId }
+                        }
                     }
                 }
-            }
-            """,
-            apiKey: AliceKey
-        );
+                """,
+                apiKey: AliceKey
+            )
+            .ConfigureAwait(false);
 
         result.HasErrors.Should().BeFalse();
         return result
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     [Test]
@@ -93,7 +97,7 @@ public class JoinChatRoomTests : ChatApiTestFixture
             );
 
         participant.Should().NotBeNull();
-        participant!.DisplayName.Should().Be("Bob");
+        participant.NotNull().DisplayName.Should().Be("Bob");
     }
 
     [Test]
@@ -123,8 +127,8 @@ public class JoinChatRoomTests : ChatApiTestFixture
 
         result.HasErrors.Should().BeFalse();
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(5);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             DataContext.Reset();
             var metadata = await DataContext

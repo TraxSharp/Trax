@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Data.Decisions;
 
@@ -100,7 +101,7 @@ internal static class DecisionJson
             };
 
             // Written here so a shadow that cannot be written fails alone, not the whole array.
-            return JsonNode.Parse(node.ToJsonString())!;
+            return JsonNode.Parse(node.ToJsonString()).NotNull();
         }
         catch (Exception e)
         {
@@ -145,7 +146,9 @@ internal static class DecisionJson
             "choice" => new ChoiceAnswer(
                 Required(node, "choice").GetValue<string>(),
                 ReadNumber(Required(node, "confidence")),
-                node["probabilities"]?.AsObject().ToDictionary(p => p.Key, p => ReadNumber(p.Value))
+                node["probabilities"]
+                    ?.AsObject()
+                    .ToDictionary(p => p.Key, p => ReadNumber(p.Value), StringComparer.Ordinal)
             ),
             "score" => new ScoreAnswer(
                 ReadNumber(Required(node, "score")),

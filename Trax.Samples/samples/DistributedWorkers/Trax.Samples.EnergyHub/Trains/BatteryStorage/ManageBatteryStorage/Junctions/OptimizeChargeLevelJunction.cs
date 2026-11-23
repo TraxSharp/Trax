@@ -14,7 +14,7 @@ public class OptimizeChargeLevelJunction(ILogger<OptimizeChargeLevelJunction> lo
             input.TargetChargePercent
         );
 
-        await Task.Delay(200);
+        await Task.Delay(200, CancellationToken).ConfigureAwait(false);
 
         var currentCharge = 67;
         var action = currentCharge < input.TargetChargePercent ? "Charging" : "Holding";

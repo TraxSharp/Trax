@@ -105,11 +105,10 @@ internal sealed class SqliteQueuedWorkSignal
         return Task.CompletedTask;
     }
 
-    public void TransactionRolledBack(DbTransaction transaction, TransactionEndEventData eventData)
-    {
-        if (eventData.Context is { } context)
-            _marked.Remove(context);
-    }
+    public void TransactionRolledBack(
+        DbTransaction transaction,
+        TransactionEndEventData eventData
+    ) => Forget(eventData.Context);
 
     public Task TransactionRolledBackAsync(
         DbTransaction transaction,
@@ -117,8 +116,14 @@ internal sealed class SqliteQueuedWorkSignal
         CancellationToken cancellationToken = default
     )
     {
-        TransactionRolledBack(transaction, eventData);
+        Forget(eventData.Context);
         return Task.CompletedTask;
+    }
+
+    private void Forget(DbContext? context)
+    {
+        if (context is not null)
+            _marked.Remove(context);
     }
 
     private void Mark(DbContext? context)

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence.FromIr;
@@ -80,18 +81,22 @@ public class PolicyDerivationTests
         """;
 
     [Test]
-    public void One_users_machine_moving_another_of_theirs_is_a_linked_policy_through_the_glossarys_link()
+    public async Task One_users_machine_moving_another_of_theirs_is_a_linked_policy_through_the_glossarys_link()
     {
-        var derived = Derive(Background + Expiring);
+        var derived = await Derive(Background + Expiring).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var policy = HostFile.Read(derived.Host!).Policies.Should().ContainSingle().Subject;
+        var policy = HostFile
+            .Read(derived.Host.NotNull())
+            .Policies.Should()
+            .ContainSingle()
+            .Subject;
         policy.Shape.Should().Be("linked");
         (policy.When, policy.Enters, policy.Target, policy.Trigger, policy.By)
             .Should()
             .Be(("order", "Expired", "receipt", "Cancel", "orderId"));
         HostFile
-            .Read(derived.Host!)
+            .Read(derived.Host.NotNull())
             .Machines["receipt"]
             .Triggers["Cancel"]
             .IsServer.Should()
@@ -99,34 +104,41 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void A_system_machine_moving_users_instances_is_a_broadcast_to_those_waiting()
+    public async Task A_system_machine_moving_users_instances_is_a_broadcast_to_those_waiting()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: The shop opening starts the waiting orders
-                    Given the shop is closed
-                    And Ada's order is placed
-                    When the shop opens
-                    Then the shop is open
-                    And Ada's order is baking
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: The shop opening starts the waiting orders
+                            Given the shop is closed
+                            And Ada's order is placed
+                            When the shop opens
+                            Then the shop is open
+                            And Ada's order is baking
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
-        var policy = HostFile.Read(derived.Host!).Policies.Should().ContainSingle().Subject;
+        var policy = HostFile
+            .Read(derived.Host.NotNull())
+            .Policies.Should()
+            .ContainSingle()
+            .Subject;
         (policy.Shape, policy.When, policy.Enters, policy.Target, policy.By, policy.Trigger)
             .Should()
             .Be(("broadcast", "shop", "Open", "order", "Placed", "Bake"));
     }
 
     [Test]
-    public void A_policy_into_a_state_of_a_users_machine_that_runs_a_train_is_refused()
+    public async Task A_policy_into_a_state_of_a_users_machine_that_runs_a_train_is_refused()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        var order = glossary["machines"]!["order"]!.AsObject();
-        order["states"]!["Baked"] = "is baked";
-        order["states"]!["Burnt"] = "is burnt";
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        var order = glossary["machines"].NotNull()["order"].NotNull().AsObject();
+        order["states"].NotNull()["Baked"] = "is baked";
+        order["states"].NotNull()["Burnt"] = "is burnt";
         order["invokes"] = JsonNode.Parse(
             """
             {
@@ -153,20 +165,23 @@ public class PolicyDerivationTests
 
                 """;
 
-        var derived = Derive(
-            Background
-                + Outcome("the bread is done", "is baked")
-                + Outcome("the oven fails", "is burnt")
-                + Outcome("the baking is called off", "is burnt")
-                + """
-                  Scenario: The shop opening starts the waiting orders
-                    Given the shop is closed
-                    And Ada's order is placed
-                    When the shop opens
-                    Then the shop is open
-                    And Ada's order is baking
-                """,
-            glossary.ToJsonString()
+        var derived = (
+            await Derive(
+                    Background
+                        + Outcome("the bread is done", "is baked")
+                        + Outcome("the oven fails", "is burnt")
+                        + Outcome("the baking is called off", "is burnt")
+                        + """
+                          Scenario: The shop opening starts the waiting orders
+                            Given the shop is closed
+                            And Ada's order is placed
+                            When the shop opens
+                            Then the shop is open
+                            And Ada's order is baking
+                        """,
+                    glossary.ToJsonString()
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -177,17 +192,22 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void A_derived_directory_with_policies_is_served_whole()
+    public async Task A_derived_directory_with_policies_is_served_whole()
     {
-        var derived = Derive(Background + Expiring);
+        var derived = await Derive(Background + Expiring).ConfigureAwait(false);
         var directory = Directory.CreateTempSubdirectory("trax-derived-").FullName;
         try
         {
-            File.WriteAllText(Path.Combine(directory, "host.json"), derived.Host!);
+            await File.WriteAllTextAsync(
+                    Path.Combine(directory, "host.json"),
+                    derived.Host.NotNull()
+                )
+                .ConfigureAwait(false);
             foreach (var (id, ir) in derived.Irs)
-                File.WriteAllText(Path.Combine(directory, $"{id}.ir.json"), ir);
+                await File.WriteAllTextAsync(Path.Combine(directory, $"{id}.ir.json"), ir)
+                    .ConfigureAwait(false);
 
-            var loaded = IrDirectory.Load(directory, []);
+            var loaded = await IrDirectory.LoadAsync(directory, []).ConfigureAwait(false);
 
             loaded.Machines.Select(m => m.Name).Should().BeEquivalentTo(derived.Irs.Keys);
             loaded.Host.Policies.Should().ContainSingle();
@@ -199,18 +219,21 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void Another_owners_instance_moving_is_refused()
+    public async Task Another_owners_instance_moving_is_refused()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Ada's order voids Bo's receipt
-                    Given Bo has a receipt
-                    And Ada's order is placed
-                    When Ada lets her order expire
-                    Then Ada's order has expired
-                    And Bo's receipt is void
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Ada's order voids Bo's receipt
+                            Given Bo has a receipt
+                            And Ada's order is placed
+                            When Ada lets her order expire
+                            Then Ada's order has expired
+                            And Bo's receipt is void
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -221,31 +244,35 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void The_same_owner_without_a_link_is_refused_as_ambiguous()
+    public async Task The_same_owner_without_a_link_is_refused_as_ambiguous()
     {
-        var glossary = JsonNode.Parse(Glossary)!;
-        glossary["machines"]!["receipt"]!.AsObject().Remove("links");
+        var glossary = JsonNode.Parse(Glossary).NotNull();
+        glossary["machines"].NotNull()["receipt"].NotNull().AsObject().Remove("links");
 
-        var derived = Derive(Background + Expiring, glossary.ToJsonString());
+        var derived = await Derive(Background + Expiring, glossary.ToJsonString())
+            .ConfigureAwait(false);
 
         derived.Problems.Should().ContainSingle().Which.Message.Should().Contain("Add a link");
     }
 
     [Test]
-    public void A_move_no_scenario_shows_a_trigger_for_is_a_problem_asking_for_one()
+    public async Task A_move_no_scenario_shows_a_trigger_for_is_a_problem_asking_for_one()
     {
-        var derived = Derive(
-            """
-            Feature: Bakery
-              Scenario: An expired order voids its receipt
-                Given Ada is a customer
-                And Ada has an order
-                And Ada has a receipt
-                And Ada's order is placed
-                When Ada lets her order expire
-                Then Ada's order has expired
-                And Ada's receipt is void
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Bakery
+                      Scenario: An expired order voids its receipt
+                        Given Ada is a customer
+                        And Ada has an order
+                        And Ada has a receipt
+                        And Ada's order is placed
+                        When Ada lets her order expire
+                        Then Ada's order has expired
+                        And Ada's receipt is void
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -256,16 +283,19 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void A_When_that_moved_nothing_sets_nothing_off()
+    public async Task A_When_that_moved_nothing_sets_nothing_off()
     {
-        var derived = Derive(
-            Background
-                + """
-                  Scenario: Expiring a draft
-                    When Ada lets her order expire
-                    Then Ada's order is still a draft
-                    And Ada's receipt is void
-                """
+        var derived = (
+            await Derive(
+                    Background
+                        + """
+                          Scenario: Expiring a draft
+                            When Ada lets her order expire
+                            Then Ada's order is still a draft
+                            And Ada's receipt is void
+                        """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -313,20 +343,23 @@ public class PolicyDerivationTests
         """;
 
     [Test]
-    public void Two_policies_that_set_each_other_off_are_refused_naming_both()
+    public async Task Two_policies_that_set_each_other_off_are_refused_naming_both()
     {
         // The bell ringing closes the shop, and the shop closing rings the bell.
-        var derived = Derive(
-            Ringing
-                + """
-                  Scenario: The bell closes the shop
-                    Given the shop is open
-                    And the bell is quiet
-                    When the bell rings
-                    Then the bell is ringing
-                    And the shop is closed
-                """,
-            Bells
+        var derived = (
+            await Derive(
+                    Ringing
+                        + """
+                          Scenario: The bell closes the shop
+                            Given the shop is open
+                            And the bell is quiet
+                            When the bell rings
+                            Then the bell is ringing
+                            And the shop is closed
+                        """,
+                    Bells
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -339,52 +372,62 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void A_policy_loop_a_timer_closes_is_derived_and_served()
+    public async Task A_policy_loop_a_timer_closes_is_derived_and_served()
     {
         // Closing rings the bell, the bell wakes an idle shop, and the open shop closes after hours: the timer paces
         // it, as a daily open and close.
-        var derived = Derive(
-            Ringing
-                + """
-                  Scenario: The bell wakes the shop
-                    Given the shop is idle
-                    And the bell is quiet
-                    When the bell rings
-                    Then the bell is ringing
-                    And the shop is open
+        var derived = (
+            await Derive(
+                    Ringing
+                        + """
+                          Scenario: The bell wakes the shop
+                            Given the shop is idle
+                            And the bell is quiet
+                            When the bell rings
+                            Then the bell is ringing
+                            And the shop is open
 
-                  Scenario: The shop wakes
-                    Given the shop is idle
-                    When the shop wakes
-                    Then the shop is open
+                          Scenario: The shop wakes
+                            Given the shop is idle
+                            When the shop wakes
+                            Then the shop is open
 
-                  Scenario: The shop is still open before closing time
-                    Given the shop is open
-                    When 3 seconds pass
-                    Then the shop is still open
+                          Scenario: The shop is still open before closing time
+                            Given the shop is open
+                            When 3 seconds pass
+                            Then the shop is still open
 
-                  Scenario: The shop closes after hours
-                    Given the shop is open
-                    When 5 seconds pass
-                    Then the shop is closed
-                """,
-            Bells
+                          Scenario: The shop closes after hours
+                            Given the shop is open
+                            When 5 seconds pass
+                            Then the shop is closed
+                        """,
+                    Bells
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
         HostFile
-            .Read(derived.Host!)
+            .Read(derived.Host.NotNull())
             .Policies.Select(p => p.Id)
             .Should()
             .BeEquivalentTo(["bell.Ringing>shop.Wake", "shop.Closed>bell.Ring"]);
         var directory = Directory.CreateTempSubdirectory("trax-derived-").FullName;
         try
         {
-            File.WriteAllText(Path.Combine(directory, "host.json"), derived.Host!);
+            await File.WriteAllTextAsync(
+                    Path.Combine(directory, "host.json"),
+                    derived.Host.NotNull()
+                )
+                .ConfigureAwait(false);
             foreach (var (id, ir) in derived.Irs)
-                File.WriteAllText(Path.Combine(directory, $"{id}.ir.json"), ir);
+                await File.WriteAllTextAsync(Path.Combine(directory, $"{id}.ir.json"), ir)
+                    .ConfigureAwait(false);
 
-            IrDirectory.Load(directory, []).Host.Policies.Should().HaveCount(2);
+            (await IrDirectory.LoadAsync(directory, []).ConfigureAwait(false))
+                .Host.Policies.Should()
+                .HaveCount(2);
         }
         finally
         {
@@ -490,19 +533,22 @@ public class PolicyDerivationTests
         """;
 
     [Test]
-    public void A_policy_waiting_on_another_policys_result_is_warned()
+    public async Task A_policy_waiting_on_another_policys_result_is_warned()
     {
-        var derived = Derive(
-            Sheets
-                + """
-                  Scenario: The answers are scored and the closed sheets are cleared
-                    Given Ada's answer sheet is closed
-                    And the quiz is scoring the question
-                    When the answers are scored
-                    Then the quiz is between questions
-                    And Ada's answer sheet is waiting for a question
-                """,
-            Quiz
+        var derived = (
+            await Derive(
+                    Sheets
+                        + """
+                          Scenario: The answers are scored and the closed sheets are cleared
+                            Given Ada's answer sheet is closed
+                            And the quiz is scoring the question
+                            When the answers are scored
+                            Then the quiz is between questions
+                            And Ada's answer sheet is waiting for a question
+                        """,
+                    Quiz
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().BeEmpty();
@@ -525,7 +571,7 @@ public class PolicyDerivationTests
         // Closing a sheet tallies the quiz, and the tallied quiz clears the closed sheets: the clear comes after the
         // close by construction. A scoring train that also reaches Tallied from Scoring races the close.
         static Dictionary<string, JsonObject> Irs(bool train) =>
-            new()
+            new(StringComparer.Ordinal)
             {
                 ["quiz"] = JsonNode
                     .Parse(
@@ -539,7 +585,8 @@ public class PolicyDerivationTests
                         )}} }
                         }
                         """
-                    )!
+                    )
+                    .NotNull()
                     .AsObject(),
                 ["sheet"] = JsonNode
                     .Parse(
@@ -551,7 +598,8 @@ public class PolicyDerivationTests
                           ]
                         }
                         """
-                    )!
+                    )
+                    .NotNull()
                     .AsObject(),
             };
         HostPolicy[] policies =
@@ -574,7 +622,7 @@ public class PolicyDerivationTests
     {
         // Scoring sends the open sheets to marking, whose train closes them, and a scoring train tallies the quiz,
         // which clears the closed sheets. The clear waits for the marking train, not for the policy itself.
-        var irs = new Dictionary<string, JsonObject>
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
         {
             ["quiz"] = JsonNode
                 .Parse(
@@ -584,7 +632,8 @@ public class PolicyDerivationTests
                       "outcomes": { "done": { "state": "Scoring", "edges": [ { "to": "Tallied" } ] } }
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
             ["sheet"] = JsonNode
                 .Parse(
@@ -597,7 +646,8 @@ public class PolicyDerivationTests
                       "outcomes": { "marked": { "state": "Marking", "edges": [ { "to": "Closed" } ] } }
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
         };
         HostPolicy[] policies =
@@ -627,7 +677,7 @@ public class PolicyDerivationTests
         // timer shorter than the policy runner's interval can fire before the close lands; one at least as long, or
         // one whose duration a context field holds, is a time a person chose.
         var timer = after is null ? """{ "name": "grace", "min": "PT0S", "max": "PT1H" }""" : null;
-        var irs = new Dictionary<string, JsonObject>
+        var irs = new Dictionary<string, JsonObject>(StringComparer.Ordinal)
         {
             ["quiz"] = JsonNode
                 .Parse(
@@ -639,7 +689,8 @@ public class PolicyDerivationTests
                     )}} } ]
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
             ["sheet"] = JsonNode
                 .Parse(
@@ -651,7 +702,8 @@ public class PolicyDerivationTests
                       ]
                     }
                     """
-                )!
+                )
+                .NotNull()
                 .AsObject(),
         };
         HostPolicy[] policies =
@@ -700,49 +752,52 @@ public class PolicyDerivationTests
     }
 
     [Test]
-    public void Policies_whose_order_the_host_keeps_are_not_warned()
+    public async Task Policies_whose_order_the_host_keeps_are_not_warned()
     {
         // A cascade is ordered: the shop opens only once the shift's policy lands. A loop a timer closes is not a wait.
-        Derive(Background + Expiring).Warnings.Should().BeEmpty();
-        FeatureDerivation
-            .Derive(
-                Trax.StateMachine.Features.Glossary.Read(Bells),
-                [
-                    (
-                        "bells.feature",
-                        Ringing
-                            + """
-                              Scenario: The bell wakes the shop
-                                Given the shop is idle
-                                And the bell is quiet
-                                When the bell rings
-                                Then the bell is ringing
-                                And the shop is open
-
-                              Scenario: The shop wakes
-                                Given the shop is idle
-                                When the shop wakes
-                                Then the shop is open
-
-                              Scenario: The shop is still open before closing time
-                                Given the shop is open
-                                When 3 seconds pass
-                                Then the shop is still open
-
-                              Scenario: The shop closes after hours
-                                Given the shop is open
-                                When 5 seconds pass
-                                Then the shop is closed
-                            """
-                    ),
-                ]
-            )
+        (await Derive(Background + Expiring).ConfigureAwait(false))
             .Warnings.Should()
             .BeEmpty();
+        (
+            await FeatureDerivation
+                .DeriveAsync(
+                    Trax.StateMachine.Features.Glossary.Read(Bells),
+                    [
+                        (
+                            "bells.feature",
+                            Ringing
+                                + """
+                                  Scenario: The bell wakes the shop
+                                    Given the shop is idle
+                                    And the bell is quiet
+                                    When the bell rings
+                                    Then the bell is ringing
+                                    And the shop is open
+
+                                  Scenario: The shop wakes
+                                    Given the shop is idle
+                                    When the shop wakes
+                                    Then the shop is open
+
+                                  Scenario: The shop is still open before closing time
+                                    Given the shop is open
+                                    When 3 seconds pass
+                                    Then the shop is still open
+
+                                  Scenario: The shop closes after hours
+                                    Given the shop is open
+                                    When 5 seconds pass
+                                    Then the shop is closed
+                                """
+                        ),
+                    ]
+                )
+                .ConfigureAwait(false)
+        ).Warnings.Should().BeEmpty();
     }
 
-    private static Derived Derive(string feature, string glossary = Glossary) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature, string glossary = Glossary) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("bakery.feature", feature)]
         );

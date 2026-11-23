@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Stress.Fakes;
@@ -15,11 +16,13 @@ public class ExactlyOnceStressTests : StressFixture
 {
     private static async Task SeedReview(Guid id)
     {
-        await using var ctx = StressDb.NewContext();
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
         (
             await StressOrder
                 .Service(StressDb.NewStore(ctx))
                 .Autosave("u", id, StressOrder.ReviewJson(1, 2))
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
@@ -27,8 +30,12 @@ public class ExactlyOnceStressTests : StressFixture
 
     private static async Task<string> LoadState(Guid id)
     {
-        await using var ctx = StressDb.NewContext();
-        var loaded = await StressOrder.Service(StressDb.NewStore(ctx)).Load("u", id);
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
+        var loaded = await StressOrder
+            .Service(StressDb.NewStore(ctx))
+            .Load("u", id)
+            .ConfigureAwait(false);
         return loaded is LoadResult.Loaded l ? l.Snapshot.State : "not-loaded";
     }
 
@@ -38,7 +45,8 @@ public class ExactlyOnceStressTests : StressFixture
         ISnapshotEffect effect
     )
     {
-        await using var ctx = StressDb.NewContext();
+        var ctx = StressDb.NewContext();
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
         var claims = StressDb.NewClaims(ctx);
         var runner = new SnapshotEffectRunner<OrderState, OrderTrigger>(
             StressOrder.Service(StressDb.NewStore(ctx), claims),
@@ -50,7 +58,7 @@ public class ExactlyOnceStressTests : StressFixture
             StressOrder.EffectKey,
             receiptKey: "orderId"
         );
-        return await runner.Run("u", id, requestId);
+        return await runner.Run("u", id, requestId).ConfigureAwait(false);
     }
 
     [Test]
@@ -66,18 +74,18 @@ public class ExactlyOnceStressTests : StressFixture
             StressProfile.MaxConcurrency,
             async i =>
             {
-                await SeedReview(ids[i]);
+                await SeedReview(ids[i]).ConfigureAwait(false);
                 return 0;
             }
         );
 
-        var sw = Stopwatch.StartNew();
+        var started = TimeProvider.System.GetTimestamp();
         await Fan(
             instances * per,
             StressProfile.MaxConcurrency,
-            k => Send(ids[k / per], $"req-{k}", effect)
+            k => Send(ids[k / per], string.Create(CultureInfo.InvariantCulture, $"req-{k}"), effect)
         );
-        sw.Stop();
+        var elapsed = (long)TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
 
         // The whole point: N drafts charged once each means exactly N deliveries, however many sends raced.
         effect
@@ -88,9 +96,15 @@ public class ExactlyOnceStressTests : StressFixture
         states.Should().OnlyContain(s => s == "Placed", "every draft ends Placed with a receipt");
 
         var sends = instances * per;
-        TestContext.Progress.WriteLine(
-            $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {sw.ElapsedMilliseconds} ms "
-                + $"({sends * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds):N0} sends/s), deliveries={effect.Calls}"
+        await TestContext.Progress.WriteLineAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"[exactly-once] {instances} drafts x {per} sends = {sends} sends in {elapsed} ms "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"({sends * 1000.0 / Math.Max(1, elapsed):N0} sends/s), deliveries={effect.Calls}"
+                )
         );
     }
 
@@ -105,7 +119,7 @@ public class ExactlyOnceStressTests : StressFixture
         var outcomes = await Fan(
             hot,
             StressProfile.MaxConcurrency,
-            k => Send(id, $"req-{k}", effect)
+            k => Send(id, string.Create(CultureInfo.InvariantCulture, $"req-{k}"), effect)
         );
 
         effect

@@ -157,7 +157,7 @@ public class TrainExceptionMessageRuleTests
                 Arg.Is<RunTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
-            .ThrowsAsync(new ArgumentException("development detail"));
+            .ThrowsAsync(new InvalidOperationException("development detail"));
 
         await using var services = BuildDetailedServices(execution);
         var executor = await services
@@ -179,6 +179,61 @@ public class TrainExceptionMessageRuleTests
         Exception refusal
     )
     {
+        var execution = RefusingExecution(refusal);
+
+        // A store that is not the in-memory one, so both surfaces attempt the enqueue rather than
+        // refuse it as having nothing to dispatch it.
+        using var host = await StartHostAsync(
+                execution,
+                new RecordingSubmitter(),
+                QueueRegistration(),
+                Substitute.For<IDataContextProviderFactory>()
+            )
+            .ConfigureAwait(false);
+
+        using var typed = await AdminOperationsAuthorizationTests
+            .PostAsync(
+                host,
+                apiKey: null,
+                "mutation { dispatch { masked(input: {}) { __typename } } }"
+            )
+            .ConfigureAwait(false);
+        using var operations = await AdminOperationsAuthorizationTests
+            .PostAsync(
+                host,
+                apiKey: null,
+                $$"""
+                mutation {
+                  operations {
+                    workQueue {
+                      queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{}" }) {
+                        success
+                        message
+                      }
+                    }
+                  }
+                }
+                """
+            )
+            .ConfigureAwait(false);
+
+        await host.StopAsync().ConfigureAwait(false);
+
+        var typedMessage = typed
+            .RootElement.GetProperty("errors")[0]
+            .GetProperty("message")
+            .GetString();
+        var payload = operations
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("workQueue")
+            .GetProperty("queueTrain");
+        payload.GetProperty("success").GetBoolean().Should().BeFalse();
+        return (typedMessage, payload.GetProperty("message").GetString());
+    }
+
+    private static ITrainExecutionService RefusingExecution(Exception refusal)
+    {
         var execution = Substitute.For<ITrainExecutionService>();
         execution
             .QueueAsync(
@@ -198,51 +253,7 @@ public class TrainExceptionMessageRuleTests
                 Arg.Any<CancellationToken>()
             )
             .ThrowsAsync(refusal);
-
-        // A store that is not the in-memory one, so both surfaces attempt the enqueue rather than
-        // refuse it as having nothing to dispatch it.
-        using var host = await StartHostAsync(
-            execution,
-            new RecordingSubmitter(),
-            QueueRegistration(),
-            Substitute.For<IDataContextProviderFactory>()
-        );
-
-        using var typed = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            "mutation { dispatch { masked(input: {}) { __typename } } }"
-        );
-        using var operations = await AdminOperationsAuthorizationTests.PostAsync(
-            host,
-            apiKey: null,
-            $$"""
-            mutation {
-              operations {
-                workQueue {
-                  queueTrain(input: { trainName: "{{TrainName}}", inputJson: "{}" }) {
-                    success
-                    message
-                  }
-                }
-              }
-            }
-            """
-        );
-
-        await host.StopAsync();
-
-        var typedMessage = typed
-            .RootElement.GetProperty("errors")[0]
-            .GetProperty("message")
-            .GetString();
-        var payload = operations
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("workQueue")
-            .GetProperty("queueTrain");
-        payload.GetProperty("success").GetBoolean().Should().BeFalse();
-        return (typedMessage, payload.GetProperty("message").GetString());
+        return execution;
     }
 
     private static TrainRegistration QueueRegistration() => Typed(GraphQLOperation.Queue);

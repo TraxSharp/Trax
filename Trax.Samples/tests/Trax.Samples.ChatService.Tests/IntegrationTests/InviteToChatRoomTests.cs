@@ -18,7 +18,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task ValidateInvite_RoomDoesNotExist_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var junction = new ValidateInviteJunction(db, ChatUsers.Alice, ChatUsers.Directory());
 
         var act = () => junction.Run(Invite(Guid.NewGuid(), ChatUsers.Bob.Id));
@@ -29,7 +29,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task ValidateInvite_CallerNotAMember_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new ValidateInviteJunction(db, ChatUsers.Charlie, ChatUsers.Directory());
 
@@ -41,7 +41,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task ValidateInvite_SomeoneTheDirectoryDoesNotKnow_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new ValidateInviteJunction(db, ChatUsers.Alice, ChatUsers.Directory());
 
@@ -53,7 +53,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task ValidateInvite_SomeoneAlreadyInTheRoom_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice, ChatUsers.Bob);
         var junction = new ValidateInviteJunction(db, ChatUsers.Alice, ChatUsers.Directory());
 
@@ -65,7 +65,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task ValidateInvite_TheCallerThemselves_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new ValidateInviteJunction(db, ChatUsers.Alice, ChatUsers.Directory());
 
@@ -77,7 +77,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task ValidateInvite_AMemberInvitingSomeoneNew_ReturnsInput()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var input = Invite(roomId, ChatUsers.Bob.Id);
 
@@ -93,7 +93,7 @@ public class InviteToChatRoomTests
     [Test]
     public async Task AddInvitee_AddsThemUnderTheNameTheDirectoryHolds()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         // The directory, not the inviter, decides what the room calls the invitee.
         var directory = new ChatDirectory([new ChatPerson(ChatUsers.Bob.Id, "Robert")]);
@@ -101,7 +101,8 @@ public class InviteToChatRoomTests
             db,
             ChatUsers.Alice,
             directory,
-            NullLogger<AddInviteeJunction>.Instance
+            NullLogger<AddInviteeJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var output = await junction.Run(Invite(roomId, ChatUsers.Bob.Id));
@@ -110,7 +111,10 @@ public class InviteToChatRoomTests
         output.InvitedByDisplayName.Should().Be("Alice");
         var participant = await db
             .ChatParticipants.AsNoTracking()
-            .SingleAsync(p => p.ChatRoomId == roomId && p.UserId == ChatUsers.Bob.Id);
+            .SingleAsync(
+                p => p.ChatRoomId == roomId && p.UserId == ChatUsers.Bob.Id,
+                cancellationToken: junction.CancellationToken
+            );
         participant.DisplayName.Should().Be("Robert");
     }
 }

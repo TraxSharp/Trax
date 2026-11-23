@@ -16,21 +16,26 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class TypeScriptExportsAreDocumentedTests
+public partial class TypeScriptExportsAreDocumentedTests
 {
     private const string Page = "sdk-reference/statemachine-api/typescript-package.md";
 
-    private static readonly Regex EntryPoint = new(
+    [GeneratedRegex(
         "\"(?<entry>@traxsharp/state-machine[^\"]*)\": \\[(?<names>[^\\]]*)\\]",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex EntryPoint { get; }
 
-    private static readonly Regex Name = new(
+    [GeneratedRegex(
         "\"(?<name>[A-Za-z_$][\\w$]*)\"",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Name { get; }
 
-    private static readonly Regex CodeSpan = new("`([^`\\n]+)`", RegexOptions.Compiled);
+    [GeneratedRegex("`(?<span>[^`\\n]+)`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex CodeSpan { get; }
 
     [Test]
     public void Every_export_of_the_npm_package_is_named_on_its_reference_page()
@@ -54,13 +59,13 @@ public class TypeScriptExportsAreDocumentedTests
             .ToList();
         exports
             .Select(e => e.Entry)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Should()
             .HaveCount(3, "the package has three entry points, and the snapshot was read");
 
         var words = CodeSpan
             .Matches(File.ReadAllText(RepoRoot.Combine(Page)))
-            .SelectMany(span => Regex.Matches(span.Groups[1].Value, "[A-Za-z_$][\\w$]*"))
+            .SelectMany(span => Identifier.Matches(span.Groups["span"].Value))
             .Select(word => word.Value)
             .ToHashSet(StringComparer.Ordinal);
         var undocumented = exports
@@ -75,4 +80,7 @@ public class TypeScriptExportsAreDocumentedTests
                     + "or stop exporting it. See Trax.Docs/adr/0008-documentation-conventions-are-linted.md"
             );
     }
+
+    [GeneratedRegex("[A-Za-z_$][\\w$]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Identifier { get; }
 }

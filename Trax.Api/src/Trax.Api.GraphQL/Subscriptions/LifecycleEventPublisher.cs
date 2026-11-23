@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;
@@ -75,20 +74,27 @@ internal sealed class LifecycleEventPublisher
         string topic,
         JunctionEvent junctionEvent,
         TimeSpan bound,
+        TimeProvider clock,
         CancellationToken ct
-    ) => PublishAsync(topic, next => junctionEvent with { PublishSequence = next }, ct, bound);
+    ) =>
+        PublishAsync(
+            topic,
+            next => junctionEvent with { PublishSequence = next },
+            ct,
+            (bound, clock)
+        );
 
     private async ValueTask PublishAsync<T>(
         string topic,
         Func<long, T> numbered,
         CancellationToken ct,
-        TimeSpan? bound = null
+        (TimeSpan Limit, TimeProvider Clock)? bound = null
     )
     {
         var sequence = _topics.GetOrAdd(topic, _ => new TopicSequence());
-        var started = Stopwatch.GetTimestamp();
+        var started = bound?.Clock.GetTimestamp() ?? 0;
 
-        if (bound is { } limit)
+        if (bound?.Limit is { } limit)
         {
             if (!await sequence.Gate.WaitAsync(limit, ct).ConfigureAwait(false))
             {
@@ -107,10 +113,14 @@ internal sealed class LifecycleEventPublisher
         {
             next = sequence.Last + skipped + 1;
             send = _sender.SendAsync(topic, numbered(next), ct).AsTask();
-            if (bound is { } sendLimit)
+            if (bound is { } sendBound)
             {
-                var remaining = sendLimit - Stopwatch.GetElapsedTime(started);
-                await send.WaitAsync(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, ct)
+                var remaining = sendBound.Limit - sendBound.Clock.GetElapsedTime(started);
+                await send.WaitAsync(
+                        remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero,
+                        sendBound.Clock,
+                        ct
+                    )
                     .ConfigureAwait(false);
             }
             else

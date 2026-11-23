@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
@@ -140,26 +141,28 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
     /// </summary>
     public async Task<VersionCheck> CheckVersionAsync(CancellationToken cancellationToken = default)
     {
-        var answer = await Client.ServerVersionAsync(cancellationToken);
+        var answer = await Client.ServerVersionAsync(cancellationToken).ConfigureAwait(false);
         if (!answer.Succeeded)
             return new VersionCheck.Failed(
                 answer.Code,
                 answer.Message ?? "The host answered without its version."
             );
-        var host = answer.Data!.Operations?.Config.Version;
+        var host = answer.Data.NotNull().Operations?.Config.Version;
         if (host is null)
             return new VersionCheck.Failed(
-                null,
+                Code: null,
                 "The host answered no operations: the credential may not reach the operations surface."
             );
         // It is printed, and put in an install line the operator may paste into a shell.
         if (!IsRelease(host))
             return new VersionCheck.Failed(
-                null,
+                Code: null,
                 "The host answered a version that is not a Trax release number."
             );
         _transport.HostVersion = host;
-        return host == ToolVersion ? new VersionCheck.Same(host) : new VersionCheck.Other(host);
+        return string.Equals(host, ToolVersion, StringComparison.Ordinal)
+            ? new VersionCheck.Same(host)
+            : new VersionCheck.Other(host);
     }
 
     /// <summary>The install line for the trax-console that matches a host.</summary>
@@ -174,74 +177,20 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
 
     /// <summary>Whether <paramref name="version"/> is a release number: SemVer, without build metadata.</summary>
     public static bool IsRelease(string version) =>
-        version.Length <= 64 && ReleaseNumber().IsMatch(version);
+        version.Length <= 64 && ReleaseNumber.IsMatch(version);
 
     [GeneratedRegex(
         @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex ReleaseNumber();
+    private static partial Regex ReleaseNumber { get; }
 
     /// <summary>Closes the socket and the HTTP client.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_socket is not null)
-            await _socket.DisposeAsync();
+            await _socket.DisposeAsync().ConfigureAwait(false);
         _http?.Dispose();
     }
-}
-
-/// <summary>Turns a redirect into a failure, so the credential goes to the endpoint the operator named and no other.</summary>
-internal sealed class NoRedirects : DelegatingHandler
-{
-    protected override async Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken
-    )
-    {
-        var response = await base.SendAsync(request, cancellationToken);
-        if ((int)response.StatusCode is < 300 or >= 400)
-            return response;
-        var location = response.Headers.Location;
-        response.Dispose();
-        throw new HttpRequestException(
-            $"{request.RequestUri} redirected to {Shown(request.RequestUri, location)}, and trax-console follows no "
-                + "redirect. Give --host and --graphql-path of the endpoint itself."
-        );
-    }
-
-    // Where it pointed, without userinfo, on one line, and short.
-    private static string Shown(Uri? from, Uri? location)
-    {
-        if (location is null)
-            return "nowhere";
-        if (!location.IsAbsoluteUri && from is not null)
-            location = new Uri(from, location);
-        var text = location.IsAbsoluteUri
-            ? new UriBuilder(location) { UserName = "", Password = "" }.Uri.ToString()
-            : location.OriginalString;
-        text = TerminalText.Line(text);
-        return text.Length > 200 ? text[..200] + "..." : text;
-    }
-}
-
-/// <summary>What <see cref="ConsoleSession.CheckVersionAsync"/> found.</summary>
-internal abstract record VersionCheck
-{
-    private VersionCheck() { }
-
-    /// <summary>The host runs this tool's release.</summary>
-    public sealed record Same(string Version) : VersionCheck;
-
-    /// <summary>The host runs another release.</summary>
-    public sealed record Other(string HostVersion) : VersionCheck
-    {
-        public string Message =>
-            $"This host runs Trax .NET {HostVersion}; trax-console is {ConsoleSession.ToolVersion}. The console sends "
-            + $"the documents of its own release, which this host does not serve. Install the matching one: "
-            + ConsoleSession.InstallLine(HostVersion);
-    }
-
-    /// <summary>The host did not say: refused, unreachable, or not serving operations.</summary>
-    public sealed record Failed(string? Code, string Message) : VersionCheck;
 }

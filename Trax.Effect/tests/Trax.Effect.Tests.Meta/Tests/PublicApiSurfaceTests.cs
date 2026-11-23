@@ -1,5 +1,6 @@
 using System.Reflection;
 using PublicApiGenerator;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Tests.Meta.Tests;
 
@@ -18,7 +19,7 @@ public class PublicApiSurfaceTests
     );
 
     private static readonly string BaselineSourceDir = Path.Combine(
-        Path.GetDirectoryName(typeof(PublicApiSurfaceTests).Assembly.Location)!,
+        Path.GetDirectoryName(typeof(PublicApiSurfaceTests).Assembly.Location).NotNull(),
         "..",
         "..",
         "..",
@@ -118,7 +119,7 @@ public class PublicApiSurfaceTests
     [TestCaseSource(nameof(Assemblies))]
     public void PublicApi_Matches_CheckedInBaseline(Assembly assembly)
     {
-        var name = assembly.GetName().Name!;
+        var name = assembly.GetName().Name.NotNull();
         var current = assembly.GeneratePublicApi(
             new ApiGeneratorOptions { IncludeAssemblyAttributes = false }
         );
@@ -147,7 +148,8 @@ public class PublicApiSurfaceTests
 
         var baseline = File.ReadAllText(baselinePath);
 
-        string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd() + "\n";
+        string Normalize(string s) =>
+            s.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd() + "\n";
 
         Normalize(current)
             .Should()

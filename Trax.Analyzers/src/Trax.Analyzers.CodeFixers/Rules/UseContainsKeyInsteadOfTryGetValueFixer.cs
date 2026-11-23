@@ -1,0 +1,79 @@
+using Microsoft.CodeAnalysis.Formatting;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class UseContainsKeyInsteadOfTryGetValueFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.UseContainsKeyInsteadOfTryGetValue);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null)
+            return;
+
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (semanticModel is null)
+            return;
+
+        if (FindInvocation(semanticModel, nodeToFix, context.CancellationToken) is not { Arguments.Length: 2 } operation)
+            return;
+
+        if (operation.TargetMethod.Name != "TryGetValue")
+            return;
+
+        if (operation.Arguments[1].Value is not IDiscardOperation)
+            return;
+
+        if (operation.Syntax is not InvocationExpressionSyntax invocationSyntax ||
+            invocationSyntax.Expression is not MemberAccessExpressionSyntax)
+            return;
+
+        const string Title = "Use ContainsKey";
+        context.RegisterCodeFix(
+            CodeAction.Create(Title, ct => UseContainsKey(context.Document, nodeToFix, ct), equivalenceKey: Title),
+            context.Diagnostics);
+    }
+
+    private static async Task<Document> UseContainsKey(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        if (FindInvocation(editor.SemanticModel, nodeToFix, cancellationToken) is not { Arguments.Length: 2 } operation)
+            return document;
+
+        if (operation.TargetMethod.Name != "TryGetValue")
+            return document;
+
+        if (operation.Arguments[1].Value is not IDiscardOperation)
+            return document;
+
+        if (operation.Syntax is not InvocationExpressionSyntax invocationSyntax ||
+            invocationSyntax.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            return document;
+        }
+
+        var newInvocation = invocationSyntax
+            .WithExpression(memberAccess.WithName(IdentifierName("ContainsKey")))
+            .WithArgumentList(ArgumentList(SeparatedList(new[] { invocationSyntax.ArgumentList.Arguments[0] })));
+
+        editor.ReplaceNode(invocationSyntax, newInvocation.WithTriviaFrom(invocationSyntax).WithAdditionalAnnotations(Formatter.Annotation));
+        return editor.GetChangedDocument();
+    }
+
+    private static IInvocationOperation? FindInvocation(SemanticModel semanticModel, SyntaxNode node, CancellationToken cancellationToken)
+    {
+        foreach (var candidate in node.AncestorsAndSelf())
+        {
+            if (semanticModel.GetOperation(candidate, cancellationToken) is IInvocationOperation invocation)
+                return invocation;
+        }
+
+        return null;
+    }
+}

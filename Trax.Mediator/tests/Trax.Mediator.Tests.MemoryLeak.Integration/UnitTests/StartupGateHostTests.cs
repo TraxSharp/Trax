@@ -82,7 +82,7 @@ public class StartupGateHostTests
                 >()
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         await start
             .Should()
@@ -116,7 +116,7 @@ public class StartupGateHostTests
             skipChainVerification: true
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         await start
             .Should()
@@ -139,7 +139,7 @@ public class StartupGateHostTests
                 >()
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<Exception>())
             .Which.ToString()
@@ -167,7 +167,7 @@ public class StartupGateHostTests
                 >()
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<Exception>())
             .Which.ToString()
@@ -198,7 +198,7 @@ public class StartupGateHostTests
             }
         );
 
-        var start = async () => await host.StartAsync();
+        var start = async () => await host.StartAsync().ConfigureAwait(false);
 
         (await start.Should().ThrowAsync<Exception>())
             .Which.ToString()
@@ -232,7 +232,7 @@ public class StartupGateHostTests
         var start = async () =>
         {
             foreach (var service in host.Services.GetServices<IHostedService>())
-                await service.StartAsync(CancellationToken.None);
+                await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
         };
 
         await start

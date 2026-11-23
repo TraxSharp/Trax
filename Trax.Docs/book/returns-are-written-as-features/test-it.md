@@ -41,7 +41,9 @@ train's assembly, so the `Returns:` line is also checked against `ReturnOrderOut
 `tests/Shopfront.Tests/UnitTests/ReturnFeaturesTests.cs`:
 
 ```csharp compile=tests file=tests/Shopfront.Tests/UnitTests/ReturnFeaturesTests.cs
+using System.Globalization;
 using Shopfront.Trains.ReturnOrder;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Gherkin;
 
 namespace Shopfront.Tests.UnitTests;
@@ -58,59 +60,75 @@ public class ReturnFeaturesTests
     private static string Machines => Path.Combine(AppContext.BaseDirectory, "machines");
 
     private static LexiconReading Lexicon =>
-        Trax.StateMachine.Gherkin.Lexicon.ReadDirectory(
-            Features,
-            [typeof(IReturnOrderTrain).Assembly]
-        )!;
+        Trax
+            .StateMachine.Gherkin.Lexicon.ReadDirectory(
+                Features,
+                [typeof(IReturnOrderTrain).Assembly]
+            )
+            .NotNull();
 
     private static FeatureGlossary Glossary => Lexicon.GlossaryOrThrow();
 
-    private static FeatureFile[] Files =>
-        [
-            .. Directory
-                .GetFiles(Features, "*.feature")
-                .Order(StringComparer.Ordinal)
-                .Select(p => new FeatureFile(Path.GetFileName(p), File.ReadAllText(p))),
-        ];
+    private static async Task<FeatureFile[]> FilesAsync()
+    {
+        var files = new List<FeatureFile>();
+        foreach (
+            var path in Directory.GetFiles(Features, "*.feature").Order(StringComparer.Ordinal)
+        )
+            files.Add(
+                new FeatureFile(
+                    Path.GetFileName(path),
+                    await File.ReadAllTextAsync(path).ConfigureAwait(false)
+                )
+            );
+        return [.. files];
+    }
 
     [Test]
-    public void EveryScenario_PassesOnTheCommittedMachines()
+    public async Task EveryScenario_PassesOnTheCommittedMachines()
     {
-        var irs = Directory
-            .GetFiles(Machines, "*.ir.json")
-            .ToDictionary(p => Path.GetFileName(p)[..^".ir.json".Length], File.ReadAllText);
+        var irs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in Directory.GetFiles(Machines, "*.ir.json"))
+            irs[Path.GetFileName(path)[..^".ir.json".Length]] = await File.ReadAllTextAsync(path)
+                .ConfigureAwait(false);
 
         var report = FeatureMachines.Run(
             Glossary,
-            Files,
+            await FilesAsync().ConfigureAwait(false),
             irs,
-            File.ReadAllText(Path.Combine(Machines, "host.json"))
+            await File.ReadAllTextAsync(Path.Combine(Machines, "host.json")).ConfigureAwait(false)
         );
 
         report.Problems.Should().BeEmpty();
         report
             .Scenarios.Where(s => s.Status != FeatureStatus.Passed)
-            .Select(s => $"{s.File}:{s.Line} {s.Name}")
+            .Select(s => string.Create(CultureInfo.InvariantCulture, $"{s.File}:{s.Line} {s.Name}"))
             .Should()
             .BeEmpty();
     }
 
     [Test]
-    public void TheCommittedMachines_AreWhatTheFeaturesDerive()
+    public async Task TheCommittedMachines_AreWhatTheFeaturesDerive()
     {
-        var derived = FeatureMachines.Derive(Glossary, Files);
+        var derived = FeatureMachines.Derive(Glossary, await FilesAsync().ConfigureAwait(false));
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            Read($"{id}.ir.json").Should().Be(ir, "run trax machine from-gherkin again");
-        Read("host.json").Should().Be(derived.Host, "run trax machine from-gherkin again");
-        Read("glossary.json")
+            (await ReadAsync($"{id}.ir.json").ConfigureAwait(false))
+                .Should()
+                .Be(ir, "run trax machine from-gherkin again");
+        (await ReadAsync("host.json").ConfigureAwait(false))
             .Should()
-            .Be(Lexicon.Json!.TrimEnd('\n'), "run trax machine from-gherkin again");
+            .Be(derived.Host, "run trax machine from-gherkin again");
+        (await ReadAsync("glossary.json").ConfigureAwait(false))
+            .Should()
+            .Be(Lexicon.Json.NotNull().TrimEnd('\n'), "run trax machine from-gherkin again");
     }
 
-    private static string Read(string file) =>
-        File.ReadAllText(Path.Combine(Machines, file)).Replace("\r\n", "\n").TrimEnd('\n');
+    private static async Task<string> ReadAsync(string file) =>
+        (await File.ReadAllTextAsync(Path.Combine(Machines, file)).ConfigureAwait(false))
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .TrimEnd('\n');
 }
 ```
 
@@ -158,10 +176,11 @@ lexicon's phrases read. There is no step code.
   <ItemGroup>
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <!-- NUnit3TestAdapter pulls these at versions deprecated as Legacy; pin newer ones. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.1" />
-    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.3" />
+    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.3" />
     <PackageVersion Include="NUnit" Version="5.0.0" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
@@ -197,6 +216,7 @@ lexicon's phrases read. There is no step code.
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
@@ -280,7 +300,7 @@ public sealed class FeatureHooks
                     new Dictionary<string, string>
                     {
                         ["Authorization"] =
-                            "Bearer " + DevJwt.Mint($"{person}-{scenario}", actor.Roles[0]),
+                            "Bearer " + DevJwt.Mint($"{person}-{scenario}", actor.Roles[0], TimeProvider.System),
                     }
                 );
         });
@@ -344,7 +364,7 @@ public class CheckTheOrderJunctionTests
                 CustomerId = "TraxJwt:ada",
                 Total = 24.00m,
                 TransactionId = "tx_test",
-                PlacedAt = DateTime.UtcNow,
+                PlacedAt = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc),
             }
         );
         await db.SaveChangesAsync();
@@ -352,11 +372,14 @@ public class CheckTheOrderJunctionTests
 
     private static async Task<bool> Check(string orderId, string customerId)
     {
-        await using var db = TestDatabase.NewContext();
-        var output = await new CheckTheOrderJunction(db).Run(
-            new ReturnOrderInput { OrderId = orderId, CustomerId = customerId }
-        );
-        return output.Accepted;
+        var db = TestDatabase.NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            var output = await new CheckTheOrderJunction(db)
+                .Run(new ReturnOrderInput { OrderId = orderId, CustomerId = customerId })
+                .ConfigureAwait(false);
+            return output.Accepted;
+        }
     }
 
     [Test]

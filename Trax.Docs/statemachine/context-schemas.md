@@ -7,6 +7,7 @@ nav_order: 21
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/SchemaReflection.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ContextSchema.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/FieldSchema.cs
 ---
 
 # Context and input schemas

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
@@ -23,7 +24,7 @@ public class AdminTrainsTests
 
         foreach (var type in AdminTrains.Types)
         {
-            AdminTrains.FullNames.Should().Contain(type.FullName!);
+            AdminTrains.FullNames.Should().Contain(type.FullName.NotNull());
         }
     }
 

@@ -1,41 +1,8 @@
+using System.Globalization;
 using Trax.Api.DTOs;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Services.BulkOperations;
-
-/// <summary>
-/// Who started a bulk operation. <paramref name="Display"/> is what <c>actor</c> reads;
-/// <paramref name="PrincipalId"/> and <paramref name="PrincipalType"/> are the caller's Trax
-/// principal claims, when it carried them, for the audit entry.
-/// </summary>
-internal sealed record BulkOperationActor(
-    string Display,
-    string? PrincipalId,
-    string? PrincipalType
-)
-{
-    /// <summary>What <c>actor</c> reads for a caller with no identity.</summary>
-    public const string Anonymous = "<anonymous>";
-}
-
-/// <summary>What a bulk operation was asked to do, once its request has been checked.</summary>
-internal sealed record BulkOperationRequest(
-    BulkOperationKind Kind,
-    BulkOperationFilter Filter,
-    int ExpectedCount,
-    bool AskAfresh,
-    string? Note
-);
-
-/// <summary>The moving part of a bulk operation, read together under its lock.</summary>
-internal sealed record BulkOperationProgress(
-    BulkOperationStatus Status,
-    int Done,
-    int Failed,
-    DateTime? FinishedAt,
-    string Message,
-    IReadOnlyList<BulkOperationFailureReason> Reasons
-);
 
 /// <summary>
 /// One bulk operation's state on the node running it: the ids it snapshot, how far it has got,
@@ -50,7 +17,7 @@ internal sealed class BulkOperationRun
     /// </summary>
     public const int MaxFailureDetail = 10_000;
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<BulkOperationFailure> _failures = [];
     private readonly Dictionary<string, int> _reasons = new(StringComparer.Ordinal);
     private BulkOperationStatus _status = BulkOperationStatus.Running;
@@ -77,7 +44,10 @@ internal sealed class BulkOperationRun
         StartedAt = startedAt;
         Total = snapshot.Ids.Length;
         _snapshot = snapshot;
-        _message = $"{Describe(Kind)} {Total} {Noun(Kind)}.";
+        _message = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{Describe(Kind)} {Total} {Noun(Kind)}."
+        );
     }
 
     public Guid Id { get; }
@@ -161,8 +131,10 @@ internal sealed class BulkOperationRun
             Batches++;
             if (took > LongestBatch)
                 LongestBatch = took;
-            _message =
-                $"{Describe(Kind)} {Total} {Noun(Kind)}: {_done} done and {_failed} failed so far.";
+            _message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Describe(Kind)} {Total} {Noun(Kind)}: {_done} done and {_failed} failed so far."
+            );
         }
     }
 
@@ -182,7 +154,7 @@ internal sealed class BulkOperationRun
         return lo;
     }
 
-    /// <summary>Stops the operation; a message of <c>null</c> describes how it finished.</summary>
+    /// <summary>Stops the operation; a message of <see langword="null"/> describes how it finished.</summary>
     public BulkOperationOutcome Finish(BulkOperationStatus status, string? message, DateTime at)
     {
         lock (_gate)
@@ -190,7 +162,11 @@ internal sealed class BulkOperationRun
             _status = status;
             _finishedAt = at;
             _message =
-                message ?? $"{Past(Kind)} {_done} of {Total} {Noun(Kind)}; {_failed} did not take.";
+                message
+                ?? string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Past(Kind)} {_done} of {Total} {Noun(Kind)}; {_failed} did not take."
+                );
             _snapshot = null;
             return new BulkOperationOutcome(
                 Id,
@@ -239,28 +215,4 @@ internal sealed class BulkOperationRun
             BulkOperationKind.Requeue or BulkOperationKind.Acknowledge => "dead letter(s)",
             _ => "manifest(s)",
         };
-}
-
-/// <summary>How a bulk operation ended, as an observer such as the audit sees it.</summary>
-internal sealed record BulkOperationOutcome(
-    Guid Id,
-    BulkOperationKind Kind,
-    BulkOperationStatus Status,
-    BulkOperationActor Actor,
-    DateTime StartedAt,
-    DateTime FinishedAt,
-    int Total,
-    int Done,
-    int Failed,
-    string Message
-);
-
-/// <summary>
-/// Told when a bulk operation on this node stops. The API's audit registers one when the host
-/// calls <c>AddAudit</c>, so the outcome lands in the audit trail beside the request that started
-/// it. An observer must not throw or block; one that throws is logged and skipped.
-/// </summary>
-internal interface IBulkOperationObserver
-{
-    void Finished(BulkOperationOutcome outcome);
 }

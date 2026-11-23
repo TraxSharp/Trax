@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.Recovery.E2E.Utilities;
@@ -14,7 +16,7 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public string RunId { get; private set; } = "";
     public long ManifestId { get; private set; }
     public string ManifestExternalId { get; private set; } = "";
-    public List<long> Attempts { get; } = [];
+    public IList<long> Attempts { get; } = [];
 
     /// <summary>Starts a run through the sample's <c>startRun</c> mutation.</summary>
     public async Task StartAsync(
@@ -27,8 +29,9 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
         var order = orderId is null ? "" : $", orderId: \"{orderId}\"";
         if (crashWhile is not null)
             order += $", crashWhile: {crashWhile}";
-        var response = await graphQL.SendAsync(
-            $$"""
+        var response = await graphQL
+            .SendAsync(
+                $$"""
             mutation {
               dispatch {
                 startRun(input: { scenario: {{scenario}}, crashOnce: {{(
@@ -39,13 +42,14 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
               }
             }
             """,
-            apiKey
-        );
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var output = response.GetData("dispatch", "startRun", "output");
-        RunId = output.GetProperty("runId").GetString()!;
+        RunId = output.GetProperty("runId").GetString().NotNull();
         ManifestId = output.GetProperty("manifestId").GetInt64();
-        ManifestExternalId = output.GetProperty("manifestExternalId").GetString()!;
+        ManifestExternalId = output.GetProperty("manifestExternalId").GetString().NotNull();
     }
 
     /// <summary>
@@ -55,33 +59,47 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public async Task<long> FollowAttemptAsync(int attempt)
     {
         long id = 0;
-        var found = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                var ids = await ExecutionIdsAsync();
-                if (ids.Count < attempt)
-                    return false;
-                id = ids[attempt - 1];
-                return true;
-            },
-            Patience,
-            TimeSpan.FromMilliseconds(40)
-        );
-        found.Should().BeTrue($"attempt {attempt} of manifest {ManifestId} should start");
-        await stream.SubscribeAsync(id);
+        var found = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    var ids = await ExecutionIdsAsync().ConfigureAwait(false);
+                    if (ids.Count < attempt)
+                        return false;
+                    id = ids[attempt - 1];
+                    return true;
+                },
+                Patience,
+                TimeSpan.FromMilliseconds(40)
+            )
+            .ConfigureAwait(false);
+        found
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"attempt {attempt} of manifest {ManifestId} should start"
+                )
+            );
+        await stream.SubscribeAsync(id).ConfigureAwait(false);
         Attempts.Add(id);
         return id;
     }
 
     /// <summary>The manifest's executions, oldest first.</summary>
-    public async Task<List<long>> ExecutionIdsAsync()
+    public async Task<IReadOnlyList<long>> ExecutionIdsAsync()
     {
-        var response = await graphQL.SendAsync(
-            $$"""
-            { operations { executions(manifestId: {{ManifestId}}, order: OLDEST) { items { id } } } }
-            """,
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { executions(manifestId: {{ManifestId}}, order: OLDEST) { items { id } } } }
+                    """
+                ),
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response
             .GetData("operations", "executions", "items")
@@ -94,37 +112,54 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public async Task<string> WaitForEndAsync(long metadataId)
     {
         var state = "";
-        var ended = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                var response = await graphQL.SendAsync(
-                    $$"""{ operations { executionDetail(id: {{metadataId}}) { trainState } } }""",
-                    apiKey
-                );
-                state = response
-                    .GetData("operations", "executionDetail", "trainState")
-                    .GetString()!;
-                return state is "COMPLETED" or "FAILED" or "CANCELLED";
-            },
-            Patience,
-            TimeSpan.FromMilliseconds(100)
-        );
-        ended.Should().BeTrue($"execution {metadataId} should finish");
+        var ended = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    var response = await graphQL
+                        .SendAsync(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $$"""{ operations { executionDetail(id: {{metadataId}}) { trainState } } }"""
+                            ),
+                            apiKey
+                        )
+                        .ConfigureAwait(false);
+                    state = response
+                        .GetData("operations", "executionDetail", "trainState")
+                        .GetString()
+                        .NotNull();
+                    return state is "COMPLETED" or "FAILED" or "CANCELLED";
+                },
+                Patience,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
+        ended
+            .Should()
+            .BeTrue(
+                string.Create(CultureInfo.InvariantCulture, $"execution {metadataId} should finish")
+            );
         return state;
     }
 
     /// <summary>The stored steps of the execution, read through <c>operations.junctionRuns</c>.</summary>
-    public async Task<List<JsonElement>> StoredStepsAsync(long metadataId)
+    public async Task<IReadOnlyList<JsonElement>> StoredStepsAsync(long metadataId)
     {
-        var response = await graphQL.SendAsync(
-            $$"""
-            { operations { junctionRuns(metadataId: {{metadataId}}) {
-                position kind name state questionKey answer replayed nameWithheld trackPosition attempt
-                nodeId
-            } } }
-            """,
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { junctionRuns(metadataId: {{metadataId}}) {
+                        position kind name state questionKey answer replayed nameWithheld trackPosition attempt
+                        nodeId
+                    } } }
+                    """
+                ),
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("operations", "junctionRuns").EnumerateArray().ToList();
     }
@@ -133,26 +168,37 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     /// The run's timeline as the page builds it: the live steps merged with the stored ones by
     /// position, keeping whichever is further along (rows trail the stream slightly).
     /// </summary>
-    public async Task<List<JsonElement>> TimelineAsync(long metadataId)
+    public async Task<IReadOnlyList<JsonElement>> TimelineAsync(long metadataId)
     {
         // A finished run's last rows may still be on their way to the table.
-        List<JsonElement> stored = [];
-        var settled = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                stored = await StoredStepsAsync(metadataId);
-                return stored.Count > 0
-                    && stored.All(s => s.GetProperty("state").GetString() != "IN_PROGRESS");
-            },
-            TimeSpan.FromSeconds(10),
-            TimeSpan.FromMilliseconds(100)
-        );
+        IReadOnlyList<JsonElement> stored = [];
+        var settled = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    stored = await StoredStepsAsync(metadataId).ConfigureAwait(false);
+                    return stored.Count > 0
+                        && stored.All(s =>
+                            !string.Equals(
+                                s.GetProperty("state").GetString(),
+                                "IN_PROGRESS",
+                                StringComparison.Ordinal
+                            )
+                        );
+                },
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         settled
             .Should()
             .BeTrue(
-                $"execution {metadataId}'s stored steps should all have ended within 10 s, but "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"execution {metadataId}'s stored steps should all have ended within 10 s, but "
+                )
                     + $"{stored.Count} were stored and "
-                    + $"{stored.Count(s => s.GetProperty("state").GetString() == "IN_PROGRESS")} "
+                    + $"{stored.Count(s => string.Equals(s.GetProperty("state").GetString(), "IN_PROGRESS", StringComparison.Ordinal))} "
                     + "still say IN_PROGRESS"
             );
 
@@ -163,7 +209,11 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
             var position = step.GetProperty("position").GetInt32();
             if (
                 !byPosition.TryGetValue(position, out var known)
-                || known.GetProperty("state").GetString() == "IN_PROGRESS"
+                || string.Equals(
+                    known.GetProperty("state").GetString(),
+                    "IN_PROGRESS",
+                    StringComparison.Ordinal
+                )
             )
                 byPosition[position] = step;
         }
@@ -181,23 +231,37 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public async Task<long> RunOfEntryAsync(long entryId)
     {
         long runId = 0;
-        var dispatched = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                var entry = await graphQL.SendAsync(
-                    $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
-                    apiKey
-                );
-                var id = entry.GetData("operations", "workQueue", "detail", "metadataId");
-                if (id.ValueKind != JsonValueKind.Number)
-                    return false;
-                runId = id.GetInt64();
-                return true;
-            },
-            Patience,
-            TimeSpan.FromMilliseconds(100)
-        );
-        dispatched.Should().BeTrue($"work queue entry {entryId} should be dispatched");
+        var dispatched = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    var entry = await graphQL
+                        .SendAsync(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }"""
+                            ),
+                            apiKey
+                        )
+                        .ConfigureAwait(false);
+                    var id = entry.GetData("operations", "workQueue", "detail", "metadataId");
+                    if (id.ValueKind != JsonValueKind.Number)
+                        return false;
+                    runId = id.GetInt64();
+                    return true;
+                },
+                Patience,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
+        dispatched
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"work queue entry {entryId} should be dispatched"
+                )
+            );
         return runId;
     }
 
@@ -210,24 +274,29 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     )
     {
         const string node = "id kind junction state canResume checkpointed";
-        var response = await graphQL.SendAsync(
-            $$"""
-            { operations { runGraph(metadataId: {{metadataId}}) {
-                canResume
-                nodes { {{node}} tracks { name nodes { {{node}} tracks { name nodes { {{node}} } } } } }
-            } } }
-            """,
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    { operations { runGraph(metadataId: {{metadataId}}) {
+                        canResume
+                        nodes { {{node}} tracks { name nodes { {{node}} tracks { name nodes { {{node}} } } } } }
+                    } } }
+                    """
+                ),
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var graph = response.GetData("operations", "runGraph");
 
-        var nodes = new Dictionary<string, JsonElement>();
+        var nodes = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         void Add(JsonElement list)
         {
             foreach (var n in list.EnumerateArray())
             {
-                nodes[n.GetProperty("id").GetString()!] = n;
+                nodes[n.GetProperty("id").GetString().NotNull()] = n;
                 if (n.TryGetProperty("tracks", out var tracks))
                     foreach (var track in tracks.EnumerateArray())
                         if (track.TryGetProperty("nodes", out var inner))
@@ -242,21 +311,28 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public async Task<JsonElement> JournalAsync(long metadataId)
     {
         // The journal is the run's starter's, by the run's external id.
-        var run = await graphQL.SendAsync(
-            $$"""{ operations { executionDetail(id: {{metadataId}}) { externalId } } }""",
-            apiKey
-        );
+        var run = await graphQL
+            .SendAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{metadataId}}) { externalId } } }"""
+                ),
+                apiKey
+            )
+            .ConfigureAwait(false);
         run.HasErrors.Should().BeFalse(run.FirstErrorMessage);
         var runId = run.GetData("operations", "executionDetail", "externalId").GetString();
-        var response = await graphQL.SendAsync(
-            $$"""
-            { discover { decisionJournal(input: { runId: "{{runId}}" }) {
-                replayDecisionsOf replayAbandoned
-                decisions { questionKey occurrence replayed replayRefused stateHash }
-            } } }
-            """,
-            apiKey
-        );
+        var response = await graphQL
+            .SendAsync(
+                $$"""
+                { discover { decisionJournal(input: { runId: "{{runId}}" }) {
+                    replayDecisionsOf replayAbandoned
+                    decisions { questionKey occurrence replayed replayRefused stateHash }
+                } } }
+                """,
+                apiKey
+            )
+            .ConfigureAwait(false);
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("discover", "decisionJournal");
     }

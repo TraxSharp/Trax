@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ReferenceAssemblies.Net.Net60, and ASP.NET Core 6. -->
+  <Import Project="../Pins.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETCore.App.Ref" Version="6.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.App.Ref" Version="6.0.10" />
+  </ItemGroup>
+</Project>

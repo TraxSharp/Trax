@@ -1,0 +1,56 @@
+#pragma warning disable CA1030 // Use events where appropriate
+
+using AnalyzerTest = Trax.Analyzers.Tests.Harness.CSharpAnalyzerTest<
+    Trax.Analyzers.Rules.DoNotRaiseApplicationExceptionAnalyzer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class DoNotRaiseApplicationExceptionAnalyzerTests
+{
+    private static AnalyzerTest CreateTest() => new();
+
+    [Fact]
+    public Task RaiseNotReservedException_ShouldNotReportErrorAsync()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            class TestAttribute
+            {
+                void Test()
+                {
+                    throw new Exception();
+                    throw new ArgumentException();
+
+                    try
+                    {
+                    }
+                    catch (ApplicationException)
+                    {
+                        throw;
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RaiseReservedException_ShouldReportErrorAsync()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            class TestAttribute
+            {
+                void Test()
+                {
+                    {|TRX0014:throw new ApplicationException();|}
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

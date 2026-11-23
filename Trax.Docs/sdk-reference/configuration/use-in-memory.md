@@ -12,7 +12,7 @@ namespace:
   - Trax.Effect.Data.InMemory.Services.InMemoryContextFactory
 source:
   - Trax.Effect/src/Trax.Effect.Data.InMemory/Extensions/ServiceExtensions.cs
-  - Trax.Effect/src/Trax.Effect.Data.InMemory/Services/InMemoryContextFactory/InMemoryContexFactory.cs
+  - Trax.Effect/src/Trax.Effect.Data.InMemory/Services/InMemoryContextFactory/InMemoryContextProviderFactory.cs
 redirect_from:
   - /docs/sdk-reference/configuration/add-in-memory-effect
 ---

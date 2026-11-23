@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Exceptions;
 using Trax.Core.Junction;
@@ -9,21 +10,33 @@ namespace Trax.Samples.Bookworm.Trains.Lending.ReturnBook.Junctions;
 /// Sets the loan's returned timestamp. The loan is looked up through the lending filter, so a member
 /// can return only their own loans (another member's loan is "not found"), and a librarian any loan.
 /// </summary>
-public class ReturnBookJunction(ILendingDbContext lending)
+public class ReturnBookJunction(ILendingDbContext lending, TimeProvider clock)
     : Junction<ReturnBookInput, ReturnBookOutput>
 {
     public override async Task<ReturnBookOutput> Run(ReturnBookInput input)
     {
         var loan =
-            await lending.Loans.FirstOrDefaultAsync(l => l.Id == input.LoanId)
-            ?? throw new TrainException($"Loan {input.LoanId} not found.");
+            await lending
+                .Loans.FirstOrDefaultAsync(
+                    l => l.Id == input.LoanId,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
+            ?? throw new TrainException(
+                string.Create(CultureInfo.InvariantCulture, $"Loan {input.LoanId} not found.")
+            );
 
         if (loan.ReturnedAt is not null)
-            throw new TrainException($"Loan {input.LoanId} was already returned.");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Loan {input.LoanId} was already returned."
+                )
+            );
 
-        var returnedAt = DateTime.UtcNow;
+        var returnedAt = clock.GetUtcNow().UtcDateTime;
         loan.ReturnedAt = returnedAt;
-        await lending.SaveChangesAsync();
+        await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         return new ReturnBookOutput { LoanId = loan.Id, ReturnedAt = returnedAt };
     }

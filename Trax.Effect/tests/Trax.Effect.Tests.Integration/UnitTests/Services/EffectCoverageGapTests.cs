@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -39,10 +40,9 @@ public class EffectCoverageGapTests
         var nonServiceTrain = new NonServiceTrain();
 
         Func<Task> act = async () =>
-            await junction.RailwayJunction<string, string>(
-                Either<Exception, string>.Right("in"),
-                nonServiceTrain
-            );
+            await junction
+                .RailwayJunction(Either<Exception, string>.Right("in"), nonServiceTrain)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*non-ServiceTrain*");
     }
@@ -55,7 +55,9 @@ public class EffectCoverageGapTests
         // Leave Metadata null
 
         Func<Task> act = async () =>
-            await junction.RailwayJunction(Either<Exception, string>.Right("in"), train);
+            await junction
+                .RailwayJunction(Either<Exception, string>.Right("in"), train)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Metadata cannot be null*");
     }
@@ -74,7 +76,7 @@ public class EffectCoverageGapTests
         result.IsRight.Should().BeTrue();
         result.IfRight(v => v.Should().Be("hello-out"));
         junction.Metadata.Should().NotBeNull();
-        junction.Metadata!.Name.Should().Be(nameof(TestEffectJunction));
+        junction.Metadata.NotNull().Name.Should().Be(nameof(TestEffectJunction));
         junction.Metadata.HasRan.Should().BeTrue();
         junction.Metadata.StartTimeUtc.Should().NotBeNull();
         junction.Metadata.EndTimeUtc.Should().NotBeNull();
@@ -93,7 +95,8 @@ public class EffectCoverageGapTests
 
         result.IsLeft.Should().BeTrue();
         junction
-            .Metadata!.HasRan.Should()
+            .Metadata.NotNull()
+            .HasRan.Should()
             .BeFalse("an earlier junction failed, so this junction's Run was never called");
     }
 
@@ -171,7 +174,7 @@ public class EffectCoverageGapTests
         );
 
         result.Swap().ValueUnsafe().Message.Should().Be("earlier junction");
-        junction.Metadata!.HasRan.Should().BeFalse();
+        junction.Metadata.NotNull().HasRan.Should().BeFalse();
     }
 
     [Test]
@@ -223,7 +226,7 @@ public class EffectCoverageGapTests
         factory.Create().Returns(provider);
 
         var registry = Substitute.For<IEffectRegistry>();
-        registry.IsEnabled(Arg.Any<Type>()).Returns(true);
+        registry.IsEnabled(Arg.Any<Type>()).Returns(returnThis: true);
 
         using var runner = new JunctionEffectRunner(new[] { factory }, registry);
 
@@ -257,7 +260,7 @@ public class EffectCoverageGapTests
         f2.Create().Returns(hook2);
 
         var registry = Substitute.For<IEffectRegistry>();
-        registry.IsEnabled(Arg.Any<Type>()).Returns(true);
+        registry.IsEnabled(Arg.Any<Type>()).Returns(returnThis: true);
 
         using var runner = new LifecycleHookRunner(new[] { f1, f2 }, registry);
 
@@ -468,7 +471,7 @@ public class EffectCoverageGapTests
             "Metadata",
             BindingFlags.Public | BindingFlags.Instance
         );
-        metadataProp!.SetValue(train, CreateMetadata());
+        metadataProp.NotNull().SetValue(train, CreateMetadata());
 
         return train;
     }
@@ -480,10 +483,11 @@ public class EffectCoverageGapTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
-    private class TestTrain : ServiceTrain<string, string>
+    private sealed class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_263>().Resolve();
@@ -494,18 +498,18 @@ public class EffectCoverageGapTests
         }
     }
 
-    private class TestEffectJunction : EffectJunction<string, string>
+    private sealed class TestEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "-out");
     }
 
-    private class FailingEffectJunction : EffectJunction<string, string>
+    private sealed class FailingEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("the junction failed");
     }
 
-    private class NonServiceTrain : Train<string, string>
+    private sealed class NonServiceTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough2_263>().Resolve();
@@ -516,7 +520,7 @@ public class EffectCoverageGapTests
         }
     }
 
-    private class FakeEffectProviderFactory : IEffectProviderFactory
+    private sealed class FakeEffectProviderFactory : IEffectProviderFactory
     {
         public IEffectProvider Create() => Substitute.For<IEffectProvider>();
     }
@@ -535,7 +539,7 @@ public class EffectCoverageGapTests
         public ITrainLifecycleHook Create() => Substitute.For<ITrainLifecycleHook>();
     }
 
-    public class RandomType { }
+    public class RandomType;
 
     public interface IFakeRoute;
 

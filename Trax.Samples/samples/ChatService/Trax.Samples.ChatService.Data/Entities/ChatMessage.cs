@@ -9,5 +9,9 @@ public class ChatMessage
     public required string Content { get; set; }
     public DateTime SentAt { get; set; }
 
-    public ChatRoom ChatRoom { get; set; } = null!;
+    public ChatRoom ChatRoom
+    {
+        get => field ?? throw new InvalidOperationException("The chat room was not loaded.");
+        set;
+    }
 }

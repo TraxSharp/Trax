@@ -34,7 +34,7 @@ public class PersistedOperationParseExceptionTests
     [Test]
     public void Ctor_NullOrWhitespaceMessage_ThrowsArgumentException()
     {
-        Action a = () => new PersistedOperationParseException(null!, 1, 1);
+        Action a = () => new PersistedOperationParseException(Null.Of<string>(), 1, 1);
         Action b = () => new PersistedOperationParseException("", 1, 1);
         Action c = () => new PersistedOperationParseException("   ", 1, 1);
 

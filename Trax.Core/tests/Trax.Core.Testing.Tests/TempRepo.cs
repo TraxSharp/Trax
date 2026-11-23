@@ -16,7 +16,10 @@ public sealed class TempRepo : IDisposable
     public TempRepo Write(string relativePath, string content)
     {
         var full = Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        Directory.CreateDirectory(
+            Path.GetDirectoryName(full)
+                ?? throw new InvalidOperationException($"'{full}' has no directory to create.")
+        );
         File.WriteAllText(full, content);
         return this;
     }

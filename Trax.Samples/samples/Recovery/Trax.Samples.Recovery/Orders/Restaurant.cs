@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Trax.Samples.Recovery.Faults;
 
 namespace Trax.Samples.Recovery.Orders;
@@ -9,7 +10,7 @@ namespace Trax.Samples.Recovery.Orders;
 /// answer once, or a restaurant that is closed. Every call to the tablet is kept with the user whose order it carried,
 /// so a client can see an attempt that timed out and the one that was answered, for its own orders only.
 /// </summary>
-public sealed class Restaurant(FaultInjector faults, DemoPace pace)
+public sealed class Restaurant(FaultInjector faults, DemoPace pace, TimeProvider clock)
 {
     /// <summary>The restaurant's name.</summary>
     public const string Name = "Pizzeria Napoli";
@@ -38,29 +39,33 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
         CancellationToken cancellationToken
     )
     {
-        var startedAt = DateTimeOffset.UtcNow;
+        var startedAt = clock.GetUtcNow();
         try
         {
             if (faults.TryFire(orderId, CrashPoint.TabletTimesOut))
             {
-                await Task.Delay(pace.TabletTimeout, cancellationToken);
+                await Task.Delay(pace.TabletTimeout, clock, cancellationToken)
+                    .ConfigureAwait(false);
                 throw new TimeoutException(
-                    $"{Name}'s tablet did not answer in {pace.TabletTimeout.TotalSeconds:0.#} s."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{Name}'s tablet did not answer in {pace.TabletTimeout.TotalSeconds:0.#} s."
+                    )
                 );
             }
 
-            await Task.Delay(pace.StepDelay, cancellationToken);
+            await Task.Delay(pace.StepDelay, clock, cancellationToken).ConfigureAwait(false);
             if (faults.TryFire(orderId, CrashPoint.RestaurantClosed))
                 throw new InvalidOperationException($"{Name} is closed.");
 
-            Keep(owner, new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, null));
+            Keep(
+                owner,
+                new TabletCall(orderId, attempt, startedAt, clock.GetUtcNow(), Problem: null)
+            );
         }
         catch (Exception e) when (e is TimeoutException or InvalidOperationException)
         {
-            Keep(
-                owner,
-                new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, e.Message)
-            );
+            Keep(owner, new TabletCall(orderId, attempt, startedAt, clock.GetUtcNow(), e.Message));
             throw;
         }
     }
@@ -72,12 +77,3 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
             _calls.TryDequeue(out _);
     }
 }
-
-/// <summary>One call to the restaurant's tablet: answered when <see cref="Problem"/> is null.</summary>
-public sealed record TabletCall(
-    string OrderId,
-    int Attempt,
-    DateTimeOffset StartedAt,
-    DateTimeOffset EndedAt,
-    string? Problem
-);

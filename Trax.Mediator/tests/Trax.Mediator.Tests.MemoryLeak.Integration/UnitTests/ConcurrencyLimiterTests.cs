@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -31,7 +32,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_PerTrainLimit_BlocksAtLimit()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 2 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 2 });
 
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
@@ -54,7 +55,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_PerTrainLimit_ReleasesOnDispose()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 1 });
 
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -68,14 +69,16 @@ public class ConcurrencyLimiterTests
         permit1.Dispose();
 
         // Now second should complete
-        var permit2 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10));
+        var permit2 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         permit2.Dispose();
     }
 
     [Test]
     public async Task AcquireAsync_DifferentTrains_IndependentLimits()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1, [TrainB] = 1 });
+        var limiter = CreateLimiter(
+            overrides: new(StringComparer.Ordinal) { [TrainA] = 1, [TrainB] = 1 }
+        );
 
         var permitA = await limiter.AcquireAsync(TrainA, CancellationToken.None);
         var permitB = await limiter.AcquireAsync(TrainB, CancellationToken.None);
@@ -98,7 +101,7 @@ public class ConcurrencyLimiterTests
 
         // Release A — only A unblocks
         permitA.Dispose();
-        (await acquireA.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        (await acquireA.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)).Dispose();
 
         // B still blocked
         // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
@@ -106,7 +109,7 @@ public class ConcurrencyLimiterTests
         stillBlockedB.Should().NotBe(acquireB);
 
         permitB.Dispose();
-        (await acquireB.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        (await acquireB.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)).Dispose();
     }
 
     #endregion
@@ -131,7 +134,7 @@ public class ConcurrencyLimiterTests
         permit1.Dispose();
 
         // Now should complete
-        var permit3 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10));
+        var permit3 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
         permit3.Dispose();
         permit2.Dispose();
     }
@@ -140,7 +143,10 @@ public class ConcurrencyLimiterTests
     public async Task AcquireAsync_PerTrainAndGlobal_BothEnforced()
     {
         // Per-train limit of 5 but global limit of 2 — global is the bottleneck
-        var limiter = CreateLimiter(globalLimit: 2, overrides: new() { [TrainA] = 5 });
+        var limiter = CreateLimiter(
+            globalLimit: 2,
+            overrides: new(StringComparer.Ordinal) { [TrainA] = 5 }
+        );
 
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
@@ -165,7 +171,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task AcquireAsync_CancellationToken_ThrowsWhenCancelled()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 1 });
 
         var permit = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -181,7 +187,10 @@ public class ConcurrencyLimiterTests
     public async Task AcquireAsync_CancelledWhileWaitingForGlobal_ReleasesPerTrainPermit()
     {
         // Per-train limit 10, global limit 1 — acquire fills global, next blocks on global
-        var limiter = CreateLimiter(globalLimit: 1, overrides: new() { [TrainA] = 10 });
+        var limiter = CreateLimiter(
+            globalLimit: 1,
+            overrides: new(StringComparer.Ordinal) { [TrainA] = 10 }
+        );
 
         var permit = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -230,10 +239,10 @@ public class ConcurrencyLimiterTests
 
         var discovery = new StubDiscoveryService([registration]);
         var config = new MediatorConfiguration();
-        config.ConcurrencyOverrides[typeof(IFakeConcurrencyTrain).FullName!] = 3;
+        config.ConcurrencyOverrides[typeof(IFakeConcurrencyTrain).FullName.NotNull()] = 3;
 
         var limiter = new ConcurrencyLimiter(config, discovery, new NullPrincipalProvider());
-        var trainName = typeof(IFakeConcurrencyTrain).FullName!;
+        var trainName = typeof(IFakeConcurrencyTrain).FullName.NotNull();
 
         // Should allow 3 concurrent (builder override), not 1 (attribute)
         var permit1 = await limiter.AcquireAsync(trainName, CancellationToken.None);
@@ -265,7 +274,7 @@ public class ConcurrencyLimiterTests
     [Test]
     public async Task Permit_Dispose_Idempotent()
     {
-        var limiter = CreateLimiter(overrides: new() { [TrainA] = 1 });
+        var limiter = CreateLimiter(overrides: new(StringComparer.Ordinal) { [TrainA] = 1 });
 
         var permit = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
@@ -315,9 +324,9 @@ public class ConcurrencyLimiterTests
 
     private interface IFakeConcurrencyTrain;
 
-    private class FakeConcurrencyTrain : IFakeConcurrencyTrain;
+    private sealed class FakeConcurrencyTrain : IFakeConcurrencyTrain;
 
-    private class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
+    private sealed class StubDiscoveryService(IReadOnlyList<TrainRegistration> registrations)
         : ITrainDiscoveryService
     {
         public IReadOnlyList<TrainRegistration> DiscoverTrains() => registrations;

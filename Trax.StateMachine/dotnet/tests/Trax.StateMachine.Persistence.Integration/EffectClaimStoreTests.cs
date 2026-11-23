@@ -52,7 +52,8 @@ public class EffectClaimStoreTests
             .BeOfType<ClaimResult.Won>();
 
         // Releasing an absent key is harmless.
-        var act = async () => await TestDb.NewClaims().Release($"never:{Guid.NewGuid()}");
+        var act = async () =>
+            await TestDb.NewClaims().Release($"never:{Guid.NewGuid()}").ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -139,7 +140,9 @@ public class EffectClaimStoreTests
         var owner = Won(await TestDb.NewClaims().TryClaim(done, TimeSpan.FromMinutes(5)));
         await TestDb.NewClaims().Complete(done, owner, "kept");
 
-        var swept = await new EffectClaimSweeper(TestDb.NewClaims()).Sweep(DateTimeOffset.UtcNow);
+        var swept = await new EffectClaimSweeper(TestDb.NewClaims()).Sweep(
+            TimeProvider.System.GetUtcNow()
+        );
 
         swept.Should().BeGreaterThanOrEqualTo(1);
         (await TestDb.NewClaims().GetReceipt(done)).Should().Be("kept"); // completed claim survives

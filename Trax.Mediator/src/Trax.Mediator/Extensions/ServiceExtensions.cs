@@ -66,10 +66,10 @@ public static class ServiceExtensions
         {
             var trainTypes = assembly
                 .GetTypes()
-                .Where(x => x.IsClass)
-                .Where(x => x.IsAbstract == false)
                 .Where(x =>
-                    x.GetInterfaces()
+                    x.IsClass
+                    && !x.IsAbstract
+                    && x.GetInterfaces()
                         .Where(y => y.IsGenericType)
                         .Select(y => y.GetGenericTypeDefinition())
                         .Contains(trainType)
@@ -93,7 +93,7 @@ public static class ServiceExtensions
                     throw new ArgumentOutOfRangeException(
                         nameof(serviceLifetime),
                         serviceLifetime,
-                        null
+                        message: null
                     );
             }
         }
@@ -224,7 +224,7 @@ public static class ServiceExtensions
                     throw new ArgumentOutOfRangeException(
                         nameof(serviceLifetime),
                         serviceLifetime,
-                        null
+                        message: null
                     );
             }
         }
@@ -299,27 +299,7 @@ public static class ServiceExtensions
         serviceCollection.PrependHostedService<AuthorizationRegistrationValidator>();
         serviceCollection.PrependHostedService<Services.ChainVerification.TrainChainStartupValidator>();
 
-        return serviceCollection
-            .AddSingleton<IServiceCollection>(serviceCollection)
-            .AddSingleton<ITrainRegistry>(trainRegistry)
-            .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
-            .AddSingleton<
-                Services.ChainVerification.ITrainChainGraphs,
-                Services.ChainVerification.TrainChainGraphs
-            >()
-            .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
-            .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
-            // Default null-returning principal provider. Hosts with an HTTP
-            // pipeline replace this via AddTraxApi with an HttpContext-backed
-            // implementation so per-principal concurrency caps activate.
-            .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
-            .AddSingleton<Services.RunStarters.IRunStarters, Services.RunStarters.RunStarters>()
-            .AddScoped<ITrainBus, TrainBus>()
-            .AddScoped<IRunExecutor>(sp => new LocalRunExecutor(
-                sp.GetRequiredService<ITrainBus>(),
-                sp.GetRequiredService<IDataContextProviderFactory>(),
-                sp
-            ))
+        return AddBusAndDiscoveryServices(serviceCollection, trainRegistry)
             // Singletons, because a singleton the host registers may inject either one and
             // ValidateScopes is on by default in Development, so scoped would fail such a host at
             // startup. (Trains themselves are never singletons: the mediator refuses that
@@ -339,4 +319,30 @@ public static class ServiceExtensions
             >()
             .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
     }
+
+    private static IServiceCollection AddBusAndDiscoveryServices(
+        IServiceCollection serviceCollection,
+        TrainRegistry trainRegistry
+    ) =>
+        serviceCollection
+            .AddSingleton<IServiceCollection>(serviceCollection)
+            .AddSingleton<ITrainRegistry>(trainRegistry)
+            .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
+            .AddSingleton<
+                Services.ChainVerification.ITrainChainGraphs,
+                Services.ChainVerification.TrainChainGraphs
+            >()
+            .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
+            .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
+            // Default null-returning principal provider. Hosts with an HTTP
+            // pipeline replace this via AddTraxApi with an HttpContext-backed
+            // implementation so per-principal concurrency caps activate.
+            .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
+            .AddSingleton<Services.RunStarters.IRunStarters, Services.RunStarters.RunStarters>()
+            .AddScoped<ITrainBus, TrainBus>()
+            .AddScoped<IRunExecutor>(sp => new LocalRunExecutor(
+                sp.GetRequiredService<ITrainBus>(),
+                sp.GetRequiredService<IDataContextProviderFactory>(),
+                sp
+            ));
 }

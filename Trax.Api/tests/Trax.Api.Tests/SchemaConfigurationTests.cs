@@ -35,7 +35,7 @@ public class SchemaConfigurationTests
 
         // Verify order is preserved by invoking them
         foreach (var action in builder.SchemaConfigurations)
-            action(null!);
+            action(Null.Of<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>());
 
         callOrder.Should().ContainInOrder(1, 2, 3);
     }
@@ -175,7 +175,7 @@ public class SchemaConfigurationTests
 
     #region Stubs
 
-    private class StubTypeModuleForSchema : HotChocolate.Execution.Configuration.TypeModule
+    private sealed class StubTypeModuleForSchema : HotChocolate.Execution.Configuration.TypeModule
     {
         public override ValueTask<
             IReadOnlyCollection<HotChocolate.Types.ITypeSystemMember>
@@ -186,7 +186,7 @@ public class SchemaConfigurationTests
     }
 
     [HotChocolate.Types.ExtendObjectType(typeof(object))]
-    private class StubTypeExtensionForSchema;
+    private sealed class StubTypeExtensionForSchema;
 
     #endregion
 }

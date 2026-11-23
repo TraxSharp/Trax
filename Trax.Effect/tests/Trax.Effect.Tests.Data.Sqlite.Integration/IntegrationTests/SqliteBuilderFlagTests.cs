@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -14,8 +15,8 @@ namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteBuilderFlagTests
 {
-    private string _dbPath = null!;
-    private ServiceProvider _provider = null!;
+    private string? _dbPath;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void Setup()
@@ -24,7 +25,7 @@ public class SqliteBuilderFlagTests
 
         _provider = new ServiceCollection()
             .AddTrax(trax =>
-                trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath}"))
+                trax.AddEffects(effects => effects.UseSqlite($"Data Source={_dbPath.NotNull()}"))
             )
             .BuildServiceProvider();
     }
@@ -32,16 +33,17 @@ public class SqliteBuilderFlagTests
     [OneTimeTearDown]
     public async Task TearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
 
-        if (File.Exists(_dbPath))
-            File.Delete(_dbPath);
+        if (File.Exists(_dbPath.NotNull()))
+            File.Delete(_dbPath.NotNull());
 
-        var walPath = _dbPath + "-wal";
+        var walPath = _dbPath.NotNull() + "-wal";
         if (File.Exists(walPath))
             File.Delete(walPath);
 
-        var shmPath = _dbPath + "-shm";
+        var shmPath = _dbPath.NotNull() + "-shm";
         if (File.Exists(shmPath))
             File.Delete(shmPath);
     }
@@ -51,7 +53,7 @@ public class SqliteBuilderFlagTests
     [Test]
     public void UseSqlite_SetsHasDataProvider_True()
     {
-        var context = _provider.GetService<IDataContext>();
+        var context = _provider.NotNull().GetService<IDataContext>();
         context
             .Should()
             .NotBeNull("HasDataProvider should be true, so IDataContext must be registered");
@@ -60,7 +62,7 @@ public class SqliteBuilderFlagTests
     [Test]
     public void UseSqlite_SetsHasDatabaseProvider_True()
     {
-        var factory = _provider.GetService<IDbContextFactory<SqliteContext>>();
+        var factory = _provider.NotNull().GetService<IDbContextFactory<SqliteContext>>();
         factory
             .Should()
             .NotBeNull(
@@ -75,14 +77,14 @@ public class SqliteBuilderFlagTests
     [Test]
     public void UseSqlite_RegistersISqlDialect_AsSqliteSqlDialect()
     {
-        var dialect = _provider.GetRequiredService<ISqlDialect>();
+        var dialect = _provider.NotNull().GetRequiredService<ISqlDialect>();
         dialect.GetType().Name.Should().Be("SqliteSqlDialect");
     }
 
     [Test]
     public void UseSqlite_RegistersIDataContext_AsSqliteContext()
     {
-        using var scope = _provider.CreateScope();
+        using var scope = _provider.NotNull().CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         context.Should().BeOfType<SqliteContext>();
     }
@@ -90,7 +92,7 @@ public class SqliteBuilderFlagTests
     [Test]
     public void UseSqlite_RegistersIDataContextProviderFactory_AsSqliteContextProviderFactory()
     {
-        using var scope = _provider.CreateScope();
+        using var scope = _provider.NotNull().CreateScope();
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         factory.Should().BeOfType<SqliteContextProviderFactory>();
     }
@@ -103,7 +105,7 @@ public class SqliteBuilderFlagTests
     public void UseSqlite_ExposesTheLogsTable()
     {
         // AddDataContextLogging, available once UseSqlite returns the data builder, writes here.
-        using var scope = _provider.CreateScope();
+        using var scope = _provider.NotNull().CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         context
@@ -123,7 +125,7 @@ public class SqliteBuilderFlagTests
         // dependent services can be chained. We already verified IDataContext and
         // IDataContextProviderFactory are registered, which only happens when the
         // builder is promoted to TraxEffectBuilderWithData.
-        using var scope = _provider.CreateScope();
+        using var scope = _provider.NotNull().CreateScope();
         var context = scope.ServiceProvider.GetService<IDataContext>();
         var factory = scope.ServiceProvider.GetService<IDataContextProviderFactory>();
 

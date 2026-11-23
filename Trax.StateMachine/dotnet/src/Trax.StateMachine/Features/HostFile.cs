@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Features;
@@ -31,6 +32,18 @@ internal sealed record HostFile(
         if (at["version"].Number(at.Required(root, "version")) != Version)
             throw at["version"].Fail($"must be {Version}.");
 
+        var machines = ReadMachines(at, root);
+        var policies = ReadPolicies(at, root);
+        var views = ReadViews(at, root);
+        var provenance = ReadProvenance(at, root);
+
+        var file = new HostFile(machines, policies, views, provenance);
+        file.Check(at);
+        return file;
+    }
+
+    private static Dictionary<string, HostMachine> ReadMachines(At at, JsonObject root)
+    {
         var machinesAt = at["machines"];
         var machines = new Dictionary<string, HostMachine>(StringComparer.Ordinal);
         var given = machinesAt.Object(at.Required(root, "machines"));
@@ -41,7 +54,11 @@ internal sealed record HostFile(
             Names.MachineIdAt(machinesAt[id], JsonValue.Create(id));
             machines[id] = ReadMachine(machinesAt[id], id, machinesAt[id].Object(node));
         }
+        return machines;
+    }
 
+    private static List<HostPolicy> ReadPolicies(At at, JsonObject root)
+    {
         var policies = new List<HostPolicy>();
         if (root.ContainsKey("policies"))
         {
@@ -49,7 +66,11 @@ internal sealed record HostFile(
             for (var i = 0; i < list.Count; i++)
                 policies.Add(ReadPolicy(at["policies"][i], list[i]));
         }
+        return policies;
+    }
 
+    private static Dictionary<string, HostView> ReadViews(At at, JsonObject root)
+    {
         var views = new Dictionary<string, HostView>(StringComparer.Ordinal);
         if (root.ContainsKey("views"))
             foreach (var (name, node) in at["views"].Object(root["views"]))
@@ -66,7 +87,14 @@ internal sealed record HostFile(
                     ReadRule(v["readers"], v.Required(view, "readers"))
                 );
             }
+        return views;
+    }
 
+    private static Dictionary<
+        string,
+        IReadOnlyDictionary<string, IReadOnlyList<Provenance>>
+    > ReadProvenance(At at, JsonObject root)
+    {
         var provenance = new Dictionary<
             string,
             IReadOnlyDictionary<string, IReadOnlyList<Provenance>>
@@ -87,10 +115,7 @@ internal sealed record HostFile(
                 }
                 provenance[machine] = parts;
             }
-
-        var file = new HostFile(machines, policies, views, provenance);
-        file.Check(at);
-        return file;
+        return provenance;
     }
 
     private static HostMachine ReadMachine(At at, string id, JsonObject machine)
@@ -109,6 +134,48 @@ internal sealed record HostFile(
         );
         var hash = at["schemaHash"].Text(at.Required(machine, "schemaHash"), 1, 128);
 
+        var (systemKey, keyedBy) = ReadOwner(at, machine);
+
+        var start = machine.ContainsKey("start") ? ReadRule(at["start"], machine["start"]) : null;
+        var read = machine.ContainsKey("read") ? ReadRule(at["read"], machine["read"]) : null;
+
+        var triggers = ReadTriggers(at, machine);
+        var invokes = ReadInvokes(at, machine);
+
+        var effects = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        if (machine.ContainsKey("effects"))
+            foreach (var (trigger, type) in at["effects"].Object(machine["effects"]))
+            {
+                Names.MemberAt(at["effects"][trigger], JsonValue.Create(trigger));
+                effects[trigger] = Names.TrainAt(at["effects"][trigger], type);
+            }
+
+        var (rules, reductions) = ReadHandlers(at, machine);
+
+        var migrations = new SortedDictionary<int, string>();
+        if (machine.ContainsKey("migrations"))
+            foreach (var (from, type) in at["migrations"].Object(machine["migrations"]))
+                migrations[MigrationVersionAt(at["migrations"][from], from)] = Names.TrainAt(
+                    at["migrations"][from],
+                    type
+                );
+
+        return new HostMachine(id, hash, systemKey, start, read, triggers, invokes)
+        {
+            Effects = effects,
+            Rules = rules,
+            Reductions = reductions,
+            Migrations = migrations,
+            KeyedBy = keyedBy,
+        };
+    }
+
+    // The owner: "user", or { "system": key }, the key fixed or { "keyedBy": [...] }.
+    private static (string? SystemKey, IReadOnlyList<string>? KeyedBy) ReadOwner(
+        At at,
+        JsonObject machine
+    )
+    {
         string? systemKey = null;
         IReadOnlyList<string>? keyedBy = null;
         var owner = at.Required(machine, "owner");
@@ -117,7 +184,7 @@ internal sealed record HostFile(
             && value.GetValueKind() == System.Text.Json.JsonValueKind.String
         )
         {
-            if (value.GetValue<string>() != "user")
+            if (!string.Equals(value.GetValue<string>(), "user", StringComparison.Ordinal))
                 throw at["owner"].Fail("must be \"user\" or { \"system\": key }.");
         }
         else
@@ -130,10 +197,11 @@ internal sealed record HostFile(
             else
                 systemKey = Names.SystemKeyAt(at["owner"]["system"], system);
         }
+        return (systemKey, keyedBy);
+    }
 
-        var start = machine.ContainsKey("start") ? ReadRule(at["start"], machine["start"]) : null;
-        var read = machine.ContainsKey("read") ? ReadRule(at["read"], machine["read"]) : null;
-
+    private static Dictionary<string, TriggerAccess> ReadTriggers(At at, JsonObject machine)
+    {
         var triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal);
         if (machine.ContainsKey("triggers"))
             foreach (var (name, node) in at["triggers"].Object(machine["triggers"]))
@@ -150,7 +218,11 @@ internal sealed record HostFile(
                 else
                     triggers[name] = new TriggerAccess(ReadRule(t, rule));
             }
+        return triggers;
+    }
 
+    private static Dictionary<string, HostInvoke> ReadInvokes(At at, JsonObject machine)
+    {
         var invokes = new Dictionary<string, HostInvoke>(StringComparer.Ordinal);
         if (machine.ContainsKey("invokes"))
             foreach (var (state, node) in at["invokes"].Object(machine["invokes"]))
@@ -172,15 +244,14 @@ internal sealed record HostFile(
                     input
                 );
             }
+        return invokes;
+    }
 
-        var effects = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        if (machine.ContainsKey("effects"))
-            foreach (var (trigger, type) in at["effects"].Object(machine["effects"]))
-            {
-                Names.MemberAt(at["effects"][trigger], JsonValue.Create(trigger));
-                effects[trigger] = Names.TrainAt(at["effects"][trigger], type);
-            }
-
+    private static (
+        SortedDictionary<string, string> Rules,
+        SortedDictionary<string, string> Reductions
+    ) ReadHandlers(At at, JsonObject machine)
+    {
         var rules = new SortedDictionary<string, string>(StringComparer.Ordinal);
         var reductions = new SortedDictionary<string, string>(StringComparer.Ordinal);
         if (machine.ContainsKey("handlers"))
@@ -196,23 +267,7 @@ internal sealed record HostFile(
                         into[name] = Names.TrainAt(h[kind][name], type);
                     }
         }
-
-        var migrations = new SortedDictionary<int, string>();
-        if (machine.ContainsKey("migrations"))
-            foreach (var (from, type) in at["migrations"].Object(machine["migrations"]))
-                migrations[MigrationVersionAt(at["migrations"][from], from)] = Names.TrainAt(
-                    at["migrations"][from],
-                    type
-                );
-
-        return new HostMachine(id, hash, systemKey, start, read, triggers, invokes)
-        {
-            Effects = effects,
-            Rules = rules,
-            Reductions = reductions,
-            Migrations = migrations,
-            KeyedBy = keyedBy,
-        };
+        return (rules, reductions);
     }
 
     /// <summary>The version a migration steps from, as a key: a whole number from 1, with no sign or leading zero.</summary>
@@ -303,34 +358,7 @@ internal sealed record HostFile(
             var m = at["machines"][machine.Id];
             if (!machine.IsSystem)
                 continue;
-            // A person sends an effect's trigger, and no person sends a system machine anything.
-            if (machine.Effects.Count > 0)
-                throw m["effects"].Fail("a system machine runs no effect: a person sends one.");
-            if (
-                machine.SystemKey is { } key
-                && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
-            )
-                throw m["owner"]
-                    ["system"]
-                    .Fail($"must start with the machine's id, '{machine.Id}/'.");
-            // No client starts, reads or fires a system machine: the host starts it, views read it, the server
-            // moves it.
-            if (machine.Start is not null)
-                throw m["start"]
-                    .Fail("a system machine is started by the host, never by a client.");
-            if (machine.Read is not null)
-                throw m["read"].Fail("a system machine is read through a view, never directly.");
-            foreach (var (name, access) in machine.Triggers)
-                if (!access.IsServer)
-                    throw m["triggers"]
-                        [name]
-                        .Fail("a system machine's triggers are fired by the server only.");
-            foreach (var invoke in machine.Invokes.Values)
-            foreach (var (field, from) in invoke.Input)
-                if (from == HostInvoke.Owner)
-                    throw m["invokes"]
-                        [invoke.State]["input"][field]
-                        .Fail($"a system machine has no owner, so nothing is {HostInvoke.Owner}.");
+            CheckSystemMachine(m, machine);
         }
 
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -340,62 +368,13 @@ internal sealed record HostFile(
             var p = at["policies"][i];
             // Two policies that wait for the same entry and fire the same trigger are one fire, named once.
             if (!seen.TryAdd(policy.Id, i))
-                throw p.Fail($"'{policy.Id}' is the policy at /policies/{seen[policy.Id]} again.");
-            if (!Machines.TryGetValue(policy.When, out var source))
-                throw p["when"]["machine"].Fail($"'{policy.When}' is not a machine here.");
-            if (!Machines.TryGetValue(policy.Target, out var target))
-                throw p["then"]["machine"].Fail($"'{policy.Target}' is not a machine here.");
-            // A trigger a policy fires is the server's alone, never also a client's.
-            if (!target.Triggers.TryGetValue(policy.Trigger, out var access))
-                throw p["then"]
-                    ["trigger"]
-                    .Fail($"'{policy.Trigger}' is not a trigger '{target.Id}' serves.");
-            if (!access.IsServer)
-                throw p["then"]
-                    ["trigger"]
-                    .Fail(
-                        $"'{policy.Trigger}' is a client's trigger; a policy fires a server-only one."
-                    );
-            // A keyed system machine has an instance per key, moved by host code; no policy picks one.
-            if (source.KeyedBy is not null)
-                throw p["when"]
-                    ["machine"]
-                    .Fail($"'{source.Id}' is a keyed system machine, which sets off no policy.");
-            if (target.KeyedBy is not null)
-                throw p["then"]
-                    ["machine"]
-                    .Fail($"'{target.Id}' is a keyed system machine, which no policy moves.");
-            switch (policy.Shape)
-            {
-                case "toSystem":
-                    if (target.SystemKey is null)
-                        throw p["then"]
-                            ["machine"]
-                            .Fail(
-                                $"'{target.Id}' is a user's machine; toSystem acts on a system one."
-                            );
-                    if (policy.By != target.SystemKey)
-                        throw p["then"]["key"].Fail($"'{target.Id}' is at '{target.SystemKey}'.");
-                    break;
-                case "broadcast":
-                    if (source.SystemKey is null)
-                        throw p["when"]
-                            ["machine"]
-                            .Fail("a broadcast starts from a system machine.");
-                    if (target.SystemKey is not null)
-                        throw p["then"]["machine"].Fail("a broadcast reaches users' machines.");
-                    break;
-                case "linked":
-                    if (source.SystemKey is not null)
-                        throw p["when"]
-                            ["machine"]
-                            .Fail("a linked policy goes from one user's machine to another.");
-                    if (target.SystemKey is not null)
-                        throw p["then"]
-                            ["machine"]
-                            .Fail("a linked policy goes from one user's machine to another.");
-                    break;
-            }
+                throw p.Fail(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"'{policy.Id}' is the policy at /policies/{seen[policy.Id]} again."
+                    )
+                );
+            CheckPolicy(p, policy);
         }
 
         var systemKeys = Machines.ToDictionary(
@@ -410,114 +389,108 @@ internal sealed record HostFile(
                 view.Reads,
                 view.Fields,
                 systemKeys,
-                Machines.Values.Where(m => m.KeyedBy is not null).Select(m => m.Id).ToHashSet()
+                Machines
+                    .Values.Where(m => m.KeyedBy is not null)
+                    .Select(m => m.Id)
+                    .ToHashSet(StringComparer.Ordinal)
             );
 
         foreach (var machine in Provenance.Keys)
             if (!Machines.ContainsKey(machine))
                 throw at["provenance"][machine].Fail($"'{machine}' is not a machine here.");
     }
+
+    private static void CheckSystemMachine(At m, HostMachine machine)
+    {
+        // A person sends an effect's trigger, and no person sends a system machine anything.
+        if (machine.Effects.Count > 0)
+            throw m["effects"].Fail("a system machine runs no effect: a person sends one.");
+        if (
+            machine.SystemKey is { } key
+            && !key.StartsWith(machine.Id + "/", StringComparison.Ordinal)
+        )
+            throw m["owner"]["system"].Fail($"must start with the machine's id, '{machine.Id}/'.");
+        // No client starts, reads or fires a system machine: the host starts it, views read it, the server
+        // moves it.
+        if (machine.Start is not null)
+            throw m["start"].Fail("a system machine is started by the host, never by a client.");
+        if (machine.Read is not null)
+            throw m["read"].Fail("a system machine is read through a view, never directly.");
+        foreach (var (name, access) in machine.Triggers)
+            if (!access.IsServer)
+                throw m["triggers"]
+                    [name]
+                    .Fail("a system machine's triggers are fired by the server only.");
+        foreach (var invoke in machine.Invokes.Values)
+        foreach (var (field, from) in invoke.Input)
+            if (string.Equals(from, HostInvoke.Owner, StringComparison.Ordinal))
+                throw m["invokes"]
+                    [invoke.State]["input"][field]
+                    .Fail($"a system machine has no owner, so nothing is {HostInvoke.Owner}.");
+    }
+
+    private void CheckPolicy(At p, HostPolicy policy)
+    {
+        if (!Machines.TryGetValue(policy.When, out var source))
+            throw p["when"]["machine"].Fail($"'{policy.When}' is not a machine here.");
+        if (!Machines.TryGetValue(policy.Target, out var target))
+            throw p["then"]["machine"].Fail($"'{policy.Target}' is not a machine here.");
+        // A trigger a policy fires is the server's alone, never also a client's.
+        if (!target.Triggers.TryGetValue(policy.Trigger, out var access))
+            throw p["then"]
+                ["trigger"]
+                .Fail($"'{policy.Trigger}' is not a trigger '{target.Id}' serves.");
+        if (!access.IsServer)
+            throw p["then"]
+                ["trigger"]
+                .Fail(
+                    $"'{policy.Trigger}' is a client's trigger; a policy fires a server-only one."
+                );
+        // A keyed system machine has an instance per key, moved by host code; no policy picks one.
+        if (source.KeyedBy is not null)
+            throw p["when"]
+                ["machine"]
+                .Fail($"'{source.Id}' is a keyed system machine, which sets off no policy.");
+        if (target.KeyedBy is not null)
+            throw p["then"]
+                ["machine"]
+                .Fail($"'{target.Id}' is a keyed system machine, which no policy moves.");
+        CheckPolicyShape(p, policy, source, target);
+    }
+
+    private static void CheckPolicyShape(
+        At p,
+        HostPolicy policy,
+        HostMachine source,
+        HostMachine target
+    )
+    {
+        switch (policy.Shape)
+        {
+            case "toSystem":
+                if (target.SystemKey is null)
+                    throw p["then"]
+                        ["machine"]
+                        .Fail($"'{target.Id}' is a user's machine; toSystem acts on a system one.");
+                if (!string.Equals(policy.By, target.SystemKey, StringComparison.Ordinal))
+                    throw p["then"]["key"].Fail($"'{target.Id}' is at '{target.SystemKey}'.");
+                break;
+            case "broadcast":
+                if (source.SystemKey is null)
+                    throw p["when"]["machine"].Fail("a broadcast starts from a system machine.");
+                if (target.SystemKey is not null)
+                    throw p["then"]["machine"].Fail("a broadcast reaches users' machines.");
+                break;
+            case "linked":
+                if (source.SystemKey is not null)
+                    throw p["when"]
+                        ["machine"]
+                        .Fail("a linked policy goes from one user's machine to another.");
+                if (target.SystemKey is not null)
+                    throw p["then"]
+                        ["machine"]
+                        .Fail("a linked policy goes from one user's machine to another.");
+                break;
+        }
+    }
 }
-
-/// <summary>
-/// One machine of a host file. <see cref="SystemKey"/> is null for a machine its users own and for a keyed system
-/// machine.
-/// </summary>
-internal sealed record HostMachine(
-    string Id,
-    string SchemaHash,
-    string? SystemKey,
-    AccessRule? Start,
-    AccessRule? Read,
-    IReadOnlyDictionary<string, TriggerAccess> Triggers,
-    IReadOnlyDictionary<string, HostInvoke> Invokes
-)
-{
-    /// <summary>
-    /// A keyed system machine's key parts by name (<c>{ "system": { "keyedBy": [...] } }</c>): one instance per key,
-    /// which host code starts and moves through <c>IMachineInstances</c>. The host starts none at startup.
-    /// </summary>
-    internal IReadOnlyList<string>? KeyedBy { get; init; }
-
-    /// <summary>Whether the system owns the machine's instances, at a fixed key or keyed.</summary>
-    internal bool IsSystem => SystemKey is not null || KeyedBy is not null;
-
-    /// <summary>The <c>ISnapshotEffect</c> interface each effect-bound trigger runs, by trigger, as a full name.</summary>
-    internal IReadOnlyDictionary<string, string> Effects { get; init; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>The <c>ICustomRule</c> type of each custom rule the IR names, by name, as a full name.</summary>
-    internal IReadOnlyDictionary<string, string> Rules { get; init; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>The <c>ICustomReduction</c> type of each custom reduction the IR names, by name, as a full name.</summary>
-    internal IReadOnlyDictionary<string, string> Reductions { get; init; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>The <c>IMachineMigration</c> type of each version step, by the version it steps from.</summary>
-    internal IReadOnlyDictionary<int, string> Migrations { get; init; } =
-        new Dictionary<int, string>();
-}
-
-/// <summary>
-/// Who a client rule admits: every role set met by one of its roles, or, with no sets, any signed-in caller. The
-/// same reading as <see cref="CallerRule"/>'s role sets.
-/// </summary>
-internal sealed record AccessRule(IReadOnlyList<IReadOnlyList<string>> RoleSets)
-{
-    internal static readonly AccessRule AnyAuthenticated = new([]);
-
-    internal bool IsAnyAuthenticated => RoleSets.Count == 0;
-}
-
-/// <summary>A trigger's access: a client rule, or the server alone (a timer or a policy fires it).</summary>
-internal sealed record TriggerAccess(AccessRule? Client)
-{
-    internal static readonly TriggerAccess Server = new((AccessRule?)null);
-
-    internal bool IsServer => Client is null;
-}
-
-/// <summary>
-/// The train a state invokes and its input: each train field from a context field, or from <see cref="Owner"/>.
-/// </summary>
-internal sealed record HostInvoke(
-    string State,
-    string Train,
-    IReadOnlyDictionary<string, string> Input
-)
-{
-    /// <summary>
-    /// The source that gives a train field the instance owner's qualified principal id (its user key). It is the
-    /// server's to set: no context holds it, so no client can write it. A system machine has no owner.
-    /// </summary>
-    internal const string Owner = "$owner";
-}
-
-/// <summary>
-/// The server acting when <see cref="When"/> enters <see cref="Enters"/>: on <see cref="Target"/> by
-/// <see cref="By"/>, which is the link field (linked), the state its instances wait in (broadcast) or the system key
-/// (toSystem).
-/// </summary>
-internal sealed record HostPolicy(
-    string Shape,
-    string When,
-    string Enters,
-    string Target,
-    string Trigger,
-    string By
-)
-{
-    /// <summary>The policy's identity: what it waits for and what it fires, <c>shop.Open&gt;order.Bake</c>.</summary>
-    internal string Id => $"{When}.{Enters}>{Target}.{Trigger}";
-}
-
-internal sealed record HostView(
-    string Name,
-    IReadOnlyList<ViewRead> Reads,
-    IReadOnlyList<ViewField> Fields,
-    AccessRule Readers
-);
-
-/// <summary>A scenario that produced part of a machine, by file and line; never its steps.</summary>
-internal sealed record Provenance(string File, long Line, string Scenario);

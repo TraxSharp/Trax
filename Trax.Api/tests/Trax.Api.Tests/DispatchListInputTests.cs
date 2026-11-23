@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
@@ -36,10 +37,10 @@ public class DispatchListInputTests
         { pollId: 11, choiceKeys: ["11:32", "11:33"], ids: [-1, 4], stops: [{ city: "Lyon", zip: 69001 }], home: { city: "Nice", zip: 6000 } }
         """;
 
-    private ITrainExecutionService _execution = null!;
+    private ITrainExecutionService? _execution;
     private ServiceProvider? _services;
     private string? _sent;
-    private JsonSerializerOptions _hostOptions = null!;
+    private JsonSerializerOptions? _hostOptions;
 
     [SetUp]
     public void SetUp()
@@ -55,6 +56,7 @@ public class DispatchListInputTests
         _services = null;
         _execution = Substitute.For<ITrainExecutionService>();
         _execution
+            .NotNull()
             .RunAsync(
                 Arg.Any<string>(),
                 Arg.Do<string>(json => _sent = json),
@@ -63,6 +65,7 @@ public class DispatchListInputTests
             )
             .Returns(new RunTrainResult(1, "ext-1"));
         _execution
+            .NotNull()
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Do<string?>(json => _sent = json),
@@ -75,7 +78,7 @@ public class DispatchListInputTests
     [TearDown]
     public async Task TearDown()
     {
-        TraxEffectConfiguration.StaticSystemJsonSerializerOptions = _hostOptions;
+        TraxEffectConfiguration.StaticSystemJsonSerializerOptions = _hostOptions.NotNull();
         if (_services is not null)
             await _services.DisposeAsync();
     }
@@ -133,12 +136,13 @@ public class DispatchListInputTests
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
         services.AddScoped(_ => Substitute.For<IOperationsService>());
-        services.AddScoped(_ => _execution);
+        services.AddScoped(_ => _execution.NotNull());
         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
         _services = services.BuildServiceProvider();
         return await _services
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static TrainRegistration Registration() =>
@@ -149,7 +153,7 @@ public class DispatchListInputTests
             InputType = typeof(VoteInput),
             OutputType = typeof(Trax.Core.Functional.Unit),
             Lifetime = ServiceLifetime.Scoped,
-            ServiceTypeName = typeof(IVoteTrain).FullName!,
+            ServiceTypeName = typeof(IVoteTrain).FullName.NotNull(),
             ImplementationTypeName = nameof(VoteTrain),
             InputTypeName = nameof(VoteInput),
             OutputTypeName = nameof(Trax.Core.Functional.Unit),
@@ -166,7 +170,7 @@ public class DispatchListInputTests
 
     private interface IVoteTrain;
 
-    private sealed class VoteTrain;
+    private static class VoteTrain;
 
     public sealed record Place(string City, int Zip);
 
@@ -175,7 +179,7 @@ public class DispatchListInputTests
         public long PollId { get; init; }
         public IReadOnlyList<string> ChoiceKeys { get; init; } = [];
         public int[] Ids { get; init; } = [];
-        public List<Place> Stops { get; init; } = [];
+        public IList<Place> Stops { get; init; } = [];
         public Place? Home { get; init; }
     }
 }

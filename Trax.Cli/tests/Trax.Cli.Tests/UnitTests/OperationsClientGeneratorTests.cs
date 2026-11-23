@@ -1,7 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Cli.Clients;
 using Trax.Cli.Commands;
+using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -17,7 +20,7 @@ namespace Trax.Cli.Tests.UnitTests;
     "adr",
     "Trax.Docs/adr/0057-the-operations-console-sends-only-documents-trax-client-generated.md"
 )]
-public class OperationsClientGeneratorTests
+public partial class OperationsClientGeneratorTests
 {
     private const string Adr =
         "Trax.Docs/adr/0057-the-operations-console-sends-only-documents-trax-client-generated.md";
@@ -110,7 +113,7 @@ public class OperationsClientGeneratorTests
     {
         var files = Render(("src/graphql/Runs.graphql", Runs));
         var module = Text(files, "documents/runs.g.ts");
-        var text = Documents(files)[0].GetProperty("text").GetString()!;
+        var text = Documents(files)[0].GetProperty("text").GetString().NotNull();
 
         module
             .Should()
@@ -296,9 +299,9 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void The_cli_and_the_host_name_a_console_document_alike()
+    public async Task The_cli_and_the_host_name_a_console_document_alike()
     {
-        var cases = FixtureCases();
+        var cases = await FixtureCasesAsync().ConfigureAwait(false);
         cases.Should().NotBeEmpty();
         foreach (var (name, text, id) in cases)
             ClientDocumentSet
@@ -373,17 +376,30 @@ public class OperationsClientGeneratorTests
     #region On disk
 
     [Test]
-    public void Check_passes_on_what_write_wrote_and_names_a_document_that_changed()
+    public async Task Check_passes_on_what_write_wrote_and_names_a_document_that_changed()
     {
         var dir = Directory.CreateTempSubdirectory("trax-operations-client-").FullName;
         try
         {
             var options = Options(("src/graphql/Runs.graphql", Runs));
-            ClientGenerator.Write(options, dir);
+            await ClientGenerator.WriteAsync(options, dir).ConfigureAwait(false);
 
-            ClientGenerator.Check(options, dir).Should().BeEmpty();
-            ClientGenerator
-                .Check(Options(("src/graphql/Runs.graphql", Runs.Replace("name\n", ""))), dir)
+            (await ClientGenerator.CheckAsync(options, dir).ConfigureAwait(false))
+                .Should()
+                .BeEmpty();
+            (
+                await ClientGenerator
+                    .CheckAsync(
+                        Options(
+                            (
+                                "src/graphql/Runs.graphql",
+                                Runs.Replace("name\n", "", StringComparison.Ordinal)
+                            )
+                        ),
+                        dir
+                    )
+                    .ConfigureAwait(false)
+            )
                 .Select(d => d.Path)
                 .Should()
                 .Contain(["console-documents.json", "documents/runs.g.ts"]);
@@ -395,24 +411,32 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void Write_removes_the_module_of_a_document_that_is_gone()
+    public async Task Write_removes_the_module_of_a_document_that_is_gone()
     {
         var dir = Directory.CreateTempSubdirectory("trax-operations-client-").FullName;
         try
         {
-            ClientGenerator.Write(
-                Options(
-                    ("src/graphql/Runs.graphql", Runs),
-                    ("src/graphql/Count.graphql", "query Count { persistedOperations { count } }")
-                ),
-                dir
-            );
-            File.WriteAllText(
-                Path.Combine(dir, "documents", "mine.g.ts"),
-                "// an app's own file\n"
-            );
+            await ClientGenerator
+                .WriteAsync(
+                    Options(
+                        ("src/graphql/Runs.graphql", Runs),
+                        (
+                            "src/graphql/Count.graphql",
+                            "query Count { persistedOperations { count } }"
+                        )
+                    ),
+                    dir
+                )
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(
+                    Path.Combine(dir, "documents", "mine.g.ts"),
+                    "// an app's own file\n"
+                )
+                .ConfigureAwait(false);
 
-            ClientGenerator.Write(Options(("src/graphql/Runs.graphql", Runs)), dir);
+            await ClientGenerator
+                .WriteAsync(Options(("src/graphql/Runs.graphql", Runs)), dir)
+                .ConfigureAwait(false);
 
             File.Exists(Path.Combine(dir, "documents", "count.g.ts")).Should().BeFalse();
             File.Exists(Path.Combine(dir, "documents", "mine.g.ts"))
@@ -426,26 +450,43 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void The_command_refuses_a_manifest_beside_the_operations_schema_and_needs_documents()
+    public async Task The_command_refuses_a_manifest_beside_the_operations_schema_and_needs_documents()
     {
-        var error = new StringWriter();
-        var previous = Console.Error;
-        Console.SetError(error);
-        try
-        {
-            ClientCommand
-                .RunOperations("manifest.json", "operations.graphql", "out", false, ["*.graphql"])
-                .Should()
-                .Be(1);
-            ClientCommand
-                .RunOperations(null, "operations.graphql", "out", false, [])
-                .Should()
-                .Be(1);
-        }
-        finally
-        {
-            Console.SetError(previous);
-        }
+        using var error = new StringWriter();
+        (
+            await ClientCommand
+                .RunOperationsAsync(
+                    "manifest.json",
+                    "operations.graphql",
+                    "out",
+                    check: false,
+                    ["*.graphql"],
+                    lang: null,
+                    @namespace: null,
+                    TextWriter.Null,
+                    error
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
+        (
+            await ClientCommand
+                .RunOperationsAsync(
+                    manifestPath: null,
+                    "operations.graphql",
+                    "out",
+                    check: false,
+                    [],
+                    lang: null,
+                    @namespace: null,
+                    TextWriter.Null,
+                    error
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
 
         error
             .ToString()
@@ -479,7 +520,8 @@ public class OperationsClientGeneratorTests
         var runs = Text(files, "Documents/Runs.g.cs");
         var text = Documents(Render(("src/graphql/Runs.graphql", Runs)))[0]
             .GetProperty("text")
-            .GetString()!;
+            .GetString()
+            .NotNull();
 
         files
             .Select(f => f.Path)
@@ -516,6 +558,12 @@ public class OperationsClientGeneratorTests
             .And.Contain(
                 "client.SendAsync(global::Trax.Operations.TraxOperations.Runs, variables ?? new(), cancellationToken)"
             );
+        AssertCSharpCancelAndTypes(files);
+    }
+
+    // The Cancel mutation's document and the shared Types.g.cs of the C# client of Runs and Cancel.
+    private static void AssertCSharpCancelAndTypes(IReadOnlyList<ClientFile> files)
+    {
         Text(files, "Documents/Cancel.g.cs")
             .Should()
             .Contain("    public required long Id { get; init; }")
@@ -582,15 +630,16 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void The_whole_console_as_csharp_compiles_and_carries_each_documents_text_and_id_exactly()
+    public async Task The_whole_console_as_csharp_compiles_and_carries_each_documents_text_and_id_exactly()
     {
-        var console = ConsoleSources();
+        var console = await ConsoleSourcesAsync().ConfigureAwait(false);
         var options = new OperationsGenerateOptions(console.Schema, console.Documents);
         var files = ClientGenerator.RenderCSharp(options, "Console.Operations");
         var registered = Documents(ClientGenerator.Render(options))
             .ToDictionary(
-                d => d.GetProperty("name").GetString()!,
-                d => d.GetProperty("text").GetString()!
+                d => d.GetProperty("name").GetString().NotNull(),
+                d => d.GetProperty("text").GetString().NotNull(),
+                StringComparer.Ordinal
             );
 
         CompileCSharp(files, out var assembly)
@@ -598,12 +647,14 @@ public class OperationsClientGeneratorTests
             .Select(d => d.ToString())
             .Should()
             .BeEmpty();
-        var descriptors = assembly!
-            .GetType("Console.Operations.TraxOperations")!
+        var descriptors = assembly
+            .NotNull()
+            .GetType("Console.Operations.TraxOperations")
+            .NotNull()
             .GetFields(
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
             )
-            .Select(f => (Trax.Client.TraxDocument)f.GetValue(null)!)
+            .Select(f => (Trax.Client.TraxDocument)f.GetValue(null).NotNull())
             .ToList();
         descriptors.Should().HaveCount(console.Documents.Count);
         foreach (var document in descriptors.Where(d => d.Id is not null))
@@ -621,32 +672,46 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void A_csharp_file_no_document_generates_any_more_is_removed()
+    public async Task A_csharp_file_no_document_generates_any_more_is_removed()
     {
         var dir = Directory.CreateTempSubdirectory("trax-ops-cs-");
         try
         {
-            ClientGenerator.WriteCSharp(
-                Options(("src/graphql/Runs.graphql", Runs), ("src/graphql/Cancel.graphql", Cancel)),
-                ClientGenerator.DefaultOperationsNamespace,
-                dir.FullName
-            );
-            File.WriteAllText(Path.Combine(dir.FullName, "Mine.g.cs"), "// an app's own file\n");
+            await ClientGenerator
+                .WriteCSharpAsync(
+                    Options(
+                        ("src/graphql/Runs.graphql", Runs),
+                        ("src/graphql/Cancel.graphql", Cancel)
+                    ),
+                    ClientGenerator.DefaultOperationsNamespace,
+                    dir.FullName
+                )
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(
+                    Path.Combine(dir.FullName, "Mine.g.cs"),
+                    "// an app's own file\n"
+                )
+                .ConfigureAwait(false);
 
-            ClientGenerator.WriteCSharp(
-                Options(("src/graphql/Runs.graphql", Runs)),
-                ClientGenerator.DefaultOperationsNamespace,
-                dir.FullName
-            );
-
-            File.Exists(Path.Combine(dir.FullName, "Documents", "Cancel.g.cs")).Should().BeFalse();
-            File.Exists(Path.Combine(dir.FullName, "Mine.g.cs")).Should().BeTrue();
-            ClientGenerator
-                .CheckCSharp(
+            await ClientGenerator
+                .WriteCSharpAsync(
                     Options(("src/graphql/Runs.graphql", Runs)),
                     ClientGenerator.DefaultOperationsNamespace,
                     dir.FullName
                 )
+                .ConfigureAwait(false);
+
+            File.Exists(Path.Combine(dir.FullName, "Documents", "Cancel.g.cs")).Should().BeFalse();
+            File.Exists(Path.Combine(dir.FullName, "Mine.g.cs")).Should().BeTrue();
+            (
+                await ClientGenerator
+                    .CheckCSharpAsync(
+                        Options(("src/graphql/Runs.graphql", Runs)),
+                        ClientGenerator.DefaultOperationsNamespace,
+                        dir.FullName
+                    )
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .BeEmpty();
         }
@@ -683,10 +748,15 @@ public class OperationsClientGeneratorTests
         ];
         var schema =
             Schema
-                .Replace("scalar Long", "scalar Long\nscalar UUID\nscalar DateTime\nscalar JSON")
+                .Replace(
+                    "scalar Long",
+                    "scalar Long\nscalar UUID\nscalar DateTime\nscalar JSON",
+                    StringComparison.Ordinal
+                )
                 .Replace(
                     "type CancelResponse {",
-                    "type CancelResponse {\n  at: DateTime\n  key: UUID\n  data: JSON"
+                    "type CancelResponse {\n  at: DateTime\n  key: UUID\n  data: JSON",
+                    StringComparison.Ordinal
                 ) + string.Concat(shadows.Select(name => $"\ninput {name} {{\n  value: Int\n}}\n"));
         var files = ClientGenerator.RenderCSharp(
             new OperationsGenerateOptions(
@@ -732,7 +802,10 @@ public class OperationsClientGeneratorTests
                 "src/graphql/TraxOperationsClient.graphql",
                 "query TraxOperationsClient { operations { run(id: 1) { id } } }"
             ),
-            ("src/graphql/Optional.graphql", Runs.Replace("query Runs", "query Optional"))
+            (
+                "src/graphql/Optional.graphql",
+                Runs.Replace("query Runs", "query Optional", StringComparison.Ordinal)
+            )
         );
 
         CompileCSharp(files, out _)
@@ -831,7 +904,7 @@ public class OperationsClientGeneratorTests
             + "\ninput Odd {\n"
             + string.Concat(members.Select(m => $"  {m}: Int\n"))
             + "}\n";
-        var selection = string.Join(" ", members.Select(m => $"{m}: id"));
+        var selection = string.Join(' ', members.Select(m => $"{m}: id"));
         var files = ClientGenerator.RenderCSharp(
             new OperationsGenerateOptions(
                 schema,
@@ -870,7 +943,7 @@ public class OperationsClientGeneratorTests
     [TestCase("", "Csharp")]
     [TestCase("Csharp", "")]
     [TestCase("", "Csharp/Nested")]
-    public void The_typescript_and_csharp_clients_share_a_folder_and_neither_removes_the_other(
+    public async Task The_typescript_and_csharp_clients_share_a_folder_and_neither_removes_the_other(
         string typescript,
         string csharp
     )
@@ -886,12 +959,16 @@ public class OperationsClientGeneratorTests
             var cs = Path.Combine(dir.FullName, csharp);
             var ns = ClientGenerator.DefaultOperationsNamespace;
 
-            ClientGenerator.Write(options, ts);
-            ClientGenerator.WriteCSharp(options, ns, cs);
-            ClientGenerator.Write(options, ts);
+            await ClientGenerator.WriteAsync(options, ts).ConfigureAwait(false);
+            await ClientGenerator.WriteCSharpAsync(options, ns, cs).ConfigureAwait(false);
+            await ClientGenerator.WriteAsync(options, ts).ConfigureAwait(false);
 
-            ClientGenerator.Check(options, ts).Should().BeEmpty();
-            ClientGenerator.CheckCSharp(options, ns, cs).Should().BeEmpty();
+            (await ClientGenerator.CheckAsync(options, ts).ConfigureAwait(false))
+                .Should()
+                .BeEmpty();
+            (await ClientGenerator.CheckCSharpAsync(options, ns, cs).ConfigureAwait(false))
+                .Should()
+                .BeEmpty();
             File.Exists(Path.Combine(cs, "Documents", "Runs.g.cs")).Should().BeTrue();
             File.Exists(Path.Combine(ts, "documents", "runs.g.ts")).Should().BeTrue();
         }
@@ -905,7 +982,7 @@ public class OperationsClientGeneratorTests
     [TestCase(false, false)]
     [TestCase(true, true)]
     [TestCase(true, false)]
-    public void Two_clients_of_one_language_one_inside_the_other_leave_each_others_files_alone(
+    public async Task Two_clients_of_one_language_one_inside_the_other_leave_each_others_files_alone(
         bool csharp,
         bool outerFirst
     )
@@ -920,32 +997,41 @@ public class OperationsClientGeneratorTests
             var inner = Options(("src/graphql/Runs.graphql", Runs));
             var nested = Path.Combine(dir.FullName, "Admin");
             var ns = ClientGenerator.DefaultOperationsNamespace;
-            void Write(OperationsGenerateOptions options, string outDir)
+            async Task WriteAsync(OperationsGenerateOptions options, string outDir)
             {
                 if (csharp)
-                    ClientGenerator.WriteCSharp(options, ns, outDir);
+                    await ClientGenerator
+                        .WriteCSharpAsync(options, ns, outDir)
+                        .ConfigureAwait(false);
                 else
-                    ClientGenerator.Write(options, outDir);
+                    await ClientGenerator.WriteAsync(options, outDir).ConfigureAwait(false);
             }
-            IReadOnlyList<ClientDrift> Check(OperationsGenerateOptions options, string outDir) =>
+            async Task<IReadOnlyList<ClientDrift>> CheckAsync(
+                OperationsGenerateOptions options,
+                string outDir
+            ) =>
                 csharp
-                    ? ClientGenerator.CheckCSharp(options, ns, outDir)
-                    : ClientGenerator.Check(options, outDir);
+                    ? (
+                        await ClientGenerator
+                            .CheckCSharpAsync(options, ns, outDir)
+                            .ConfigureAwait(false)
+                    )
+                    : (await ClientGenerator.CheckAsync(options, outDir).ConfigureAwait(false));
 
             for (var round = 0; round < 2; round++)
                 if (outerFirst)
                 {
-                    Write(outer, dir.FullName);
-                    Write(inner, nested);
+                    await WriteAsync(outer, dir.FullName).ConfigureAwait(false);
+                    await WriteAsync(inner, nested).ConfigureAwait(false);
                 }
                 else
                 {
-                    Write(inner, nested);
-                    Write(outer, dir.FullName);
+                    await WriteAsync(inner, nested).ConfigureAwait(false);
+                    await WriteAsync(outer, dir.FullName).ConfigureAwait(false);
                 }
 
-            Check(outer, dir.FullName).Should().BeEmpty();
-            Check(inner, nested).Should().BeEmpty();
+            (await CheckAsync(outer, dir.FullName).ConfigureAwait(false)).Should().BeEmpty();
+            (await CheckAsync(inner, nested).ConfigureAwait(false)).Should().BeEmpty();
             File.Exists(Path.Combine(nested, csharp ? "Types.g.cs" : "index.g.ts"))
                 .Should()
                 .BeTrue();
@@ -960,7 +1046,7 @@ public class OperationsClientGeneratorTests
     [TestCase(false, false)]
     [TestCase(true, true)]
     [TestCase(true, false)]
-    public void A_client_in_the_documents_folder_of_another_of_its_language_is_refused(
+    public async Task A_client_in_the_documents_folder_of_another_of_its_language_is_refused(
         bool csharp,
         bool outerFirst
     )
@@ -971,18 +1057,23 @@ public class OperationsClientGeneratorTests
             var options = Options(("src/graphql/Runs.graphql", Runs));
             var nested = Path.Combine(dir.FullName, csharp ? "Documents" : "documents");
             var ns = ClientGenerator.DefaultOperationsNamespace;
-            void Write(string outDir)
+            async Task WriteAsync(string outDir)
             {
                 if (csharp)
-                    ClientGenerator.WriteCSharp(options, ns, outDir);
+                    await ClientGenerator
+                        .WriteCSharpAsync(options, ns, outDir)
+                        .ConfigureAwait(false);
                 else
-                    ClientGenerator.Write(options, outDir);
+                    await ClientGenerator.WriteAsync(options, outDir).ConfigureAwait(false);
             }
-            Write(outerFirst ? dir.FullName : nested);
+            await WriteAsync(outerFirst ? dir.FullName : nested).ConfigureAwait(false);
 
-            var second = () => Write(outerFirst ? nested : dir.FullName);
+            var second = async () =>
+                await WriteAsync(outerFirst ? nested : dir.FullName).ConfigureAwait(false);
 
-            second.Should().Throw<InvalidOperationException>().WithMessage("*move one of them*");
+            (
+                await second.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+            ).WithMessage("*move one of them*");
             File.Exists(Path.Combine(nested, csharp ? "Types.g.cs" : "index.g.ts"))
                 .Should()
                 .Be(!outerFirst, "a refused client writes nothing");
@@ -997,7 +1088,9 @@ public class OperationsClientGeneratorTests
     // the folder the outer client writes. It is refused on every file system.
     [TestCase(false)]
     [TestCase(true)]
-    public void A_client_in_the_documents_folder_spelled_in_another_case_is_refused(bool csharp)
+    public async Task A_client_in_the_documents_folder_spelled_in_another_case_is_refused(
+        bool csharp
+    )
     {
         var dir = Directory.CreateTempSubdirectory("trax-ops-overlap-case-");
         try
@@ -1005,18 +1098,22 @@ public class OperationsClientGeneratorTests
             var options = Options(("src/graphql/Runs.graphql", Runs));
             var nested = Path.Combine(dir.FullName, csharp ? "documents" : "Documents");
             var ns = ClientGenerator.DefaultOperationsNamespace;
-            void Write(string outDir)
+            async Task WriteAsync(string outDir)
             {
                 if (csharp)
-                    ClientGenerator.WriteCSharp(options, ns, outDir);
+                    await ClientGenerator
+                        .WriteCSharpAsync(options, ns, outDir)
+                        .ConfigureAwait(false);
                 else
-                    ClientGenerator.Write(options, outDir);
+                    await ClientGenerator.WriteAsync(options, outDir).ConfigureAwait(false);
             }
-            Write(dir.FullName);
+            await WriteAsync(dir.FullName).ConfigureAwait(false);
 
-            var second = () => Write(nested);
+            var second = async () => await WriteAsync(nested).ConfigureAwait(false);
 
-            second.Should().Throw<InvalidOperationException>().WithMessage("*move one of them*");
+            (
+                await second.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+            ).WithMessage("*move one of them*");
             File.Exists(Path.Combine(nested, csharp ? "Types.g.cs" : "index.g.ts"))
                 .Should()
                 .BeFalse("a refused client writes nothing");
@@ -1030,27 +1127,30 @@ public class OperationsClientGeneratorTests
     // On a file system that keeps case, documents/Runs.g.cs beside the C# client's Documents/Runs.g.cs is another
     // file, left by an earlier run, and stale.
     [Test]
-    public void A_generated_file_differing_only_in_case_from_one_the_client_writes_is_stale()
+    public async Task A_generated_file_differing_only_in_case_from_one_the_client_writes_is_stale()
     {
         var dir = Directory.CreateTempSubdirectory("trax-ops-cs-case-");
         try
         {
             var options = Options(("src/graphql/Runs.graphql", Runs));
             var ns = ClientGenerator.DefaultOperationsNamespace;
-            ClientGenerator.WriteCSharp(options, ns, dir.FullName);
+            await ClientGenerator.WriteCSharpAsync(options, ns, dir.FullName).ConfigureAwait(false);
             var written = Path.Combine(dir.FullName, "Documents", "Runs.g.cs");
             var other = Path.Combine(dir.FullName, "documents", "Runs.g.cs");
-            Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(other).NotNull());
             if (File.Exists(other))
                 Assert.Ignore("The file system ignores case: documents/ is Documents/ here.");
             File.Copy(written, other);
 
-            ClientGenerator
-                .CheckCSharp(options, ns, dir.FullName)
+            (
+                await ClientGenerator
+                    .CheckCSharpAsync(options, ns, dir.FullName)
+                    .ConfigureAwait(false)
+            )
                 .Select(d => d.Path)
                 .Should()
                 .Contain("documents/Runs.g.cs");
-            ClientGenerator.WriteCSharp(options, ns, dir.FullName);
+            await ClientGenerator.WriteCSharpAsync(options, ns, dir.FullName).ConfigureAwait(false);
             File.Exists(other).Should().BeFalse("the stale case variant is deleted");
             File.Exists(written).Should().BeTrue();
         }
@@ -1064,7 +1164,7 @@ public class OperationsClientGeneratorTests
     // spells documents/Runs.g.cs, whichever run made the folder: it is the client's own, not stale.
     [Test]
     [Platform("MacOsX,Win")]
-    public void A_documents_folder_made_in_another_case_holds_the_clients_own_files()
+    public async Task A_documents_folder_made_in_another_case_holds_the_clients_own_files()
     {
         var dir = Directory.CreateTempSubdirectory("trax-ops-cs-fold-");
         try
@@ -1072,9 +1172,15 @@ public class OperationsClientGeneratorTests
             var options = Options(("src/graphql/Runs.graphql", Runs));
             var ns = ClientGenerator.DefaultOperationsNamespace;
             Directory.CreateDirectory(Path.Combine(dir.FullName, "documents"));
-            ClientGenerator.WriteCSharp(options, ns, dir.FullName);
+            await ClientGenerator.WriteCSharpAsync(options, ns, dir.FullName).ConfigureAwait(false);
 
-            ClientGenerator.CheckCSharp(options, ns, dir.FullName).Should().BeEmpty();
+            (
+                await ClientGenerator
+                    .CheckCSharpAsync(options, ns, dir.FullName)
+                    .ConfigureAwait(false)
+            )
+                .Should()
+                .BeEmpty();
             File.Exists(Path.Combine(dir.FullName, "documents", "Runs.g.cs")).Should().BeTrue();
         }
         finally
@@ -1084,30 +1190,35 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void A_csharp_folder_that_empties_is_removed_and_one_holding_an_apps_own_file_is_kept()
+    public async Task A_csharp_folder_that_empties_is_removed_and_one_holding_an_apps_own_file_is_kept()
     {
         var emptied = Directory.CreateTempSubdirectory("trax-ops-cs-");
         var kept = Directory.CreateTempSubdirectory("trax-ops-cs-");
         try
         {
             var ns = ClientGenerator.DefaultOperationsNamespace;
-            ClientGenerator.WriteCSharp(
-                Options(("src/graphql/Runs.graphql", Runs)),
-                ns,
-                emptied.FullName
-            );
-            ClientGenerator.WriteCSharp(
-                Options(("src/graphql/Cancel.graphql", Cancel)),
-                ns,
-                kept.FullName
-            );
-            File.WriteAllText(
-                Path.Combine(kept.FullName, "Documents", "Mine.g.cs"),
-                "// an app's own file\n"
-            );
+            await ClientGenerator
+                .WriteCSharpAsync(Options(("src/graphql/Runs.graphql", Runs)), ns, emptied.FullName)
+                .ConfigureAwait(false);
+            await ClientGenerator
+                .WriteCSharpAsync(
+                    Options(("src/graphql/Cancel.graphql", Cancel)),
+                    ns,
+                    kept.FullName
+                )
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(
+                    Path.Combine(kept.FullName, "Documents", "Mine.g.cs"),
+                    "// an app's own file\n"
+                )
+                .ConfigureAwait(false);
 
-            ClientGenerator.WriteCSharp(Options(), ns, emptied.FullName);
-            ClientGenerator.WriteCSharp(Options(), ns, kept.FullName);
+            await ClientGenerator
+                .WriteCSharpAsync(Options(), ns, emptied.FullName)
+                .ConfigureAwait(false);
+            await ClientGenerator
+                .WriteCSharpAsync(Options(), ns, kept.FullName)
+                .ConfigureAwait(false);
 
             Directory
                 .Exists(Path.Combine(emptied.FullName, "Documents"))
@@ -1131,7 +1242,7 @@ public class OperationsClientGeneratorTests
     [TestCase("csharp", "My.class", "is not a C# namespace")]
     [TestCase("csharp", "Trax.Client", "is Trax.Client's own namespace")]
     [TestCase("csharp", "Trax.Client.Operations", "is Trax.Client's own namespace")]
-    public void The_language_options_are_refused_where_they_do_not_apply(
+    public async Task The_language_options_are_refused_where_they_do_not_apply(
         string? lang,
         string? @namespace,
         string message
@@ -1140,29 +1251,30 @@ public class OperationsClientGeneratorTests
         var dir = Directory.CreateTempSubdirectory("trax-ops-lang-");
         try
         {
-            File.WriteAllText(Path.Combine(dir.FullName, "operations.graphql"), Schema);
-            File.WriteAllText(Path.Combine(dir.FullName, "Runs.graphql"), Runs);
-            var error = new StringWriter();
-            var before = Console.Error;
+            await File.WriteAllTextAsync(Path.Combine(dir.FullName, "operations.graphql"), Schema);
+            await File.WriteAllTextAsync(Path.Combine(dir.FullName, "Runs.graphql"), Runs);
+            using var error = new StringWriter();
             var cwd = Directory.GetCurrentDirectory();
             int exit;
             try
             {
-                Console.SetError(error);
                 Directory.SetCurrentDirectory(dir.FullName);
-                exit = ClientCommand.RunOperations(
-                    null,
-                    Path.Combine(dir.FullName, "operations.graphql"),
-                    Path.Combine(dir.FullName, "out"),
-                    check: false,
-                    ["Runs.graphql"],
-                    lang,
-                    @namespace
-                );
+                exit = await ClientCommand
+                    .RunOperationsAsync(
+                        manifestPath: null,
+                        Path.Combine(dir.FullName, "operations.graphql"),
+                        Path.Combine(dir.FullName, "out"),
+                        check: false,
+                        ["Runs.graphql"],
+                        lang,
+                        @namespace,
+                        TextWriter.Null,
+                        error
+                    )
+                    .ConfigureAwait(false);
             }
             finally
             {
-                Console.SetError(before);
                 Directory.SetCurrentDirectory(cwd);
             }
 
@@ -1331,6 +1443,12 @@ public class OperationsClientGeneratorTests
                 $"    public {List}<ShapesResultOperationsMaybe?>? Maybe {{ get; init; }}",
                 "a nullable list of nullable objects"
             );
+        AssertShapesTouchAndTypes(files);
+    }
+
+    // Touch's defaulted variable, the shared Types.g.cs, and that the whole client compiles without a warning.
+    private static void AssertShapesTouchAndTypes(IReadOnlyList<ClientFile> files)
+    {
         Text(files, "Documents/Touch.g.cs")
             .Should()
             .Contain(
@@ -1353,81 +1471,83 @@ public class OperationsClientGeneratorTests
             .BeEmpty();
     }
 
+    private const string TraxJsonProbe = """
+        namespace Trax.Operations;
+
+        internal static class Probe
+        {
+            private static string Write<T>(T value) =>
+                global::System.Text.Json.JsonSerializer.Serialize(value, global::Trax.Client.TraxJson.Options);
+
+            public static string LeftOut() => Write(new ShapesVariables { Key = global::System.Guid.Empty });
+
+            public static string Sent() =>
+                Write(new ShapesVariables { Key = global::System.Guid.Empty, Window = Window.Last24Hours, Filter = null });
+
+            public static string Nested() =>
+                Write(
+                    new ShapesVariables
+                    {
+                        Key = global::System.Guid.Empty,
+                        Filter = new ThingFilter { Note = null, Window = Window.AllTime },
+                    }
+                );
+
+            public static string Read(string json)
+            {
+                var operations = global::System.Text.Json.JsonSerializer
+                    .Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options)!
+                    .Operations!;
+                var thing = operations.Thing;
+                return string.Join(
+                    "|",
+                    thing.Typename,
+                    thing.Id,
+                    thing.Key,
+                    thing.At.ToString("O", global::System.Globalization.CultureInfo.InvariantCulture),
+                    thing.When.Offset,
+                    thing.Data.GetRawText(),
+                    thing.Note ?? "null",
+                    thing.Window,
+                    operations.Grid[0]![1],
+                    operations.Grid[1] is null,
+                    operations.Maybe![0] is null,
+                    operations.Maybe[1]!.Id
+                );
+            }
+
+            public static string Refused(string json)
+            {
+                try
+                {
+                    global::System.Text.Json.JsonSerializer.Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options);
+                    return "read";
+                }
+                catch (global::System.Text.Json.JsonException)
+                {
+                    return "refused";
+                }
+            }
+        }
+        """;
+
+    private const string ShapesAnswer = """
+        {"operations":{"thing":{"__typename":"Thing","id":9007199254740993,"key":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","at":"2026-10-23T10:00:00+02:00","when":"2026-10-23T08:00:00Z","data":{"a":[1,"x"]},"note":null,"window":"LAST24_HOURS"},"grid":[[1,2],null],"maybe":[null,{"id":3}]}}
+        """;
+
     [Test]
     public void The_csharp_records_read_and_write_the_wire_through_TraxJson()
     {
-        const string probe = """
-            namespace Trax.Operations;
-
-            internal static class Probe
-            {
-                private static string Write<T>(T value) =>
-                    global::System.Text.Json.JsonSerializer.Serialize(value, global::Trax.Client.TraxJson.Options);
-
-                public static string LeftOut() => Write(new ShapesVariables { Key = global::System.Guid.Empty });
-
-                public static string Sent() =>
-                    Write(new ShapesVariables { Key = global::System.Guid.Empty, Window = Window.Last24Hours, Filter = null });
-
-                public static string Nested() =>
-                    Write(
-                        new ShapesVariables
-                        {
-                            Key = global::System.Guid.Empty,
-                            Filter = new ThingFilter { Note = null, Window = Window.AllTime },
-                        }
-                    );
-
-                public static string Read(string json)
-                {
-                    var operations = global::System.Text.Json.JsonSerializer
-                        .Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options)!
-                        .Operations!;
-                    var thing = operations.Thing;
-                    return string.Join(
-                        "|",
-                        thing.Typename,
-                        thing.Id,
-                        thing.Key,
-                        thing.At.ToString("O", global::System.Globalization.CultureInfo.InvariantCulture),
-                        thing.When.Offset,
-                        thing.Data.GetRawText(),
-                        thing.Note ?? "null",
-                        thing.Window,
-                        operations.Grid[0]![1],
-                        operations.Grid[1] is null,
-                        operations.Maybe![0] is null,
-                        operations.Maybe[1]!.Id
-                    );
-                }
-
-                public static string Refused(string json)
-                {
-                    try
-                    {
-                        global::System.Text.Json.JsonSerializer.Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options);
-                        return "read";
-                    }
-                    catch (global::System.Text.Json.JsonException)
-                    {
-                        return "refused";
-                    }
-                }
-            }
-            """;
-        const string answer = """
-            {"operations":{"thing":{"__typename":"Thing","id":9007199254740993,"key":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","at":"2026-10-23T10:00:00+02:00","when":"2026-10-23T08:00:00Z","data":{"a":[1,"x"]},"note":null,"window":"LAST24_HOURS"},"grid":[[1,2],null],"maybe":[null,{"id":3}]}}
-            """;
         var files = RenderShapes(("src/graphql/Shapes.graphql", ShapesQuery));
 
-        CompileCSharp(files, out var assembly, probe)
+        CompileCSharp(files, out var assembly, TraxJsonProbe)
             .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
             .Select(d => d.ToString())
             .Should()
             .BeEmpty();
-        var type = assembly!.GetType("Trax.Operations.Probe")!;
+        var type = assembly.NotNull().GetType("Trax.Operations.Probe").NotNull();
         string Call(string method, params object[] args) =>
-            (string)type.GetMethod(method)!.Invoke(null, args)!;
+            (string)type.GetMethod(method).NotNull().Invoke(null, args).NotNull();
 
         Call("LeftOut")
             .Should()
@@ -1446,12 +1566,15 @@ public class OperationsClientGeneratorTests
             .Be(
                 "{\"key\":\"00000000-0000-0000-0000-000000000000\",\"filter\":{\"note\":null,\"window\":\"ALL_TIME\"}}"
             );
-        Call("Read", answer)
+        Call("Read", ShapesAnswer)
             .Should()
             .Be(
                 "Thing|9007199254740993|3f2504e0-4f89-11d3-9a0c-0305e82c3301|2026-10-23T10:00:00.0000000+02:00|00:00:00|{\"a\":[1,\"x\"]}|null|Last24Hours|2|True|True|3"
             );
-        Call("Refused", answer.Replace("\"id\":9007199254740993,", ""))
+        Call(
+                "Refused",
+                ShapesAnswer.Replace("\"id\":9007199254740993,", "", StringComparison.Ordinal)
+            )
             .Should()
             .Be("refused", "a required field the answer lacks is an error, not a default");
     }
@@ -1486,7 +1609,7 @@ public class OperationsClientGeneratorTests
         string name
     )
     {
-        var schema = System.Text.RegularExpressions.Regex.Replace(Schema, @"\bRunState\b", name);
+        var schema = RunStateWord.Replace(Schema, name);
         var runs = Runs.Replace("RunState", name, StringComparison.Ordinal);
         var options = new OperationsGenerateOptions(
             schema,
@@ -1632,10 +1755,15 @@ public class OperationsClientGeneratorTests
         const string hostile = "ends </summary> here & <b>\nnext\u2028line\u2029*/ \"q\" \\ end";
         var schema =
             Schema
-                .Replace("type Run {\n  id: Long!", $"type Run {{\n  {Block(hostile)}\n  id: Long!")
+                .Replace(
+                    "type Run {\n  id: Long!",
+                    $"type Run {{\n  {Block(hostile)}\n  id: Long!",
+                    StringComparison.Ordinal
+                )
                 .Replace(
                     "enum RunState {\n  RUNNING",
-                    $"enum RunState {{\n  {Block(hostile)}\n  RUNNING"
+                    $"enum RunState {{\n  {Block(hostile)}\n  RUNNING",
+                    StringComparison.Ordinal
                 ) + $"\n{Block(hostile)}\ninput Odd {{\n  {Block(hostile)}\n  value: Int\n}}\n";
         const string mutation =
             "# ünïcode comment\nmutation Hostile { operations { cancel(id: 1, note: \"say \\\"hi\\\" \\\\ café ☃ \u2028 \\u00e9\") { success } } }";
@@ -1649,8 +1777,9 @@ public class OperationsClientGeneratorTests
         );
         var registered = Documents(ClientGenerator.Render(options))
             .ToDictionary(
-                d => d.GetProperty("name").GetString()!,
-                d => d.GetProperty("text").GetString()!
+                d => d.GetProperty("name").GetString().NotNull(),
+                d => d.GetProperty("text").GetString().NotNull(),
+                StringComparer.Ordinal
             );
 
         Text(files, "Types.g.cs")
@@ -1665,10 +1794,14 @@ public class OperationsClientGeneratorTests
             .Should()
             .BeEmpty();
         var document = (Trax.Client.TraxDocument)
-            assembly!
-                .GetType("Trax.Operations.TraxOperations")!
-                .GetField("Hostile")!
-                .GetValue(null)!;
+            assembly
+                .NotNull()
+                .GetType("Trax.Operations.TraxOperations")
+                .NotNull()
+                .GetField("Hostile")
+                .NotNull()
+                .GetValue(null)
+                .NotNull();
         registered["Hostile"].Should().Contain("café ☃ \u2028");
         document.Text.Should().Be(registered["Hostile"], "the text is sent byte for byte");
         document.Id.Should().Be(ClientDocumentSet.ConsoleIdOf("Hostile", document.Text));
@@ -1683,7 +1816,8 @@ public class OperationsClientGeneratorTests
         var schema =
             Schema.Replace(
                 "enum RunState {\n  RUNNING",
-                $"enum RunState {{\n  {Block(described)}\n  RUNNING"
+                $"enum RunState {{\n  {Block(described)}\n  RUNNING",
+                StringComparison.Ordinal
             ) + $"\n{Block(described)}\ninput Odd {{\n  {Block(described)}\n  value: Int\n}}\n";
         var files = ClientGenerator.Render(
             new OperationsGenerateOptions(schema, [new("src/graphql/Runs.graphql", Runs)])
@@ -1708,7 +1842,7 @@ public class OperationsClientGeneratorTests
 
     // A GraphQL block string holding text exactly.
     private static string Block(string text) =>
-        "\"\"\"" + text.Replace("\"\"\"", "\\\"\"\"") + "\"\"\"";
+        "\"\"\"" + text.Replace("\"\"\"", "\\\"\"\"", StringComparison.Ordinal) + "\"\"\"";
 
     [TestCase("")]
     [TestCase("1Abc")]
@@ -1732,38 +1866,38 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
-    public void The_command_checks_the_csharp_client_and_names_a_document_that_changed()
+    public async Task The_command_checks_the_csharp_client_and_names_a_document_that_changed()
     {
         var dir = Directory.CreateTempSubdirectory("trax-ops-check-");
-        var output = new StringWriter();
-        var error = new StringWriter();
-        var (before, beforeError) = (Console.Out, Console.Error);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
         var cwd = Directory.GetCurrentDirectory();
         try
         {
-            File.WriteAllText(Path.Combine(dir.FullName, "operations.graphql"), Schema);
-            File.WriteAllText(Path.Combine(dir.FullName, "Runs.graphql"), Runs);
-            Console.SetOut(output);
-            Console.SetError(error);
+            await File.WriteAllTextAsync(Path.Combine(dir.FullName, "operations.graphql"), Schema);
+            await File.WriteAllTextAsync(Path.Combine(dir.FullName, "Runs.graphql"), Runs);
             Directory.SetCurrentDirectory(dir.FullName);
-            int Run(bool check) =>
-                ClientCommand.RunOperations(
-                    null,
+            Task<int> RunAsync(bool check) =>
+                ClientCommand.RunOperationsAsync(
+                    manifestPath: null,
                     Path.Combine(dir.FullName, "operations.graphql"),
                     Path.Combine(dir.FullName, "Operations"),
                     check,
                     ["Runs.graphql"],
                     "csharp",
-                    "My.Operations"
+                    "My.Operations",
+                    output,
+                    error
                 );
 
-            var written = Run(check: false);
-            var clean = Run(check: true);
-            File.WriteAllText(
-                Path.Combine(dir.FullName, "Runs.graphql"),
-                Runs.Replace("name\n", "")
-            );
-            var stale = Run(check: true);
+            var written = await RunAsync(check: false).ConfigureAwait(false);
+            var clean = await RunAsync(check: true).ConfigureAwait(false);
+            await File.WriteAllTextAsync(
+                    Path.Combine(dir.FullName, "Runs.graphql"),
+                    Runs.Replace("name\n", "", StringComparison.Ordinal)
+                )
+                .ConfigureAwait(false);
+            var stale = await RunAsync(check: true).ConfigureAwait(false);
 
             (written, clean, stale).Should().Be((0, 0, 1));
             output.ToString().Should().Contain("DRIFT   Documents/Runs.g.cs");
@@ -1771,8 +1905,6 @@ public class OperationsClientGeneratorTests
         }
         finally
         {
-            Console.SetOut(before);
-            Console.SetError(beforeError);
             Directory.SetCurrentDirectory(cwd);
             dir.Delete(recursive: true);
         }
@@ -1780,31 +1912,21 @@ public class OperationsClientGeneratorTests
 
     [TestCase("--lang", "csharp")]
     [TestCase("--namespace", "My.Operations")]
-    public void The_command_refuses_the_language_options_without_operations(
+    public async Task The_command_refuses_the_language_options_without_operations(
         string option,
         string value
     )
     {
-        var error = new StringWriter();
-        var before = Console.Error;
-        int exit;
-        try
-        {
-            Console.SetError(error);
-            exit = ClientCommand
-                .Create()
-                .Parse(["--manifest", "manifest.json", "--out", "out", option, value])
-                .Invoke();
-        }
-        finally
-        {
-            Console.SetError(before);
-        }
+        var run = await CommandOutput
+            .InvokeAsync(
+                ClientCommand
+                    .Create()
+                    .Parse(["--manifest", "manifest.json", "--out", "out", option, value])
+            )
+            .ConfigureAwait(false);
 
-        exit.Should().Be(1);
-        error
-            .ToString()
-            .Should()
+        run.ExitCode.Should().Be(1);
+        run.Stderr.Should()
             .Contain(
                 "--lang and --namespace choose the operations client's language; give them with --operations."
             );
@@ -1838,14 +1960,19 @@ public class OperationsClientGeneratorTests
         params string[] callers
     )
     {
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path));
         var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
             "OperationsClient" + Guid.NewGuid().ToString("N"),
             files
                 .Select(f => (f.Text, f.Path))
-                .Concat(callers.Select((text, i) => (text, $"Caller{i}.cs")))
+                .Concat(
+                    callers.Select(
+                        (text, i) =>
+                            (text, string.Create(CultureInfo.InvariantCulture, $"Caller{i}.cs"))
+                    )
+                )
                 .Select(f =>
                     Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
                         f.Item1,
@@ -1868,7 +1995,10 @@ public class OperationsClientGeneratorTests
     }
 
     // The console's schema and documents, from the source tree above the test's directory.
-    private static (string Schema, List<ClientDocumentFile> Documents) ConsoleSources()
+    private static async Task<(
+        string Schema,
+        List<ClientDocumentFile> Documents
+    )> ConsoleSourcesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -1885,15 +2015,23 @@ public class OperationsClientGeneratorTests
             );
             if (!File.Exists(Path.Combine(app, "operations.graphql")))
                 continue;
-            var documents = Directory
-                .EnumerateFiles(Path.Combine(app, "src", "graphql"), "*.graphql")
-                .Order(StringComparer.Ordinal)
-                .Select(path => new ClientDocumentFile(
-                    "src/graphql/" + Path.GetFileName(path),
-                    File.ReadAllText(path)
-                ))
-                .ToList();
-            return (File.ReadAllText(Path.Combine(app, "operations.graphql")), documents);
+            var documents = new List<ClientDocumentFile>();
+            foreach (
+                var path in Directory
+                    .EnumerateFiles(Path.Combine(app, "src", "graphql"), "*.graphql")
+                    .Order(StringComparer.Ordinal)
+            )
+                documents.Add(
+                    new ClientDocumentFile(
+                        "src/graphql/" + Path.GetFileName(path),
+                        await File.ReadAllTextAsync(path).ConfigureAwait(false)
+                    )
+                );
+            return (
+                await File.ReadAllTextAsync(Path.Combine(app, "operations.graphql"))
+                    .ConfigureAwait(false),
+                documents
+            );
         }
         if (Environment.GetEnvironmentVariable("CI") is not null)
             Assert.Fail("Trax.Api's operations console not found, and CI always checks it out.");
@@ -1902,7 +2040,7 @@ public class OperationsClientGeneratorTests
     }
 
     private static string Text(IReadOnlyList<ClientFile> files, string path) =>
-        files.Single(f => f.Path == path).Text;
+        files.Single(f => string.Equals(f.Path, path, StringComparison.Ordinal)).Text;
 
     private static List<JsonElement> Documents(IReadOnlyList<ClientFile> files)
     {
@@ -1915,7 +2053,7 @@ public class OperationsClientGeneratorTests
     }
 
     // The cases both this suite and the host's read, from the source tree above the test's directory.
-    private static List<(string Name, string Text, string Id)> FixtureCases()
+    private static async Task<List<(string Name, string Text, string Id)>> FixtureCasesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -1934,15 +2072,17 @@ public class OperationsClientGeneratorTests
             );
             if (!File.Exists(candidate))
                 continue;
-            using var json = JsonDocument.Parse(File.ReadAllText(candidate));
+            using var json = JsonDocument.Parse(
+                await File.ReadAllTextAsync(candidate).ConfigureAwait(false)
+            );
             return json
                 .RootElement.GetProperty("cases")
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();
@@ -1954,4 +2094,11 @@ public class OperationsClientGeneratorTests
         Assert.Ignore("Trax.Api's console-document-ids.json not found (isolated build).");
         return [];
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\bRunState\b",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex RunStateWord { get; }
 }

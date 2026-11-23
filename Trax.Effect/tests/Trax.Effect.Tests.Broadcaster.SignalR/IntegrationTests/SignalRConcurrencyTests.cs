@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR.Client;
 using Trax.Effect.Broadcaster.SignalR.Models;
@@ -19,7 +20,7 @@ public class SignalRConcurrencyTests
             ExternalId: externalId,
             TrainName: "T.IDoThing",
             TrainState: "Completed",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -29,12 +30,12 @@ public class SignalRConcurrencyTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + timeout;
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             if (condition())
                 return true;
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         }
         return condition();
     }
@@ -42,21 +43,27 @@ public class SignalRConcurrencyTests
     [Test]
     public async Task ParallelDispatch_AllMessagesDelivered_NoLoss()
     {
-        await using var server = await SignalRTestServer.StartAsync();
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync();
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var received = new ConcurrentBag<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => received.Add(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
-        var ids = Enumerable.Range(0, 200).Select(i => $"id-{i}").ToArray();
+        var ids = Enumerable
+            .Range(0, 200)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"id-{i}"))
+            .ToArray();
         await Parallel.ForEachAsync(
             ids,
             new ParallelOptions { MaxDegreeOfParallelism = 16 },
-            async (id, ct) => await dispatcher.HandleAsync(Message(id, "Completed"), ct)
+            async (id, ct) =>
+                await dispatcher.HandleAsync(Message(id, "Completed"), ct).ConfigureAwait(false)
         );
 
         var ok = await WaitUntilAsync(() => received.Count >= ids.Length, Timeout);
@@ -68,26 +75,33 @@ public class SignalRConcurrencyTests
     [Test]
     public async Task ParallelDispatch_FilterApplied_OnlyMatchingEventsDelivered()
     {
-        await using var server = await SignalRTestServer.StartAsync(opts =>
-            opts.OnlyForEvents("Completed")
-        );
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(opts => opts.OnlyForEvents("Completed"));
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var received = new ConcurrentBag<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => received.Add(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
-        var completedIds = Enumerable.Range(0, 50).Select(i => $"c-{i}").ToArray();
-        var failedIds = Enumerable.Range(0, 50).Select(i => $"f-{i}").ToArray();
+        var completedIds = Enumerable
+            .Range(0, 50)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"c-{i}"))
+            .ToArray();
+        var failedIds = Enumerable
+            .Range(0, 50)
+            .Select(i => string.Create(CultureInfo.InvariantCulture, $"f-{i}"))
+            .ToArray();
 
         await Parallel.ForEachAsync(
             completedIds
                 .Select(id => (id, type: "Completed"))
                 .Concat(failedIds.Select(id => (id, type: "Failed"))),
-            async (item, ct) => await dispatcher.HandleAsync(Message(item.id, item.type), ct)
+            async (item, ct) =>
+                await dispatcher.HandleAsync(Message(item.id, item.type), ct).ConfigureAwait(false)
         );
 
         var ok = await WaitUntilAsync(() => received.Count >= completedIds.Length, Timeout);

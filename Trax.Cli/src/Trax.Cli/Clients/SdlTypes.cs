@@ -98,20 +98,22 @@ internal sealed class SdlTypes
     /// <paramref name="objectType"/>: the same type, an interface it implements, or a union it is a member of.
     /// </summary>
     public bool Applies(string condition, string objectType) =>
-        condition == objectType
+        string.Equals(condition, objectType, StringComparison.Ordinal)
         || Definition(condition) switch
         {
             GraphQLInterfaceTypeDefinition => Definition(objectType)
                 is GraphQLObjectTypeDefinition o
                 && Implements(o, condition),
-            GraphQLUnionTypeDefinition union => (union.Types?.Items ?? []).Any(t =>
-                t.Name.StringValue == objectType
+            GraphQLUnionTypeDefinition union => (union.Types?.Items ?? []).Exists(t =>
+                string.Equals(t.Name.StringValue, objectType, StringComparison.Ordinal)
             ),
             _ => false,
         };
 
     private static bool Implements(GraphQLObjectTypeDefinition objectType, string @interface) =>
-        (objectType.Interfaces?.Items ?? []).Any(i => i.Name.StringValue == @interface);
+        (objectType.Interfaces?.Items ?? []).Exists(i =>
+            string.Equals(i.Name.StringValue, @interface, StringComparison.Ordinal)
+        );
 
     /// <summary>A scalar or enum named <paramref name="name"/>, as a value of it arrives.</summary>
     public string Leaf(string name) => Scalar(name);
@@ -136,7 +138,7 @@ internal sealed class SdlTypes
         // Text that closes the type it is parsed in (`Int } type X { y: Int`) parses, as two definitions.
         return parsed.Definitions is [GraphQLObjectTypeDefinition { Fields.Items: [var field] }]
             ? field.Type
-            : throw NotAType(text, owner, null);
+            : throw NotAType(text, owner, inner: null);
     }
 
     private static InvalidOperationException NotAType(
@@ -159,7 +161,7 @@ internal sealed class SdlTypes
 
     /// <summary>The declared types <paramref name="types"/> name.</summary>
     public IEnumerable<string> NamesIn(IEnumerable<GraphQLType> types) =>
-        types.Select(NameOf).Where(n => n is not null).Select(n => n!);
+        types.Select(NameOf).OfType<string>();
 
     /// <summary>A value sent as <paramref name="type"/>: null allowed where the type is nullable.</summary>
     public string InputType(GraphQLType type) =>
@@ -188,12 +190,10 @@ internal sealed class SdlTypes
                 case GraphQLEnumTypeDefinition @enum:
                     sb.Append(TypeScript.Doc(@enum.Description?.Value.ToString()));
                     sb.Append($"export type {identifier} = ")
-                        .Append(
-                            string.Join(
-                                " | ",
-                                (@enum.Values?.Items ?? []).Select(v =>
-                                    TypeScript.Literal(v.Name.StringValue)
-                                )
+                        .AppendJoin(
+                            " | ",
+                            (@enum.Values?.Items ?? []).Select(v =>
+                                TypeScript.Literal(v.Name.StringValue)
                             )
                         )
                         .Append(";\n");

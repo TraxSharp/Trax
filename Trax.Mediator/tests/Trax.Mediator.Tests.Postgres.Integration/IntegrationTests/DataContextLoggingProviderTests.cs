@@ -50,7 +50,7 @@ public class DataContextLoggingProviderTests : TestSetup
     )
     {
         timeout ??= TimeSpan.FromSeconds(10);
-        var deadline = DateTime.UtcNow + timeout.Value;
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout.Value;
         var count = 0;
 
         // ADR 0014: the query carries this wait's own token so a stalled command
@@ -59,15 +59,19 @@ public class DataContextLoggingProviderTests : TestSetup
         // simply never saw the count.
         using var cts = new CancellationTokenSource(timeout.Value);
 
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
-            using var context = (IDataContext)factory.Create();
-            count = await context.Logs.Where(l => l.Category == category).CountAsync(cts.Token);
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
+            count = await context
+                .Logs.Where(l => l.Category == category)
+                .CountAsync(cts.Token)
+                .ConfigureAwait(false);
 
             if (count >= expectedCount)
                 return count;
 
-            await Task.Delay(250, cts.Token);
+            await Task.Delay(250, cts.Token).ConfigureAwait(false);
         }
 
         return count;
@@ -91,7 +95,8 @@ public class DataContextLoggingProviderTests : TestSetup
 
             count.Should().Be(logCount);
 
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var sample = await context.Logs.FirstAsync(l => l.Category == "Test.BulkPersistence");
             sample.Message.Should().Contain("Bulk log");
             sample.Level.Should().Be(LogLevel.Information);
@@ -121,7 +126,8 @@ public class DataContextLoggingProviderTests : TestSetup
             var truncatedCategory = new string('C', 500);
             await WaitForLogCount(factory, truncatedCategory, 1);
 
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var log = await context.Logs.FirstAsync(l => l.Category == truncatedCategory);
 
             log.Message.Should().HaveLength(4000);
@@ -212,7 +218,8 @@ public class DataContextLoggingProviderTests : TestSetup
             // Wait for the allowed logs to flush
             await WaitForLogCount(factory, "Test.Allowed", 5);
 
-            using var context = (IDataContext)factory.Create();
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
             var logs = await context
                 .Logs.Where(l =>
                     l.Category == "Test.Blacklisted"

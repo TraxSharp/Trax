@@ -27,7 +27,7 @@ public sealed class ChangeSignalCoalescer(
         {
             try
             {
-                await DrainWindowAsync(stoppingToken);
+                await DrainWindowAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -43,7 +43,7 @@ public sealed class ChangeSignalCoalescer(
     private async Task DrainWindowAsync(CancellationToken ct)
     {
         // Block until at least one signal is available, then open a coalesce window.
-        if (!await signal.Reader.WaitToReadAsync(ct))
+        if (!await signal.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             return;
 
         var domains = new HashSet<ChangeDomain>();
@@ -53,19 +53,19 @@ public sealed class ChangeSignalCoalescer(
         while (!windowEnd.IsCompleted)
         {
             var readReady = signal.Reader.WaitToReadAsync(ct).AsTask();
-            var winner = await Task.WhenAny(readReady, windowEnd);
+            var winner = await Task.WhenAny(readReady, windowEnd).ConfigureAwait(false);
             if (winner == windowEnd)
                 break;
 
             // The channel completed (shutdown) — flush what we have and stop coalescing.
-            if (!await readReady)
+            if (!await readReady.ConfigureAwait(false))
                 break;
 
             DrainAvailable(domains);
         }
 
         if (domains.Count > 0)
-            await FlushAsync(domains, ct);
+            await FlushAsync(domains, ct).ConfigureAwait(false);
     }
 
     private void DrainAvailable(HashSet<ChangeDomain> domains)
@@ -76,14 +76,15 @@ public sealed class ChangeSignalCoalescer(
 
     private async Task FlushAsync(IReadOnlyCollection<ChangeDomain> domains, CancellationToken ct)
     {
-        await using var scope = serviceProvider.CreateAsyncScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var sinks = scope.ServiceProvider.GetServices<IChangeSignalSink>();
 
         foreach (var sink in sinks)
         {
             try
             {
-                await sink.FlushAsync(domains, ct);
+                await sink.FlushAsync(domains, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

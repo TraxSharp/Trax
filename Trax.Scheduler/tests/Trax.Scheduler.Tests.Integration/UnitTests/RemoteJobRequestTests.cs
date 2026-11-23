@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
@@ -42,7 +43,7 @@ public class RemoteJobRequestTests
         var deserialized = JsonSerializer.Deserialize<RemoteJobRequest>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(99);
+        deserialized.NotNull().MetadataId.Should().Be(99);
         deserialized.Input.Should().BeNull();
         deserialized.InputType.Should().BeNull();
     }
@@ -60,7 +61,7 @@ public class RemoteJobRequestTests
         var deserialized = JsonSerializer.Deserialize<RemoteJobRequest>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(42);
+        deserialized.NotNull().MetadataId.Should().Be(42);
         deserialized.Input.Should().Be("{\"value\":\"hello\"}");
         deserialized
             .InputType.Should()

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 
 public partial class SignalRSinkOptions
@@ -71,7 +73,7 @@ public partial class SignalRSinkOptions
                 );
             }
 
-            _trainNames.Add(type.FullName!);
+            _trainNames.Add(type.FullName.NotNull());
         }
 
         return this;

@@ -22,17 +22,20 @@ namespace Trax.Core.Tests.Unit.UnitTests.Train;
 [Property("adr", "Trax.Docs/adr/0016-a-junction-chain-is-a-declaration-not-a-step-of-the-work.md")]
 public class ChainVerificationStepAndConstructorTests : TestSetup
 {
-    private static IReadOnlyList<ChainFault> Verify<TTrain>(IServiceCollection? services = null)
+    private static async Task<IReadOnlyList<ChainFault>> Verify<TTrain>(
+        IServiceCollection? services = null
+    )
         where TTrain : Train<string, bool>, new()
     {
-        using var provider = (services ?? new ServiceCollection()).BuildServiceProvider();
+        var provider = (services ?? new ServiceCollection()).BuildServiceProvider();
 
-        return ChainVerification.Verify(
-            new TTrain().DeclaredChain(),
-            typeof(string),
-            typeof(bool),
-            provider.GetRequiredService<IServiceProviderIsService>()
-        );
+        await using (provider.ConfigureAwait(false))
+            return ChainVerification.Verify(
+                new TTrain().DeclaredChain(),
+                typeof(string),
+                typeof(bool),
+                provider.GetRequiredService<IServiceProviderIsService>()
+            );
     }
 
     #region Refusals carry their step
@@ -132,9 +135,9 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     #region Constructor arguments
 
     [Test]
-    public void Verify_AConstructorArgumentNothingSupplies_IsAFaultNamingTheJunctionAndTheType()
+    public async Task Verify_AConstructorArgumentNothingSupplies_IsAFaultNamingTheJunctionAndTheType()
     {
-        var fault = Verify<NeedsClockTrain>().Should().ContainSingle().Which;
+        var fault = (await Verify<NeedsClockTrain>()).Should().ContainSingle().Which;
 
         fault.IsRefusal.Should().BeFalse();
         fault.StepIndex.Should().Be(0);
@@ -143,56 +146,56 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     }
 
     [Test]
-    public void Verify_AConstructorArgumentTheContainerRegisters_IsNotAFault() =>
-        Verify<NeedsClockTrain>(new ServiceCollection().AddSingleton<IClock, Clock>())
+    public async Task Verify_AConstructorArgumentTheContainerRegisters_IsNotAFault() =>
+        (await Verify<NeedsClockTrain>(new ServiceCollection().AddSingleton<IClock, Clock>()))
             .Should()
             .BeEmpty();
 
     [Test]
-    public void Verify_AConstructorArgumentAnEarlierJunctionProduces_IsNotAFault() =>
-        Verify<ClockProducedFirstTrain>().Should().BeEmpty();
+    public async Task Verify_AConstructorArgumentAnEarlierJunctionProduces_IsNotAFault() =>
+        (await Verify<ClockProducedFirstTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_AConstructorArgumentOnlyALaterJunctionProduces_IsAFault() =>
-        Verify<ClockProducedAfterTrain>()
+    public async Task Verify_AConstructorArgumentOnlyALaterJunctionProduces_IsAFault() =>
+        (await Verify<ClockProducedAfterTrain>())
             .Should()
             .ContainSingle()
             .Which.Junction.Should()
             .Be(typeof(ClockJunction));
 
     [Test]
-    public void Verify_AConstructorArgumentPassedToAddServices_IsNotAFault() =>
-        Verify<ClockPassedAsServiceTrain>().Should().BeEmpty();
+    public async Task Verify_AConstructorArgumentPassedToAddServices_IsNotAFault() =>
+        (await Verify<ClockPassedAsServiceTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_TheServiceProviderItself_IsAlwaysAvailable() =>
-        Verify<NeedsServiceProviderTrain>().Should().BeEmpty();
+    public async Task Verify_TheServiceProviderItself_IsAlwaysAvailable() =>
+        (await Verify<NeedsServiceProviderTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_ALoggerWithLoggingRegistered_IsNotAFault() =>
-        Verify<NeedsLoggerTrain>(new ServiceCollection().AddLogging()).Should().BeEmpty();
+    public async Task Verify_ALoggerWithLoggingRegistered_IsNotAFault() =>
+        (await Verify<NeedsLoggerTrain>(new ServiceCollection().AddLogging())).Should().BeEmpty();
 
     [Test]
-    public void Verify_ALoggerWithAFactoryPassedToAddServices_IsNotAFault() =>
-        Verify<NeedsLoggerWithFactoryTrain>().Should().BeEmpty();
+    public async Task Verify_ALoggerWithAFactoryPassedToAddServices_IsNotAFault() =>
+        (await Verify<NeedsLoggerWithFactoryTrain>()).Should().BeEmpty();
 
     [Test]
-    public void Verify_ALoggerWithNoLoggingAndNoFactory_IsAFault() =>
-        Verify<NeedsLoggerTrain>()
+    public async Task Verify_ALoggerWithNoLoggingAndNoFactory_IsAFault() =>
+        (await Verify<NeedsLoggerTrain>())
             .Should()
             .ContainSingle()
             .Which.Reason.Should()
             .Contain("ILogger");
 
     [Test]
-    public void Verify_ATupleConstructorArgument_IsNotTakenFromTheContainer()
+    public async Task Verify_ATupleConstructorArgument_IsNotTakenFromTheContainer()
     {
         var services = new ServiceCollection().AddSingleton<IClock, Clock>();
         services.Add(
             ServiceDescriptor.Singleton(typeof((string, IClock)), _ => ("x", (IClock)new Clock()))
         );
 
-        Verify<NeedsTupleTrain>(services)
+        (await Verify<NeedsTupleTrain>(services))
             .Should()
             .ContainSingle()
             .Which.Reason.Should()
@@ -203,8 +206,8 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
     }
 
     [Test]
-    public void Verify_AJunctionPassedAsAnInstance_HasItsConstructorLeftUnchecked() =>
-        Verify<ClockInstanceTrain>().Should().BeEmpty();
+    public async Task Verify_AJunctionPassedAsAnInstance_HasItsConstructorLeftUnchecked() =>
+        (await Verify<ClockInstanceTrain>()).Should().BeEmpty();
 
     [Test]
     public void Verify_WithoutTheContainer_LeavesConstructorsUnchecked() =>
@@ -228,22 +231,22 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
         public NotAJunctionWithTwoConstructors(IClock clock) => _ = clock;
     }
 
-    private class StringToBool : Junction<string, bool>
+    private sealed class StringToBool : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(input.Length > 0);
     }
 
-    private class StringToInt : Junction<string, int>
+    private sealed class StringToInt : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class IntToBool : Junction<int, bool>
+    private sealed class IntToBool : Junction<int, bool>
     {
         public override Task<bool> Run(int input) => Task.FromResult(input > 0);
     }
 
-    private class TwoConstructors : Junction<string, bool>
+    private sealed class TwoConstructors : Junction<string, bool>
     {
         public TwoConstructors() { }
 
@@ -252,116 +255,116 @@ public class ChainVerificationStepAndConstructorTests : TestSetup
         public override Task<bool> Run(string input) => Task.FromResult(true);
     }
 
-    private class ClockJunction(IClock clock) : Junction<string, bool>
+    private sealed class ClockJunction(IClock clock) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(clock is not null);
     }
 
-    private class ProducesClock : Junction<string, IClock>
+    private sealed class ProducesClock : Junction<string, IClock>
     {
         public override Task<IClock> Run(string input) => Task.FromResult<IClock>(new Clock());
     }
 
-    private class ServiceProviderJunction(IServiceProvider services) : Junction<string, bool>
+    private sealed class ServiceProviderJunction(IServiceProvider services) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(services is not null);
     }
 
-    private class LoggerJunction(ILogger<LoggerJunction> logger) : Junction<string, bool>
+    private sealed class LoggerJunction(ILogger<LoggerJunction> logger) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(logger is not null);
     }
 
-    private class TupleJunction((string, IClock) pair) : Junction<string, bool>
+    private sealed class TupleJunction((string, IClock) pair) : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(pair.Item2 is not null);
     }
 
-    private class NotAJunctionFirstTrain : Train<string, bool>
+    private sealed class NotAJunctionFirstTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<NotAJunction>().Chain<StringToBool>().Resolve();
     }
 
-    private class NotAJunctionWithTwoConstructorsTrain : Train<string, bool>
+    private sealed class NotAJunctionWithTwoConstructorsTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<NotAJunctionWithTwoConstructors>().Chain<StringToBool>().Resolve();
     }
 
-    private class TwoConstructorsSecondTrain : Train<string, bool>
+    private sealed class TwoConstructorsSecondTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToInt>().Chain<TwoConstructors>().Resolve();
     }
 
-    private class NullServiceSecondTrain : Train<string, bool>
+    private sealed class NullServiceSecondTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
-            Chain<StringToBool>().AddServices<IClock>(null!).Resolve();
+            Chain<StringToBool>().AddServices<IClock>(Null.Of<IClock>()).Resolve();
     }
 
-    private class ResolvesAValueTrain : Train<string, bool>
+    private sealed class ResolvesAValueTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
-            Chain<StringToBool>().Resolve(true);
+            Chain<StringToBool>().Resolve(returnType: true);
     }
 
-    private class MissingInputTrain : Train<string, bool>
+    private sealed class MissingInputTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<IntToBool>().Resolve();
     }
 
-    private class NeedsClockTrain : Train<string, bool>
+    private sealed class NeedsClockTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ClockJunction>().Resolve();
     }
 
-    private class ClockProducedFirstTrain : Train<string, bool>
+    private sealed class ClockProducedFirstTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ProducesClock>().Chain<ClockJunction>().Resolve();
     }
 
-    private class ClockProducedAfterTrain : Train<string, bool>
+    private sealed class ClockProducedAfterTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ClockJunction>().Chain<ProducesClock>().Resolve();
     }
 
-    private class ClockPassedAsServiceTrain : Train<string, bool>
+    private sealed class ClockPassedAsServiceTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<IClock>(new Clock()).Chain<ClockJunction>().Resolve();
     }
 
-    private class NeedsServiceProviderTrain : Train<string, bool>
+    private sealed class NeedsServiceProviderTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<ServiceProviderJunction>().Resolve();
     }
 
-    private class NeedsLoggerTrain : Train<string, bool>
+    private sealed class NeedsLoggerTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<LoggerJunction>().Resolve();
     }
 
-    private class NeedsLoggerWithFactoryTrain : Train<string, bool>
+    private sealed class NeedsLoggerWithFactoryTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<ILoggerFactory>(new LoggerFactory()).Chain<LoggerJunction>().Resolve();
     }
 
-    private class NeedsTupleTrain : Train<string, bool>
+    private sealed class NeedsTupleTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TupleJunction>().Resolve();
     }
 
-    private class ClockInstanceTrain : Train<string, bool>
+    private sealed class ClockInstanceTrain : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain(new ClockJunction(new Clock())).Resolve();

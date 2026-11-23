@@ -119,10 +119,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // ── Auto-migrate chat schema ────────────────────────────────────────────────
-using (var scope = app.Services.CreateScope())
+var scope = app.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-    await db.Database.MigrateAsync();
+    await db.Database.MigrateAsync().ConfigureAwait(false);
 }
 
 // ── Map endpoints ───────────────────────────────────────────────────────────
@@ -132,7 +133,7 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+await app.RunAsync().ConfigureAwait(false);
 
 // The display name is what other participants see beside a message.
 static TraxPrincipal ChatUser((string Id, string Name) person) =>
@@ -140,5 +141,12 @@ static TraxPrincipal ChatUser((string Id, string Name) person) =>
 
 namespace Trax.Samples.ChatService.Api
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

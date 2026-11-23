@@ -14,7 +14,7 @@ public class ReadSolarSensorsJunction(ILogger<ReadSolarSensorsJunction> logger)
             input.Region
         );
 
-        await Task.Delay(250);
+        await Task.Delay(250, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{ArrayId}] Sensor data collected — 48 panels reporting nominal output",

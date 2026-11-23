@@ -5,60 +5,6 @@ using Trax.Effect.Data.Services.SqlDialect;
 namespace Trax.StateMachine.Persistence.Integration.Fixtures;
 
 /// <summary>
-/// Where <see cref="PausingSnapshotStore"/> holds the next write: before it reaches the store (after the caller's
-/// read), or after the store has written it and before the caller hears back.
-/// </summary>
-public enum PausePoint
-{
-    BeforeWrite,
-    AfterWrite,
-}
-
-/// <summary>
-/// The one-shot gate a <see cref="PausingSnapshotStore"/> holds a write at. A test arms it, starts the call, awaits
-/// <see cref="Reached"/>, looks at the database, and releases it.
-/// </summary>
-public sealed class WriteGate
-{
-    private readonly TaskCompletionSource _reached = new(
-        TaskCreationOptions.RunContinuationsAsynchronously
-    );
-    private readonly TaskCompletionSource _released = new(
-        TaskCreationOptions.RunContinuationsAsynchronously
-    );
-    private PausePoint? _armed;
-
-    /// <summary>Holds the next write at <paramref name="point"/>.</summary>
-    public void Arm(PausePoint point) => _armed = point;
-
-    /// <summary>Completes when a write is held.</summary>
-    public Task Reached => _reached.Task;
-
-    /// <summary>Lets the held write go on.</summary>
-    public void Release() => _released.TrySetResult();
-
-    internal async Task At(PausePoint point)
-    {
-        if (_armed != point)
-            return;
-        _armed = null;
-        _reached.TrySetResult();
-        await _released.Task;
-    }
-
-    /// <summary>Replaces a host's <see cref="ISnapshotStore"/> with one that holds its writes at <paramref name="gate"/>.</summary>
-    public static Action<IServiceCollection> Install(WriteGate gate) =>
-        services =>
-            services.AddScoped<ISnapshotStore>(sp => new PausingSnapshotStore(
-                new EfSnapshotStore(
-                    sp.GetRequiredService<IDataContext>(),
-                    sp.GetService<ISqlDialect>()
-                ),
-                gate
-            ));
-}
-
-/// <summary>
 /// A test-only decorator over <see cref="ISnapshotStore"/> that holds a write between the caller's read and its
 /// update (<see cref="PausePoint.BeforeWrite"/>), or between the store's write and the caller hearing back
 /// (<see cref="PausePoint.AfterWrite"/>), so a test can interleave another reader or writer at that point
@@ -151,16 +97,16 @@ public sealed class PausingSnapshotStore(ISnapshotStore inner, WriteGate gate)
 
     private async Task Write(Func<Task> write)
     {
-        await gate.At(PausePoint.BeforeWrite);
-        await write();
-        await gate.At(PausePoint.AfterWrite);
+        await gate.At(PausePoint.BeforeWrite).ConfigureAwait(false);
+        await write().ConfigureAwait(false);
+        await gate.At(PausePoint.AfterWrite).ConfigureAwait(false);
     }
 
     private async Task<T> Write<T>(Func<Task<T>> write)
     {
-        await gate.At(PausePoint.BeforeWrite);
-        var result = await write();
-        await gate.At(PausePoint.AfterWrite);
+        await gate.At(PausePoint.BeforeWrite).ConfigureAwait(false);
+        var result = await write().ConfigureAwait(false);
+        await gate.At(PausePoint.AfterWrite).ConfigureAwait(false);
         return result;
     }
 }

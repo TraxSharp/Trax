@@ -7,7 +7,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class TakePaymentJunction(
+internal sealed class TakePaymentJunction(
     IPaymentProvider payments,
     Catalogue catalogue,
     IServiceProvider services,
@@ -35,22 +35,26 @@ internal class TakePaymentJunction(
         ChargeResult charge;
         try
         {
-            charge = await payments.Charge(
-                input.Customer.Id,
-                input.Order.PaymentToken,
-                input.Cart.Total,
-                idempotencyKey,
-                CancellationToken
-            );
+            charge = await payments
+                .Charge(
+                    input.Customer.Id,
+                    input.Order.PaymentToken,
+                    input.Cart.Total,
+                    idempotencyKey,
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             // However the charge failed, the order stops here, so its stock goes back, even when
             // the run itself was cancelled.
-            await catalogue.Release(
-                [.. input.Cart.Lines.Select(l => (l.Sku, l.Quantity))],
-                CancellationToken.None
-            );
+            await catalogue
+                .Release(
+                    [.. input.Cart.Lines.Select(l => (l.Sku, l.Quantity))],
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
             logger.LogInformation("Released reservation {ReservationId}", input.Reservation.Id);
 
             if (ex is PaymentDeclinedException)

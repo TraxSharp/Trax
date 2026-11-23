@@ -1,27 +1,11 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.Decisions;
-
-/// <summary>
-/// Prepares the recording of one run's decisions before its junctions run. Implemented by
-/// <c>Trax.Effect.Data</c>'s decision journal, which <c>AddDecisionRecording</c> registers.
-/// </summary>
-internal interface IDecisionRunRecorder
-{
-    /// <summary>
-    /// Binds the run to its row and loads the answers it replays. Called once per run, after the
-    /// row is saved and the start hooks have run, and before the first junction. Whatever it
-    /// throws fails the run.
-    /// </summary>
-    /// <param name="metadata">The run's row.</param>
-    /// <param name="train">The train's own type, which Trax.Core names its decisions after.</param>
-    /// <param name="cancellationToken">The run's token.</param>
-    Task<DecisionRun> Begin(Metadata metadata, Type train, CancellationToken cancellationToken);
-}
 
 /// <summary>
 /// What one run needs to record and replay its decisions: the row they are written against and the
@@ -98,7 +82,9 @@ internal sealed class DecisionRun
     /// <summary>
     /// The branches that have taken a track on a question whose answer is withheld.
     /// </summary>
-    private readonly ConcurrentDictionary<string, byte> _withheldTracks = new();
+    private readonly ConcurrentDictionary<string, byte> _withheldTracks = new(
+        StringComparer.Ordinal
+    );
 
     /// <summary>
     /// Serialises adding a track to a recorded decision. Two branches can route on one decision
@@ -124,7 +110,7 @@ internal sealed class DecisionRun
 
         foreach (var ((asked, asking), id) in _latest)
             if (
-                asking == key
+                string.Equals(asking, key, StringComparison.Ordinal)
                 && BranchPaths.Encloses(asked, path)
                 && (nearest is null || asked.Length > nearest.Length)
             )
@@ -177,7 +163,10 @@ internal sealed class DecisionRun
     {
         var message =
             $"Run {externalId} of train '{name}' was queued to replay the decisions of run "
-            + $"{replayDecisionsOf}, but {why}. It is failed rather than asked afresh, because a "
+            + string.Create(
+                CultureInfo.InvariantCulture,
+                $"{replayDecisionsOf}, but {why}. It is failed rather than asked afresh, because a "
+            )
             + "fresh answer could take a different track from the run it repeats.";
 
         return Classified(new TrainException(message), name, externalId, FailureClass.Permanent);
@@ -249,7 +238,7 @@ internal sealed class DecisionRun
         }
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
 
         if (tick >= 0)
             name = name[..tick];

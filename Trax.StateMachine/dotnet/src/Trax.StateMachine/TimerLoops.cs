@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine;
 
 /// <summary>
@@ -33,8 +35,8 @@ internal static class TimerLoops
             var loop = path.SkipWhile(s => !EqualityComparer<TState>.Default.Equals(s, current))
                 .ToList();
             var first = loop.MinBy(s => IndexOf(order, s));
-            var at = loop.IndexOf(first!);
-            loops.Add(loop.Skip(at).Concat(loop.Take(at)).Append(first!).ToList());
+            var at = loop.IndexOf(first.NotNull());
+            loops.Add(loop.Skip(at).Concat(loop.Take(at)).Append(first.NotNull()).ToList());
             foreach (var s in loop)
                 named.Add(s);
         }

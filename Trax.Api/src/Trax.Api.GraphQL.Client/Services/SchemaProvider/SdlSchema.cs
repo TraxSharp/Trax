@@ -4,6 +4,7 @@ using GraphQL.Types;
 using GraphQLParser;
 using GraphQLParser.AST;
 using GraphQLParser.Visitors;
+using Trax.Api.GraphQL.Client.Checks;
 
 namespace Trax.Api.GraphQL.Client;
 
@@ -79,7 +80,7 @@ internal static class SdlSchema
             );
             if (entry is not null)
             {
-                rootName = entry.Type!.Name.StringValue;
+                rootName = entry.Type.NotNull().Name.StringValue;
                 schemaDefinition.OperationTypes.Remove(entry);
             }
         }
@@ -94,8 +95,16 @@ internal static class SdlSchema
         var removed = document.Definitions.RemoveAll(definition =>
             definition switch
             {
-                GraphQLObjectTypeDefinition type => type.Name.StringValue == rootName,
-                GraphQLObjectTypeExtension extension => extension.Name.StringValue == rootName,
+                GraphQLObjectTypeDefinition type => string.Equals(
+                    type.Name.StringValue,
+                    rootName,
+                    StringComparison.Ordinal
+                ),
+                GraphQLObjectTypeExtension extension => string.Equals(
+                    extension.Name.StringValue,
+                    rootName,
+                    StringComparison.Ordinal
+                ),
                 _ => false,
             }
         );

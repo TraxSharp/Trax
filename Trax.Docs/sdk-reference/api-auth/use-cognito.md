@@ -30,6 +30,14 @@ public static JwtBuilder UseCognito(
     string clientId,
     CognitoTokenUse tokenUse = CognitoTokenUse.IdAndAccess);
 
+public static JwtBuilder UseCognito(
+    this JwtBuilder builder,
+    string region,
+    string userPoolId,
+    string clientId,
+    CognitoTokenUse tokenUse,
+    TimeProvider clock);
+
 public enum CognitoTokenUse
 {
     Id,
@@ -51,6 +59,7 @@ public sealed class CognitoJwtPrincipalResolver : ITraxPrincipalResolver<JwtToke
 | `userPoolId` | `string` | The user pool id, such as `us-east-1_AbCdEfGhI`. |
 | `clientId` | `string` | The app client id. An ID token must carry it in `aud`, an access token in `client_id`. |
 | `tokenUse` | `CognitoTokenUse` | Which token shapes to accept: `Id`, `Access`, or `IdAndAccess` (the default). |
+| `clock` | `TimeProvider` | The clock a token's `nbf` and `exp` are checked against. The overload without it uses the system clock. |
 
 ## Returns
 

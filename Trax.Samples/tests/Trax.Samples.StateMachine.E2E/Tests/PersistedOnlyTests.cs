@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
 
@@ -21,7 +22,7 @@ public class PersistedOnlyTests : StateMachineTestFixture
     {
         // The start document with one field fewer: a document the host did not register. (The registered text itself
         // is the same document as its id, so the host runs it.)
-        var start = StateMachineClient.DocumentOf(Turnstile, "start")!;
+        var start = StateMachineClient.DocumentOf(Turnstile, "start").NotNull();
         var unregistered = start.Document.Replace("dueAtKnown ", "", StringComparison.Ordinal);
         unregistered.Should().NotBe(start.Document);
 

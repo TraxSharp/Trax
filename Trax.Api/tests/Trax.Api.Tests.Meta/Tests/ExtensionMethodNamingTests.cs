@@ -53,36 +53,9 @@ public class ExtensionMethodNamingTests
 
             foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
             {
-                if (!method.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword)))
-                    continue;
-                if (!method.Modifiers.Any(m => m.IsKind(SyntaxKind.StaticKeyword)))
-                    continue;
-
-                var name = method.Identifier.Text;
-                if (
-                    !name.StartsWith("Add", StringComparison.Ordinal)
-                    && !name.StartsWith("Use", StringComparison.Ordinal)
-                )
-                    continue;
-
-                var firstParam = method.ParameterList.Parameters.FirstOrDefault();
-                if (firstParam is null)
-                    continue;
-                if (!firstParam.Modifiers.Any(m => m.IsKind(SyntaxKind.ThisKeyword)))
-                    continue;
-
-                var paramType = firstParam.Type?.ToString();
-                if (paramType is null)
-                    continue;
-
-                if (!HostingTypes.Contains(paramType))
-                    continue;
-                if (name.Contains("Trax", StringComparison.Ordinal))
-                    continue;
-                if (KnownExceptions.Contains(name))
-                    continue;
-
-                offenders.Add($"{RepoRoot.Relative(file)} -> {name} (extends {paramType})");
+                var offence = Offence(file, method);
+                if (offence is not null)
+                    offenders.Add(offence);
             }
         }
 
@@ -97,5 +70,39 @@ public class ExtensionMethodNamingTests
                     + "ExtensionMethodNamingTests.KnownExceptions with a justification. Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
+    }
+
+    private static string? Offence(string file, MethodDeclarationSyntax method)
+    {
+        if (!method.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword)))
+            return null;
+        if (!method.Modifiers.Any(m => m.IsKind(SyntaxKind.StaticKeyword)))
+            return null;
+
+        var name = method.Identifier.Text;
+        if (
+            !name.StartsWith("Add", StringComparison.Ordinal)
+            && !name.StartsWith("Use", StringComparison.Ordinal)
+        )
+            return null;
+
+        var firstParam = method.ParameterList.Parameters.FirstOrDefault();
+        if (firstParam is null)
+            return null;
+        if (!firstParam.Modifiers.Any(m => m.IsKind(SyntaxKind.ThisKeyword)))
+            return null;
+
+        var paramType = firstParam.Type?.ToString();
+        if (paramType is null)
+            return null;
+
+        if (!HostingTypes.Contains(paramType))
+            return null;
+        if (name.Contains("Trax", StringComparison.Ordinal))
+            return null;
+        if (KnownExceptions.Contains(name))
+            return null;
+
+        return $"{RepoRoot.Relative(file)} -> {name} (extends {paramType})";
     }
 }

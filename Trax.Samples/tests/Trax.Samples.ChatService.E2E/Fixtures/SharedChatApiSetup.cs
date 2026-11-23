@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.ChatService.E2E.Factories;
 
 namespace Trax.Samples.ChatService.E2E;
@@ -5,7 +6,11 @@ namespace Trax.Samples.ChatService.E2E;
 [SetUpFixture]
 public class SharedChatApiSetup
 {
-    public static ChatServiceApiFactory Factory { get; private set; } = null!;
+    public static ChatServiceApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
     [OneTimeSetUp]
     public void OneTimeSetUp()

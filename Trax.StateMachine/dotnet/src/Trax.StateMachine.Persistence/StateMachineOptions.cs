@@ -30,8 +30,8 @@ public sealed class StateMachineOptions
     /// idle, as <see cref="MaxDraftLifetime"/> does: that is the record of what the server did. Its delete is conditional on the revision it read, so a draft written since
     /// is kept. A read never deletes. Defaults to <see cref="DefaultDraftTtl"/>; must be positive, and a host that sets
     /// it longer than <see cref="MaxDraftLifetime"/> refuses to start (a lifetime set below the default TTL is a hard
-    /// cap and is accepted). <c>null</c>
-    /// turns idle expiry off; <see cref="MaxDraftLifetime"/> still applies, so set that to <c>null</c> as well for a
+    /// cap and is accepted). <see langword="null"/>
+    /// turns idle expiry off; <see cref="MaxDraftLifetime"/> still applies, so set that to <see langword="null"/> as well for a
     /// draft to live until it is discarded.
     /// </summary>
     public TimeSpan? DraftTtl
@@ -40,7 +40,11 @@ public sealed class StateMachineOptions
         set
         {
             if (value is { } ttl)
-                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(ttl, TimeSpan.Zero);
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+                    ttl,
+                    TimeSpan.Zero,
+                    nameof(value)
+                );
             field = value;
             DraftTtlSet = true;
         }
@@ -55,7 +59,7 @@ public sealed class StateMachineOptions
     /// it created, a save over a draft the user holds is not a new one, a draft idle past <see cref="DraftTtl"/> no
     /// longer counts, and system-owned instances never count. The count and the insert are one transaction, under a
     /// lock on the user, so concurrent starts cannot pass it together. Defaults to
-    /// <see cref="DefaultMaxDraftsPerUser"/>; must be positive. <c>null</c> sets no cap. The InMemory provider has no
+    /// <see cref="DefaultMaxDraftsPerUser"/>; must be positive. <see langword="null"/> sets no cap. The InMemory provider has no
     /// transactions to hold the cap in: it does not apply the default, and a host that sets a cap on it refuses to
     /// start.
     /// </summary>
@@ -65,7 +69,7 @@ public sealed class StateMachineOptions
         set
         {
             if (value is { } cap)
-                ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1);
+                ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1, nameof(value));
             field = value;
             MaxDraftsPerUserSet = true;
         }
@@ -148,7 +152,7 @@ public sealed class StateMachineOptions
     /// draft written before its creation time was recorded counts its age from its last write. Defaults to
     /// <see cref="DefaultMaxDraftLifetime"/>; must be positive. A host that sets <see cref="DraftTtl"/> longer than
     /// this refuses to start, rather than the TTL raising it; set below the default TTL alone, it caps every draft.
-    /// <c>null</c> sets no bound.
+    /// <see langword="null"/> sets no bound.
     /// </summary>
     public TimeSpan? MaxDraftLifetime
     {
@@ -156,7 +160,11 @@ public sealed class StateMachineOptions
         set
         {
             if (value is { } lifetime)
-                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lifetime, TimeSpan.Zero);
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+                    lifetime,
+                    TimeSpan.Zero,
+                    nameof(value)
+                );
             field = value;
         }
     } = DefaultMaxDraftLifetime;
@@ -291,7 +299,7 @@ public sealed class StateMachineOptions
     internal bool GenericMutationsExposed { get; private set; }
 
     /// <summary>
-    /// The policy <see cref="ExposeGenericStateMachineMutations"/> gates the generic mutations with, or <c>null</c>
+    /// The policy <see cref="ExposeGenericStateMachineMutations"/> gates the generic mutations with, or <see langword="null"/>
     /// when it named none or was not called.
     /// </summary>
     internal string? GenericMutationsPolicy { get; private set; }
@@ -342,32 +350,4 @@ public sealed class StateMachineOptions
             field = value;
         }
     } = StateMachineChangeFeed.Notify;
-}
-
-/// <summary>How a host hears that a state-machine instance changed (<see cref="StateMachineOptions.ChangeFeed"/>).</summary>
-public enum StateMachineChangeFeed
-{
-    /// <summary>
-    /// On Postgres, one listening session per host hears the notice the database sends for every committed write.
-    /// Changes arrive at once; every write pays for the notice.
-    /// </summary>
-    Notify,
-
-    /// <summary>
-    /// Every host with an open watch reads the watched rows' revisions once a second, as on SQLite. Once the database
-    /// turns its snapshot notices off (<c>ALTER DATABASE ... SET trax.snapshot_notify = 'off'</c>), a snapshot write
-    /// sends none, and takes the notify lock only when its transaction sends another notice.
-    /// </summary>
-    Poll,
-}
-
-/// <summary>The options of <see cref="StateMachineOptions.ExposeGenericStateMachineMutations"/>.</summary>
-public sealed class GenericStateMachineMutationOptions
-{
-    /// <summary>
-    /// The authorization policy a caller must satisfy to reach any of the six generic mutations. Required: the
-    /// opt-in without one refuses to start. The host registers the policy with ASP.NET Core authorization as it
-    /// does for a train's <c>[TraxAuthorize(Policy = ...)]</c>.
-    /// </summary>
-    public string? Policy { get; set; }
 }

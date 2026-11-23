@@ -27,7 +27,7 @@ namespace Trax.Mediator.Services.TrainRegistry;
 /// The registry is typically created during application startup and registered as a singleton
 /// in the dependency injection container, allowing it to be injected into the train bus.
 /// </remarks>
-internal class TrainRegistry : ITrainRegistry
+internal sealed class TrainRegistry : ITrainRegistry
 {
     /// <summary>
     /// Gets or sets the dictionary that maps train input types to their corresponding train types.
@@ -36,7 +36,7 @@ internal class TrainRegistry : ITrainRegistry
     /// This dictionary is populated during construction by scanning the provided assemblies
     /// for train implementations and extracting their input types.
     /// </remarks>
-    public Dictionary<Type, Type> InputTypeToTrain { get; set; }
+    public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; }
 
     /// <summary>
     /// The discovered (serviceType, implementationType) pairs from assembly scanning.
@@ -87,10 +87,10 @@ internal class TrainRegistry : ITrainRegistry
         {
             var concreteTypes = assembly
                 .GetTypes()
-                .Where(x => x.IsClass)
-                .Where(x => x.IsAbstract == false)
                 .Where(x =>
-                    x.GetInterfaces()
+                    x.IsClass
+                    && !x.IsAbstract
+                    && x.GetInterfaces()
                         .Where(y => y.IsGenericType)
                         .Select(y => y.GetGenericTypeDefinition())
                         .Contains(trainType)
@@ -116,7 +116,7 @@ internal class TrainRegistry : ITrainRegistry
         // Multiple trains can share the same input type (e.g., internal scheduler
         // trains using Unit). The bus's input-keyed RunAsync reaches only the first of
         // them; everything that names a train runs it by name instead (ITrainBus.RunByNameAsync).
-        InputTypeToTrain = new Dictionary<Type, Type>();
+        var inputTypeToTrain = new Dictionary<Type, Type>();
         foreach (var (serviceType, implementationType) in discovered)
         {
             // The input type of the service type the train is registered under, which is the
@@ -127,7 +127,9 @@ internal class TrainRegistry : ITrainRegistry
                     $"Could not find an interface and/or an inherited interface of type ({trainType.Name}) on target type ({implementationType.Name}) with FullName ({implementationType.FullName}) on Assembly ({implementationType.AssemblyQualifiedName})."
                 );
 
-            InputTypeToTrain.TryAdd(inputType, serviceType);
+            inputTypeToTrain.TryAdd(inputType, serviceType);
         }
+
+        InputTypeToTrain = inputTypeToTrain;
     }
 }

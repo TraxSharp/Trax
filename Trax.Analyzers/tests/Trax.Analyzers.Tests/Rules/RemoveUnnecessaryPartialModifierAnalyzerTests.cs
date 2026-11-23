@@ -1,0 +1,475 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.RemoveUnnecessaryPartialModifierAnalyzer,
+    Trax.Analyzers.Rules.RemoveUnnecessaryPartialModifierFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class RemoveUnnecessaryPartialModifierAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task PartialClass_WithSingleDeclaration_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            {|TRX0204:partial|} class Sample
+            {
+            }
+            """;
+        test.FixedCode = """
+            class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithSingleDeclaration_PreserveComments_Keyword_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            /*sample*/{|TRX0204:partial|} class Sample
+            {
+            }
+            """;
+        test.FixedCode = """
+            /*sample*/class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithSingleDeclaration_PreserveComments_Modifier_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            static /*sample*/{|TRX0204:partial|} class Sample
+            {
+            }
+            """;
+        test.FixedCode = """
+            static /*sample*/class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithOtherModifiers_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            public sealed {|TRX0204:partial|} class Sample
+            {
+            }
+            """;
+        test.FixedCode = """
+            public sealed class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialRecord_WithSingleDeclaration_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            {|TRX0204:partial|} record Sample;
+            """;
+        test.FixedCode = """
+            record Sample;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialStruct_WithSingleDeclaration_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            {|TRX0204:partial|} struct Sample
+            {
+            }
+            """;
+        test.FixedCode = """
+            struct Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialInterface_WithSingleDeclaration_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            {|TRX0204:partial|} interface ISample
+            {
+            }
+            """;
+        test.FixedCode = """
+            interface ISample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithMultipleDeclarations_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial class Sample
+            {
+            }
+
+            partial class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithPartialMethod_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial class Sample
+            {
+                partial void M();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialStruct_WithPartialMethodImplementation_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial struct Sample
+            {
+                partial void M();
+                partial void M() { }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#if CSHARP13_OR_GREATER
+    [Fact]
+    public Task PartialClass_WithPartialProperty_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial class Sample
+            {
+                public partial int P { get; }
+                public partial int P { get => 1; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithPartialIndexer_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial class Sample
+            {
+                public partial int this[int index] { get; }
+                public partial int this[int index] { get => index; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+#endif
+
+#if CSHARP14_OR_GREATER
+    [Fact]
+    public Task PartialClass_WithPartialEvent_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial class Sample
+            {
+                public partial event System.EventHandler E;
+                public partial event System.EventHandler E { add { } remove { } }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_WithPartialConstructor_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            partial class Sample
+            {
+                public partial Sample();
+                public partial Sample() { }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+#endif
+
+    [Fact]
+    public Task PartialClass_WithNestedPartialType_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            {|TRX0204:partial|} class Sample
+            {
+                partial class Nested
+                {
+                }
+
+                partial class Nested
+                {
+                }
+            }
+            """;
+        test.FixedCode = """
+            class Sample
+            {
+                partial class Nested
+                {
+                }
+
+                partial class Nested
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_ImplementingDisposable_WithCsWinRTSupport_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            namespace WinRT
+            {
+                sealed class WindowsRuntimeTypeAttribute : Attribute
+                {
+                }
+
+                sealed class GeneratedBindableCustomPropertyAttribute : Attribute
+                {
+                }
+
+                sealed class GeneratedWinRTExposedTypeAttribute : Attribute
+                {
+                }
+
+                sealed class WinRTExposedTypeAttribute : Attribute
+                {
+                }
+            }
+
+            partial class Sample : IDisposable
+            {
+                public void Dispose()
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_ImplementingDisposable_WithoutCsWinRTOrMauiSupport_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            {|TRX0204:partial|} class Sample : IDisposable
+            {
+                public void Dispose()
+                {
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            class Sample : IDisposable
+            {
+                public void Dispose()
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialContainingClass_WithNestedDisposableType_InMauiCompilation_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            namespace Microsoft.Maui.Controls
+            {
+                class BindableObject
+                {
+                }
+
+                class Application : BindableObject
+                {
+                }
+            }
+
+            partial class Sample
+            {
+                partial class Nested : IDisposable
+                {
+                    public void Dispose()
+                    {
+                    }
+                }
+            }
+
+            partial class Sample
+            {
+                partial class Nested
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_InheritingFromWpfUserControl_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            namespace System.Windows.Controls
+            {
+                public class UserControl
+                {
+                }
+            }
+            partial class Sample : System.Windows.Controls.UserControl
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_InheritingFromWpfPage_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            namespace System.Windows.Controls
+            {
+                public class Page
+                {
+                }
+            }
+            partial class Sample : System.Windows.Controls.Page
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_InheritingFromWpfApplication_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            namespace System.Windows
+            {
+                public class Application
+                {
+                }
+            }
+            partial class Sample : System.Windows.Application
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_InheritingFromWpfWindow_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            namespace System.Windows
+            {
+                public class Window
+                {
+                }
+            }
+            partial class Sample : System.Windows.Window
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PartialClass_PartialBeforeOtherModifier_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestCode = """
+            {|TRX0204:partial|} public class Sample
+            {
+            }
+            """;
+        test.FixedCode = """
+            public class Sample
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

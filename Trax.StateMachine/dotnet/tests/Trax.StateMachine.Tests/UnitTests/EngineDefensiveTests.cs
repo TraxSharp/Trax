@@ -59,7 +59,7 @@ public class EngineDefensiveTests
         builder.MigrateFrom(1, (_, _) => throw new InvalidOperationException("boom"));
         var engine = builder.Build().Engine;
 
-        RehydrationResult result = null!;
+        RehydrationResult? result = null;
         var act = () =>
             result = engine.Rehydrate(
                 "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}"

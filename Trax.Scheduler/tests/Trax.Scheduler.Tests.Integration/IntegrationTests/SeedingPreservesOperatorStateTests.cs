@@ -213,7 +213,7 @@ public class SeedingPreservesOperatorStateTests
                 Every.Minutes(5),
                 configureEach: (id, o) =>
                 {
-                    if (id == "batch-a")
+                    if (string.Equals(id, "batch-a", StringComparison.Ordinal))
                         o.MaxRetries = 1;
                 }
             );
@@ -227,7 +227,7 @@ public class SeedingPreservesOperatorStateTests
         var manifests = await fx
             .DataContext.Manifests.AsNoTracking()
             .Where(m => m.ExternalId == "batch-a" || m.ExternalId == "batch-b")
-            .ToDictionaryAsync(m => m.ExternalId);
+            .ToDictionaryAsync(m => m.ExternalId, StringComparer.Ordinal);
         manifests["batch-a"].MaxRetries.Should().Be(1, "configureEach states it for batch-a");
         manifests["batch-a"].Priority.Should().Be(17, "nothing states batch-a's priority");
         manifests["batch-b"].MaxRetries.Should().Be(9, "nothing states batch-b's retries");
@@ -249,7 +249,8 @@ public class SeedingPreservesOperatorStateTests
                 s.SetProperty(m => m.MaxRetries, maxRetries)
                     .SetProperty(m => m.TimeoutSeconds, timeoutSeconds)
                     .SetProperty(m => m.Priority, priority)
-            );
+            )
+            .ConfigureAwait(false);
         fx.DataContext.Reset();
     }
 

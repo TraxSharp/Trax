@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 
@@ -51,6 +52,7 @@ internal sealed class SnapshotWatchHub(
     ISnapshotChangeListener listener,
     IDataContextProviderFactory contexts,
     IEnumerable<IMachine> machines,
+    TimeProvider timeProvider,
     ILogger<SnapshotWatchHub>? logger = null
 ) : IHostedService, IAsyncDisposable, IDisposable
 {
@@ -76,7 +78,7 @@ internal sealed class SnapshotWatchHub(
     internal static TimeSpan CoalesceLimit { get; set; } = TimeSpan.FromMilliseconds(100);
 
     private readonly ILogger _logger = logger ?? NullLogger<SnapshotWatchHub>.Instance;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<long, WatchedRow> _rows = [];
     private readonly List<SnapshotWatch> _all = [];
 
@@ -138,7 +140,7 @@ internal sealed class SnapshotWatchHub(
                 _pending.Add(rowId);
             Start();
         }
-        _wake.Writer.TryWrite(true);
+        _wake.Writer.TryWrite(item: true);
         return watch;
     }
 
@@ -177,7 +179,7 @@ internal sealed class SnapshotWatchHub(
             loop = _loop;
             hearing = _hearing;
         }
-        await _stopping.CancelAsync();
+        await _stopping.CancelAsync().ConfigureAwait(false);
         if (loop is not null)
             await loop.WaitAsync(cancellationToken).ConfigureAwait(false);
         if (hearing is not null)
@@ -187,7 +189,8 @@ internal sealed class SnapshotWatchHub(
 
     // The container may dispose this more than once (it is registered under several service types), so disposing is
     // stopping, which is idempotent; the token source has no timer, so it is left to the collector.
-    public async ValueTask DisposeAsync() => await StopAsync(CancellationToken.None);
+    public async ValueTask DisposeAsync() =>
+        await StopAsync(CancellationToken.None).ConfigureAwait(false);
 
     public void Dispose()
     {
@@ -233,12 +236,12 @@ internal sealed class SnapshotWatchHub(
     // Called under the gate.
     private void Start()
     {
-        _loop ??= Task.Run(() => Read(_stopping.Token));
+        _loop ??= Task.Run(() => Read(_stopping.Token), CancellationToken.None);
         if (_session is null)
         {
             var session = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
             _session = session;
-            _hearing = Task.Run(() => Hear(session.Token));
+            _hearing = Task.Run(() => Hear(session.Token), CancellationToken.None);
         }
     }
 
@@ -252,9 +255,9 @@ internal sealed class SnapshotWatchHub(
             return new SnapshotWatchScope(
                 [.. _rows.Keys],
                 EveryRow: _all.Count > 0,
-                Machines: _all.Count == 0 || _all.Any(w => w.Machine is null)
+                Machines: _all.Count == 0 || _all.Exists(w => w.Machine is null)
                     ? null
-                    : _all.Select(w => w.Machine!).ToHashSet(StringComparer.Ordinal)
+                    : _all.Select(w => w.Machine.NotNull()).ToHashSet(StringComparer.Ordinal)
             );
     }
 
@@ -264,7 +267,9 @@ internal sealed class SnapshotWatchHub(
     {
         try
         {
-            await foreach (var change in listener.ChangesAsync(sessionToken, WatchedRows))
+            await foreach (
+                var change in listener.ChangesAsync(sessionToken, WatchedRows).ConfigureAwait(false)
+            )
             {
                 lock (_gate)
                 {
@@ -286,7 +291,7 @@ internal sealed class SnapshotWatchHub(
                             break;
                     }
                 }
-                _wake.Writer.TryWrite(true);
+                _wake.Writer.TryWrite(item: true);
             }
         }
         catch (OperationCanceledException) when (sessionToken.IsCancellationRequested)
@@ -301,10 +306,10 @@ internal sealed class SnapshotWatchHub(
     {
         try
         {
-            while (await _wake.Reader.WaitToReadAsync(stoppingToken))
+            while (await _wake.Reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
             {
                 _wake.Reader.TryRead(out _);
-                await Settle(stoppingToken);
+                await Settle(stoppingToken).ConfigureAwait(false);
                 List<long> burst;
                 lock (_gate)
                 {
@@ -323,7 +328,7 @@ internal sealed class SnapshotWatchHub(
 
                 try
                 {
-                    var read = await ReadRows(burst, stoppingToken);
+                    var read = await ReadRows(burst, stoppingToken).ConfigureAwait(false);
                     lock (_gate)
                         foreach (var rowId in burst)
                             Deliver(rowId, read.GetValueOrDefault(rowId));
@@ -342,8 +347,8 @@ internal sealed class SnapshotWatchHub(
                     );
                     lock (_gate)
                         _pending.UnionWith(burst);
-                    await Task.Delay(RetryDelay, stoppingToken);
-                    _wake.Writer.TryWrite(true);
+                    await Task.Delay(RetryDelay, timeProvider, stoppingToken).ConfigureAwait(false);
+                    _wake.Writer.TryWrite(item: true);
                 }
             }
         }
@@ -357,13 +362,13 @@ internal sealed class SnapshotWatchHub(
     // (a writer's quick succession of events, or a flood of forged ones) costs one read of it.
     private async Task Settle(CancellationToken stoppingToken)
     {
-        var started = Stopwatch.GetTimestamp();
-        while (Stopwatch.GetElapsedTime(started) < CoalesceLimit)
+        var started = timeProvider.GetTimestamp();
+        while (timeProvider.GetElapsedTime(started) < CoalesceLimit)
         {
             long before;
             lock (_gate)
                 before = _hints;
-            await Task.Delay(CoalesceWindow, stoppingToken);
+            await Task.Delay(CoalesceWindow, timeProvider, stoppingToken).ConfigureAwait(false);
             lock (_gate)
                 if (_hints == before)
                     return;
@@ -376,70 +381,94 @@ internal sealed class SnapshotWatchHub(
     )
     {
         var found = new Dictionary<long, SnapshotRowChange>(rowIds.Count);
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         foreach (var chunk in rowIds.Chunk(ReadBatch))
         {
             var rows = await db
                 .SnapshotDrafts.AsNoTracking()
                 .Where(d => chunk.Contains(d.RowId))
-                .Select(d => new
+                .Select(d => new ReadRow
                 {
-                    d.RowId,
-                    d.Id,
-                    d.Machine,
-                    d.OwnerKind,
-                    d.UserKey,
-                    d.Revision,
-                    d.Version,
-                    d.State,
-                    d.Context,
-                    d.IrHash,
-                    d.UpdatedAt,
-                    d.CreatedAt,
-                    d.DueAt,
+                    RowId = d.RowId,
+                    Id = d.Id,
+                    Machine = d.Machine,
+                    OwnerKind = d.OwnerKind,
+                    UserKey = d.UserKey,
+                    Revision = d.Revision,
+                    Version = d.Version,
+                    State = d.State,
+                    Context = d.Context,
+                    IrHash = d.IrHash,
+                    UpdatedAt = d.UpdatedAt,
+                    CreatedAt = d.CreatedAt,
+                    DueAt = d.DueAt,
                     HasInvokeToken = d.InvokeToken != null,
                 })
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
             foreach (var row in rows)
-                found[row.RowId] = Unreadable(row.Machine, row.State, row.Context) is { } reason
-                    ? SnapshotRowChange.UnreadableRow(
-                        row.RowId,
-                        row.Revision,
-                        row.Machine,
-                        row.Id,
-                        row.OwnerKind,
-                        row.UserKey,
-                        row.IrHash
-                    ) with
-                    {
-                        Version = row.Version,
-                        State = row.State,
-                        UnreadableReason = reason,
-                        HasInvokeToken = row.HasInvokeToken,
-                        CreatedAt = row.CreatedAt,
-                        UpdatedAt = row.UpdatedAt,
-                    }
-                    : new SnapshotRowChange(
-                        SnapshotRowChangeKind.Changed,
-                        row.RowId,
-                        row.Revision,
-                        row.Machine,
-                        row.Id,
-                        row.OwnerKind,
-                        row.UserKey,
-                        row.Version,
-                        row.State,
-                        row.Context,
-                        row.IrHash,
-                        row.UpdatedAt
-                    )
-                    {
-                        HasInvokeToken = row.HasInvokeToken,
-                        CreatedAt = row.CreatedAt,
-                        DueAt = row.DueAt,
-                    };
+                found[row.RowId] = Change(row);
         }
         return found;
+    }
+
+    private SnapshotRowChange Change(ReadRow row) =>
+        Unreadable(row.Machine, row.State, row.Context) is { } reason
+            ? SnapshotRowChange.UnreadableRow(
+                row.RowId,
+                row.Revision,
+                row.Machine,
+                row.Id,
+                row.OwnerKind,
+                row.UserKey,
+                row.IrHash
+            ) with
+            {
+                Version = row.Version,
+                State = row.State,
+                UnreadableReason = reason,
+                HasInvokeToken = row.HasInvokeToken,
+                CreatedAt = row.CreatedAt,
+                UpdatedAt = row.UpdatedAt,
+            }
+            : new SnapshotRowChange(
+                SnapshotRowChangeKind.Changed,
+                row.RowId,
+                row.Revision,
+                row.Machine,
+                row.Id,
+                row.OwnerKind,
+                row.UserKey,
+                row.Version,
+                row.State,
+                row.Context,
+                row.IrHash,
+                row.UpdatedAt
+            )
+            {
+                HasInvokeToken = row.HasInvokeToken,
+                CreatedAt = row.CreatedAt,
+                DueAt = row.DueAt,
+            };
+
+    // A row as the hub reads it.
+    private sealed class ReadRow
+    {
+        public long RowId { get; init; }
+        public Guid Id { get; init; }
+        public required string Machine { get; init; }
+        public SnapshotOwnerKind OwnerKind { get; init; }
+        public string? UserKey { get; init; }
+        public long Revision { get; init; }
+        public int Version { get; init; }
+        public required string State { get; init; }
+        public required string Context { get; init; }
+        public string? IrHash { get; init; }
+        public DateTimeOffset UpdatedAt { get; init; }
+        public DateTimeOffset? CreatedAt { get; init; }
+        public DateTimeOffset? DueAt { get; init; }
+        public bool HasInvokeToken { get; init; }
     }
 
     // Under the gate: hands one re-read row (null when it is gone) to the watchers that have not seen it.
@@ -526,7 +555,7 @@ internal sealed class SnapshotWatchHub(
             : _seen.TryGetValue(rowId, out var seen) ? seen
             : null;
         return known is null
-            ? SnapshotRowChange.GoneRow(rowId, null)
+            ? SnapshotRowChange.GoneRow(rowId, machine: null)
             : SnapshotRowChange.GoneRow(rowId, known.Machine) with
             {
                 Revision = known.Revision,
@@ -596,177 +625,4 @@ internal sealed class SnapshotWatchHub(
         // The last re-read of the row, handed to a watcher that joins later.
         public SnapshotRowChange? Latest { get; set; }
     }
-}
-
-/// <summary>
-/// One open watch on <see cref="SnapshotWatchHub"/>. Read <see cref="Changes"/> until it completes; dispose it to
-/// stop watching.
-/// </summary>
-internal sealed class SnapshotWatch : IAsyncDisposable, IDisposable
-{
-    private readonly SnapshotWatchHub _hub;
-    private readonly Channel<SnapshotRowChange> _buffer;
-
-    internal SnapshotWatch(SnapshotWatchHub hub, long? rowId, string? machine)
-    {
-        _hub = hub;
-        RowId = rowId;
-        Machine = machine;
-        _buffer = rowId is null
-            ? Channel.CreateBounded<SnapshotRowChange>(
-                new BoundedChannelOptions(SnapshotWatchHub.AllCapacity)
-                {
-                    SingleReader = true,
-                    FullMode = BoundedChannelFullMode.Wait,
-                }
-            )
-            // A row watch keeps only the latest change: each change is the whole row, so a skipped revision
-            // loses nothing, and a terminal change replaces whatever was waiting.
-            : Channel.CreateBounded<SnapshotRowChange>(
-                new BoundedChannelOptions(1)
-                {
-                    SingleReader = true,
-                    FullMode = BoundedChannelFullMode.DropOldest,
-                }
-            );
-    }
-
-    /// <summary>The row watched, or null for a watch on every row.</summary>
-    public long? RowId { get; }
-
-    /// <summary>The machine a watch on every row is limited to, or null.</summary>
-    public string? Machine { get; }
-
-    /// <summary>The changes, until the watch ends.</summary>
-    public ChannelReader<SnapshotRowChange> Changes => _buffer.Reader;
-
-    // The highest revision handed to this watch. Guarded by the hub's gate.
-    internal long Delivered { get; set; }
-
-    // Whether the hub still counts this watch. Guarded by the hub's gate.
-    internal bool Registered { get; set; } = true;
-
-    internal bool Offer(SnapshotRowChange change) => _buffer.Writer.TryWrite(change);
-
-    internal void Complete() => _buffer.Writer.TryComplete();
-
-    public void Dispose() => _hub.Release(this);
-
-    public ValueTask DisposeAsync()
-    {
-        _hub.Release(this);
-        return ValueTask.CompletedTask;
-    }
-}
-
-/// <summary>What a <see cref="SnapshotWatch"/> hands on.</summary>
-internal enum SnapshotRowChangeKind
-{
-    /// <summary>The row as it is now, at a revision newer than the watcher had.</summary>
-    Changed,
-
-    /// <summary>The row no longer exists: deleted or expired. The end of a watch on it.</summary>
-    Gone,
-
-    /// <summary>This host cannot read the row (written by another version, or by hand). The end of a watch on it.</summary>
-    Unreadable,
-
-    /// <summary>For a watch on every row only: changes may have been missed, so list again.</summary>
-    Reload,
-}
-
-/// <summary>
-/// One row as the hub re-read it. <see cref="Context"/> is the row's context as JSON text, set only on
-/// <see cref="SnapshotRowChangeKind.Changed"/>; the identifying fields are set whenever the hub read the row.
-/// </summary>
-internal sealed record SnapshotRowChange(
-    SnapshotRowChangeKind Kind,
-    long RowId,
-    long Revision,
-    string? Machine,
-    Guid? Id,
-    SnapshotOwnerKind? OwnerKind,
-    string? UserKey,
-    int Version,
-    string? State,
-    string? Context,
-    string? IrHash,
-    DateTimeOffset? UpdatedAt
-)
-{
-    /// <summary>Whether the row is gone.</summary>
-    public bool Deleted => Kind is SnapshotRowChangeKind.Gone;
-
-    /// <summary>Whether the row's state waits on a train run it invoked (it holds an invoke token).</summary>
-    public bool HasInvokeToken { get; init; }
-
-    /// <summary>When the row was created, where the store recorded it.</summary>
-    public DateTimeOffset? CreatedAt { get; init; }
-
-    /// <summary>
-    /// For <see cref="SnapshotRowChangeKind.Changed"/>: when the timer of the row's state fires, read with the row, or
-    /// null when that state has none. It travels beside the snapshot, never inside it.
-    /// </summary>
-    public DateTimeOffset? DueAt { get; init; }
-
-    /// <summary>
-    /// For <see cref="SnapshotRowChangeKind.Unreadable"/>: why this host cannot read the row, a rehydration error code
-    /// (unknown machine, unknown state, a context that is not a JSON object).
-    /// </summary>
-    public RefusalCode? UnreadableReason { get; init; }
-
-    internal static readonly SnapshotRowChange ReloadAll = new(
-        SnapshotRowChangeKind.Reload,
-        0,
-        0,
-        null,
-        null,
-        null,
-        null,
-        0,
-        null,
-        null,
-        null,
-        null
-    );
-
-    internal static SnapshotRowChange GoneRow(long rowId, string? machine) =>
-        new(
-            SnapshotRowChangeKind.Gone,
-            rowId,
-            0,
-            machine,
-            null,
-            null,
-            null,
-            0,
-            null,
-            null,
-            null,
-            null
-        );
-
-    internal static SnapshotRowChange UnreadableRow(
-        long rowId,
-        long revision,
-        string machine,
-        Guid id,
-        SnapshotOwnerKind ownerKind,
-        string? userKey,
-        string? irHash
-    ) =>
-        new(
-            SnapshotRowChangeKind.Unreadable,
-            rowId,
-            revision,
-            machine,
-            id,
-            ownerKind,
-            userKey,
-            0,
-            null,
-            null,
-            irHash,
-            null
-        );
 }

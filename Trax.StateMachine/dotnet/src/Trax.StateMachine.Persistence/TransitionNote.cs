@@ -24,7 +24,7 @@ internal readonly record struct TransitionNote(
 
     /// <summary>A creation by <paramref name="owner"/>'s side.</summary>
     public static TransitionNote Start(DraftOwner owner) =>
-        new(SnapshotTransitionKind.Start, null, ActorFor(owner));
+        new(SnapshotTransitionKind.Start, Trigger: null, ActorFor(owner));
 
     /// <summary>A command <paramref name="trigger"/> sent by <paramref name="owner"/>'s side.</summary>
     public static TransitionNote Command(DraftOwner owner, string? trigger) =>
@@ -32,7 +32,7 @@ internal readonly record struct TransitionNote(
 
     /// <summary>A save by <paramref name="owner"/>'s side.</summary>
     public static TransitionNote Save(DraftOwner owner) =>
-        new(SnapshotTransitionKind.Save, null, ActorFor(owner));
+        new(SnapshotTransitionKind.Save, Trigger: null, ActorFor(owner));
 
     /// <summary>A timer's fire of <paramref name="trigger"/>.</summary>
     public static TransitionNote Timer(string? trigger) =>
@@ -48,5 +48,5 @@ internal readonly record struct TransitionNote(
 
     /// <summary>A child's creation by the parent that spawned it.</summary>
     public static TransitionNote Spawned { get; } =
-        new(SnapshotTransitionKind.Start, null, SnapshotTransitionActor.Machine);
+        new(SnapshotTransitionKind.Start, Trigger: null, SnapshotTransitionActor.Machine);
 }

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -31,7 +32,7 @@ public class IrMachineViewSchemaTests
         var refusal = await RefusalAsync(field);
 
         refusal.Should().NotBeNull();
-        refusal!.ToString().Should().Contain("'turnstile'").And.Contain($"'{field}'");
+        refusal.NotNull().ToString().Should().Contain("'turnstile'").And.Contain($"'{field}'");
     }
 
     [TestCase("shop's sign")]
@@ -42,7 +43,12 @@ public class IrMachineViewSchemaTests
         var refusal = await RefusalAsync("status", name);
 
         refusal.Should().NotBeNull();
-        refusal!.ToString().Should().Contain($"'{name}'").And.Contain("has no GraphQL name");
+        refusal
+            .NotNull()
+            .ToString()
+            .Should()
+            .Contain($"'{name}'")
+            .And.Contain("has no GraphQL name");
     }
 
     [Test]
@@ -51,7 +57,8 @@ public class IrMachineViewSchemaTests
         var refusal = await RefusalAsync("status", "the turnstile", "the-turnstile");
 
         refusal.Should().NotBeNull();
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain("'the turnstile'")
@@ -60,12 +67,18 @@ public class IrMachineViewSchemaTests
     }
 
     // A host serving the turnstile from its IR and the given views, each its state under the field named field.
-    private static Task<Exception?> RefusalAsync(string field, params string[] names)
+    private static async Task<Exception?> RefusalAsync(string field, params string[] names)
     {
         if (names.Length == 0)
             names = ["turnstile"];
         var ir = JsonNode
-            .Parse(File.ReadAllText(IrMachineSchemaTests.IrFile("turnstile")))!
+            .Parse(
+                (
+                    await File.ReadAllTextAsync(IrMachineSchemaTests.IrFile("turnstile"))
+                        .ConfigureAwait(false)
+                )
+            )
+            .NotNull()
             .AsObject();
         ir["id"] = "ir-turnstile";
         var host = new HostMachine(
@@ -73,33 +86,36 @@ public class IrMachineViewSchemaTests
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
+            SystemKey: null,
             AccessRule.AnyAuthenticated,
             AccessRule.AnyAuthenticated,
-            new Dictionary<string, TriggerAccess>
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(AccessRule.AnyAuthenticated),
                 ["Push"] = new(AccessRule.AnyAuthenticated),
             },
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, host)], []);
         var views = names.ToDictionary(
             name => name,
             name => new HostView(
                 name,
-                [new ViewRead("ir-turnstile", null)],
-                [new ViewField(field, "ir-turnstile", ViewField.State, null)],
+                [new ViewRead("ir-turnstile", Key: null)],
+                [new ViewField(field, "ir-turnstile", ViewField.State, Labels: null)],
                 AccessRule.AnyAuthenticated
+            ),
+            StringComparer.Ordinal
+        );
+        return await MachineSchemaHost
+            .RefusalAsync(
+                [],
+                services: s =>
+                {
+                    s.AddIrMachines(machines);
+                    s.AddSingleton(new MachineViewCatalog(views));
+                }
             )
-        );
-        return MachineSchemaHost.RefusalAsync(
-            [],
-            services: s =>
-            {
-                s.AddIrMachines(machines);
-                s.AddSingleton(new MachineViewCatalog(views));
-            }
-        );
+            .ConfigureAwait(false);
     }
 }

@@ -49,7 +49,9 @@ internal sealed class DraftClaimHold
         foreach (var (key, from) in keys)
         {
             if (
-                await claims.TryClaim(key, Lease, contentFingerprint: null, CancellationToken.None)
+                await claims
+                    .TryClaim(key, Lease, contentFingerprint: null, CancellationToken.None)
+                    .ConfigureAwait(false)
                 is ClaimResult.Won won
             )
             {
@@ -57,18 +59,22 @@ internal sealed class DraftClaimHold
                 continue;
             }
             if (
-                await claims.GetCompleted(key, CancellationToken.None) is { } completed
+                await claims.GetCompleted(key, CancellationToken.None).ConfigureAwait(false)
+                    is { } completed
                 && (
                     recorded(completed.Receipt)
-                    || from is not null && state is not null && state != from
-                    || claims is EfEffectClaimStore ef && await ef.LeasePassed(key)
+                    || from is not null
+                        && state is not null
+                        && !string.Equals(state, from, StringComparison.Ordinal)
+                    || claims is EfEffectClaimStore ef
+                        && await ef.LeasePassed(key).ConfigureAwait(false)
                 )
             )
             {
                 hold._settled.Add((key, completed.Receipt));
                 continue;
             }
-            await hold.Drop();
+            await hold.Drop().ConfigureAwait(false);
             return null;
         }
         return hold;
@@ -89,7 +95,7 @@ internal sealed class DraftClaimHold
         if (_claims is null)
             return;
         foreach (var (key, token) in _held)
-            await _claims.ReleaseOwned(key, token, CancellationToken.None);
+            await _claims.ReleaseOwned(key, token, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -100,13 +106,15 @@ internal sealed class DraftClaimHold
     {
         if (_claims is null)
             return;
-        await Drop();
+        await Drop().ConfigureAwait(false);
         foreach (var (key, receipt) in _settled)
-            await _claims.ReleaseForReset(
-                key,
-                r => string.Equals(r, receipt, StringComparison.Ordinal),
-                CancellationToken.None
-            );
+            await _claims
+                .ReleaseForReset(
+                    key,
+                    r => string.Equals(r, receipt, StringComparison.Ordinal),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -152,7 +160,12 @@ internal sealed class DraftClaimHold
             claim.Receipt is null
                 ? claim.LeaseLive
                 : keys.Any(k =>
-                    k.Key == claim.Key && (k.From is null || state is null || k.From == state)
+                    string.Equals(k.Key, claim.Key, StringComparison.Ordinal)
+                    && (
+                        k.From is null
+                        || state is null
+                        || string.Equals(k.From, state, StringComparison.Ordinal)
+                    )
                 )
         );
 

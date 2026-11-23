@@ -1,70 +1,8 @@
 using System.Globalization;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Gherkin.Lexical;
-
-internal enum TokenKind
-{
-    /// <summary>A run of anything but whitespace, a quote, a comma or a bracket.</summary>
-    Word,
-
-    /// <summary>A quoted text, its escapes read.</summary>
-    Text,
-    Comma,
-    Open,
-    Close,
-}
-
-internal readonly record struct Token(TokenKind Kind, string Value)
-{
-    internal bool Is(string word) =>
-        Kind == TokenKind.Word && string.Equals(Value, word, StringComparison.Ordinal);
-
-    public override string ToString() =>
-        Kind switch
-        {
-            TokenKind.Text => $"\"{Value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"",
-            TokenKind.Comma => ",",
-            TokenKind.Open => "[",
-            TokenKind.Close => "]",
-            _ => Value,
-        };
-}
-
-/// <summary>The blocks a lexicon line can open, and the root every lexicon is.</summary>
-internal enum Block
-{
-    Root,
-    Actor,
-    Type,
-    Machine,
-    State,
-    Trigger,
-    Guard,
-    Runs,
-    View,
-    Field,
-}
-
-/// <summary>One keyword of the closed set: its text, its one form, where it may stand and the block it opens.</summary>
-internal sealed record Keyword(string Text, string Form, Block[] Under, Block? Opens = null)
-{
-    /// <summary>Whether the keyword ends in a colon and takes words after it, or stands alone (<c>Differential</c>).</summary>
-    internal bool TakesWords => Text.EndsWith(':');
-}
-
-/// <summary>One lexicon line: where it is, its keyword and the tokens after it.</summary>
-internal sealed record LexLine(int Number, Keyword Keyword, IReadOnlyList<Token> Tokens)
-{
-    /// <summary>
-    /// A line already reported as a problem, kept only because it opens a block: the lines under it attach to it and
-    /// are not each refused for having no block to go under.
-    /// </summary>
-    internal bool Broken { get; init; }
-}
-
-/// <summary>A problem with a lexicon, at its line (0 for the file as a whole).</summary>
-internal sealed record LexProblem(int Line, string Message);
 
 /// <summary>
 /// The lexicon's lines as Gherkin's are read: every line starts with a keyword from a closed set, whitespace outside
@@ -183,7 +121,7 @@ internal static class LexiconSyntax
             }
             if (!Tokenize(line, out var tokens, out var problem))
             {
-                problems.Add(new LexProblem(number, problem!));
+                problems.Add(new LexProblem(number, problem.NotNull()));
                 // The words before the first quote still say which block the line meant to open.
                 var quote = line.IndexOf('"', StringComparison.Ordinal);
                 if (
@@ -305,7 +243,8 @@ internal static class LexiconSyntax
         best ??= Keywords
             .Select(k => k.Text)
             .FirstOrDefault(k =>
-                guess.StartsWith(Bare(k) + " ", StringComparison.Ordinal) || guess == Bare(k)
+                guess.StartsWith(Bare(k) + " ", StringComparison.Ordinal)
+                || string.Equals(guess, Bare(k), StringComparison.Ordinal)
             );
         var shown = guess.Length == 0 ? tokens[0].ToString() : guess;
         return best is null
@@ -359,35 +298,9 @@ internal static class LexiconSyntax
             if (c == '"')
             {
                 EndWord();
-                var text = new StringBuilder();
-                var closed = false;
-                for (i++; i < line.Length; i++)
-                {
-                    var q = line[i];
-                    if (q == '\\')
-                    {
-                        if (i + 1 < line.Length && line[i + 1] is '"' or '\\')
-                        {
-                            text.Append(line[++i]);
-                            continue;
-                        }
-                        problem =
-                            "a backslash in quotes escapes only a quote (\\\") or a backslash (\\\\).";
-                        return false;
-                    }
-                    if (q == '"')
-                    {
-                        closed = true;
-                        break;
-                    }
-                    text.Append(q);
-                }
-                if (!closed)
-                {
-                    problem = "a quote is opened and never closed.";
+                if (QuotedText(line, ref i, out problem) is not { } quoted)
                     return false;
-                }
-                tokens.Add(new Token(TokenKind.Text, text.ToString()));
+                tokens.Add(new Token(TokenKind.Text, quoted));
                 continue;
             }
             if (char.IsWhiteSpace(c))
@@ -412,6 +325,42 @@ internal static class LexiconSyntax
         }
         EndWord();
         return true;
+    }
+
+    // The text of the quotes opened at line[i], with i left on the closing quote; null, with the problem, when the
+    // quotes hold a bad escape or never close.
+    private static string? QuotedText(string line, ref int i, out string? problem)
+    {
+        problem = null;
+        var text = new StringBuilder();
+        var closed = false;
+        for (i++; i < line.Length; i++)
+        {
+            var q = line[i];
+            if (q == '\\')
+            {
+                if (i + 1 < line.Length && line[i + 1] is '"' or '\\')
+                {
+                    text.Append(line[++i]);
+                    continue;
+                }
+                problem =
+                    "a backslash in quotes escapes only a quote (\\\") or a backslash (\\\\).";
+                return null;
+            }
+            if (q == '"')
+            {
+                closed = true;
+                break;
+            }
+            text.Append(q);
+        }
+        if (!closed)
+        {
+            problem = "a quote is opened and never closed.";
+            return null;
+        }
+        return text.ToString();
     }
 
     /// <summary>A word as a number, read as JSON reads one.</summary>

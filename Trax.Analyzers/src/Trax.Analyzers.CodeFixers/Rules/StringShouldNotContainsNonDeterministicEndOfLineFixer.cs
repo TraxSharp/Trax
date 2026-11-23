@@ -1,0 +1,77 @@
+using Microsoft.CodeAnalysis.Formatting;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class StringShouldNotContainsNonDeterministicEndOfLineFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.StringShouldNotContainsNonDeterministicEndOfLine);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        // Only the string literals are fixed, not the interpolated strings
+        if (root?.FindNode(context.Span, getInnermostNodeForTie: true) is not LiteralExpressionSyntax nodeToFix)
+            return;
+
+        foreach (var newLine in new[] { null, "\n", "\r\n" })
+        {
+            var title = "Use explicit " + (newLine switch
+            {
+                null => "new lines",
+                _ => $"new lines ({newLine.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal)})",
+            });
+            var codeAction = CodeAction.Create(
+                title,
+                ct => FixString(context.Document, nodeToFix, newLine, ct),
+                equivalenceKey: title);
+
+            context.RegisterCodeFix(codeAction, context.Diagnostics);
+        }
+    }
+
+    private static async Task<Document> FixString(Document document, LiteralExpressionSyntax nodeToFix, string? newLine, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+
+        var options = await document.GetOptionsAsync(cancellationToken).ConfigureAwait(false);
+        var lineEnding = options.GetOption(FormattingOptions.NewLine, LanguageNames.CSharp);
+
+        var firstCharPosition = nodeToFix.GetLineSpan(cancellationToken)?.StartLinePosition.Character ?? 0;
+        var newLineTrivia = TriviaList(lineEnding == "\n" ? LineFeed : CarriageReturnLineFeed, Whitespace(new string(' ', firstCharPosition)));
+
+        var text = nodeToFix.GetText().ToString();
+        var isVerbatim = text.StartsWith('@', StringComparison.Ordinal);
+        text = isVerbatim ? text[2..^1] : text[1..^1];
+
+        var newNode = ReplaceString(generator, text, newLine, newLineTrivia);
+        editor.ReplaceNode(nodeToFix, newNode);
+
+        return editor.GetChangedDocument();
+    }
+
+    private static SyntaxNode ReplaceString(SyntaxGenerator generator, string text, string? newLine, SyntaxTriviaList trivia)
+    {
+        SyntaxNode? node = null;
+        foreach (var (line, eol) in text.SplitLines())
+        {
+            var newText = eol.Length > 0 ? string.Concat(line.ToString().Replace("\"\"", "\"", StringComparison.Ordinal), newLine ?? eol.ToString()) : line.ToString();
+            var literal = generator.LiteralExpression(newText);
+            if (node is null)
+            {
+                node = literal;
+            }
+            else
+            {
+                literal = literal.WithLeadingTrivia(trivia);
+                node = generator.AddExpression(node, literal);
+            }
+        }
+
+        return node!;
+    }
+}

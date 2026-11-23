@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
 
@@ -20,9 +21,9 @@ public class CheckoutTests : StateMachineTestFixture
         var (id, started) = await Machines.StartAsync(Alice, Checkout);
         id.Should().NotBeNull(started.Raw);
         started.State.Should().Be("Cart");
-        started.Context["items"]!.AsArray().Should().BeEmpty();
+        started.Context["items"].NotNull().AsArray().Should().BeEmpty();
 
-        (await Machines.AdvanceAsync(Alice, Checkout, id!.Value, "Next"))
+        (await Machines.AdvanceAsync(Alice, Checkout, id.NotNull().Value, "Next"))
             .ProblemCode.Should()
             .Be("GUARD_FAILED", "an empty cart cannot be reviewed");
         await Machines.AdvanceAsync(
@@ -39,7 +40,8 @@ public class CheckoutTests : StateMachineTestFixture
             "AddItem",
             """{"item":"pen"}"""
         );
-        cart.Context["total"]!
+        cart.Context["total"]
+            .NotNull()
             .GetValue<long>()
             .Should()
             .Be(2 * CheckoutMachine.UnitPriceCents, "the server prices the cart, not the client");
@@ -71,7 +73,7 @@ public class CheckoutTests : StateMachineTestFixture
 
         var review = await Machines.AdvanceAsync(Alice, Checkout, id, "Next");
         review.State.Should().Be("Review");
-        review.Context["total"]!.GetValue<long>().Should().Be(999);
+        review.Context["total"].NotNull().GetValue<long>().Should().Be(999);
 
         (await Machines.AdvanceAsync(Alice, Checkout, id, "Back")).State.Should().Be("Cart");
     }
@@ -88,7 +90,7 @@ public class CheckoutTests : StateMachineTestFixture
         var charge = Charges.For(item).Should().ContainSingle().Subject;
         charge.State.Should().Be("Review");
         charge.AmountCents.Should().Be(999);
-        paid.Context["receipt"]!.GetValue<string>().Should().Be(charge.Receipt);
+        paid.Context["receipt"].NotNull().GetValue<string>().Should().Be(charge.Receipt);
         (await Machines.LoadAsync(Alice, Checkout, id)).Wire.Should().Be(paid.Wire);
     }
 
@@ -124,7 +126,12 @@ public class CheckoutTests : StateMachineTestFixture
         var settled = await Machines.SendAsync(Alice, Checkout, id, requestId: "pay-1");
         settled.State.Should().Be("Paid");
         Charges.For(item).Should().ContainSingle();
-        settled.Context["receipt"]!.GetValue<string>().Should().Be(Charges.For(item)[0].Receipt);
+        settled
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be(Charges.For(item)[0].Receipt);
     }
 
     [Test]
@@ -181,7 +188,7 @@ public class CheckoutTests : StateMachineTestFixture
         // The machine declares Paid --Reset--> Cart, so a reset is the one write it allows.
         var reset = await Machines.AdvanceAsync(Alice, Checkout, id, "Reset");
         reset.State.Should().Be("Cart");
-        reset.Context["items"]!.AsArray().Should().BeEmpty();
+        reset.Context["items"].NotNull().AsArray().Should().BeEmpty();
     }
 
     [Test]

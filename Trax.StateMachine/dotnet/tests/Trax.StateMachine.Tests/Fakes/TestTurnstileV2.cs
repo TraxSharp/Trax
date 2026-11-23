@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
@@ -24,7 +25,7 @@ public static class TestTurnstileV2
             // v2 Unlocked keeps the paidWith rule; the migration adds the marker so a migrated snapshot passes.
             [TurnstileState.Unlocked] = ctx =>
                 ctx["paidWith"]?.GetValueKind() == JsonValueKind.String
-                && ctx["paidWith"]!.GetValue<string>().Length > 0
+                && ctx["paidWith"].NotNull().GetValue<string>().Length > 0
                     ? null
                     : "Unlocked requires a non-empty paidWith.",
         },

@@ -13,28 +13,38 @@ namespace Trax.Api.Services.Metrics;
 /// <remarks>
 /// This lives in the API layer, not the shared <c>IOperationsService</c>, precisely because it is
 /// stateful per consumer: the scheduler and dashboard each need their own sampler. The first call
-/// only primes the baseline and returns <c>null</c>.
+/// only primes the baseline and returns <see langword="null"/>.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class ProcessCpuSampler
 {
     private readonly Func<(TimeSpan Cpu, DateTime At)> _read;
     private readonly int _cores;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private TimeSpan _prevCpu;
     private DateTime _prevAt;
     private bool _primed;
 
     /// <summary>Creates a sampler that reads this process's total CPU time and the machine's logical core count.</summary>
     public ProcessCpuSampler()
+        : this(TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates a sampler that reads this process's total CPU time and the machine's logical core
+    /// count, and measures the time between two samples on <paramref name="clock"/>.
+    /// </summary>
+    public ProcessCpuSampler(TimeProvider clock)
         : this(
             () =>
             {
                 using var proc = Process.GetCurrentProcess();
-                return (proc.TotalProcessorTime, DateTime.UtcNow);
+                return (proc.TotalProcessorTime, clock.GetUtcNow().UtcDateTime);
             },
             Environment.ProcessorCount
-        ) { }
+        )
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+    }
 
     // Seam for deterministic tests: inject the CPU-time/clock reader and core count.
     internal ProcessCpuSampler(Func<(TimeSpan Cpu, DateTime At)> read, int cores)
@@ -44,7 +54,7 @@ public sealed class ProcessCpuSampler
     }
 
     /// <summary>
-    /// CPU usage since the previous sample, clamped to 0-100. Returns <c>null</c> on the first call
+    /// CPU usage since the previous sample, clamped to 0-100. Returns <see langword="null"/> on the first call
     /// (no interval to compare) or if no measurable time has elapsed since the last call.
     /// </summary>
     public double? SamplePercent()
@@ -69,7 +79,7 @@ public sealed class ProcessCpuSampler
 
     /// <summary>
     /// Pure CPU-percent calculation: consumed CPU time over wall-clock elapsed, per core, as a
-    /// percentage clamped to 0-100. Returns <c>null</c> when the interval or core count is not
+    /// percentage clamped to 0-100. Returns <see langword="null"/> when the interval or core count is not
     /// positive (nothing measurable).
     /// </summary>
     internal static double? ComputePercent(TimeSpan cpuDelta, double elapsedMs, int cores)
@@ -78,6 +88,6 @@ public sealed class ProcessCpuSampler
             return null;
 
         var percent = cpuDelta.TotalMilliseconds / elapsedMs / cores * 100;
-        return Math.Clamp(Math.Round(percent, 1), 0, 100);
+        return Math.Clamp(Math.Round(percent, 1, MidpointRounding.ToEven), 0, 100);
     }
 }

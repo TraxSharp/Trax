@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Trax.Scheduler.Configuration;
 
@@ -49,17 +50,20 @@ internal sealed class SchedulerLivenessHealthCheck(
             reference = running;
         var age = timeProvider.GetUtcNow() - reference;
 
-        var data = new Dictionary<string, object>
+        var data = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["lastDispatchCompletedAt"] = monitor.LastDispatchCompletedAt?.ToString("O") ?? "never",
-            ["ageSeconds"] = Math.Round(age.TotalSeconds, 1),
-            ["thresholdSeconds"] = Math.Round(threshold.TotalSeconds, 1),
+            ["ageSeconds"] = Math.Round(age.TotalSeconds, 1, MidpointRounding.ToEven),
+            ["thresholdSeconds"] = Math.Round(threshold.TotalSeconds, 1, MidpointRounding.ToEven),
         };
 
         if (age <= threshold)
             return Task.FromResult(
                 HealthCheckResult.Healthy(
-                    $"JobDispatcher completed a cycle {age.TotalSeconds:F0}s ago",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"JobDispatcher completed a cycle {age.TotalSeconds:F0}s ago"
+                    ),
                     data
                 )
             );
@@ -67,7 +71,10 @@ internal sealed class SchedulerLivenessHealthCheck(
         return Task.FromResult(
             new HealthCheckResult(
                 context.Registration.FailureStatus,
-                $"JobDispatcher has not completed a cycle for {age.TotalSeconds:F0}s (threshold {threshold.TotalSeconds:F0}s)",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"JobDispatcher has not completed a cycle for {age.TotalSeconds:F0}s (threshold {threshold.TotalSeconds:F0}s)"
+                ),
                 data: data
             )
         );

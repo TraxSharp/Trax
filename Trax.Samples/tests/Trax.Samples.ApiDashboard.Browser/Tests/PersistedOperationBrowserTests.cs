@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Pages;
 
@@ -40,7 +41,7 @@ public class PersistedOperationBrowserTests : ConsoleTest
         await Assertions.Expect(list.Operation(id)).ToBeVisibleAsync(new() { Timeout = Render });
         var stored = await Stored(id);
         stored.Should().NotBeNull();
-        stored!.IsActive.Should().BeTrue();
+        stored.NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]
@@ -97,7 +98,7 @@ public class PersistedOperationBrowserTests : ConsoleTest
         await Assertions
             .Expect(page.DetailField("Deprecation reason"))
             .ToHaveTextAsync("Replaced by v2.");
-        (await Stored(operation.Id))!.IsActive.Should().BeFalse();
+        (await Stored(operation.Id)).NotNull().IsActive.Should().BeFalse();
 
         var restored = Console.SendsAsync("RestorePersistedOperation");
         await Console.Button("Restore").ClickAsync();
@@ -106,7 +107,7 @@ public class PersistedOperationBrowserTests : ConsoleTest
         await Assertions
             .Expect(page.DetailField("Active"))
             .ToHaveTextAsync("Yes", new() { Timeout = Render });
-        (await Stored(operation.Id))!.IsActive.Should().BeTrue();
+        (await Stored(operation.Id)).NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]
@@ -122,7 +123,7 @@ public class PersistedOperationBrowserTests : ConsoleTest
             .ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions.Expect(Console.Button("Deactivate")).ToHaveCountAsync(0);
         await Assertions.Expect(page.Main).Not.ToContainTextAsync(operation.Document);
-        (await Stored(operation.Id))!.IsActive.Should().BeTrue();
+        (await Stored(operation.Id)).NotNull().IsActive.Should().BeTrue();
     }
 
     [Test]

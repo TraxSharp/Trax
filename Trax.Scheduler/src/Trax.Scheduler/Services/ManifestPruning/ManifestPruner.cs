@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 
@@ -55,9 +56,10 @@ internal static class ManifestPruner
                     && batch.Contains(m.ManifestId.Value)
                     && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
                 )
-                .Select(m => m.ManifestId!.Value)
+                .Select(m => m.ManifestId ?? 0)
                 .Distinct()
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
             if (withActiveRuns.Count > 0)
             {
@@ -75,7 +77,7 @@ internal static class ManifestPruner
 
             try
             {
-                pruned += await DeleteBatchAsync(context, batch, ct);
+                pruned += await DeleteBatchAsync(context, batch, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -97,7 +99,7 @@ internal static class ManifestPruner
         CancellationToken ct
     )
     {
-        using var transaction = await context.BeginTransaction(ct);
+        using var transaction = await context.BeginTransaction(ct).ConfigureAwait(false);
 
         try
         {
@@ -107,60 +109,24 @@ internal static class ManifestPruner
                 .Manifests.Where(m =>
                     m.DependsOnManifestId.HasValue && batch.Contains(m.DependsOnManifestId.Value)
                 )
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.DependsOnManifestId, (long?)null),
-                    ct
-                );
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (long?)null), ct)
+                .ConfigureAwait(false);
 
             await context
                 .WorkQueues.Where(w => w.ManifestId.HasValue && batch.Contains(w.ManifestId.Value))
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             await context
                 .DeadLetters.Where(d => batch.Contains(d.ManifestId))
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             var runIds = context
                 .Metadatas.Where(m => m.ManifestId.HasValue && batch.Contains(m.ManifestId.Value))
                 .Select(m => m.Id);
 
-            // A run another run started, and a dead letter's retry, reference these runs without
-            // being owned by them: clear the references rather than deleting the rows.
-            await context
-                .Metadatas.Where(m => m.ParentId.HasValue && runIds.Contains(m.ParentId.Value))
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.ParentId, (long?)null), ct);
-
-            await context
-                .DeadLetters.Where(d =>
-                    d.RetryMetadataId.HasValue && runIds.Contains(d.RetryMetadataId.Value)
-                )
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct);
-
-            // A run that resumes one of these runs, or an entry queued to, belongs to no manifest
-            // when an operator asked for it, so it is kept and its link cleared: nothing may name
-            // a run that is gone, and a queued one now runs from the top (Trax.Docs/adr/0047).
-            // The manifest's own resumed runs and entries go with it.
-            await context
-                .WorkQueues.Where(w => w.ResumeFrom.HasValue && runIds.Contains(w.ResumeFrom.Value))
-                .ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(w => w.ResumeFrom, (long?)null)
-                            .SetProperty(w => w.ResumeAt, (string?)null),
-                    ct
-                );
-
-            await context
-                .Metadatas.Where(m =>
-                    m.ResumeFrom.HasValue
-                    && runIds.Contains(m.ResumeFrom.Value)
-                    && !(m.ManifestId.HasValue && batch.Contains(m.ManifestId.Value))
-                )
-                .ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(m => m.ResumeFrom, (long?)null)
-                            .SetProperty(m => m.ResumeAt, (string?)null),
-                    ct
-                );
+            await ClearReferencesToRunsAsync(context, batch, runIds, ct).ConfigureAwait(false);
 
             await context
                 .Metadatas.Where(m =>
@@ -169,19 +135,71 @@ internal static class ManifestPruner
                     && m.TrainState != TrainState.Pending
                     && m.TrainState != TrainState.InProgress
                 )
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             var deleted = await context
                 .Manifests.Where(m => batch.Contains(m.Id))
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
-            await context.CommitTransaction();
+            await context.CommitTransaction().ConfigureAwait(false);
             return deleted;
         }
         catch
         {
-            await context.RollbackTransaction();
+            await context.RollbackTransaction().ConfigureAwait(false);
             throw;
         }
+    }
+
+    private static async Task ClearReferencesToRunsAsync(
+        IDataContext context,
+        List<long> batch,
+        IQueryable<long> runIds,
+        CancellationToken ct
+    )
+    {
+        // A run another run started, and a dead letter's retry, reference these runs without
+        // being owned by them: clear the references rather than deleting the rows.
+        await context
+            .Metadatas.Where(m => m.ParentId.HasValue && runIds.Contains(m.ParentId.Value))
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ParentId, (long?)null), ct)
+            .ConfigureAwait(false);
+
+        await context
+            .DeadLetters.Where(d =>
+                d.RetryMetadataId.HasValue && runIds.Contains(d.RetryMetadataId.Value)
+            )
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct)
+            .ConfigureAwait(false);
+
+        // A run that resumes one of these runs, or an entry queued to, belongs to no manifest
+        // when an operator asked for it, so it is kept and its link cleared: nothing may name
+        // a run that is gone, and a queued one now runs from the top (Trax.Docs/adr/0047).
+        // The manifest's own resumed runs and entries go with it.
+        await context
+            .WorkQueues.Where(w => w.ResumeFrom.HasValue && runIds.Contains(w.ResumeFrom.Value))
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(w => w.ResumeFrom, (long?)null)
+                        .SetProperty(w => w.ResumeAt, (string?)null),
+                ct
+            )
+            .ConfigureAwait(false);
+
+        await context
+            .Metadatas.Where(m =>
+                m.ResumeFrom.HasValue
+                && runIds.Contains(m.ResumeFrom.Value)
+                && !(m.ManifestId.HasValue && batch.Contains(m.ManifestId.Value))
+            )
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(m => m.ResumeFrom, (long?)null)
+                        .SetProperty(m => m.ResumeAt, (string?)null),
+                ct
+            )
+            .ConfigureAwait(false);
     }
 }

@@ -15,7 +15,7 @@ public class HostDriverOutcomeTests
     // Charging failed to Declined, and Retry brought it back to Charging.
     private static readonly Move[] Retried =
     [
-        new(1, null, "Draft"),
+        new(1, From: null, "Draft"),
         new(2, "Draft", "Charging"),
         new(3, "Charging", "Declined"),
         new(4, "Declined", "Charging"),
@@ -43,7 +43,7 @@ public class HostDriverOutcomeTests
     {
         Move[] history =
         [
-            new(1, null, "Draft", Id: 10, Arranged: true),
+            new(1, From: null, "Draft", Id: 10, Arranged: true),
             new(2, "Draft", "Placed", Id: 11, Arranged: true),
             new(3, "Placed", "Placed", Id: 14),
             new(5, "Baking", "Ready", Id: 19),
@@ -59,7 +59,7 @@ public class HostDriverOutcomeTests
     [Test]
     public void A_state_passed_through_is_not_where_the_outcome_went()
     {
-        Move[] history = [new(1, null, "Draft"), new(2, "Draft", "Charging")];
+        Move[] history = [new(1, From: null, "Draft"), new(2, "Draft", "Charging")];
         var entered = HostDriver.Entered(history, "Charging");
         Move[] moved = [.. history, new(3, "Charging", "Paid"), new(4, "Paid", "Baking")];
 

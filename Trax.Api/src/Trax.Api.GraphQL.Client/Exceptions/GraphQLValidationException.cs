@@ -19,7 +19,7 @@ public class GraphQLValidationException : Exception
     /// <param name="query">The query text.</param>
     /// <param name="errors">The validation errors.</param>
     public GraphQLValidationException(string query, IReadOnlyList<ExecutionError> errors)
-        : base(BuildMessage(query, errors, null))
+        : base(BuildMessage(query, errors, detail: null))
     {
         Query = query;
         Errors = errors;

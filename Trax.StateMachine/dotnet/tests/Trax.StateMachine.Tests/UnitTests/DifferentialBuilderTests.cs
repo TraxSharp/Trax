@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -42,8 +43,13 @@ public class DifferentialBuilderTests
 
         var built = m.Build();
 
-        var sample = built.Declarative!.Differential!.Samples[TurnstileTrigger.Coin][0]!;
-        sample["priority"]!
+        var sample = built
+            .Declarative.NotNull()
+            .Differential.NotNull()
+            .Samples[TurnstileTrigger.Coin][0]
+            .NotNull();
+        sample["priority"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be(

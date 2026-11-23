@@ -7,6 +7,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -40,8 +41,8 @@ public class InvokedRunOperationsTests
 
     private const string Database = "trax_api_invoked_runs";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -53,13 +54,14 @@ public class InvokedRunOperationsTests
             t.AddEffects(e => e.UsePostgres(AuthE2EHost.ConnectionString(Database)))
         );
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -86,7 +88,7 @@ public class InvokedRunOperationsTests
         dashboard.Success.Should().BeFalse();
         dashboard.Message.Should().Be(expected, "the dashboard refuses with the same reason");
 
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (await db.WorkQueues.AsNoTracking().CountAsync(w => w.TrainName == "Ingest.IFetchTrain"))
             .Should()
             .Be(0, "nothing was queued");
@@ -101,20 +103,29 @@ public class InvokedRunOperationsTests
         var live = await SeedInvokedRunAsync(machine, instance.Id, SnapshotOwnerKind.System, token);
         var earlier = await SeedInvokedRunAsync(machine, instance.Id, SnapshotOwnerKind.System);
 
-        var detail = await new OperationsQueries().GetExecutionDetail(live, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            live,
+            _factory.NotNull(),
+            default
+        );
 
-        detail!
+        detail
+            .NotNull()
             .InvokedBy.Should()
             .Be(
                 new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, instance.RowId),
                 "the run names the instance whose state queued it, and its row while it waits"
             );
 
-        var past = await new OperationsQueries().GetExecutionDetail(earlier, _factory, default);
-        past!
+        var past = await new OperationsQueries().GetExecutionDetail(
+            earlier,
+            _factory.NotNull(),
+            default
+        );
+        past.NotNull()
             .InvokedBy.Should()
             .Be(
-                new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, null),
+                new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, RowId: null),
                 "an instance that no longer waits on the run is still named, without its row"
             );
     }
@@ -128,14 +139,22 @@ public class InvokedRunOperationsTests
         var draft = await SeedDraftAsync(machine, SnapshotOwnerKind.User, secret, token);
         var run = await SeedInvokedRunAsync(machine, draft.Id, SnapshotOwnerKind.User, token);
 
-        var detail = await new OperationsQueries().GetExecutionDetail(run, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            run,
+            _factory.NotNull(),
+            default
+        );
 
-        detail!
+        detail
+            .NotNull()
             .InvokedBy.Should()
             .Be(new RunInvoker(machine, draft.Id, SnapshotOwnerKind.User, draft.RowId));
         var json = JsonSerializer.Serialize(detail);
         json.Should()
-            .NotContain(draft.UserKey!, $"an operator is not shown whose a draft is. See {Adr}");
+            .NotContain(
+                draft.UserKey.NotNull(),
+                $"an operator is not shown whose a draft is. See {Adr}"
+            );
         json.Should().NotContain(secret, "nor anything of the draft's context");
     }
 
@@ -144,9 +163,13 @@ public class InvokedRunOperationsTests
     {
         var run = await SeedRunAsync(TrainState.Completed);
 
-        var detail = await new OperationsQueries().GetExecutionDetail(run, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            run,
+            _factory.NotNull(),
+            default
+        );
 
-        detail!.InvokedBy.Should().BeNull();
+        detail.NotNull().InvokedBy.Should().BeNull();
     }
 
     [Test]
@@ -157,7 +180,7 @@ public class InvokedRunOperationsTests
         var token = Guid.NewGuid().ToString("N");
         var system = await SeedDraftAsync(machine, SnapshotOwnerKind.System, secret, token);
         var run = await SeedInvokedRunAsync(machine, system.Id, SnapshotOwnerKind.System, token);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE trax.metadata SET invoke_output = {secret} WHERE id = {run}"
             );
@@ -187,7 +210,7 @@ public class InvokedRunOperationsTests
         };
 
         views.Should().AllSatisfy(v => v.Should().NotBeNull());
-        var detail = (MachineInstanceDetail)views[0]!;
+        var detail = (MachineInstanceDetail)views[0].NotNull();
         detail
             .InvokedRuns.Should()
             .ContainSingle("the run the instance invoked is listed")
@@ -221,13 +244,13 @@ public class InvokedRunOperationsTests
                 operations,
                 default
             )
-        )!;
+        ).NotNull();
         var dashboard = (
             await operations.GetMachineInstanceRunsAsync(
                 new MachineInstanceKey(machine, SnapshotOwnerKind.System, system.Id),
                 default
             )
-        )!;
+        ).NotNull();
 
         graphQl.InvokedRuns.Select(r => r.Id).Should().Equal(live, older);
         graphQl
@@ -257,41 +280,10 @@ public class InvokedRunOperationsTests
     {
         var machine = "ingest-" + Guid.NewGuid().ToString("N");
         var operations = Operations();
-        var user = await SeedDraftAsync(machine, SnapshotOwnerKind.User, "{}", null);
-        var idle = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", null);
+        var user = await SeedDraftAsync(machine, SnapshotOwnerKind.User, "{}", invokeToken: null);
+        var idle = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", invokeToken: null);
 
-        // Each refusal, through the mutation and through the service the dashboard calls.
-        foreach (
-            var (ownerKind, id, outcome) in new[]
-            {
-                (SnapshotOwnerKind.User, user.Id, MachineInstanceCancelOutcome.UserOwned),
-                (SnapshotOwnerKind.System, Guid.NewGuid(), MachineInstanceCancelOutcome.NotFound),
-                (SnapshotOwnerKind.System, idle.Id, MachineInstanceCancelOutcome.NoLiveRun),
-            }
-        )
-        {
-            var graphQl = await new OperationsMutations().CancelMachineInstance(
-                machine,
-                ownerKind,
-                id,
-                operations,
-                default
-            );
-            var dashboard = await operations.CancelMachineInstanceAsync(
-                new MachineInstanceKey(
-                    machine,
-                    ownerKind,
-                    id,
-                    ownerKind == SnapshotOwnerKind.User ? user.RowId : null
-                ),
-                default
-            );
-
-            graphQl.Success.Should().BeFalse();
-            graphQl.Outcome.Should().Be(outcome);
-            dashboard.Outcome.Should().Be(outcome);
-            graphQl.Message.Should().Be(dashboard.Message, "one reason on both surfaces");
-        }
+        await AssertEachRefusalAgreesOnBothSurfacesAsync(machine, operations, user, idle);
 
         // A queued run, cancelled on each surface: one instance each, the same outcome and words.
         var viaGraphQl = await SeedQueuedInstanceAsync(machine);
@@ -327,7 +319,7 @@ public class InvokedRunOperationsTests
                 )
             );
 
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         (
             await db
                 .WorkQueues.AsNoTracking()
@@ -337,6 +329,45 @@ public class InvokedRunOperationsTests
         )
             .Should()
             .AllBeEquivalentTo(WorkQueueStatus.Cancelled);
+    }
+
+    private static async Task AssertEachRefusalAgreesOnBothSurfacesAsync(
+        string machine,
+        IOperationsService operations,
+        SnapshotDraft user,
+        SnapshotDraft idle
+    )
+    {
+        // Each refusal, through the mutation and through the service the dashboard calls.
+        foreach (
+            var (ownerKind, id, outcome) in new[]
+            {
+                (SnapshotOwnerKind.User, user.Id, MachineInstanceCancelOutcome.UserOwned),
+                (SnapshotOwnerKind.System, Guid.NewGuid(), MachineInstanceCancelOutcome.NotFound),
+                (SnapshotOwnerKind.System, idle.Id, MachineInstanceCancelOutcome.NoLiveRun),
+            }
+        )
+        {
+            var graphQl = await new OperationsMutations()
+                .CancelMachineInstance(machine, ownerKind, id, operations, default)
+                .ConfigureAwait(false);
+            var dashboard = await operations
+                .CancelMachineInstanceAsync(
+                    new MachineInstanceKey(
+                        machine,
+                        ownerKind,
+                        id,
+                        ownerKind == SnapshotOwnerKind.User ? user.RowId : null
+                    ),
+                    default
+                )
+                .ConfigureAwait(false);
+
+            graphQl.Success.Should().BeFalse();
+            graphQl.Outcome.Should().Be(outcome);
+            dashboard.Outcome.Should().Be(outcome);
+            graphQl.Message.Should().Be(dashboard.Message, "one reason on both surfaces");
+        }
     }
 
     [Test]
@@ -386,12 +417,13 @@ public class InvokedRunOperationsTests
             var plain = await SeedRunAsync(TrainState.Pending);
             long[] ids = [users, systems, plain];
 
-            var (success, count, message) =
-                surface == "graphql"
-                    ? Unpack(
-                        await new OperationsMutations().CancelExecutions(ids, operations, default)
-                    )
-                    : Unpack(await operations.CancelExecutionsAsync(ids, default));
+            var (success, count, message) = string.Equals(
+                surface,
+                "graphql",
+                StringComparison.Ordinal
+            )
+                ? Unpack(await new OperationsMutations().CancelExecutions(ids, operations, default))
+                : Unpack(await operations.CancelExecutionsAsync(ids, default));
 
             success.Should().BeTrue(surface);
             count.Should().Be(2, $"{surface}: the system's run and the plain run are flagged");
@@ -448,7 +480,7 @@ public class InvokedRunOperationsTests
             .Message.Should()
             .Be(bulk.Message, "the dashboard's bulk cancel says the same");
 
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         var statuses = await db
             .WorkQueues.AsNoTracking()
             .Where(w => w.Id == users || w.Id == systems || w.Id == plain)
@@ -462,8 +494,18 @@ public class InvokedRunOperationsTests
     public async Task A_system_instance_asked_for_with_a_row_id_that_is_not_its_own_is_null()
     {
         var machine = "ingest-" + Guid.NewGuid().ToString("N");
-        var system = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", null);
-        var other = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", null);
+        var system = await SeedDraftAsync(
+            machine,
+            SnapshotOwnerKind.System,
+            "{}",
+            invokeToken: null
+        );
+        var other = await SeedDraftAsync(
+            machine,
+            SnapshotOwnerKind.System,
+            "{}",
+            invokeToken: null
+        );
         var operations = Operations();
 
         var right = await new OperationsQueries().GetMachineInstance(
@@ -483,7 +525,7 @@ public class InvokedRunOperationsTests
             rowId: other.RowId
         );
 
-        right!.RowId.Should().Be(system.RowId);
+        right.NotNull().RowId.Should().Be(system.RowId);
         wrong.Should().BeNull("a row id names one row, and this one is another instance's");
     }
 
@@ -495,42 +537,55 @@ public class InvokedRunOperationsTests
 
     private async Task<long> SeedRunAsync(TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Ingest.IFetchTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = state;
-        await db.Track(run);
-        await db.SaveChanges(default);
-        return run.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Ingest.IFetchTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
+            );
+            run.TrainState = state;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return run.Id;
+        }
     }
 
     private async Task<long> SeedQueuedEntryAsync(string machine, SnapshotOwnerKind? owner)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Ingest.IStageTrain",
-                InvokedBy = owner is { } kind ? new InvokedBy(machine, Guid.NewGuid(), kind) : null,
-            }
-        );
-        await db.Track(entry);
-        await db.SaveChanges(default);
-        return entry.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = "Ingest.IStageTrain",
+                    InvokedBy = owner is { } kind
+                        ? new InvokedBy(machine, Guid.NewGuid(), kind)
+                        : null,
+                },
+                TimeProvider.System
+            );
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return entry.Id;
+        }
     }
 
     private async Task<bool> IsFlaggedAsync(long id)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        return (
-            await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id)
-        ).CancellationRequested;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return (
+                await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id).ConfigureAwait(false)
+            ).CancellationRequested;
+        }
     }
 
     private async Task<SnapshotDraft> SeedDraftAsync(
@@ -541,48 +596,62 @@ public class InvokedRunOperationsTests
         Guid? id = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var row = new SnapshotDraft
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Id = id ?? Guid.NewGuid(),
-            OwnerKind = owner,
-            UserKey = owner == SnapshotOwnerKind.User ? $"user-{Guid.NewGuid():N}" : null,
-            Machine = machine,
-            Version = 1,
-            State = "Running",
-            Context = secretOrContext.StartsWith('{')
-                ? secretOrContext
-                : JsonSerializer.Serialize(new { apiKey = secretOrContext }),
-            ConcurrencyToken = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-            InvokeToken = invokeToken,
-        };
-        db.SnapshotDrafts.Add(row);
-        await db.SaveChanges(default);
-        return row;
+            var row = new SnapshotDraft
+            {
+                Id = id ?? Guid.NewGuid(),
+                OwnerKind = owner,
+                UserKey = owner == SnapshotOwnerKind.User ? $"user-{Guid.NewGuid():N}" : null,
+                Machine = machine,
+                Version = 1,
+                State = "Running",
+                Context = secretOrContext.StartsWith('{')
+                    ? secretOrContext
+                    : JsonSerializer.Serialize(new { apiKey = secretOrContext }),
+                ConcurrencyToken = Guid.NewGuid(),
+                CreatedAt = TimeProvider.System.GetUtcNow(),
+                UpdatedAt = TimeProvider.System.GetUtcNow(),
+                InvokeToken = invokeToken,
+            };
+            db.SnapshotDrafts.Add(row);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return row;
+        }
     }
 
     private async Task<SnapshotDraft> SeedQueuedInstanceAsync(string machine)
     {
         var id = Guid.NewGuid();
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = "Ingest.IStageTrain",
-                InvokedBy = new InvokedBy(machine, id, SnapshotOwnerKind.System),
-            }
-        );
-        await db.Track(entry);
-        await db.SaveChanges(default);
-        return await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", entry.ExternalId, id);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = "Ingest.IStageTrain",
+                    InvokedBy = new InvokedBy(machine, id, SnapshotOwnerKind.System),
+                },
+                TimeProvider.System
+            );
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return await SeedDraftAsync(
+                    machine,
+                    SnapshotOwnerKind.System,
+                    "{}",
+                    entry.ExternalId,
+                    id
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private IOperationsService Operations() =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             new ServiceCollection()
@@ -601,21 +670,25 @@ public class InvokedRunOperationsTests
         TrainState state = TrainState.Failed
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Ingest.IFetchTrain",
-                ExternalId = externalId ?? Guid.NewGuid().ToString("N"),
-                Input = null,
-                InvokedBy = new InvokedBy(machine, instance, owner),
-            }
-        );
-        run.TrainState = state;
-        if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
-            run.EndTime = DateTime.UtcNow;
-        await db.Track(run);
-        await db.SaveChanges(default);
-        return run.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Ingest.IFetchTrain",
+                    ExternalId = externalId ?? Guid.NewGuid().ToString("N"),
+                    Input = null,
+                    InvokedBy = new InvokedBy(machine, instance, owner),
+                },
+                TimeProvider.System
+            );
+            run.TrainState = state;
+            if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+                run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return run.Id;
+        }
     }
 }

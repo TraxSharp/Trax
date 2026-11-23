@@ -97,7 +97,9 @@ public class IdempotentEffectTests
         var failing = new CountingEffect(fail: true);
 
         var act = async () =>
-            await new IdempotentEffect(TestDb.NewClaims()).RunOnce(key, () => failing.Run(Snap()));
+            await new IdempotentEffect(TestDb.NewClaims())
+                .RunOnce(key, () => failing.Run(Snap()))
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         // The claim was released, so a retry with a working effect runs.

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -30,11 +31,17 @@ public class CanonicalizationConformanceTests
     public static IEnumerable<TestCaseData> Vectors()
     {
         var file = Path.Combine(FixturePaths.ConformanceRoot, "canonical-wire.json");
-        foreach (var node in JsonNode.Parse(File.ReadAllText(file))!["cases"]!.AsArray())
+        foreach (
+            var node in JsonNode
+                .Parse(File.ReadAllText(file))
+                .NotNull()["cases"]
+                .NotNull()
+                .AsArray()
+        )
         {
-            var vector = (JsonObject)node!;
+            var vector = (JsonObject)node.NotNull();
             yield return new TestCaseData(vector).SetArgDisplayNames(
-                vector["name"]!.GetValue<string>()
+                vector["name"].NotNull().GetValue<string>()
             );
         }
     }
@@ -45,7 +52,7 @@ public class CanonicalizationConformanceTests
     [TestCaseSource(nameof(Vectors))]
     public void Serialize_writes_the_shared_vector(JsonObject vector)
     {
-        Wire(ContextOf(vector)).Should().Be(Envelope(vector["wire"]!.GetValue<string>()));
+        Wire(ContextOf(vector)).Should().Be(Envelope(vector["wire"].NotNull().GetValue<string>()));
     }
 
     // A lone surrogate has no UTF-8 encoding and System.Text.Json refuses to read one, so the file gives those
@@ -53,7 +60,7 @@ public class CanonicalizationConformanceTests
     private static JsonObject ContextOf(JsonObject vector)
     {
         if (vector["context"] is { } context)
-            return (JsonObject)JsonNode.Parse(context.GetValue<string>())!;
+            return (JsonObject)JsonNode.Parse(context.GetValue<string>()).NotNull();
         if (vector["stringUnits"] is JsonArray stringUnits)
             return new JsonObject { ["s"] = FromUnits(stringUnits) };
         if (vector["keyUnits"] is JsonArray keyUnits)
@@ -62,5 +69,5 @@ public class CanonicalizationConformanceTests
     }
 
     private static string FromUnits(JsonArray units) =>
-        new(units.Select(u => (char)u!.GetValue<int>()).ToArray());
+        new(units.Select(u => (char)u.NotNull().GetValue<int>()).ToArray());
 }

@@ -20,7 +20,7 @@ internal static class JwtIssuerPeek
 {
     /// <summary>
     /// Attempts to extract the <c>iss</c> claim from <paramref name="token"/>.
-    /// Returns <c>null</c> for empty strings, malformed tokens, and tokens
+    /// Returns <see langword="null"/> for empty strings, malformed tokens, and tokens
     /// without an <c>iss</c> claim.
     /// </summary>
     public static string? TryReadIssuer(string? token)
@@ -42,7 +42,7 @@ internal static class JwtIssuerPeek
 
     /// <summary>
     /// Strips the <c>Bearer</c> prefix from an Authorization header value,
-    /// returning the raw token or <c>null</c> if the header does not carry
+    /// returning the raw token or <see langword="null"/> if the header does not carry
     /// a bearer credential.
     /// </summary>
     public static string? TryReadBearerToken(string? authorizationHeader)

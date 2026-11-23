@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -78,7 +79,10 @@ public class MachineDocumentCrossNodeTests
             .ToList();
         documents
             .Select(d => d.Operation(ShelfMachine.MachineId))
-            .Where(op => op is not null && op != MachineDocumentOps.MachineChanged)
+            .Where(op =>
+                op is not null
+                && !string.Equals(op, MachineDocumentOps.MachineChanged, StringComparison.Ordinal)
+            )
             .Should()
             .BeEquivalentTo(
                 ["start", "discard", "get", .. ShelfMachine.ClientEventFields],
@@ -180,7 +184,13 @@ public class MachineDocumentCrossNodeTests
         );
 
         after
-            .Where(d => d.Operation(WizardMachine.MachineId) == "describe")
+            .Where(d =>
+                string.Equals(
+                    d.Operation(WizardMachine.MachineId),
+                    "describe",
+                    StringComparison.Ordinal
+                )
+            )
             .Select(d => d.Id)
             .Should()
             .HaveCount(
@@ -190,7 +200,9 @@ public class MachineDocumentCrossNodeTests
                     + Adr
             );
         after
-            .Where(d => d.Operation(WizardMachine.MachineId) == "get")
+            .Where(d =>
+                string.Equals(d.Operation(WizardMachine.MachineId), "get", StringComparison.Ordinal)
+            )
             .Should()
             .ContainSingle("a document whose text is unchanged keeps its id");
     }
@@ -202,7 +214,7 @@ public class MachineDocumentCrossNodeTests
         var v1 = await ShelfIdsAsync();
         await ShelfHosts.StopAsync(a);
         var b = Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "deploy_b"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         v1.Should().NotBeEmpty("the first version's documents were registered, per " + Adr);
         v2.Should().NotBeEmpty("the second version registered its own");
 
@@ -298,7 +310,7 @@ public class MachineDocumentCrossNodeTests
             answers.Add(
                 MachineDocumentOps.Succeeded(answer, ShelfMachine.MachineId, "get")
                     ? "ok"
-                    : string.Join(",", MachineDocumentOps.Codes(answer))
+                    : string.Join(',', MachineDocumentOps.Codes(answer))
             );
         }
 
@@ -318,7 +330,7 @@ public class MachineDocumentCrossNodeTests
         var (_, _, v1, _) = await RollingDeployAsync();
 
         (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId))
-            .Where(d => v1.Contains(d.Id))
+            .Where(d => v1.Contains(d.Id, StringComparer.Ordinal))
             .Should()
             .HaveCount(v1.Count)
             .And.OnlyContain(
@@ -330,7 +342,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task Old_ids_are_collected_only_after_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var withClock = new E2EHostOptions
         {
             Services = services => services.AddSingleton<TimeProvider>(clock),
@@ -350,18 +362,21 @@ public class MachineDocumentCrossNodeTests
 
         clock.Advance(TimeSpan.FromDays(400));
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "grace_v2c", withClock));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "past the grace period the older version's documents are collected, per " + Adr
             );
-        (await ShelfIdsAsync()).Except(v1).Should().NotBeEmpty("the current version's stay");
+        (await ShelfIdsAsync())
+            .Except(v1, StringComparer.Ordinal)
+            .Should()
+            .NotBeEmpty("the current version's stay");
     }
 
     [Test]
     public async Task A_running_node_collects_old_ids_after_the_grace_period_without_a_restart()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var running = new E2EHostOptions
         {
             Services = services =>
@@ -370,7 +385,7 @@ public class MachineDocumentCrossNodeTests
                 var options = (PersistedOperationsOptions)
                     services
                         .Last(d => d.ServiceType == typeof(PersistedOperationsOptions))
-                        .ImplementationInstance!;
+                        .ImplementationInstance.NotNull();
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };
@@ -382,20 +397,23 @@ public class MachineDocumentCrossNodeTests
         Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "timer_collect_v2", running));
 
         // negative-wait: several collection intervals pass inside the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "within the grace period an older client may still be running");
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "a running node collects the older version's documents once the grace period has passed, "
                     + "without waiting for a restart, per "
                     + Adr
             );
-        (await ShelfIdsAsync()).Except(v1).Should().NotBeEmpty("the current version's stay");
+        (await ShelfIdsAsync())
+            .Except(v1, StringComparer.Ordinal)
+            .Should()
+            .NotBeEmpty("the current version's stay");
     }
 
     [Test]
@@ -445,7 +463,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_machine_a_newer_deploy_stopped_exposing_is_client_outdated_once_its_documents_are_collected()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "dropped_older")
         );
@@ -467,7 +485,7 @@ public class MachineDocumentCrossNodeTests
         var get = Pick(shelf, "get");
 
         // negative-wait: several collection intervals pass inside the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(shelf))
             .Should()
             .Be(shelf.Count, "within the grace period an older node may still serve the shelf");
@@ -481,7 +499,7 @@ public class MachineDocumentCrossNodeTests
                 );
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(shelf) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(shelf).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "past the grace period no registering node has served the machine, so its documents are "
@@ -503,7 +521,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_deploy_that_serves_no_machine_still_collects_the_old_documents_and_old_ids_turn_client_outdated()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         await ShelfHosts.StopAsync(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "last_served")
         );
@@ -534,7 +552,7 @@ public class MachineDocumentCrossNodeTests
                 );
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(shelf) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(shelf).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "a node that serves no machine still registers its empty set of documents, so past the grace "
@@ -555,7 +573,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task A_machine_a_newer_node_serves_is_never_collected_by_an_older_node_that_does_not()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         // The older node was built before the shelf was exposed; the newer one serves it.
         var older = Track(
             await ShelfHosts.StartAsync(
@@ -581,7 +599,7 @@ public class MachineDocumentCrossNodeTests
 
         clock.Advance(TimeSpan.FromDays(400));
         // negative-wait: both nodes register several times past the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await Task.Delay(TimeSpan.FromSeconds(2), clock);
 
         (await ActiveAsync(shelf))
             .Should()
@@ -598,7 +616,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task An_older_node_still_registering_keeps_its_documents_past_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var older = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "lingering_v1", Collecting(clock))
         );
@@ -606,7 +624,7 @@ public class MachineDocumentCrossNodeTests
         var newer = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V2, "lingering_v2", Collecting(clock))
         );
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
 
         await MachineDocumentOps.PassTheGracePeriodRegisteringAsync(
             Database,
@@ -650,7 +668,7 @@ public class MachineDocumentCrossNodeTests
     [Test]
     public async Task An_older_version_no_node_registers_is_collected_after_the_grace_period()
     {
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(TimeProvider.System.GetUtcNow());
         var older = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "gone_v1", Collecting(clock))
         );
@@ -658,20 +676,20 @@ public class MachineDocumentCrossNodeTests
         var newer = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V2, "gone_v2", Collecting(clock))
         );
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
         // The older node is stopped: nothing registers its documents from here on.
         _hosts.Remove(older);
         await ShelfHosts.StopAsync(older);
 
         clock.Advance(TimeSpan.FromDays(1));
         // negative-wait: the newer node registers several times inside the grace period, and nothing may be collected.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "within the grace period a node of the older version may still run");
 
         clock.Advance(TimeSpan.FromDays(400));
-        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1).ConfigureAwait(false) == 0))
             .Should()
             .BeTrue(
                 "no node has registered the older version for the grace period, so it is collected, per "
@@ -703,7 +721,7 @@ public class MachineDocumentCrossNodeTests
             )
         );
         // negative-wait: both nodes register several times; the newer one may not collect what the older registers.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), clock);
         (await ActiveAsync(v1))
             .Should()
             .Be(v1.Count, "a node on the older version serves them again");
@@ -719,7 +737,7 @@ public class MachineDocumentCrossNodeTests
                 var options = (PersistedOperationsOptions)
                     services
                         .Last(d => d.ServiceType == typeof(PersistedOperationsOptions))
-                        .ImplementationInstance!;
+                        .ImplementationInstance.NotNull();
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };
@@ -746,7 +764,7 @@ public class MachineDocumentCrossNodeTests
         await ws.NextChangeAsync("shelf");
 
         var b = Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2WithTimer, "timer_b"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var v2 = (await ShelfIdsAsync()).Except(v1, StringComparer.Ordinal).ToList();
 
         v1.Should().NotBeEmpty();
         v2.Select(Operation)
@@ -776,10 +794,16 @@ public class MachineDocumentCrossNodeTests
         IReadOnlyList<string> V2
     )> RollingDeployAsync()
     {
-        var a = Track(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "rolling_a"));
-        var v1 = await ShelfIdsAsync();
-        var b = Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "rolling_b"));
-        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        var a = Track(
+            await ShelfHosts.StartAsync(Database, ShelfShape.V1, "rolling_a").ConfigureAwait(false)
+        );
+        var v1 = await ShelfIdsAsync().ConfigureAwait(false);
+        var b = Track(
+            await ShelfHosts.StartAsync(Database, ShelfShape.V2, "rolling_b").ConfigureAwait(false)
+        );
+        var v2 = (await ShelfIdsAsync().ConfigureAwait(false))
+            .Except(v1, StringComparer.Ordinal)
+            .ToList();
         v1.Should().NotBeEmpty("node A registered the first version's documents, per " + Adr);
         v2.Should().NotBeEmpty("node B registered the second version's");
         return (a, b, v1, v2);
@@ -792,21 +816,35 @@ public class MachineDocumentCrossNodeTests
     }
 
     private static async Task<IReadOnlyList<string>> ShelfIdsAsync() =>
-        (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId))
-            .Where(d => d.Operation(ShelfMachine.MachineId) != MachineDocumentOps.MachineChanged)
+        (
+            await MachineDocumentOps
+                .MachineDocumentsAsync(Database, ShelfMachine.MachineId)
+                .ConfigureAwait(false)
+        )
+            .Where(d =>
+                !string.Equals(
+                    d.Operation(ShelfMachine.MachineId),
+                    MachineDocumentOps.MachineChanged,
+                    StringComparison.Ordinal
+                )
+            )
             .Select(d => d.Id)
             .ToList();
 
     private static async Task<int> ActiveAsync(IReadOnlyList<string> ids) =>
-        (await MachineDocumentOps.MachineDocumentsAsync(Database, ShelfMachine.MachineId)).Count(
-            d => d.IsActive && ids.Contains(d.Id)
-        );
+        (
+            await MachineDocumentOps
+                .MachineDocumentsAsync(Database, ShelfMachine.MachineId)
+                .ConfigureAwait(false)
+        ).Count(d => d.IsActive && ids.Contains(d.Id, StringComparer.Ordinal));
 
     private static string? Operation(string id) =>
-        new MachineDocumentOps.StoredDocument("", id, "", true).Operation(ShelfMachine.MachineId);
+        new MachineDocumentOps.StoredDocument("", id, "", IsActive: true).Operation(
+            ShelfMachine.MachineId
+        );
 
     private static string Pick(IReadOnlyList<string> ids, string operation) =>
-        ids.Single(i => Operation(i) == operation);
+        ids.Single(i => string.Equals(Operation(i), operation, StringComparison.Ordinal));
 
     /// <summary>
     /// Renames the GraphQL input type of the wizard's describe event, which leaves the IR alone. Before the name is

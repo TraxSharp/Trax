@@ -52,7 +52,7 @@ public static class MachineChangedOps
         this GraphQLWs ws,
         string operation,
         TimeSpan? timeout = null
-    ) => new(Only(await ws.NextDataAsync(operation, timeout)));
+    ) => new(Only(await ws.NextDataAsync(operation, timeout).ConfigureAwait(false)));
 
     /// <summary>The one field a push's data holds.</summary>
     public static JsonElement Only(JsonElement data) =>
@@ -73,7 +73,7 @@ public static class MachineChangedOps
         var events = new List<MachineChange>();
         while (true)
         {
-            var change = await ws.NextChangeAsync(operation, timeout);
+            var change = await ws.NextChangeAsync(operation, timeout).ConfigureAwait(false);
             events.Add(change);
             if (change.Revision >= revision || change.Gone || change.ProblemCode is not null)
                 return events;
@@ -90,7 +90,7 @@ public static class MachineChangedOps
         var events = new List<MachineChange>();
         while (true)
         {
-            var change = await ws.NextChangeAsync(operation, timeout);
+            var change = await ws.NextChangeAsync(operation, timeout).ConfigureAwait(false);
             events.Add(change);
             if (change.Gone || change.ProblemCode is not null)
                 return events;
@@ -103,7 +103,7 @@ public static class MachineChangedOps
     /// </summary>
     public static async Task<string> FirstAnswerAsync(this GraphQLWs ws, string operation)
     {
-        var message = await ws.NextAsync(operation);
+        var message = await ws.NextAsync(operation).ConfigureAwait(false);
         var type = message.GetProperty("type").GetString();
         var payload = message.TryGetProperty("payload", out var p) ? p.GetRawText() : "";
         return $"{type}:{payload}";
@@ -118,11 +118,11 @@ public static class MachineChangedOps
         string operation
     )
     {
-        var message = await ws.NextAsync(operation);
+        var message = await ws.NextAsync(operation).ConfigureAwait(false);
         var raw = message.GetRawText();
         var type = message.GetProperty("type").GetString();
         var codes = new List<string>();
-        if (type == "error")
+        if (string.Equals(type, "error", StringComparison.Ordinal))
         {
             foreach (var error in message.GetProperty("payload").EnumerateArray())
                 if (
@@ -133,8 +133,8 @@ public static class MachineChangedOps
                     codes.Add(text);
             return (true, codes, raw);
         }
-        if (type != "next")
-            return (type == "complete", codes, raw);
+        if (!string.Equals(type, "next", StringComparison.Ordinal))
+            return (string.Equals(type, "complete", StringComparison.Ordinal), codes, raw);
 
         using var doc = JsonDocument.Parse(message.GetProperty("payload").GetRawText());
         codes.AddRange(MachineDocumentOps.Codes(doc));
@@ -147,42 +147,4 @@ public static class MachineChangedOps
             && state.ValueKind == JsonValueKind.String;
         return (!hasSnapshot || codes.Count > 0, codes, raw);
     }
-}
-
-/// <summary>One push event.</summary>
-public sealed record MachineChange(JsonElement Raw)
-{
-    /// <summary>The revision of the snapshot, or 0 when the event carries none.</summary>
-    public long Revision =>
-        Raw.TryGetProperty("revision", out var revision)
-            ? revision.ValueKind switch
-            {
-                JsonValueKind.Number => revision.GetInt64(),
-                JsonValueKind.String => long.Parse(revision.GetString()!),
-                _ => 0,
-            }
-            : 0;
-
-    /// <summary>The state, as the schema spells it.</summary>
-    public string? State =>
-        Raw.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.String
-            ? state.GetString()
-            : null;
-
-    /// <summary>Whether the instance is gone, which ends the stream.</summary>
-    public bool Gone =>
-        Raw.TryGetProperty("gone", out var gone) && gone.ValueKind == JsonValueKind.True;
-
-    /// <summary>Whether the client must read the instance again.</summary>
-    public bool Reload =>
-        Raw.TryGetProperty("reload", out var reload) && reload.ValueKind == JsonValueKind.True;
-
-    /// <summary>The problem's code, or null.</summary>
-    public string? ProblemCode =>
-        Raw.TryGetProperty("problem", out var problem) && problem.ValueKind == JsonValueKind.Object
-            ? problem.GetProperty("code").GetString()
-            : null;
-
-    /// <summary>Whether the state is <paramref name="state"/>, however the schema spells an enum value.</summary>
-    public bool StateIs(string state) => MachineResult.SameName(State, state);
 }

@@ -54,7 +54,10 @@ internal static class ListElementFilterBinding
 
     private static readonly MethodInfo BindRuntimeTypeMethod = typeof(IFilterConventionDescriptor)
         .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-        .Single(m => m.Name == "BindRuntimeType" && m.GetGenericArguments().Length == 2);
+        .Single(m =>
+            string.Equals(m.Name, "BindRuntimeType", StringComparison.Ordinal)
+            && m.GetGenericArguments().Length == 2
+        );
 
     /// <summary>
     /// Collects one binding per distinct scalar collection runtime type found across the
@@ -75,7 +78,7 @@ internal static class ListElementFilterBinding
                 if (!property.CanRead || !property.CanWrite)
                     continue;
 
-                if (property.GetCustomAttribute<NotMappedAttribute>() is not null)
+                if (Attribute.IsDefined(property, typeof(NotMappedAttribute)))
                     continue;
 
                 if (bindings.ContainsKey(property.PropertyType))

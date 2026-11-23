@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Utilities;
 
@@ -20,8 +21,8 @@ public class RegisteredInputTypesTests
 
     private sealed class Registry : ITrainRegistry
     {
-        public Dictionary<Type, Type> InputTypeToTrain { get; set; } =
-            new() { [typeof(RegisteredInput)] = typeof(object) };
+        public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; } =
+            new Dictionary<Type, Type> { [typeof(RegisteredInput)] = typeof(object) };
     }
 
     private static readonly Registry TheRegistry = new();
@@ -29,14 +30,14 @@ public class RegisteredInputTypesTests
     [Test]
     public void Finds_a_registered_input_by_full_name() =>
         RegisteredInputTypes
-            .Find(TheRegistry, typeof(RegisteredInput).FullName!)
+            .Find(TheRegistry, typeof(RegisteredInput).FullName.NotNull())
             .Should()
             .Be(typeof(RegisteredInput));
 
     [Test]
     public void Finds_a_registered_input_by_assembly_qualified_name() =>
         RegisteredInputTypes
-            .Find(TheRegistry, typeof(RegisteredInput).AssemblyQualifiedName!)
+            .Find(TheRegistry, typeof(RegisteredInput).AssemblyQualifiedName.NotNull())
             .Should()
             .Be(typeof(RegisteredInput));
 
@@ -62,12 +63,12 @@ public class RegisteredInputTypesTests
     public void Refuses_a_loaded_type_that_is_not_a_registered_input()
     {
         RegisteredInputTypes
-            .Find(TheRegistry, typeof(OtherInput).FullName!)
+            .Find(TheRegistry, typeof(OtherInput).FullName.NotNull())
             .Should()
             .BeNull(
                 "only a registered train's input resolves (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
             );
-        RegisteredInputTypes.Find(TheRegistry, typeof(string).FullName!).Should().BeNull();
+        RegisteredInputTypes.Find(TheRegistry, typeof(string).FullName.NotNull()).Should().BeNull();
     }
 
     [Test]

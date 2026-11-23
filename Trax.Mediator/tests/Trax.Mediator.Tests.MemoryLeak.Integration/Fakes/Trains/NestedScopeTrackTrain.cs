@@ -1,0 +1,32 @@
+using Trax.Core.Extensions;
+using Trax.Core.Functional;
+using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Services.TrainBus;
+
+namespace Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Trains;
+
+/// <summary>
+/// Test train that dispatches a child <see cref="ScopeTrackTrain"/> via <see cref="ITrainBus"/>
+/// and returns both its own and the child's scope marker IDs.
+/// Used to verify nested dispatch creates separate scopes.
+/// </summary>
+public class NestedScopeTrackTrain
+    : ServiceTrain<NestedScopeTrackInput, NestedScopeTrackOutput>,
+        INestedScopeTrackTrain
+{
+    [Inject]
+    public ScopeMarker? Marker { get; set; }
+
+    [Inject]
+    public ITrainBus? TrainBus { get; set; }
+
+    protected override async Task<Either<Exception, NestedScopeTrackOutput>> Junctions()
+    {
+        var childResult = await TrainBus
+            .NotNull()
+            .RunAsync<ScopeTrackOutput>(new ScopeTrackInput(), CancellationToken.None)
+            .ConfigureAwait(false);
+        return new NestedScopeTrackOutput(Marker.NotNull().Id, childResult.ScopeMarkerId);
+    }
+}

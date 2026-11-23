@@ -1,7 +1,9 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -52,7 +54,7 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
     private readonly ILogger<DeadLetterRequeueJobs> _logger;
     private readonly TimeProvider _time;
     private readonly CancellationToken _stopping;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<Guid, DeadLetterRequeueJob> _jobs = [];
     private Guid? _running;
 
@@ -90,14 +92,15 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
     )
     {
         int awaiting;
-        await using (var scope = _scopes.CreateAsyncScope())
+        var scope = _scopes.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-            using var db = await factory.CreateDbContextAsync(ct);
-            awaiting = await db.DeadLetters.CountAsync(
-                d => d.Status == DeadLetterStatus.AwaitingIntervention,
-                ct
-            );
+            var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
+            awaiting = await db
+                .DeadLetters.CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct)
+                .ConfigureAwait(false);
         }
 
         return Start(awaiting, askAfresh);
@@ -136,14 +139,17 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
                 _time.GetUtcNow().UtcDateTime,
                 FinishedAt: null,
                 Count: null,
-                Message: $"Requeueing {awaitingAtStart} dead letter(s) awaiting intervention.",
+                Message: string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Requeueing {awaitingAtStart} dead letter(s) awaiting intervention."
+                ),
                 AskAfresh: askAfresh
             );
             _jobs[job.Id] = job;
             _running = job.Id;
 
             // Task.Run, not the caller's context: the fold must not share the caller's lifetime.
-            Current = Task.Run(() => RunAsync(job.Id, askAfresh));
+            Current = Task.Run(() => RunAsync(job.Id, askAfresh), CancellationToken.None);
             return job;
         }
     }
@@ -166,19 +172,20 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
 
         try
         {
-            await using var scope = _scopes.CreateAsyncScope();
-            var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
-            // Each page's running total is written onto the job as it commits, so a reader sees
-            // how far the fold has got. A scheduler that predates the progress overload runs the
-            // fold without reporting, and the job shows its count only when it finishes.
-            var result = await scheduler.RequeueAllDeadLettersAsync(
-                askAfresh,
-                new JobProgress(this, id),
-                _stopping
-            );
-            status = DeadLetterRequeueJobStatus.Succeeded;
-            count = result.Count;
-            message = result.Message;
+            var scope = _scopes.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+            {
+                var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
+                // Each page's running total is written onto the job as it commits, so a reader sees
+                // how far the fold has got. A scheduler that predates the progress overload runs the
+                // fold without reporting, and the job shows its count only when it finishes.
+                var result = await scheduler
+                    .RequeueAllDeadLettersAsync(askAfresh, new JobProgress(this, id), _stopping)
+                    .ConfigureAwait(false);
+                status = DeadLetterRequeueJobStatus.Succeeded;
+                count = result.Count;
+                message = result.Message;
+            }
         }
         catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
         {
@@ -218,8 +225,10 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
                     {
                         Processed = value,
                         Message =
-                            $"Requeued {value} of {job.AwaitingAtStart} dead letter(s) awaiting "
-                            + "intervention so far.",
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Requeued {value} of {job.AwaitingAtStart} dead letter(s) awaiting "
+                            ) + "intervention so far.",
                     };
             }
         }
@@ -231,7 +240,7 @@ public sealed class DeadLetterRequeueJobs : IDeadLetterRequeueJobs
         var expiredBefore = _time.GetUtcNow().UtcDateTime - Retention;
         var finished = _jobs
             .Values.Where(j => j.FinishedAt is not null)
-            .Select(j => (j.Id, FinishedAt: j.FinishedAt!.Value))
+            .Select(j => (j.Id, FinishedAt: j.FinishedAt.NotNull().Value))
             .OrderBy(j => j.FinishedAt)
             .ToList();
 

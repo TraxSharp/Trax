@@ -73,7 +73,7 @@ internal sealed class SignalRTestServer : IAsyncDisposable
                 });
         });
 
-        var host = await hostBuilder.StartAsync();
+        var host = await hostBuilder.StartAsync().ConfigureAwait(false);
         return new SignalRTestServer(host, hubPath);
     }
 
@@ -111,7 +111,7 @@ internal sealed class SignalRTestServer : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await Host.StopAsync();
+        await Host.StopAsync().ConfigureAwait(false);
         Host.Dispose();
     }
 }

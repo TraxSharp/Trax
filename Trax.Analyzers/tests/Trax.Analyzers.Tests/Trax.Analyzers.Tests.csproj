@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The rules' tests, copied from Meziantou.Analyzer by tools/sync-upstream.sh (everything but
+       this file and NuGetPackages.cs). They test the Roslyn 5.6 build. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Trax.Analyzers.Tests</RootNamespace>
+    <RoslynVersion>5.6</RoslynVersion>
+    <!-- The tests are upstream's, written in its style; the profile is for Trax's code. -->
+    <TraxAnalyzers>false</TraxAnalyzers>
+    <!-- RS1035/RS1036/RS1038/RS1041: the suite defines a helper analyzer of its own (Helpers/), which
+         the analyzer-authoring rules would hold to what a shipped one needs. -->
+    <NoWarn>$(NoWarn);RS1035;RS1036;RS1038;RS1041</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.Globalization" />
+    <Using Include="System.Text" />
+    <Using Include="Xunit" />
+    <Using Include="Trax.Analyzers.Rules" />
+    <Using Include="Trax.Analyzers.Tests.Harness" />
+    <Using Include="Trax.Analyzers.Tests.Helpers" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);ROSLYN_4_8_OR_GREATER;ROSLYN_4_10_OR_GREATER;ROSLYN_4_14_OR_GREATER;ROSLYN_5_0_OR_GREATER;ROSLYN_5_3_OR_GREATER;ROSLYN_5_6_OR_GREATER</DefineConstants>
+    <DefineConstants>$(DefineConstants);CSHARP9_OR_GREATER;CSHARP10_OR_GREATER;CSHARP11_OR_GREATER;CSHARP12_OR_GREATER;CSHARP13_OR_GREATER;CSHARP14_OR_GREATER;CSHARP15_OR_GREATER;ROSLYN_WORKSPACES</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/Trax.Analyzers.Roslyn/**/*.cs" LinkBase="Roslyn" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3.mtp-off" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeRefactoring.Testing" />
+    <!-- The tests run the Roslyn the rules are built against (5.6); some of them load the IDE's
+         own analyzers, which must match it. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" VersionOverride="5.6.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="5.6.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" VersionOverride="5.6.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Trax.Analyzers.Annotations/Trax.Analyzers.Annotations.csproj" />
+    <ProjectReference Include="../../src/Trax.Analyzers.CodeFixers/Trax.Analyzers.CodeFixers.csproj" />
+    <ProjectReference Include="../../src/Trax.Analyzers/Trax.Analyzers.csproj" />
+  </ItemGroup>
+</Project>

@@ -30,7 +30,7 @@ public static class FunctionalExtensions
     internal static async Task<R> Unwrap<L, R>(this Task<Either<L, R>> option)
         where L : Exception
     {
-        var result = await option;
+        var result = await option.ConfigureAwait(false);
         return result.Unwrap();
     }
 
@@ -69,8 +69,15 @@ public static class FunctionalExtensions
         TupleCache.GetOrAdd(
             type,
             t =>
-                (t.IsGenericType && t.FullName?.StartsWith("System.ValueTuple`") == true)
-                || t.FullName?.StartsWith("System.Runtime.CompilerServices.ITuple") == true
+                (
+                    t.IsGenericType
+                    && t.FullName?.StartsWith("System.ValueTuple`", StringComparison.Ordinal)
+                        == true
+                )
+                || t.FullName?.StartsWith(
+                    "System.Runtime.CompilerServices.ITuple",
+                    StringComparison.Ordinal
+                ) == true
         );
 
     /// <summary>
@@ -88,6 +95,28 @@ public static class FunctionalExtensions
     {
         if (value == null)
             throw new InvalidOperationException($"{valueExpr} has not been loaded");
+    }
+
+    /// <summary>
+    /// The value, or an <see cref="InvalidOperationException"/> naming the caller's expression when
+    /// it is null. Write it where the null-forgiving operator (!) would have gone: the assumption
+    /// is the same, and it fails at the line that made it instead of somewhere after.
+    /// </summary>
+    /// <typeparam name="T">The type of the value</typeparam>
+    /// <param name="value">The value that must not be null</param>
+    /// <param name="valueExpr">Auto-captured caller argument expression</param>
+    /// <returns>The value, known not to be null</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the value is null</exception>
+    [return: NotNull]
+    public static T NotNull<T>(
+        [NotNull] this T? value,
+        [CallerArgumentExpression(nameof(value))] string? valueExpr = null
+    )
+    {
+        if (value is null)
+            throw new InvalidOperationException($"{valueExpr} is null");
+
+        return value;
     }
 
     /// <summary>

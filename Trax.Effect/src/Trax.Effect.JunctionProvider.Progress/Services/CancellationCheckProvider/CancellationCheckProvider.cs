@@ -42,12 +42,16 @@ public class CancellationCheckProvider(IDataContextProviderFactory dataContextFa
         if (serviceTrain.Metadata is null)
             return;
 
-        await using var context = await dataContextFactory.CreateDbContextAsync(cancellationToken);
+        var context = await dataContextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var cancelRequested = await context
             .Metadatas.Where(m => m.Id == serviceTrain.Metadata.Id)
             .Select(m => m.CancellationRequested)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         if (cancelRequested)
         {

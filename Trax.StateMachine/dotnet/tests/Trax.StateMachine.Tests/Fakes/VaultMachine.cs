@@ -2,21 +2,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum VaultState
-{
-    Draft,
-    Stamped,
-    Sealed,
-}
-
-public enum VaultTrigger
-{
-    Seal,
-    Stamp,
-    Force,
-    Detonate,
-}
-
 /// <summary>
 /// A machine whose rules are custom: <c>Seal</c> is guarded by the custom rule <c>approved</c>, <c>Stamp</c>
 /// reduces with the custom reduction <c>stamp</c>, <c>Sealed</c> requires the custom rule <c>sealable</c>, and

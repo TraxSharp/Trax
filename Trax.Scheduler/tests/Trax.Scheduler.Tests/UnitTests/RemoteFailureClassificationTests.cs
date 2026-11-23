@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Services.RequestHandler;
@@ -107,7 +108,8 @@ public class RemoteFailureClassificationTests
                 Name = "SomeTrain",
                 ExternalId = "abc",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 
@@ -157,7 +159,8 @@ public class RemoteFailureClassificationTests
                 Name = "SomeTrain",
                 ExternalId = "abc",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 
@@ -184,10 +187,9 @@ public class RemoteFailureClassificationTests
 
         // Read with the executors' own options, so the reader's converters are part of what is
         // proven to tolerate the missing property.
-        var response = JsonSerializer.Deserialize<RemoteRunResponse>(
-            olderWorkerJson,
-            RemoteRunJson.Read
-        )!;
+        var response = JsonSerializer
+            .Deserialize<RemoteRunResponse>(olderWorkerJson, RemoteRunJson.Read)
+            .NotNull();
         var rebuilt = HttpRunExecutor.BuildExceptionFromErrorResponse(response);
 
         var metadata = Metadata.Create(
@@ -196,7 +198,8 @@ public class RemoteFailureClassificationTests
                 Name = "SomeTrain",
                 ExternalId = "abc",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 

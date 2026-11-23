@@ -10,16 +10,16 @@ namespace Trax.Cli.Generator
     public class CodeRenderer
     {
         public CodeRenderer() { }
-        public string RenderEnum(Trax.Cli.Models.ApiEnum apiEnum, string projectName) { }
-        public string RenderGraphQLNamespaces(System.Collections.Generic.IEnumerable<string> groups, string projectName) { }
-        public string RenderInput(Trax.Cli.Models.ApiOperation operation, string projectName) { }
-        public string RenderJunction(Trax.Cli.Models.ApiOperation operation, string projectName) { }
-        public string RenderManifestNames(System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> operations, string projectName) { }
-        public string RenderOutput(Trax.Cli.Models.ApiOperation operation, string projectName) { }
-        public string RenderTrainImplementation(Trax.Cli.Models.ApiOperation operation, string projectName) { }
-        public string RenderTrainInterface(Trax.Cli.Models.ApiOperation operation, string projectName) { }
-        public string RenderTrainsCsproj() { }
-        public string RenderTypeRecord(Trax.Cli.Models.ApiType type, string projectName, string? group) { }
+        public System.Threading.Tasks.Task<string> RenderEnumAsync(Trax.Cli.Models.ApiEnum apiEnum, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderGraphQLNamespacesAsync(System.Collections.Generic.IEnumerable<string> groups, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderInputAsync(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderJunctionAsync(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderManifestNamesAsync(System.Collections.Generic.IList<Trax.Cli.Models.ApiOperation> operations, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderOutputAsync(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderTrainImplementationAsync(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderTrainInterfaceAsync(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public System.Threading.Tasks.Task<string> RenderTrainsCsprojAsync() { }
+        public System.Threading.Tasks.Task<string> RenderTypeRecordAsync(Trax.Cli.Models.ApiType type, string projectName, string? group) { }
         public void SetModelsNamespace(string modelsNamespace) { }
     }
     public static class NamingConventions
@@ -35,8 +35,8 @@ namespace Trax.Cli.Generator
     public class TraxProjectGenerator
     {
         public TraxProjectGenerator() { }
-        public void Generate(Trax.Cli.Models.ApiSchema schema, string outputDir, string projectName, bool force) { }
-        public static bool IsDotnetAvailable() { }
+        public System.Threading.Tasks.Task GenerateAsync(Trax.Cli.Models.ApiSchema schema, string outputDir, string projectName, bool force) { }
+        public static System.Threading.Tasks.Task<bool> IsDotnetAvailableAsync() { }
     }
 }
 namespace Trax.Cli.Models
@@ -46,7 +46,7 @@ namespace Trax.Cli.Models
         public ApiEnum() { }
         public string? Description { get; init; }
         public required string Name { get; init; }
-        public required System.Collections.Generic.List<string> Values { get; init; }
+        public required System.Collections.Generic.IList<string> Values { get; init; }
     }
     public class ApiField
     {
@@ -72,16 +72,16 @@ namespace Trax.Cli.Models
     public class ApiSchema
     {
         public ApiSchema() { }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiEnum> Enums { get; init; }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> Operations { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiEnum> Enums { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiOperation> Operations { get; init; }
         public required string SchemaType { get; init; }
         public required string SourceFile { get; init; }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiType> Types { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiType> Types { get; init; }
     }
     public class ApiType
     {
         public ApiType() { }
-        public System.Collections.Generic.List<Trax.Cli.Models.ApiField> Fields { get; init; }
+        public System.Collections.Generic.IList<Trax.Cli.Models.ApiField> Fields { get; init; }
         public bool IsBuiltIn { get; init; }
         public required string Name { get; init; }
     }
@@ -96,14 +96,15 @@ namespace Trax.Cli.Schema.GraphQL
     public class GraphQLSchemaParser : Trax.Cli.Schema.ISchemaParser
     {
         public GraphQLSchemaParser() { }
-        public Trax.Cli.Models.ApiSchema Parse(string filePath) { }
+        public GraphQLSchemaParser(System.IO.TextWriter warnings) { }
+        public System.Threading.Tasks.Task<Trax.Cli.Models.ApiSchema> ParseAsync(string filePath) { }
     }
 }
 namespace Trax.Cli.Schema
 {
     public interface ISchemaParser
     {
-        Trax.Cli.Models.ApiSchema Parse(string filePath);
+        System.Threading.Tasks.Task<Trax.Cli.Models.ApiSchema> ParseAsync(string filePath);
     }
     public static class SchemaDetector
     {
@@ -115,6 +116,7 @@ namespace Trax.Cli.Schema.OpenApi
     public class OpenApiSchemaParser : Trax.Cli.Schema.ISchemaParser
     {
         public OpenApiSchemaParser() { }
-        public Trax.Cli.Models.ApiSchema Parse(string filePath) { }
+        public OpenApiSchemaParser(System.IO.TextWriter warnings) { }
+        public System.Threading.Tasks.Task<Trax.Cli.Models.ApiSchema> ParseAsync(string filePath) { }
     }
 }

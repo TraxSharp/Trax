@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -64,12 +65,13 @@ public class JsonEffectToggleTests
         var jsonLogCountBefore = GetJsonEffectLogCount(arrayProvider);
 
         // Act
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
         await train.Run(Unit.Default);
 
         // Assert
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
         (jsonLogCountAfter - jsonLogCountBefore)
@@ -88,12 +90,13 @@ public class JsonEffectToggleTests
         var jsonLogCountBefore = GetJsonEffectLogCount(arrayProvider);
 
         // Act
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
         await train.Run(Unit.Default);
 
         // Assert - train still completes successfully
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         // But no new JSON logs should have been written
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
@@ -114,12 +117,13 @@ public class JsonEffectToggleTests
         var jsonLogCountBefore = GetJsonEffectLogCount(arrayProvider);
 
         // Act
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
         await train.Run(Unit.Default);
 
         // Assert
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
         (jsonLogCountAfter - jsonLogCountBefore)
@@ -129,14 +133,22 @@ public class JsonEffectToggleTests
 
     private static int GetJsonEffectLogCount(IArrayLoggingProvider arrayProvider) =>
         arrayProvider
-            .Loggers.Where(logger => logger.Logs.Any(log => log.Category == JsonEffectCategory))
-            .SelectMany(logger => logger.Logs.Where(log => log.Category == JsonEffectCategory))
+            .Loggers.Where(logger =>
+                logger.Logs.Any(log =>
+                    string.Equals(log.Category, JsonEffectCategory, StringComparison.Ordinal)
+                )
+            )
+            .SelectMany(logger =>
+                logger.Logs.Where(log =>
+                    string.Equals(log.Category, JsonEffectCategory, StringComparison.Ordinal)
+                )
+            )
             .Count();
 
-    private class ToggleTestTrain : ServiceTrain<Unit, Unit>, IToggleTestTrain
+    private sealed class ToggleTestTrain : ServiceTrain<Unit, Unit>, IToggleTestTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
     }
 
-    private interface IToggleTestTrain : IServiceTrain<Unit, Unit> { }
+    private interface IToggleTestTrain : IServiceTrain<Unit, Unit>;
 }

@@ -1,6 +1,7 @@
-using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
@@ -15,7 +16,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainBusReflectionCacheTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -54,27 +55,36 @@ public class TrainBusReflectionCacheTests
     public async Task TrainBus_ShouldCacheReflectionLookups()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput();
 
         // Warm up the cache with first execution
         await trainBus.RunAsync<MemoryTestOutput>(input);
 
         // Act - Measure subsequent executions that should use cached methods
-        var stopwatch = Stopwatch.StartNew();
+        var start = TimeProvider.System.GetTimestamp();
 
         for (int i = 0; i < 100; i++)
         {
-            var testInput = MemoryTestModelFactory.CreateInput($"cache_test_{i}");
+            var testInput = MemoryTestModelFactory.CreateInput(
+                string.Create(CultureInfo.InvariantCulture, $"cache_test_{i}")
+            );
             var result = await trainBus.RunAsync<MemoryTestOutput>(testInput);
             result.Should().NotBeNull();
         }
 
-        stopwatch.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(start);
 
         // Assert - Cached executions should be fast
-        var averageMs = stopwatch.ElapsedMilliseconds / 100.0;
-        Console.WriteLine($"Average execution time with caching: {averageMs:F2}ms");
+        var averageMs = (long)elapsed.TotalMilliseconds / 100.0;
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Average execution time with caching: {averageMs:F2}ms"
+                )
+            )
+            .ConfigureAwait(false);
 
         averageMs
             .Should()
@@ -88,7 +98,7 @@ public class TrainBusReflectionCacheTests
     public async Task TrainBus_ShouldNotLeakMemory_WithRepeatedExecutions()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act & Assert
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
@@ -97,15 +107,19 @@ public class TrainBusReflectionCacheTests
                 // Execute many trains to test reflection caching memory behavior
                 for (int i = 0; i < 200; i++)
                 {
-                    var testInput = MemoryTestModelFactory.CreateInput($"reflection_test_{i}");
-                    var output = await trainBus.RunAsync<MemoryTestOutput>(testInput);
+                    var testInput = MemoryTestModelFactory.CreateInput(
+                        string.Create(CultureInfo.InvariantCulture, $"reflection_test_{i}")
+                    );
+                    var output = await trainBus
+                        .RunAsync<MemoryTestOutput>(testInput)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
             "TrainBus_RepeatedExecutions_MemoryTest"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // With reflection caching, memory retention should be minimal
         result
@@ -120,7 +134,7 @@ public class TrainBusReflectionCacheTests
     public async Task TrainBus_ShouldHandleConcurrentExecutions_WithoutMemoryLeaks()
     {
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         const int concurrentTasks = 20;
         const int executionsPerTask = 10;
 
@@ -135,19 +149,24 @@ public class TrainBusReflectionCacheTests
                         for (int i = 0; i < executionsPerTask; i++)
                         {
                             var testInput = MemoryTestModelFactory.CreateInput(
-                                $"concurrent_{taskId}_{i}"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"concurrent_{taskId}_{i}"
+                                )
                             );
-                            var output = await trainBus.RunAsync<MemoryTestOutput>(testInput);
+                            var output = await trainBus
+                                .RunAsync<MemoryTestOutput>(testInput)
+                                .ConfigureAwait(false);
                             output.Should().NotBeNull();
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
             },
             "TrainBus_ConcurrentExecutions_MemoryTest"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent executions with shared cache should not cause memory leaks
         result
@@ -165,30 +184,43 @@ public class TrainBusReflectionCacheTests
         // Since we can't easily disable caching, we compare cold starts vs warm executions
 
         // Arrange
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         // Act - Cold start (first execution - cache miss)
-        var coldStartStopwatch = Stopwatch.StartNew();
+        var coldStart = TimeProvider.System.GetTimestamp();
         var coldInput = MemoryTestModelFactory.CreateInput("cold_start");
         await trainBus.RunAsync<MemoryTestOutput>(coldInput);
-        coldStartStopwatch.Stop();
+        var coldElapsed = TimeProvider.System.GetElapsedTime(coldStart);
 
         // Warm executions (cache hits)
-        var warmStopwatch = Stopwatch.StartNew();
+        var warmStart = TimeProvider.System.GetTimestamp();
         for (int i = 0; i < 10; i++)
         {
-            var warmInput = MemoryTestModelFactory.CreateInput($"warm_{i}");
+            var warmInput = MemoryTestModelFactory.CreateInput(
+                string.Create(CultureInfo.InvariantCulture, $"warm_{i}")
+            );
             await trainBus.RunAsync<MemoryTestOutput>(warmInput);
         }
 
-        warmStopwatch.Stop();
+        var warmElapsed = TimeProvider.System.GetElapsedTime(warmStart);
 
         // Assert
-        var coldStartMs = coldStartStopwatch.ElapsedMilliseconds;
-        var warmAverageMs = warmStopwatch.ElapsedMilliseconds / 10.0;
+        var coldStartMs = (long)coldElapsed.TotalMilliseconds;
+        var warmAverageMs = (long)warmElapsed.TotalMilliseconds / 10.0;
 
-        Console.WriteLine($"Cold start time: {coldStartMs}ms");
-        Console.WriteLine($"Warm execution average: {warmAverageMs:F2}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(CultureInfo.InvariantCulture, $"Cold start time: {coldStartMs}ms")
+            )
+            .ConfigureAwait(false);
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Warm execution average: {warmAverageMs:F2}ms"
+                )
+            )
+            .ConfigureAwait(false);
 
         // Floored, because the bound is otherwise set by however fast the single cold run happened
         // to be: a cold start that lands at 1ms demands warm runs under 1.2ms, which says nothing
@@ -215,20 +247,29 @@ public class TrainBusReflectionCacheTests
             var serviceProvider = (IServiceProvider)scopedProvider;
             var trainBus = serviceProvider.GetRequiredService<ITrainBus>();
 
-            var stopwatch = Stopwatch.StartNew();
+            var start = TimeProvider.System.GetTimestamp();
 
             for (int i = 0; i < 20; i++)
             {
-                var testInput = MemoryTestModelFactory.CreateInput($"scope_{scope}_item_{i}");
+                var testInput = MemoryTestModelFactory.CreateInput(
+                    string.Create(CultureInfo.InvariantCulture, $"scope_{scope}_item_{i}")
+                );
                 var result = await trainBus.RunAsync<MemoryTestOutput>(testInput);
                 result.Should().NotBeNull();
             }
 
-            stopwatch.Stop();
-            var averageMs = stopwatch.ElapsedMilliseconds / 20.0;
-            results.Add(($"Scope {scope}", averageMs));
+            var elapsed = TimeProvider.System.GetElapsedTime(start);
+            var averageMs = (long)elapsed.TotalMilliseconds / 20.0;
+            results.Add((string.Create(CultureInfo.InvariantCulture, $"Scope {scope}"), averageMs));
 
-            Console.WriteLine($"Scope {scope} average execution time: {averageMs:F2}ms");
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Scope {scope} average execution time: {averageMs:F2}ms"
+                    )
+                )
+                .ConfigureAwait(false);
         }
 
         // Assert - Later scopes should benefit from the shared static cache

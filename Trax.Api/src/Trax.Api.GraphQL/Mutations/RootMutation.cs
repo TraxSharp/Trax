@@ -9,4 +9,4 @@ namespace Trax.Api.GraphQL.Mutations;
 /// </list>
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations">SDK reference</seealso>
-public class RootMutation { }
+public class RootMutation;

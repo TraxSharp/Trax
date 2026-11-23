@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -11,52 +13,18 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0035-demo-credentials-exist-only-in-development.md")]
 [TestFixture]
-public class DemoKeysCarryTheMarkerTests
+public partial class DemoKeysCarryTheMarkerTests
 {
     private const string Marker = "do-not-use-in-production";
 
-    private static readonly Regex ClassDeclaration = new(
-        @"\b(?:class|record|struct)\s+(?<name>\w+)",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex ConstString = new(
-        @"\bconst\s+string\s+(?<name>\w+)\s*=\s*""(?<value>[^""]*)""",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex UsingAlias = new(
-        @"^\s*using\s+(?<alias>\w+)\s*=\s*[\w.]*?(?<target>\w+)\s*;",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
-
-    private static readonly Regex InlineRegistration = new(
-        @"\bAddTraxApiKeyAuth\s*\(",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex ResolverRegistration = new(
-        @"\bAddTraxApiKeyAuth\s*<\s*(?<resolver>\w+)\s*>",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex AddCall = new(
-        @"\.Add\(\s*(?<key>[^,\)]+?)\s*,",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex DictionaryKey = new(
-        @"\[\s*(?<key>""[^""]*""|[\w.]+)\s*\]\s*=",
-        RegexOptions.Compiled
-    );
-
     [Test]
-    public void EveryRegisteredDemoKey_CarriesTheMarker()
+    public async Task EveryRegisteredDemoKey_CarriesTheMarker()
     {
-        var files = SourceFiles
-            .CSharp("samples", "templates")
-            .Select(path => new SourceFile(path, File.ReadAllText(path)))
-            .ToList();
+        var files = new List<SourceFile>();
+        foreach (var path in SourceFiles.CSharp("samples", "templates"))
+            files.Add(
+                new SourceFile(path, await File.ReadAllTextAsync(path).ConfigureAwait(false))
+            );
         var constants = Constants(files);
 
         var offenders = new List<string>();
@@ -92,7 +60,7 @@ public class DemoKeysCarryTheMarkerTests
                 $"every demo API key must contain \"{Marker}\", so Trax.Api refuses to start a "
                     + "host outside Development with it registered. See "
                     + "Trax.Docs/adr/0035-demo-credentials-exist-only-in-development.md:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
@@ -148,7 +116,12 @@ public class DemoKeysCarryTheMarkerTests
             {
                 var resolver = registration.Groups["resolver"].Value;
                 var declaring = files.FirstOrDefault(f =>
-                    Regex.IsMatch(f.Code, $@"\bclass\s+{Regex.Escape(resolver)}\b")
+                    Regex.IsMatch(
+                        f.Code,
+                        $@"\bclass\s+{Regex.Escape(resolver)}\b",
+                        RegexOptions.None,
+                        TimeSpan.FromSeconds(1)
+                    )
                 );
                 if (declaring is null)
                 {
@@ -183,7 +156,7 @@ public class DemoKeysCarryTheMarkerTests
 
         var type = parts[^2];
         foreach (Match alias in UsingAlias.Matches(site.Code))
-            if (alias.Groups["alias"].Value == type)
+            if (string.Equals(alias.Groups["alias"].Value, type, StringComparison.Ordinal))
                 type = alias.Groups["target"].Value;
 
         return constants.TryGetValue(type, out var members)
@@ -201,6 +174,53 @@ public class DemoKeysCarryTheMarkerTests
             else if (code[i] == ')' && --depth == 0)
                 return i;
         }
-        throw new InvalidOperationException($"Unbalanced parenthesis at offset {open}.");
+        throw new InvalidOperationException(
+            string.Create(CultureInfo.InvariantCulture, $"Unbalanced parenthesis at offset {open}.")
+        );
     }
+
+    [GeneratedRegex(
+        @"\[\s*(?<key>""[^""]*""|[\w.]+)\s*\]\s*=",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DictionaryKey { get; }
+
+    [GeneratedRegex(
+        @"\.Add\(\s*(?<key>[^,\)]+?)\s*,",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AddCall { get; }
+
+    [GeneratedRegex(
+        @"\bAddTraxApiKeyAuth\s*<\s*(?<resolver>\w+)\s*>",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ResolverRegistration { get; }
+
+    [GeneratedRegex(@"\bAddTraxApiKeyAuth\s*\(", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InlineRegistration { get; }
+
+    [GeneratedRegex(
+        @"^\s*using\s+(?<alias>\w+)\s*=\s*[\w.]*?(?<target>\w+)\s*;",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex UsingAlias { get; }
+
+    [GeneratedRegex(
+        @"\bconst\s+string\s+(?<name>\w+)\s*=\s*""(?<value>[^""]*)""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConstString { get; }
+
+    [GeneratedRegex(
+        @"\b(?:class|record|struct)\s+(?<name>\w+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ClassDeclaration { get; }
 }

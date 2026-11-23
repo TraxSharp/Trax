@@ -24,23 +24,33 @@ public class StartPartitionMachines(IMachineInstances instances)
         foreach (var partition in discovered.Partitions)
         {
             var key = SourcePartitionMachine.KeyFor(partition.Source, partition.Month);
-            var instance = await instances.Start<SourcePartitionMachine>(
-                key,
-                SourcePartitionMachine.ContextFor(partition.Source, partition.Month),
-                CancellationToken
-            );
+            var instance = await instances
+                .Start<SourcePartitionMachine>(
+                    key,
+                    SourcePartitionMachine.ContextFor(partition.Source, partition.Month),
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
             if (instance.Created)
                 started++;
 
-            if (instance.State != nameof(PartitionState.Discovered))
+            if (
+                !string.Equals(
+                    instance.State,
+                    nameof(PartitionState.Discovered),
+                    StringComparison.Ordinal
+                )
+            )
                 continue;
 
             switch (
-                await instances.Advance<SourcePartitionMachine>(
-                    key,
-                    nameof(PartitionTrigger.Ingest),
-                    cancellationToken: CancellationToken
-                )
+                await instances
+                    .Advance<SourcePartitionMachine>(
+                        key,
+                        nameof(PartitionTrigger.Ingest),
+                        cancellationToken: CancellationToken
+                    )
+                    .ConfigureAwait(false)
             )
             {
                 case AdvanceOutcome.Advanced:

@@ -57,7 +57,7 @@ internal sealed class DeferredOutcomeEvents(
             return;
         }
 
-        await OutOfTrainOutcomes.PublishFailedAsync(services, runIds, logger);
+        await OutOfTrainOutcomes.PublishFailedAsync(services, runIds, logger).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -75,11 +75,13 @@ internal sealed class DeferredOutcomeEvents(
         }
 
         if (failed.Count > 0)
-            await OutOfTrainOutcomes.PublishFailedAsync(
-                services,
-                failed,
-                logger,
-                parallelism: oneWriter ? 1 : Parallelism
-            );
+            await OutOfTrainOutcomes
+                .PublishFailedAsync(
+                    services,
+                    failed,
+                    logger,
+                    parallelism: oneWriter ? 1 : Parallelism
+                )
+                .ConfigureAwait(false);
     }
 }

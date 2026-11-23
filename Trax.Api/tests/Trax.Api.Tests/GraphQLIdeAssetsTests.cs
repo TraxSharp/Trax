@@ -58,12 +58,12 @@ public partial class GraphQLIdeAssetsTests
 
         var page = await GetAsync(app, "/trax/graphql/", "text/html");
         page.StatusCode.Should().Be(HttpStatusCode.OK);
-        var html = await page.Content.ReadAsStringAsync();
+        var html = await page.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None);
 
-        var assets = AssetReference()
+        var assets = AssetReference
             .Matches(html)
             .Select(m => m.Groups["path"].Value)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
         assets.Should().NotBeEmpty("the IDE page references its scripts and styles");
         assets
@@ -82,8 +82,12 @@ public partial class GraphQLIdeAssetsTests
         outgoing.Requests.Should().BeEmpty("the IDE and its assets come from the package");
     }
 
-    [GeneratedRegex("""(?:src|href)="(?<path>[^"]+\.(?:js|css))""")]
-    private static partial Regex AssetReference();
+    [GeneratedRegex(
+        """(?:src|href)="(?<path>[^"]+\.(?:js|css))""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AssetReference { get; }
 
     private static async Task<HttpResponseMessage> GetAsync(
         WebApplication app,
@@ -93,7 +97,9 @@ public partial class GraphQLIdeAssetsTests
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
-        return await app.GetTestClient().SendAsync(request);
+        return await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task<WebApplication> StartAsync()
@@ -121,7 +127,7 @@ public partial class GraphQLIdeAssetsTests
         var app = builder.Build();
         app.UseRouting();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
@@ -144,7 +150,13 @@ public partial class GraphQLIdeAssetsTests
 
         public void OnNext(DiagnosticListener listener)
         {
-            if (listener.Name == "HttpHandlerDiagnosticListener")
+            if (
+                string.Equals(
+                    listener.Name,
+                    "HttpHandlerDiagnosticListener",
+                    StringComparison.Ordinal
+                )
+            )
                 lock (_subscriptions)
                     _subscriptions.Add(listener.Subscribe(this));
         }
@@ -152,8 +164,12 @@ public partial class GraphQLIdeAssetsTests
         public void OnNext(KeyValuePair<string, object?> evt)
         {
             if (
-                evt.Key != "System.Net.Http.Request"
-                && evt.Key != "System.Net.Http.HttpRequestOut.Start"
+                !string.Equals(evt.Key, "System.Net.Http.Request", StringComparison.Ordinal)
+                && !string.Equals(
+                    evt.Key,
+                    "System.Net.Http.HttpRequestOut.Start",
+                    StringComparison.Ordinal
+                )
             )
                 return;
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -33,11 +34,11 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class JobDispatcherTrainTests : TestSetup
 {
-    private IJobDispatcherTrain _train = null!;
+    private IJobDispatcherTrain? _train;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
     }
 
@@ -58,7 +59,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should be dispatched
         DataContext.Reset();
@@ -74,7 +75,7 @@ public class JobDispatcherTrainTests : TestSetup
         // Arrange - No queued entries
 
         // Act & Assert
-        var act = async () => await _train.Run(Unit.Default);
+        var act = async () => await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -93,7 +94,7 @@ public class JobDispatcherTrainTests : TestSetup
         var dispatchedEntry = await CreateAndSaveWorkQueueEntry(manifest);
         dispatchedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == dispatchedEntry.Id);
         dispatchedEntry.Status = WorkQueueStatus.Dispatched;
-        dispatchedEntry.DispatchedAt = DateTime.UtcNow;
+        dispatchedEntry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
@@ -107,7 +108,7 @@ public class JobDispatcherTrainTests : TestSetup
         var queuedEntry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Only the queued entry should have been dispatched
         DataContext.Reset();
@@ -138,7 +139,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - A Metadata record should be created and linked
         DataContext.Reset();
@@ -148,7 +149,7 @@ public class JobDispatcherTrainTests : TestSetup
 
         updatedEntry.MetadataId.Should().NotBeNull();
         updatedEntry.Metadata.Should().NotBeNull();
-        updatedEntry.Metadata!.ManifestId.Should().Be(manifest.Id);
+        updatedEntry.Metadata.NotNull().ManifestId.Should().Be(manifest.Id);
     }
 
     [Test]
@@ -160,10 +161,11 @@ public class JobDispatcherTrainTests : TestSetup
         var source = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(source);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -172,26 +174,27 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = JsonSerializer.Serialize(
                     new SchedulerTestInput { Value = "requeued" },
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ReplayDecisionsOf = source.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         DataContext.Reset();
         var dispatched = await DataContext
             .WorkQueues.Include(q => q.Metadata)
             .FirstAsync(q => q.Id == entry.Id);
-        dispatched.Metadata!.ReplayDecisionsOf.Should().Be(source.Id);
+        dispatched.Metadata.NotNull().ReplayDecisionsOf.Should().Be(source.Id);
     }
 
     [Test]
@@ -203,13 +206,14 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = JsonSerializer.Serialize(
                     new SchedulerTestInput { Value = "started" },
                     TraxJsonSerializationOptions.ManifestProperties
                 ),
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -221,7 +225,7 @@ public class JobDispatcherTrainTests : TestSetup
             entry.Id
         );
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         DataContext.Reset();
         var dispatched = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
@@ -230,7 +234,7 @@ public class JobDispatcherTrainTests : TestSetup
             await ((DbContext)DataContext)
                 .Database.SqlQueryRaw<string?>(
                     "SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {0}",
-                    dispatched.MetadataId!.Value
+                    dispatched.MetadataId.NotNull().Value
                 )
                 .SingleAsync()
         )
@@ -247,16 +251,17 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = """{"value":{"not":"a string"}}""",
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         DataContext.Reset();
         var dispatched = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
@@ -267,7 +272,8 @@ public class JobDispatcherTrainTests : TestSetup
         run.FailureException.Should().Be("TrainException");
         run.FailureReason.Should().Be("The run's input could not be read.");
         run.FailureReason.Should().NotContain(nameof(SchedulerTestInput));
-        run.FailureReason.Should().NotContain(entry.Id.ToString());
+        run.FailureReason.Should()
+            .NotContain(entry.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Test]
@@ -278,7 +284,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -287,7 +293,7 @@ public class JobDispatcherTrainTests : TestSetup
             .FirstOrDefaultAsync();
 
         metadata.Should().NotBeNull();
-        metadata!.Name.Should().Be(typeof(SchedulerTestTrain).FullName);
+        metadata.NotNull().Name.Should().Be(typeof(SchedulerTestTrain).FullName);
     }
 
     [Test]
@@ -296,10 +302,10 @@ public class JobDispatcherTrainTests : TestSetup
         // Arrange
         var manifest = await CreateAndSaveManifest();
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
-        var beforeDispatch = DateTime.UtcNow;
+        var beforeDispatch = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -307,7 +313,9 @@ public class JobDispatcherTrainTests : TestSetup
 
         updatedEntry.DispatchedAt.Should().NotBeNull();
         updatedEntry.DispatchedAt.Should().BeOnOrAfter(beforeDispatch);
-        updatedEntry.DispatchedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        updatedEntry
+            .DispatchedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -324,7 +332,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry3 = await CreateAndSaveWorkQueueEntry(manifest3);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - All entries should be dispatched
         DataContext.Reset();
@@ -351,7 +359,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - InMemoryJobSubmitter executes immediately, which updates LastSuccessfulRun
         DataContext.Reset();
@@ -360,10 +368,10 @@ public class JobDispatcherTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest
             .LastSuccessfulRun.Should()
-            .BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     #endregion
@@ -388,7 +396,7 @@ public class JobDispatcherTrainTests : TestSetup
         var highEntry = await CreateAndSaveWorkQueueEntry(highManifest, priority: 31);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - All entries should be dispatched
         DataContext.Reset();
@@ -402,9 +410,9 @@ public class JobDispatcherTrainTests : TestSetup
 
         // Verify dispatch order: higher priority should have earlier MetadataId
         // (since they are dispatched sequentially, earlier dispatch = lower MetadataId)
-        var highMeta = entries.First(e => e.Id == highEntry.Id).MetadataId!.Value;
-        var midMeta = entries.First(e => e.Id == midEntry.Id).MetadataId!.Value;
-        var lowMeta = entries.First(e => e.Id == lowEntry.Id).MetadataId!.Value;
+        var highMeta = entries.First(e => e.Id == highEntry.Id).MetadataId.NotNull().Value;
+        var midMeta = entries.First(e => e.Id == midEntry.Id).MetadataId.NotNull().Value;
+        var lowMeta = entries.First(e => e.Id == lowEntry.Id).MetadataId.NotNull().Value;
 
         highMeta
             .Should()
@@ -423,7 +431,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveManualWorkQueueEntry();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should be dispatched despite having no manifest
         DataContext.Reset();
@@ -440,7 +448,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveManualWorkQueueEntry();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Metadata should be created with null ManifestId
         DataContext.Reset();
@@ -450,7 +458,7 @@ public class JobDispatcherTrainTests : TestSetup
 
         updatedEntry.MetadataId.Should().NotBeNull();
         updatedEntry.Metadata.Should().NotBeNull();
-        updatedEntry.Metadata!.ManifestId.Should().BeNull();
+        updatedEntry.Metadata.NotNull().ManifestId.Should().BeNull();
     }
 
     [Test]
@@ -462,7 +470,7 @@ public class JobDispatcherTrainTests : TestSetup
         var manualEntry = await CreateAndSaveManualWorkQueueEntry(inputValue: "ManualJob");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Both should be dispatched
         DataContext.Reset();
@@ -490,7 +498,7 @@ public class JobDispatcherTrainTests : TestSetup
         var manualEntry = await CreateAndSaveManualWorkQueueEntry(inputValue: "ManualJob");
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Manual entry dispatches, disabled group entry stays queued
         DataContext.Reset();
@@ -513,7 +521,7 @@ public class JobDispatcherTrainTests : TestSetup
         var highEntry = await CreateAndSaveManualWorkQueueEntry(inputValue: "High", priority: 31);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Both dispatched, higher priority first (lower MetadataId)
         DataContext.Reset();
@@ -524,8 +532,8 @@ public class JobDispatcherTrainTests : TestSetup
 
         entries.Should().AllSatisfy(e => e.Status.Should().Be(WorkQueueStatus.Dispatched));
 
-        var highMeta = entries.First(e => e.Id == highEntry.Id).MetadataId!.Value;
-        var lowMeta = entries.First(e => e.Id == lowEntry.Id).MetadataId!.Value;
+        var highMeta = entries.First(e => e.Id == highEntry.Id).MetadataId.NotNull().Value;
+        var lowMeta = entries.First(e => e.Id == lowEntry.Id).MetadataId.NotNull().Value;
 
         highMeta
             .Should()
@@ -543,11 +551,11 @@ public class JobDispatcherTrainTests : TestSetup
         var manifest = await CreateAndSaveManifest(inputValue: "FutureScheduled");
         var entry = await CreateAndSaveWorkQueueEntry(
             manifest,
-            scheduledAt: DateTime.UtcNow.AddHours(1)
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should remain Queued (not dispatched)
         DataContext.Reset();
@@ -566,11 +574,11 @@ public class JobDispatcherTrainTests : TestSetup
         var manifest = await CreateAndSaveManifest(inputValue: "PastScheduled");
         var entry = await CreateAndSaveWorkQueueEntry(
             manifest,
-            scheduledAt: DateTime.UtcNow.AddMinutes(-5)
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should be dispatched
         DataContext.Reset();
@@ -590,7 +598,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest, scheduledAt: null);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should be dispatched (null means dispatch immediately)
         DataContext.Reset();
@@ -619,7 +627,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest, priority: 25);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - entry should be dispatched (priority doesn't affect dispatch eligibility)
         DataContext.Reset();
@@ -635,7 +643,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveManualWorkQueueEntry(priority: 15);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -652,7 +660,7 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = await CreateAndSaveWorkQueueEntry(manifest, priority: 0);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
         DataContext.Reset();
@@ -666,10 +674,8 @@ public class JobDispatcherTrainTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -683,8 +689,8 @@ public class JobDispatcherTrainTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -701,17 +707,18 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = input,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
                 ScheduledAt = scheduledAt,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -734,15 +741,16 @@ public class JobDispatcherTrainTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = serializedInput,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return entry;
@@ -762,8 +770,8 @@ public class JobDispatcherTrainTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

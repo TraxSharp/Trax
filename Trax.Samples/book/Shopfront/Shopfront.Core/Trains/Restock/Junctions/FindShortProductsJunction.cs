@@ -5,7 +5,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.Restock.Junctions;
 
-internal class FindShortProductsJunction(IShopfrontDbContext db)
+internal sealed class FindShortProductsJunction(IShopfrontDbContext db)
     : EffectJunction<RestockInput, ShortProducts>
 {
     public override async Task<ShortProducts> Run(RestockInput input) =>
@@ -15,5 +15,6 @@ internal class FindShortProductsJunction(IShopfrontDbContext db)
                 .OrderBy(p => p.Sku)
                 .Select(p => p.Sku)
                 .ToListAsync(CancellationToken)
+                .ConfigureAwait(false)
         );
 }

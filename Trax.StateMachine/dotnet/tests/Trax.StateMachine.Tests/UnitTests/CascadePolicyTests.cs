@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Gherkin;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -79,11 +80,15 @@ public class CascadePolicyTests
             [new FeatureFile("shop.feature", Shop)]
         );
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
-        var policies = JsonNode.Parse(derived.Host!)!["policies"]!.AsArray();
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
+        var policies = JsonNode
+            .Parse(derived.Host.NotNull())
+            .NotNull()["policies"]
+            .NotNull()
+            .AsArray();
         policies
             .Select(p =>
-                $"{p!["shape"]} {p["when"]!["machine"]}.{p["when"]!["enters"]} {p["then"]!["machine"]}.{p["then"]!["trigger"]}"
+                $"{p.NotNull()["shape"]} {p["when"].NotNull()["machine"]}.{p["when"].NotNull()["enters"]} {p["then"].NotNull()["machine"]}.{p["then"].NotNull()["trigger"]}"
             )
             .Should()
             .BeEquivalentTo(["toSystem shift.On shop.Open", "broadcast shop.Open order.Bake"]);

@@ -1,3 +1,3 @@
 namespace Shopfront.Trains.Restock.Models;
 
-internal record ShortProducts(List<string> Skus);
+internal sealed record ShortProducts(List<string> Skus);

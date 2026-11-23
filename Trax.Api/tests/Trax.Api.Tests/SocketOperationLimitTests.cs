@@ -46,7 +46,9 @@ public class SocketOperationLimitTests
     )
     {
         var builder = OperationRequestBuilder.New().SetDocument(Subscription);
-        await interceptor.OnRequestAsync(session, id, builder);
+        await interceptor
+            .OnRequestAsync(session, id, builder, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
         var request = (OperationRequest)builder.Build();
         return request.ContextData?.ContainsKey(SocketOperationLimitRequestMiddleware.ExceededKey)
             == true;
@@ -75,7 +77,7 @@ public class SocketOperationLimitTests
         await RefusedAsync(interceptor, session, "1");
         await RefusedAsync(interceptor, session, "2");
 
-        await interceptor.OnCompleteAsync(session, "1");
+        await interceptor.OnCompleteAsync(session, "1", cancellationToken: CancellationToken.None);
 
         (await RefusedAsync(interceptor, session, "3"))
             .Should()
@@ -104,10 +106,10 @@ public class SocketOperationLimitTests
         (await RefusedAsync(interceptor, session, "2")).Should().BeTrue();
 
         // The refused operation completes too; it held no place, so it frees none.
-        await interceptor.OnCompleteAsync(session, "2");
+        await interceptor.OnCompleteAsync(session, "2", cancellationToken: CancellationToken.None);
         (await RefusedAsync(interceptor, session, "3")).Should().BeTrue();
 
-        await interceptor.OnCompleteAsync(session, "1");
+        await interceptor.OnCompleteAsync(session, "1", cancellationToken: CancellationToken.None);
         (await RefusedAsync(interceptor, session, "4"))
             .Should()
             .BeFalse("only the admitted operation held a place, per " + Adr);
@@ -122,7 +124,15 @@ public class SocketOperationLimitTests
         var (session, _) = NewSession();
 
         for (var i = 0; i < 100; i++)
-            (await RefusedAsync(interceptor, session, i.ToString())).Should().BeFalse();
+            (
+                await RefusedAsync(
+                    interceptor,
+                    session,
+                    i.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                )
+            )
+                .Should()
+                .BeFalse();
 
         (await RefusedAsync(interceptor, session, "100")).Should().BeTrue();
     }
@@ -236,7 +246,7 @@ public class SocketOperationLimitTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -244,14 +254,16 @@ public class SocketOperationLimitTests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default);
+        return await client
+            .ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default)
+            .ConfigureAwait(false);
     }
 
     private static Task SendAsync(WebSocket ws, object message) =>
         ws.SendAsync(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message)),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             default
         );
 
@@ -262,7 +274,7 @@ public class SocketOperationLimitTests
         var buffer = new byte[16384];
         while (true)
         {
-            var received = await ws.ReceiveAsync(buffer, cts.Token);
+            var received = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (received.MessageType == WebSocketMessageType.Close)
                 throw new InvalidOperationException(
                     "The server closed the socket: " + received.CloseStatusDescription

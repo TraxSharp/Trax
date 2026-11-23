@@ -15,6 +15,7 @@ using Trax.Api.GraphQL.Filtering;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -156,7 +157,7 @@ public class CaseInsensitiveFilterTests
         var schema = await BuildSchemaAsync<PeopleDbContext>(caseInsensitive: true);
 
         var stringFilter = schema.Types.GetType<InputObjectType>("StringOperationFilterInput");
-        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         fieldNames.Should().Contain("icontains");
         fieldNames.Should().Contain("ieq");
@@ -171,7 +172,7 @@ public class CaseInsensitiveFilterTests
         var schema = await BuildSchemaAsync<PeopleDbContext>(caseInsensitive: false);
 
         var stringFilter = schema.Types.GetType<InputObjectType>("StringOperationFilterInput");
-        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet();
+        var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
 
         // Default behavior is untouched: stock ops present, custom ops absent.
         fieldNames.Should().Contain("contains");
@@ -231,7 +232,7 @@ public class CaseInsensitiveFilterTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
         // The field errors out instead of matching every row.
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
         discover["people"].Should().BeNull();
     }
 
@@ -246,7 +247,7 @@ public class CaseInsensitiveFilterTests
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
         discover["people"].Should().BeNull();
     }
 
@@ -276,9 +277,11 @@ public class CaseInsensitiveFilterTests
                 .ConfigureFiltering(f => f.AddCaseInsensitiveStringOperations())
         );
 
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var ctx = scope.ServiceProvider.GetRequiredService<PeopleDbContext>();
             ctx.People.AddRange(
@@ -381,28 +384,36 @@ public class CaseInsensitiveFilterTests
 
     private static async Task<List<int>> QueryIdsAsync(IRequestExecutor executor, string where)
     {
-        var result = await executor.ExecuteAsync(
-            $"{{ discover {{ people(where: {{ {where} }}) {{ nodes {{ id }} }} }} }}"
-        );
+        var result = await executor
+            .ExecuteAsync($"{{ discover {{ people(where: {{ {where} }}) {{ nodes {{ id }} }} }} }}")
+            .ConfigureAwait(false);
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var people = (IReadOnlyDictionary<string, object?>)discover["people"]!;
-        var nodes = (IReadOnlyList<object?>)people["nodes"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var people = (IReadOnlyDictionary<string, object?>)discover["people"].NotNull();
+        var nodes = (IReadOnlyList<object?>)people["nodes"].NotNull();
 
         return nodes
-            .Select(n => Convert.ToInt32(((IReadOnlyDictionary<string, object?>)n!)["id"]))
-            .OrderBy(id => id)
+            .Select(n =>
+                Convert.ToInt32(
+                    ((IReadOnlyDictionary<string, object?>)n.NotNull())["id"],
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            )
+            .Order()
             .ToList();
     }
 
     private static int TotalCount(OperationResult op, string field)
     {
-        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
-        var connection = (IReadOnlyDictionary<string, object?>)discover[field]!;
-        return Convert.ToInt32(connection["totalCount"]);
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"].NotNull();
+        var connection = (IReadOnlyDictionary<string, object?>)discover[field].NotNull();
+        return Convert.ToInt32(
+            connection["totalCount"],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static GraphQLConfiguration BuildConfig<TContext>(Action<TraxGraphQLBuilder> customize)
@@ -422,7 +433,8 @@ public class CaseInsensitiveFilterTests
     private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>(bool caseInsensitive)
         where TContext : DbContext
     {
-        var executor = await BuildExecutorAsync<TContext>(caseInsensitive: caseInsensitive);
+        var executor = await BuildExecutorAsync<TContext>(caseInsensitive: caseInsensitive)
+            .ConfigureAwait(false);
         return executor.Schema;
     }
 
@@ -474,9 +486,12 @@ public class CaseInsensitiveFilterTests
         var provider = services.BuildServiceProvider();
 
         if (seedData)
-            await SeedAsync<TContext>(provider);
+            await SeedAsync<TContext>(provider).ConfigureAwait(false);
 
-        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
+        return await provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .ConfigureAwait(false);
     }
 
     private static async Task SeedAsync<TContext>(IServiceProvider provider)
@@ -505,7 +520,7 @@ public class CaseInsensitiveFilterTests
                         Nickname = "WALL-E",
                     }
                 );
-                await people.SaveChangesAsync();
+                await people.SaveChangesAsync().ConfigureAwait(false);
                 break;
             case MemberRefDbContext members:
                 members.Members.AddRange(
@@ -528,7 +543,7 @@ public class CaseInsensitiveFilterTests
                         Secret = "s3",
                     }
                 );
-                await members.SaveChangesAsync();
+                await members.SaveChangesAsync().ConfigureAwait(false);
                 break;
         }
     }
@@ -552,66 +567,3 @@ public class CaseInsensitiveFilterTests
 
     #endregion
 }
-
-#region Test entities, contexts, and filter types
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "people")]
-public class Person
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public string? Nickname { get; set; }
-}
-
-public class PeopleDbContext(DbContextOptions<PeopleDbContext> options) : DbContext(options)
-{
-    public DbSet<Person> People => Set<Person>();
-}
-
-public class PersonNameOnlyFilter : FilterInputType<Person>
-{
-    protected override void Configure(IFilterInputTypeDescriptor<Person> descriptor)
-    {
-        descriptor.BindFieldsExplicitly();
-        descriptor.Field(p => p.Name);
-    }
-}
-
-public interface IMemberReference
-{
-    int Id { get; }
-    string Name { get; }
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "memberRefs", ExposeAs = typeof(IMemberReference))]
-public class MemberRef : IMemberReference
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-
-    // Hidden by ExposeAs; present to prove the projection still works with the
-    // case-insensitive convention.
-    public string Secret { get; set; } = "";
-}
-
-public class MemberRefDbContext(DbContextOptions<MemberRefDbContext> options) : DbContext(options)
-{
-    public DbSet<MemberRef> Members => Set<MemberRef>();
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "noFilter", Filtering = false)]
-public class NoFilterPerson
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}
-
-public class NoFilterDbContext(DbContextOptions<NoFilterDbContext> options) : DbContext(options)
-{
-    public DbSet<NoFilterPerson> NoFilter => Set<NoFilterPerson>();
-}
-
-#endregion

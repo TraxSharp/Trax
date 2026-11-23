@@ -22,7 +22,7 @@ public interface IDeadLetterRequeueJobs
     /// Counts the dead letters awaiting intervention, starts a requeue-all fold over them in the
     /// background and returns its handle at once. While one is already running on this node, this
     /// starts nothing and returns the running one with <see cref="DeadLetterRequeueJob.Started"/>
-    /// <c>false</c>; when the running one is in the other mode than <paramref name="askAfresh"/>,
+    /// <see langword="false"/>; when the running one is in the other mode than <paramref name="askAfresh"/>,
     /// its message also says this request was not folded into it.
     /// </summary>
     /// <param name="askAfresh">True makes every new run ask its deciders afresh rather than replay.</param>
@@ -30,7 +30,7 @@ public interface IDeadLetterRequeueJobs
     Task<DeadLetterRequeueJob> StartAsync(bool askAfresh = false, CancellationToken ct = default);
 
     /// <summary>
-    /// The job with this id, or <c>null</c> when this node does not know it: it was started on
+    /// The job with this id, or <see langword="null"/> when this node does not know it: it was started on
     /// another node, this node has restarted since, or it finished more than 24 hours ago.
     /// </summary>
     DeadLetterRequeueJob? Get(Guid id);

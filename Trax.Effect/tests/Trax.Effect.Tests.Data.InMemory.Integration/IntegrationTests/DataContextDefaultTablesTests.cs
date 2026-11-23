@@ -35,7 +35,8 @@ public class DataContextDefaultTablesTests
             .Options;
         var id = Guid.NewGuid();
 
-        await using (var writer = new PreDraftDataContext(options))
+        var writer = new PreDraftDataContext(options);
+        await using (writer.ConfigureAwait(false))
         {
             IDataContext context = writer;
             context.SnapshotDrafts.Add(
@@ -51,7 +52,8 @@ public class DataContextDefaultTablesTests
             await writer.SaveChangesAsync();
         }
 
-        await using var reader = new PreDraftDataContext(options);
+        var reader = new PreDraftDataContext(options);
+        await using var readerDisposal = reader.ConfigureAwait(false);
         IDataContext read = reader;
         (await read.SnapshotDrafts.SingleAsync()).Id.Should().Be(id);
         (await read.EffectClaims.SingleAsync()).EffectKey.Should().Be("order:place:u");

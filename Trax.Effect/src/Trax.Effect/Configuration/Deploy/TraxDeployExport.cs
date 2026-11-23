@@ -38,14 +38,14 @@ public static class TraxDeployExport
         ArgumentNullException.ThrowIfNull(args);
         for (var i = 0; i < args.Count; i++)
         {
-            if (args[i] == Argument)
+            if (string.Equals(args[i], Argument, StringComparison.Ordinal))
                 return i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
                     ? args[i + 1]
-                    : throw NoPath();
+                    : throw NoPath(nameof(args));
             if (args[i].StartsWith(Argument + "=", StringComparison.Ordinal))
                 return args[i][(Argument.Length + 1)..] is { Length: > 0 } path
                     ? path
-                    : throw NoPath();
+                    : throw NoPath(nameof(args));
         }
         return null;
     }
@@ -65,74 +65,10 @@ public static class TraxDeployExport
         return true;
     }
 
-    private static ArgumentException NoPath() =>
+    private static ArgumentException NoPath(string paramName) =>
         new(
             $"The process was started with {Argument} and no path after it. Give the file to write the deploy "
-                + $"manifest to, as in '{Argument} deploy.json', or start it without {Argument} to serve."
+                + $"manifest to, as in '{Argument} deploy.json', or start it without {Argument} to serve.",
+            paramName
         );
-}
-
-/// <summary>
-/// One thing a host needs from where it is deployed, recorded by the registration that adds it: its data provider, a
-/// role (<c>scheduler</c>, <c>worker</c>), a transport. Collected into the
-/// <see cref="DeployManifest"/> a deploy export writes.
-/// </summary>
-internal sealed record DeployFact(string Kind, string Value)
-{
-    public const string Database = "database";
-    public const string MigratesOnStart = "migrates-on-start";
-    public const string Role = "role";
-    public const string Transport = "transport";
-
-    /// <summary>Records a fact. Duplicates are harmless: the manifest keeps one of each.</summary>
-    public static void Add(IServiceCollection services, string kind, string value) =>
-        services.AddSingleton(new DeployFact(kind, value));
-}
-
-/// <summary>
-/// Adds what only the built host knows (its endpoints, its authentication schemes) to the deploy manifest. Registered
-/// by the packages that map endpoints.
-/// </summary>
-internal interface IDeployManifestSource
-{
-    /// <param name="manifest">The manifest being built.</param>
-    /// <param name="services">The host's services.</param>
-    /// <param name="host">The host itself, which on a web host is where its endpoints are mapped.</param>
-    /// <param name="cancellationToken">Stops the export.</param>
-    Task DescribeAsync(
-        DeployManifest manifest,
-        IServiceProvider services,
-        IHost? host,
-        CancellationToken cancellationToken
-    );
-}
-
-/// <summary>
-/// Refuses to start a host that was started to export its deploy manifest and is serving instead. Its data provider
-/// opened no database for the export, so serving would answer on an unmigrated one.
-/// </summary>
-internal sealed class DeployExportServeGate : IHostedLifecycleService
-{
-    private bool _checked;
-
-    public Task StartingAsync(CancellationToken cancellationToken)
-    {
-        _checked = true;
-        throw new InvalidOperationException(
-            $"This process was started with {TraxDeployExport.Argument}, so its database was not migrated, but the "
-                + "host is starting to serve. Call 'await app.RunTraxAsync(args)' in place of 'app.Run()' so the "
-                + $"export is written and the host exits, or start it without {TraxDeployExport.Argument}."
-        );
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken) =>
-        _checked ? Task.CompletedTask : StartingAsync(cancellationToken);
-
-    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

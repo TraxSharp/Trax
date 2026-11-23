@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Path = System.IO.Path;
@@ -26,24 +27,24 @@ public class ClientDocumentsTests
     private const string Adr =
         "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
 
-    private string _dir = null!;
+    private string? _dir;
 
     [SetUp]
     public void SetUp()
     {
         _dir = Path.Combine(Path.GetTempPath(), $"trax-client-docs-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(_dir.NotNull());
     }
 
     [TearDown]
-    public void TearDown() => Directory.Delete(_dir, recursive: true);
+    public void TearDown() => Directory.Delete(_dir.NotNull(), recursive: true);
 
     #region Ids
 
     [Test]
-    public void The_cli_and_the_host_hash_a_document_alike()
+    public async Task The_cli_and_the_host_hash_a_document_alike()
     {
-        foreach (var (name, text, id) in FixtureCases())
+        foreach (var (name, text, id) in await FixtureCasesAsync())
             ClientDocuments.IdOf(name, text).Should().Be(id, $"the fixture's id for {name}");
     }
 
@@ -85,9 +86,9 @@ public class ClientDocumentsTests
     #region The file
 
     [Test]
-    public void A_file_reads_back_in_name_order_with_its_ids()
+    public async Task A_file_reads_back_in_name_order_with_its_ids()
     {
-        var path = Write(
+        var path = await WriteAsync(
             """
             { "format": 1, "documents": [
               { "name": "Zed", "source": "src/zed.graphql", "text": "query Zed { a }" },
@@ -96,7 +97,7 @@ public class ClientDocumentsTests
             """
         );
 
-        var documents = ClientDocuments.Load(path);
+        var documents = await ClientDocuments.LoadAsync(path, CancellationToken.None);
 
         documents.Select(d => d.Name).Should().Equal("OrderCard", "Zed");
         documents[0].Id.Should().Be(ClientDocuments.IdOf("OrderCard", "query OrderCard { a }"));
@@ -104,13 +105,15 @@ public class ClientDocumentsTests
     }
 
     [Test]
-    public void A_missing_file_refuses_naming_it()
+    public async Task A_missing_file_refuses_naming_it()
     {
-        var path = Path.Combine(_dir, "nope.json");
+        var path = Path.Combine(_dir.NotNull(), "nope.json");
 
-        var act = () => ClientDocuments.Load(path);
+        var act = () => ClientDocuments.LoadAsync(path, CancellationToken.None);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage($"*'{path}'*cannot be read*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage($"*'{path}'*cannot be read*");
     }
 
     [TestCase("not json", "*not JSON trax client wrote*")]
@@ -130,13 +133,13 @@ public class ClientDocumentsTests
         """{ "format": 1, "documents": [ { "name": "A", "text": "query A { x }" }, { "name": "A", "text": "query A { y }" } ] }""",
         "*client document 'A'*twice*"
     )]
-    public void A_file_it_cannot_trust_refuses(string json, string message)
+    public async Task A_file_it_cannot_trust_refuses(string json, string message)
     {
-        var path = Write(json);
+        var path = await WriteAsync(json);
 
-        var act = () => ClientDocuments.Load(path);
+        var act = () => ClientDocuments.LoadAsync(path, CancellationToken.None);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(message);
     }
 
     #endregion
@@ -366,14 +369,16 @@ public class ClientDocumentsTests
         public string State { get; init; } = "";
     }
 
-    private string Write(string json)
+    private async Task<string> WriteAsync(string json)
     {
-        var path = Path.Combine(_dir, $"{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, json);
+        var path = Path.Combine(_dir.NotNull(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
         return path;
     }
 
-    internal static IEnumerable<(string Name, string Text, string Id)> FixtureCases()
+    internal static async Task<
+        IEnumerable<(string Name, string Text, string Id)>
+    > FixtureCasesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -392,15 +397,17 @@ public class ClientDocumentsTests
             );
             if (!File.Exists(candidate))
                 continue;
-            using var json = JsonDocument.Parse(File.ReadAllText(candidate));
+            using var json = JsonDocument.Parse(
+                await File.ReadAllTextAsync(candidate).ConfigureAwait(false)
+            );
             return json
                 .RootElement.GetProperty("cases")
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();
@@ -438,33 +445,13 @@ public class ClientDocumentsTests
             )
             .AddFiltering()
             .AddSorting()
-            .AddTypeExtension(
-                new ObjectTypeExtension(d =>
-                {
-                    d.Name("DiscoverQueries");
-                    d.Field("orders")
-                        .Type<ListType<NonNullType<ObjectType<Order>>>>()
-                        .UsePaging<ObjectType<Order>>(options: new() { IncludeTotalCount = true })
-                        .UseFiltering()
-                        .UseSorting()
-                        .Resolve(Array.Empty<Order>());
-                    d.Field("notes").Type<StringType>().Resolve("hand-written");
-                })
-            )
-            .AddTypeExtension(
-                new ObjectTypeExtension(d =>
-                {
-                    d.Name("RunsDiscoverQueries");
-                    d.Field("ledger")
-                        .Type<ListType<NonNullType<ObjectType<Order>>>>()
-                        .Resolve(Array.Empty<Order>());
-                    d.Field("memo").Type<StringType>().Resolve("hand-written");
-                })
-            );
+            .AddTypeExtension(DiscoverQueriesExtension())
+            .AddTypeExtension(RunsDiscoverQueriesExtension());
         var executor = await services
             .BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         var reach = ClientDocumentReach.Of(
             [
                 ("query", null, "findOrder"),
@@ -476,6 +463,29 @@ public class ClientDocumentsTests
         );
         return (executor.Schema, reach);
     }
+
+    private static ObjectTypeExtension DiscoverQueriesExtension() =>
+        new(d =>
+        {
+            d.Name("DiscoverQueries");
+            d.Field("orders")
+                .Type<ListType<NonNullType<ObjectType<Order>>>>()
+                .UsePaging<ObjectType<Order>>(options: new() { IncludeTotalCount = true })
+                .UseFiltering()
+                .UseSorting()
+                .Resolve(Array.Empty<Order>());
+            d.Field("notes").Type<StringType>().Resolve("hand-written");
+        });
+
+    private static ObjectTypeExtension RunsDiscoverQueriesExtension() =>
+        new(d =>
+        {
+            d.Name("RunsDiscoverQueries");
+            d.Field("ledger")
+                .Type<ListType<NonNullType<ObjectType<Order>>>>()
+                .Resolve(Array.Empty<Order>());
+            d.Field("memo").Type<StringType>().Resolve("hand-written");
+        });
 
     private static TrainRegistration Registration(
         string name,
@@ -513,7 +523,7 @@ public class ClientDocumentsTests
 
     private interface IStubTrain;
 
-    private sealed class StubTrain;
+    private static class StubTrain;
 
     #endregion
 }

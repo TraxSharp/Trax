@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -54,14 +55,17 @@ public class MovedRoutesBrowserTests : ConsoleTest
     [TestCase("persisted-operations/{op}", "api-admin/persisted-operations/{op}")]
     public async Task An_old_route_redirects_to_where_it_lives_now(string from, string to)
     {
-        var ids = new Dictionary<string, string>();
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (
             var token in new[] { "run", "entry", "deadLetter", "gate", "manifest", "group", "op" }
         )
-            if (from.Contains($"{{{token}}}"))
+            if (from.Contains($"{{{token}}}", StringComparison.Ordinal))
                 ids[token] = await IdAsync(token);
         string Fill(string route) =>
-            ids.Aggregate(route, (r, id) => r.Replace($"{{{id.Key}}}", id.Value));
+            ids.Aggregate(
+                route,
+                (r, id) => r.Replace($"{{{id.Key}}}", id.Value, StringComparison.Ordinal)
+            );
 
         await Console.OpenAsync(Fill(from), Caller.Operator);
 
@@ -73,13 +77,23 @@ public class MovedRoutesBrowserTests : ConsoleTest
     private async Task<string> IdAsync(string token) =>
         token switch
         {
-            "run" => $"{await Host.QueryAsync(dc => dc.Metadatas.MaxAsync(m => m.Id))}",
-            "entry" => $"{await Host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => w.Id))}",
-            "deadLetter" => $"{(await Seed.DeadLetterAsync()).Id}",
-            "gate" => $"{(await Seed.ClosedGateAsync()).Instance.Id}",
-            "manifest" => $"{(await Seed.OnDemandManifestAsync()).Id}",
-            "group" => $"{(await Seed.GroupOfOneAsync()).Group.Id}",
-            "op" => (await Seed.PersistedOperationAsync()).Id,
-            _ => throw new ArgumentOutOfRangeException(nameof(token), token, null),
+            "run" => (
+                await Host.QueryAsync(dc => dc.Metadatas.MaxAsync(m => m.Id)).ConfigureAwait(false)
+            ).ToString(CultureInfo.InvariantCulture),
+            "entry" => (
+                await Host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => w.Id)).ConfigureAwait(false)
+            ).ToString(CultureInfo.InvariantCulture),
+            "deadLetter" => ((await Seed.DeadLetterAsync().ConfigureAwait(false)).Id).ToString(
+                CultureInfo.InvariantCulture
+            ),
+            "gate" => $"{(await Seed.ClosedGateAsync().ConfigureAwait(false)).Instance.Id}",
+            "manifest" => ((await Seed.OnDemandManifestAsync().ConfigureAwait(false)).Id).ToString(
+                CultureInfo.InvariantCulture
+            ),
+            "group" => ((await Seed.GroupOfOneAsync().ConfigureAwait(false)).Group.Id).ToString(
+                CultureInfo.InvariantCulture
+            ),
+            "op" => (await Seed.PersistedOperationAsync().ConfigureAwait(false)).Id,
+            _ => throw new ArgumentOutOfRangeException(nameof(token), token, message: null),
         };
 }

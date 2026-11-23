@@ -13,6 +13,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Cognito;
 using Trax.Api.Auth.Jwt.Cognito.Issuer;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.CognitoIssuer;
 
@@ -35,7 +36,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var sub = Guid.NewGuid();
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
@@ -69,7 +70,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -98,7 +99,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var sub = Guid.NewGuid();
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
@@ -132,7 +133,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
             {
@@ -148,7 +149,7 @@ public class CognitoIssuerRoundTripTests
                         ProviderName: "Google",
                         ProviderType: "Google",
                         Primary: true,
-                        DateCreated: DateTimeOffset.UtcNow
+                        DateCreated: TimeProvider.System.GetUtcNow()
                     ),
                 },
             }
@@ -170,7 +171,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var token = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -196,7 +197,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var token = issuer.MintIdToken(
             new CognitoIdTokenRequest
             {
@@ -221,7 +222,7 @@ public class CognitoIssuerRoundTripTests
     {
         await using var server = await TestJwksServer.StartAsync();
 
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var sub = Guid.NewGuid();
         var accessToken = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
@@ -270,7 +271,7 @@ public class CognitoIssuerRoundTripTests
         var client = host.GetTestClient();
 
         // Prime: mint and use a token signed by the original key.
-        var primingIssuer = server.CreateCognitoIssuer();
+        var primingIssuer = server.CreateCognitoIssuer(TimeProvider.System);
         var primingToken = primingIssuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -287,7 +288,7 @@ public class CognitoIssuerRoundTripTests
 
         // Rotate: publish a new signing key, mint a token with it.
         server.AddSigningKey();
-        var rotatedIssuer = server.CreateCognitoIssuer();
+        var rotatedIssuer = server.CreateCognitoIssuer(TimeProvider.System);
         var rotatedToken = rotatedIssuer.MintAccessToken(
             new CognitoAccessTokenRequest
             {
@@ -312,7 +313,7 @@ public class CognitoIssuerRoundTripTests
     public async Task RefreshFlow_RotatedToken_NewAccessTokenValidates()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var issuer = server.CreateCognitoIssuer();
+        var issuer = server.CreateCognitoIssuer(TimeProvider.System);
         var store = new InMemoryRefreshTokenStore();
         var sub = Guid.NewGuid();
 
@@ -328,9 +329,9 @@ public class CognitoIssuerRoundTripTests
         var rotated = await store.RotateAsync(refresh.Token, CancellationToken.None);
         rotated.Should().NotBeNull();
 
-        var claims = await store.ValidateAsync(rotated!.Token, CancellationToken.None);
+        var claims = await store.ValidateAsync(rotated.NotNull().Token, CancellationToken.None);
         claims.Should().NotBeNull();
-        claims!.Sub.Should().Be(sub);
+        claims.NotNull().Sub.Should().Be(sub);
 
         var newAccess = issuer.MintAccessToken(
             new CognitoAccessTokenRequest
@@ -352,7 +353,7 @@ public class CognitoIssuerRoundTripTests
 
     private static async Task<PrincipalSnapshot> ReadPrincipalSnapshot(HttpResponseMessage resp)
     {
-        var json = await resp.Content.ReadAsStringAsync();
+        var json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var root = doc.RootElement;
         return new PrincipalSnapshot
@@ -369,7 +370,7 @@ public class CognitoIssuerRoundTripTests
                 : null,
             Roles = root.GetProperty("roles")
                 .EnumerateArray()
-                .Select(x => x.GetString()!)
+                .Select(x => x.GetString().NotNull())
                 .ToArray(),
         };
     }
@@ -389,7 +390,13 @@ public class CognitoIssuerRoundTripTests
                         services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
                         services.AddTraxJwtAuth<CognitoJwtPrincipalResolver>(jwt =>
                         {
-                            jwt.UseCognito(Region, UserPoolId, ClientId, tokenUse)
+                            jwt.UseCognito(
+                                    Region,
+                                    UserPoolId,
+                                    ClientId,
+                                    tokenUse,
+                                    TimeProvider.System
+                                )
                                 .AllowHttpMetadata();
                             // The JwtBearer middleware uses Authority to fetch JWKS. Override
                             // it to our test JWKS server so signature validation works.
@@ -400,56 +407,50 @@ public class CognitoIssuerRoundTripTests
                             });
                         });
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected",
-                                    (ClaimsPrincipal user) =>
-                                    {
-                                        var id =
-                                            user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value
-                                            ?? "";
-                                        var name = user.FindFirst(ClaimTypes.Name)?.Value ?? "";
-                                        var type =
-                                            user.FindFirst(TraxAuthClaimTypes.PrincipalType)?.Value
-                                            ?? "";
-                                        var email =
-                                            user.FindFirst("email")?.Value
-                                            ?? user.FindFirst(ClaimTypes.Email)?.Value;
-                                        var emailVerified = user.FindFirst("email_verified")?.Value;
-                                        var idp = user.FindFirst(
-                                            CognitoDefaults.IdentityProvider
-                                        )?.Value;
-                                        var roles = user.FindAll(ClaimTypes.Role)
-                                            .Select(c => c.Value)
-                                            .ToArray();
-                                        return Results.Json(
-                                            new
-                                            {
-                                                id,
-                                                displayName = name,
-                                                principalType = type,
-                                                email,
-                                                emailVerified,
-                                                identityProvider = idp,
-                                                roles,
-                                            }
-                                        );
-                                    }
-                                )
-                                .RequireAuthorization(JwtDefaults.PolicyName);
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected",
+                    (ClaimsPrincipal user) =>
+                    {
+                        var id = user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value ?? "";
+                        var name = user.FindFirst(ClaimTypes.Name)?.Value ?? "";
+                        var type = user.FindFirst(TraxAuthClaimTypes.PrincipalType)?.Value ?? "";
+                        var email =
+                            user.FindFirst("email")?.Value
+                            ?? user.FindFirst(ClaimTypes.Email)?.Value;
+                        var emailVerified = user.FindFirst("email_verified")?.Value;
+                        var idp = user.FindFirst(CognitoDefaults.IdentityProvider)?.Value;
+                        var roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+                        return Results.Json(
+                            new
+                            {
+                                id,
+                                displayName = name,
+                                principalType = type,
+                                email,
+                                emailVerified,
+                                identityProvider = idp,
+                                roles,
+                            }
+                        );
+                    }
+                )
+                .RequireAuthorization(JwtDefaults.PolicyName);
+        });
     }
 
     private sealed class PrincipalSnapshot

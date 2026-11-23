@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
@@ -7,26 +9,71 @@ namespace Trax.Core.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0004-tests-assert-with-fluentassertions.md")]
 [TestFixture]
-public class NoLegacyAssertTests
+public partial class NoLegacyAssertTests
 {
     private static readonly (string Name, Regex Pattern)[] LegacyPatterns = new[]
     {
-        ("Assert.That", new Regex(@"\bAssert\.That\b", RegexOptions.Compiled)),
-        ("Assert.AreEqual", new Regex(@"\bAssert\.AreEqual\b", RegexOptions.Compiled)),
-        ("Assert.AreNotEqual", new Regex(@"\bAssert\.AreNotEqual\b", RegexOptions.Compiled)),
-        ("Assert.AreSame", new Regex(@"\bAssert\.AreSame\b", RegexOptions.Compiled)),
-        ("Assert.AreNotSame", new Regex(@"\bAssert\.AreNotSame\b", RegexOptions.Compiled)),
-        ("Assert.IsTrue", new Regex(@"\bAssert\.IsTrue\b", RegexOptions.Compiled)),
-        ("Assert.IsFalse", new Regex(@"\bAssert\.IsFalse\b", RegexOptions.Compiled)),
-        ("Assert.IsNull", new Regex(@"\bAssert\.IsNull\b", RegexOptions.Compiled)),
-        ("Assert.IsNotNull", new Regex(@"\bAssert\.IsNotNull\b", RegexOptions.Compiled)),
-        ("Assert.IsEmpty", new Regex(@"\bAssert\.IsEmpty\b", RegexOptions.Compiled)),
-        ("Assert.IsNotEmpty", new Regex(@"\bAssert\.IsNotEmpty\b", RegexOptions.Compiled)),
-        ("Assert.Contains", new Regex(@"\bAssert\.Contains\b", RegexOptions.Compiled)),
-        ("ClassicAssert", new Regex(@"\bClassicAssert\.\w+", RegexOptions.Compiled)),
-        ("CollectionAssert", new Regex(@"\bCollectionAssert\.\w+", RegexOptions.Compiled)),
-        ("StringAssert", new Regex(@"\bStringAssert\.\w+", RegexOptions.Compiled)),
+        ("Assert.That", LegacyAssertThat),
+        ("Assert.AreEqual", LegacyAssertAreEqual),
+        ("Assert.AreNotEqual", LegacyAssertAreNotEqual),
+        ("Assert.AreSame", LegacyAssertAreSame),
+        ("Assert.AreNotSame", LegacyAssertAreNotSame),
+        ("Assert.IsTrue", LegacyAssertIsTrue),
+        ("Assert.IsFalse", LegacyAssertIsFalse),
+        ("Assert.IsNull", LegacyAssertIsNull),
+        ("Assert.IsNotNull", LegacyAssertIsNotNull),
+        ("Assert.IsEmpty", LegacyAssertIsEmpty),
+        ("Assert.IsNotEmpty", LegacyAssertIsNotEmpty),
+        ("Assert.Contains", LegacyAssertContains),
+        ("ClassicAssert", LegacyClassicAssert),
+        ("CollectionAssert", LegacyCollectionAssert),
+        ("StringAssert", LegacyStringAssert),
     };
+
+    [GeneratedRegex(@"\bAssert\.That\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertThat { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreEqual\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreEqual { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreNotEqual\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreNotEqual { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreSame\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreSame { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreNotSame\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreNotSame { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsTrue\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsTrue { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsFalse\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsFalse { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsNull\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsNull { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsNotNull\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsNotNull { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsEmpty\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsEmpty { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsNotEmpty\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsNotEmpty { get; }
+
+    [GeneratedRegex(@"\bAssert\.Contains\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertContains { get; }
+
+    [GeneratedRegex(@"\bClassicAssert\.\w+", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyClassicAssert { get; }
+
+    [GeneratedRegex(@"\bCollectionAssert\.\w+", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyCollectionAssert { get; }
+
+    [GeneratedRegex(@"\bStringAssert\.\w+", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyStringAssert { get; }
 
     [Test]
     public void TestSources_UseOnly_AwesomeAssertions()
@@ -45,7 +92,12 @@ public class NoLegacyAssertTests
             {
                 var hits = SourceText.MatchingLines(stripped, pattern);
                 foreach (var (line, _) in hits)
-                    offenders.Add($"{RepoRoot.Relative(file)}:{line}  ({name})");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{RepoRoot.Relative(file)}:{line}  ({name})"
+                        )
+                    );
             }
         }
 

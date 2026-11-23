@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -39,11 +40,13 @@ public class MachineAuthorizationCensusTests
         var census = MachineCensus.Describe(machines);
 
         var undeclared = census
-            .Where(e => e.Kind is nameof(TriggerKind.Client) or "Read")
             .Where(e =>
-                string.IsNullOrWhiteSpace(e.Rule)
-                || e.Rule.Equals("none", StringComparison.OrdinalIgnoreCase)
-                || e.Rule.Equals("undeclared", StringComparison.OrdinalIgnoreCase)
+                e.Kind is nameof(TriggerKind.Client) or "Read"
+                && (
+                    string.IsNullOrWhiteSpace(e.Rule)
+                    || e.Rule.Equals("none", StringComparison.OrdinalIgnoreCase)
+                    || e.Rule.Equals("undeclared", StringComparison.OrdinalIgnoreCase)
+                )
             )
             .Select(e => $"{e.Machine}.{e.Name} ({e.Kind})")
             .ToList();
@@ -67,6 +70,6 @@ public class MachineAuthorizationCensusTests
                 && typeof(IMachine).IsAssignableFrom(t)
                 && t.GetConstructor(Type.EmptyTypes) is not null
             )
-            .Select(t => (IMachine)Activator.CreateInstance(t)!)
+            .Select(t => (IMachine)Activator.CreateInstance(t).NotNull())
             .ToList();
 }

@@ -52,14 +52,15 @@ public class FrontMatterTests
     ];
 
     [Test]
-    public void EveryPublishedPage_HasATypeAndAnArea()
+    public async Task EveryPublishedPage_HasATypeAndAnArea()
     {
-        var offenders = RepoRoot
-            .PublishedPages()
-            .Select(page => (page, Problem: Problem(page, FrontMatter.OfPage(page))))
-            .Where(x => x.Problem is not null)
-            .Select(x => $"{x.page}  -> {x.Problem}")
-            .ToList();
+        var offenders = new List<string>();
+        foreach (var page in RepoRoot.PublishedPages())
+        {
+            var problem = Problem(page, await FrontMatter.OfPageAsync(page).ConfigureAwait(false));
+            if (problem is not null)
+                offenders.Add($"{page}  -> {problem}");
+        }
 
         offenders
             .Should()
@@ -124,7 +125,10 @@ public class FrontMatterTests
         if (!Areas.Contains(area, StringComparer.Ordinal))
             return $"area '{area}' is not one of {string.Join(", ", Areas)}";
 
-        if (DocsSite.IsSdkReferenceLeaf(page) && type != "reference")
+        if (
+            DocsSite.IsSdkReferenceLeaf(page)
+            && !string.Equals(type, "reference", StringComparison.Ordinal)
+        )
             return $"an sdk-reference page is `type: reference`, not '{type}'";
 
         return null;

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
@@ -45,27 +46,29 @@ public class DraftLifetimeTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         await host.Seed(
-            user,
-            id,
-            new Snapshot
-            {
-                Machine = machine,
-                Version = 1,
-                State = state,
-                Context = context,
-            }
-        );
+                user,
+                id,
+                new Snapshot
+                {
+                    Machine = machine,
+                    Version = 1,
+                    State = state,
+                    Context = context,
+                }
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
     private static async Task Born(InstanceHost host, Guid id, TimeSpan? ago)
     {
         using var scope = host.Scope();
-        DateTimeOffset? at = ago is { } a ? DateTimeOffset.UtcNow - a : null;
+        DateTimeOffset? at = ago is { } a ? TimeProvider.System.GetUtcNow() - a : null;
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.Where(d => d.Id == id)
-            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at));
+            .ExecuteUpdateAsync(x => x.SetProperty(d => d.CreatedAt, at))
+            .ConfigureAwait(false);
     }
 
     private static IEnumerable<TestCaseData> KeptStates()
@@ -139,7 +142,7 @@ public class DraftLifetimeTests(StoreProvider provider)
             nameof(LedgerState.Open),
             new JsonObject { ["entries"] = new JsonArray() }
         );
-        var idleSince = DateTimeOffset.UtcNow.AddHours(-1);
+        var idleSince = TimeProvider.System.GetUtcNow().AddHours(-1);
         await host.Backdate(kept, SnapshotOwnerKind.User, idleSince);
         await host.Backdate(editable, SnapshotOwnerKind.User, idleSince);
 
@@ -176,7 +179,7 @@ public class DraftLifetimeTests(StoreProvider provider)
                     DraftOwner.User(user),
                     RuledBuildMachine.Id,
                     id,
-                    stored!.Token,
+                    stored.NotNull().Token,
                     new InvokeTokenWrite(token)
                 )
             )
@@ -184,7 +187,7 @@ public class DraftLifetimeTests(StoreProvider provider)
                 .BeTrue();
         }
         await Born(host, id, PastLifetime);
-        runs.RowExists = () => host.Rows(id).Result.Count > 0;
+        runs.RowExists = async () => (await host.Rows(id).ConfigureAwait(false)).Count > 0;
 
         await Sweeper(host).SweepOnce();
 
@@ -215,7 +218,11 @@ public class DraftLifetimeTests(StoreProvider provider)
         );
         await Born(host, old, ago: null);
         await Born(host, recent, ago: null);
-        await host.Backdate(old, SnapshotOwnerKind.User, DateTimeOffset.UtcNow - PastLifetime);
+        await host.Backdate(
+            old,
+            SnapshotOwnerKind.User,
+            TimeProvider.System.GetUtcNow() - PastLifetime
+        );
 
         await Sweeper(host).SweepOnce();
 
@@ -236,7 +243,9 @@ public class DraftLifetimeTests(StoreProvider provider)
         Guid owner;
         using (var scope = host.Scope())
             owner = (
-                (ClaimResult.Won)await Claims(scope).TryClaim(key, TimeSpan.FromMinutes(5), null)
+                (ClaimResult.Won)
+                    await Claims(scope)
+                        .TryClaim(key, TimeSpan.FromMinutes(5), contentFingerprint: null)
             ).OwnerToken;
 
         try
@@ -270,7 +279,7 @@ public class DraftLifetimeTests(StoreProvider provider)
         var key = Key(host, "ship", user, id);
         using (var scope = host.Scope())
             // A claim whose lease has passed with no receipt: whoever held it is gone.
-            (await Claims(scope).TryClaim(key, TimeSpan.FromMinutes(-1), null))
+            (await Claims(scope).TryClaim(key, TimeSpan.FromMinutes(-1), contentFingerprint: null))
                 .Should()
                 .BeOfType<ClaimResult.Won>();
 
@@ -303,7 +312,7 @@ public class DraftLifetimeTests(StoreProvider provider)
         host
             .Services.GetServices<IMachine>()
             .OfType<IMachineInternals>()
-            .Single(m => ((IMachine)m).Name == machine)
+            .Single(m => string.Equals(((IMachine)m).Name, machine, StringComparison.Ordinal))
             .EffectKeys(user, id)
             .Single();
 
@@ -319,7 +328,8 @@ public class DraftLifetimeTests(StoreProvider provider)
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .EffectClaims.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.EffectKey == key);
+            .FirstOrDefaultAsync(x => x.EffectKey == key)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Records each cancel, and whether the draft still existed when it was asked for.</summary>
@@ -327,13 +337,14 @@ public class DraftLifetimeTests(StoreProvider provider)
     {
         public List<string> Cancelled { get; } = [];
         public List<bool> RowExistedWhenCancelled { get; } = [];
-        public Func<bool>? RowExists { get; set; }
+        public Func<Task<bool>>? RowExists { get; set; }
 
-        public Task Cancel(string invokeToken, CancellationToken cancellationToken = default)
+        public async Task Cancel(string invokeToken, CancellationToken cancellationToken = default)
         {
             Cancelled.Add(invokeToken);
-            RowExistedWhenCancelled.Add(RowExists?.Invoke() ?? false);
-            return Task.CompletedTask;
+            RowExistedWhenCancelled.Add(
+                RowExists is not null && await RowExists().ConfigureAwait(false)
+            );
         }
     }
 }

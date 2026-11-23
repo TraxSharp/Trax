@@ -1,3 +1,6 @@
+using System.Globalization;
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Gherkin.Lexical;
 
 /// <summary>
@@ -42,7 +45,11 @@ internal sealed class LexiconParser
             return;
         }
         _open.RemoveRange(at + 1, _open.Count - at - 1);
-        if (keyword.Text == "Version:" && _open[at].Block == Block.Root && !first)
+        if (
+            string.Equals(keyword.Text, "Version:", StringComparison.Ordinal)
+            && _open[at].Block == Block.Root
+            && !first
+        )
         {
             _problems.Add(
                 new LexProblem(line.Number, "'Version: 1' is the first line of a lexicon.")
@@ -51,7 +58,7 @@ internal sealed class LexiconParser
         }
         if (line.Broken)
         {
-            _open.Add((keyword.Opens!.Value, null));
+            _open.Add((keyword.Opens.NotNull().Value, null));
             return;
         }
         var parent = _open[at].Node;
@@ -62,7 +69,7 @@ internal sealed class LexiconParser
             opened = Read(line, cursor, _open[at].Block, parent);
             cursor.End();
         }
-        catch (FormError error)
+        catch (FormErrorException error)
         {
             _problems.Add(new LexProblem(line.Number, error.Message));
         }
@@ -78,33 +85,9 @@ internal sealed class LexiconParser
         switch (line.Keyword.Text)
         {
             case "Version:":
-            {
-                var version = c.Integer();
-                if (under == Block.Root)
-                {
-                    if (_doc.Version is not null)
-                        throw Again("Version:", _doc.VersionLine);
-                    _doc.Version = version;
-                    _doc.VersionLine = n;
-                }
-                else if (parent is LxMachine m)
-                {
-                    if (m.Version is not null)
-                        throw Again("Version:", m.VersionLine);
-                    m.Version = version;
-                    m.VersionLine = n;
-                }
-                return null;
-            }
+                return ReadVersion(c, under, parent, n);
             case "Trains in:":
-            {
-                var ns = c.Word("a namespace");
-                if (_doc.TrainsIn is not null)
-                    throw Again("Trains in:", _doc.TrainsInLine);
-                _doc.TrainsIn = ns;
-                _doc.TrainsInLine = n;
-                return null;
-            }
+                return ReadTrainsIn(c, n);
             case "Actor:":
             {
                 var actor = new LxActor(c.Word("the actor's name"), c.Text("the actor's noun"), n);
@@ -112,32 +95,11 @@ internal sealed class LexiconParser
                 return actor;
             }
             case "Roles:":
-            {
-                var roles = c.Words("a role");
-                if (parent is LxActor a)
-                {
-                    if (a.Roles is not null)
-                        throw Again("Roles:", a.RolesLine);
-                    a.Roles = roles;
-                    a.RolesLine = n;
-                }
-                return null;
-            }
+                return ReadRoles(c, parent, n);
             case "Any signed-in":
-                if (parent is LxActor any)
-                {
-                    if (any.AnyLine != 0)
-                        throw Again("Any signed-in", any.AnyLine);
-                    any.AnyLine = n;
-                }
-                return null;
+                return ReadAnySignedIn(parent, n);
             case "Constant:":
-            {
-                var name = c.Word("the constant's name");
-                c.Expect("is");
-                _doc.Constants.Add(new LxConstant(name, c.Value(), n));
-                return null;
-            }
+                return ReadConstant(c, n);
             case "Type:":
             {
                 var type = new LxType(c.Word("the type's name"), n);
@@ -145,28 +107,12 @@ internal sealed class LexiconParser
                 return type;
             }
             case "Values:":
-            {
-                var values = TypeValues(c);
-                if (parent is LxType t)
-                {
-                    if (t.Values is not null)
-                        throw Again("Values:", t.ValuesLine);
-                    t.Values = values;
-                    t.ValuesLine = n;
-                }
-                return null;
-            }
+                return ReadValues(c, parent, n);
             case "Has:":
                 (parent as LxType)?.Has.Add(c.Field(partial: false));
                 return null;
             case "Machine:":
-            {
-                var id = c.Word("the machine's id");
-                var noun = c.AtEnd ? null : c.Text("the machine's noun");
-                var machine = new LxMachine(id, noun, n);
-                _doc.Machines.Add(machine);
-                return machine;
-            }
+                return OpenMachine(c, n);
             case "View:":
             {
                 var view = new LxView(c.Text("the view's name"), n);
@@ -174,29 +120,9 @@ internal sealed class LexiconParser
                 return view;
             }
             case "Reads:":
-            {
-                var reads = c.Words("a machine");
-                if (parent is LxView v)
-                {
-                    if (v.Reads is not null)
-                        throw Again("Reads:", v.ReadsLine);
-                    v.Reads = reads;
-                    v.ReadsLine = n;
-                }
-                return null;
-            }
+                return ReadReads(c, parent, n);
             case "Field:":
-            {
-                var name = c.Word("the field's name");
-                c.Expect("from");
-                var possessive = c.Word("<machine>'s");
-                if (!possessive.EndsWith("'s", StringComparison.Ordinal) || possessive.Length < 3)
-                    throw c.Form($"'{possessive}' is not a machine's: write '<machine>'s <field>'");
-                var source = c.Word("the field or state it shows");
-                var field = new LxViewField(name, possessive[..^2], source, n);
-                (parent as LxView)?.Fields.Add(field);
-                return field;
-            }
+                return ReadViewField(c, parent, n);
             case "Label:":
             {
                 var label = new LxLabel(c.Word("a state"), c.Text("the label"), n);
@@ -215,19 +141,133 @@ internal sealed class LexiconParser
         };
     }
 
+    private object? ReadVersion(Cursor c, Block under, object? parent, int n)
+    {
+        var version = c.Integer();
+        if (under == Block.Root)
+        {
+            if (_doc.Version is not null)
+                throw Again("Version:", _doc.VersionLine);
+            _doc.Version = version;
+            _doc.VersionLine = n;
+        }
+        else if (parent is LxMachine m)
+        {
+            if (m.Version is not null)
+                throw Again("Version:", m.VersionLine);
+            m.Version = version;
+            m.VersionLine = n;
+        }
+        return null;
+    }
+
+    private object? ReadTrainsIn(Cursor c, int n)
+    {
+        var ns = c.Word("a namespace");
+        if (_doc.TrainsIn is not null)
+            throw Again("Trains in:", _doc.TrainsInLine);
+        _doc.TrainsIn = ns;
+        _doc.TrainsInLine = n;
+        return null;
+    }
+
+    private static object? ReadRoles(Cursor c, object? parent, int n)
+    {
+        var roles = c.Words("a role");
+        if (parent is LxActor a)
+        {
+            if (a.Roles is not null)
+                throw Again("Roles:", a.RolesLine);
+            a.Roles = roles;
+            a.RolesLine = n;
+        }
+        return null;
+    }
+
+    private static object? ReadAnySignedIn(object? parent, int n)
+    {
+        if (parent is LxActor any)
+        {
+            if (any.AnyLine != 0)
+                throw Again("Any signed-in", any.AnyLine);
+            any.AnyLine = n;
+        }
+        return null;
+    }
+
+    private object? ReadConstant(Cursor c, int n)
+    {
+        var name = c.Word("the constant's name");
+        c.Expect("is");
+        _doc.Constants.Add(new LxConstant(name, c.Value(), n));
+        return null;
+    }
+
+    private static object? ReadValues(Cursor c, object? parent, int n)
+    {
+        var values = TypeValues(c);
+        if (parent is LxType t)
+        {
+            if (t.Values is not null)
+                throw Again("Values:", t.ValuesLine);
+            t.Values = values;
+            t.ValuesLine = n;
+        }
+        return null;
+    }
+
+    private LxMachine OpenMachine(Cursor c, int n)
+    {
+        var id = c.Word("the machine's id");
+        var noun = c.AtEnd ? null : c.Text("the machine's noun");
+        var machine = new LxMachine(id, noun, n);
+        _doc.Machines.Add(machine);
+        return machine;
+    }
+
+    private static object? ReadReads(Cursor c, object? parent, int n)
+    {
+        var reads = c.Words("a machine");
+        if (parent is LxView v)
+        {
+            if (v.Reads is not null)
+                throw Again("Reads:", v.ReadsLine);
+            v.Reads = reads;
+            v.ReadsLine = n;
+        }
+        return null;
+    }
+
+    private static LxViewField ReadViewField(Cursor c, object? parent, int n)
+    {
+        var name = c.Word("the field's name");
+        c.Expect("from");
+        var possessive = c.Word("<machine>'s");
+        if (!possessive.EndsWith("'s", StringComparison.Ordinal) || possessive.Length < 3)
+            throw c.Form($"'{possessive}' is not a machine's: write '<machine>'s <field>'");
+        var source = c.Word("the field or state it shows");
+        var field = new LxViewField(name, possessive[..^2], source, n);
+        (parent as LxView)?.Fields.Add(field);
+        return field;
+    }
+
     // The parent was a problem: read the line for its own form against a throwaway parent, then drop it.
-    private object? Discard(LexLine line, Cursor c, Block under) =>
+    private static object? Discard(LexLine line, Cursor c, Block under) =>
         under switch
         {
-            Block.Machine => ReadMachine(line, c, new LxMachine("x", null, 0)),
-            Block.State => ReadState(line, c, new LxState("X", "x", false, 0)),
+            Block.Machine => ReadMachine(line, c, new LxMachine("x", noun: null, 0)),
+            Block.State => ReadState(line, c, new LxState("X", "x", committed: false, 0)),
             Block.Trigger => ReadTrigger(line, c, new LxTrigger("X", "x", 0)),
-            Block.Guard => ReadGuard(line, c, new LxGuard("x", new LxRule([], null, 0), 0)),
+            Block.Guard => ReadGuard(
+                line,
+                c,
+                new LxGuard("x", new LxRule([], Connective: null, 0), 0)
+            ),
             Block.Runs => ReadRuns(line, c, new LxRuns("X", "X", 0)),
             _ => null,
         };
 
-    private object? ReadMachine(LexLine line, Cursor c, LxMachine m)
+    private static object? ReadMachine(LexLine line, Cursor c, LxMachine m)
     {
         var n = line.Number;
         switch (line.Keyword.Text)
@@ -241,14 +281,7 @@ internal sealed class LexiconParser
             case "System":
             case "System at:":
             case "System keyed by:":
-                if (m.SystemLine != 0)
-                    throw Again("System", m.SystemLine);
-                if (line.Keyword.Text == "System at:")
-                    m.SystemAt = c.Word("the system key");
-                if (line.Keyword.Text == "System keyed by:")
-                    m.KeyedBy = c.Words("a key part");
-                m.SystemLine = n;
-                return null;
+                return ReadSystem(line, c, m, n);
             case "Started by:":
                 if (m.Start is not null)
                     throw Again("Started by:", m.StartLine);
@@ -262,12 +295,7 @@ internal sealed class LexiconParser
                 m.InitialLine = n;
                 return null;
             case "Migrates from:":
-            {
-                var from = c.Integer();
-                c.Expect("with");
-                m.Migrations.Add(new LxMigration(from, c.Word("the migration's type"), n));
-                return null;
-            }
+                return AddMigration(c, m, n);
             case "Differential":
                 if (m.DifferentialLine != 0)
                     throw Again("Differential", m.DifferentialLine);
@@ -283,82 +311,123 @@ internal sealed class LexiconParser
                 m.Context.Add(c.Field(partial: true));
                 return null;
             case "State:":
-            {
-                var name = c.Word("the state's name");
-                var phrase = c.Text("the state's phrase");
-                var committed = false;
-                if (!c.AtEnd)
-                {
-                    c.Expect("committed");
-                    committed = true;
-                }
-                var state = new LxState(name, phrase, committed, n);
-                m.States.Add(state);
-                return state;
-            }
+                return NewState(c, m, n);
             case "Trigger:":
-            {
-                var trigger = new LxTrigger(
-                    c.Word("the trigger's name"),
-                    c.Text("the trigger's phrase"),
-                    n
-                );
-                m.Triggers.Add(trigger);
-                return trigger;
-            }
+                return NewTrigger(c, m, n);
             case "Guard:":
-            {
-                var name = c.Word("the guard's name");
-                c.Expect("when");
-                var guard = new LxGuard(name, c.Rule(), n);
-                m.Guards.Add(guard);
-                return guard;
-            }
+                return NewGuard(c, m, n);
             case "Runs:":
-            {
-                var train = c.Word("the train");
-                c.Expect("in");
-                var runs = new LxRuns(train, c.Word("the state it runs in"), n);
-                m.Runs.Add(runs);
-                return runs;
-            }
+                return NewRuns(c, m, n);
             case "Link:":
-            {
-                var phrase = c.Text("the link's phrase");
-                c.Expect("to");
-                var machine = c.Word("a machine");
-                c.Expect("by");
-                m.Links.Add(new LxLink(phrase, machine, c.Word("a context field"), n));
-                return null;
-            }
+                return AddLink(c, m, n);
             case "Rule:":
-            {
-                var name = c.Word("the rule's name");
-                c.Expect("with");
-                var type = c.Word("the rule's type");
-                c.Comma();
-                c.Expect("example");
-                var example = c.Next("true or false");
-                if (!example.Is("true") && !example.Is("false"))
-                    throw c.Form("a rule's example is true or false");
-                m.Rules.Add(new LxHandler(name, type, example.Is("true"), null, n));
-                return null;
-            }
+                return AddRule(c, m, n);
             case "Reduction:":
-            {
-                var name = c.Word("the reduction's name");
-                c.Expect("with");
-                var type = c.Word("the reduction's type");
-                c.Comma();
-                c.Expect("example");
-                m.Reductions.Add(new LxHandler(name, type, null, c.Assignments(), n));
-                return null;
-            }
+                return AddReduction(c, m, n);
         }
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Machine:.");
     }
 
-    private object? ReadState(LexLine line, Cursor c, LxState state)
+    private static object? ReadSystem(LexLine line, Cursor c, LxMachine m, int n)
+    {
+        if (m.SystemLine != 0)
+            throw Again("System", m.SystemLine);
+        if (string.Equals(line.Keyword.Text, "System at:", StringComparison.Ordinal))
+            m.SystemAt = c.Word("the system key");
+        if (string.Equals(line.Keyword.Text, "System keyed by:", StringComparison.Ordinal))
+            m.KeyedBy = c.Words("a key part");
+        m.SystemLine = n;
+        return null;
+    }
+
+    private static object? AddMigration(Cursor c, LxMachine m, int n)
+    {
+        var from = c.Integer();
+        c.Expect("with");
+        m.Migrations.Add(new LxMigration(from, c.Word("the migration's type"), n));
+        return null;
+    }
+
+    private static LxState NewState(Cursor c, LxMachine m, int n)
+    {
+        var name = c.Word("the state's name");
+        var phrase = c.Text("the state's phrase");
+        var committed = false;
+        if (!c.AtEnd)
+        {
+            c.Expect("committed");
+            committed = true;
+        }
+        var state = new LxState(name, phrase, committed, n);
+        m.States.Add(state);
+        return state;
+    }
+
+    private static LxTrigger NewTrigger(Cursor c, LxMachine m, int n)
+    {
+        var trigger = new LxTrigger(
+            c.Word("the trigger's name"),
+            c.Text("the trigger's phrase"),
+            n
+        );
+        m.Triggers.Add(trigger);
+        return trigger;
+    }
+
+    private static LxGuard NewGuard(Cursor c, LxMachine m, int n)
+    {
+        var name = c.Word("the guard's name");
+        c.Expect("when");
+        var guard = new LxGuard(name, c.Rule(), n);
+        m.Guards.Add(guard);
+        return guard;
+    }
+
+    private static LxRuns NewRuns(Cursor c, LxMachine m, int n)
+    {
+        var train = c.Word("the train");
+        c.Expect("in");
+        var runs = new LxRuns(train, c.Word("the state it runs in"), n);
+        m.Runs.Add(runs);
+        return runs;
+    }
+
+    private static object? AddLink(Cursor c, LxMachine m, int n)
+    {
+        var phrase = c.Text("the link's phrase");
+        c.Expect("to");
+        var machine = c.Word("a machine");
+        c.Expect("by");
+        m.Links.Add(new LxLink(phrase, machine, c.Word("a context field"), n));
+        return null;
+    }
+
+    private static object? AddRule(Cursor c, LxMachine m, int n)
+    {
+        var name = c.Word("the rule's name");
+        c.Expect("with");
+        var type = c.Word("the rule's type");
+        c.Comma();
+        c.Expect("example");
+        var example = c.Next("true or false");
+        if (!example.Is("true") && !example.Is("false"))
+            throw c.Form("a rule's example is true or false");
+        m.Rules.Add(new LxHandler(name, type, example.Is("true"), ReductionExample: null, n));
+        return null;
+    }
+
+    private static object? AddReduction(Cursor c, LxMachine m, int n)
+    {
+        var name = c.Word("the reduction's name");
+        c.Expect("with");
+        var type = c.Word("the reduction's type");
+        c.Comma();
+        c.Expect("example");
+        m.Reductions.Add(new LxHandler(name, type, RuleExample: null, c.Assignments(), n));
+        return null;
+    }
+
+    private static object? ReadState(LexLine line, Cursor c, LxState state)
     {
         switch (line.Keyword.Text)
         {
@@ -374,15 +443,17 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under State:.");
     }
 
-    private object? ReadTrigger(LexLine line, Cursor c, LxTrigger trigger)
+    private static object? ReadTrigger(LexLine line, Cursor c, LxTrigger trigger)
     {
         var n = line.Number;
         void Reduce(LxReduce reduce)
         {
             if (trigger.Reduce is { } earlier)
-                throw new FormError(
-                    $"a trigger reduces once, and line {earlier.Line} already does: one of Sets:, Keeps, Clears, "
-                        + "Resets or Reduces with:."
+                throw new FormErrorException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"a trigger reduces once, and line {earlier.Line} already does: one of Sets:, Keeps, Clears, "
+                    ) + "Resets or Reduces with:."
                 );
             trigger.Reduce = reduce;
         }
@@ -392,19 +463,19 @@ internal sealed class LexiconParser
                 trigger.Input.Add(c.Field(partial: false));
                 return null;
             case "Sets:":
-                Reduce(new LxReduce("set", c.Sets(), null, n));
+                Reduce(new LxReduce("set", c.Sets(), Name: null, n));
                 return null;
             case "Keeps":
-                Reduce(new LxReduce("keep", null, null, n));
+                Reduce(new LxReduce("keep", Steps: null, Name: null, n));
                 return null;
             case "Clears":
-                Reduce(new LxReduce("clear", null, null, n));
+                Reduce(new LxReduce("clear", Steps: null, Name: null, n));
                 return null;
             case "Resets":
-                Reduce(new LxReduce("reset", null, null, n));
+                Reduce(new LxReduce("reset", Steps: null, Name: null, n));
                 return null;
             case "Reduces with:":
-                Reduce(new LxReduce("custom", null, c.Word("a reduction"), n));
+                Reduce(new LxReduce("custom", Steps: null, c.Word("a reduction"), n));
                 return null;
             case "Guarded by:":
                 if (trigger.Guard is not null)
@@ -434,7 +505,7 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Trigger:.");
     }
 
-    private object? ReadGuard(LexLine line, Cursor c, LxGuard guard)
+    private static object? ReadGuard(LexLine line, Cursor c, LxGuard guard)
     {
         var n = line.Number;
         switch (line.Keyword.Text)
@@ -455,7 +526,7 @@ internal sealed class LexiconParser
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Guard:.");
     }
 
-    private object? ReadRuns(LexLine line, Cursor c, LxRuns runs)
+    private static object? ReadRuns(LexLine line, Cursor c, LxRuns runs)
     {
         var n = line.Number;
         switch (line.Keyword.Text)
@@ -470,7 +541,7 @@ internal sealed class LexiconParser
             }
             case "Takes:":
                 if (runs.Takes)
-                    throw new FormError(
+                    throw new FormErrorException(
                         "the train's inputs are already listed on an earlier 'Takes:' line."
                     );
                 runs.Takes = true;
@@ -503,41 +574,44 @@ internal sealed class LexiconParser
                 runs.Example.AddRange(c.Assignments());
                 return null;
             case "Outcome:":
-            {
-                var phrase = c.Text("the outcome's phrase");
-                c.Expect("when");
-                if (c.Peek.Is("it"))
-                {
-                    c.Expect("it");
-                    string kind;
-                    if (c.Peek.Is("fails"))
-                    {
-                        c.Expect("fails");
-                        kind = "failed";
-                    }
-                    else
-                    {
-                        c.Expect("is");
-                        if (c.Peek.Is("done"))
-                        {
-                            c.Expect("done");
-                            kind = "done";
-                        }
-                        else
-                        {
-                            c.Expect("called");
-                            c.Expect("off");
-                            kind = "cancelled";
-                        }
-                    }
-                    runs.Outcomes.Add(new LxOutcome(phrase, kind, null, n));
-                }
-                else
-                    runs.Outcomes.Add(new LxOutcome(phrase, "done", c.Rule(), n));
-                return null;
-            }
+                return AddOutcome(c, runs, n);
         }
         throw new InvalidOperationException($"{line.Keyword.Text} has no reader under Runs:.");
+    }
+
+    private static object? AddOutcome(Cursor c, LxRuns runs, int n)
+    {
+        var phrase = c.Text("the outcome's phrase");
+        c.Expect("when");
+        if (c.Peek.Is("it"))
+        {
+            c.Expect("it");
+            string kind;
+            if (c.Peek.Is("fails"))
+            {
+                c.Expect("fails");
+                kind = "failed";
+            }
+            else
+            {
+                c.Expect("is");
+                if (c.Peek.Is("done"))
+                {
+                    c.Expect("done");
+                    kind = "done";
+                }
+                else
+                {
+                    c.Expect("called");
+                    c.Expect("off");
+                    kind = "cancelled";
+                }
+            }
+            runs.Outcomes.Add(new LxOutcome(phrase, kind, When: null, n));
+        }
+        else
+            runs.Outcomes.Add(new LxOutcome(phrase, "done", c.Rule(), n));
+        return null;
     }
 
     private static string Owner(Cursor c)
@@ -612,9 +686,11 @@ internal sealed class LexiconParser
 
     private static bool Letter(char c) => c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
-    private static FormError Again(string keyword, int line) =>
-        new($"'{keyword}' is already given at line {line}, and is given once.");
+    private static FormErrorException Again(string keyword, int line) =>
+        new(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"'{keyword}' is already given at line {line}, and is given once."
+            )
+        );
 }
-
-/// <summary>A line not in its keyword's form: the message names the form.</summary>
-internal sealed class FormError(string message) : Exception(message);

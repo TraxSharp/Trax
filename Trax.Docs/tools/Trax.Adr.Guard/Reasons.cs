@@ -10,7 +10,7 @@ namespace Trax.Adr.Guard;
 /// the answer that is really "we have not got to it", because a rule that should be
 /// recorded and is not yet should be recorded, not exempted.
 /// </remarks>
-public static class Reasons
+public static partial class Reasons
 {
     public const int MinimumLength = 40;
 
@@ -19,10 +19,12 @@ public static class Reasons
     /// "we have not written the guard yet" is the same deferral as "not yet", and the
     /// words in between meant a phrase-only pattern missed it.
     /// </summary>
-    private static readonly Regex Hollow = new(
+    [GeneratedRegex(
         @"\b(yet|todo|tbd|later|for now|coming soon|eventually|someday|will be (written|added|done)|to be (written|added|done)|follow[- ]up)\b",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
-    );
+        RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Hollow { get; }
 
     /// <summary>Null when the reason is acceptable, otherwise why it is not.</summary>
     public static string? Problem(string reason)

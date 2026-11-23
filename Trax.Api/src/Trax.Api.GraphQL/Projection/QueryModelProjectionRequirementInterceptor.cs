@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Configuration;
 using HotChocolate.Types.Descriptors.Configurations;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Projection;
 
@@ -86,7 +87,7 @@ internal sealed class QueryModelProjectionRequirementInterceptor : TypeIntercept
 
     /// <summary>
     /// The requirement a resolver declared with <c>[Parent(requires:)]</c>, or
-    /// <c>null</c> when it declared none.
+    /// <see langword="null"/> when it declared none.
     /// </summary>
     private static string? ReadDeclaredRequirement(ObjectFieldConfiguration field)
     {
@@ -97,7 +98,7 @@ internal sealed class QueryModelProjectionRequirementInterceptor : TypeIntercept
             .GetParameters()
             .Select(p => p.GetCustomAttribute<ParentAttribute>(inherit: true)?.Requires)
             .Where(r => !string.IsNullOrWhiteSpace(r))
-            .Select(r => r!.Trim())
+            .Select(r => r.NotNull().Trim())
             .ToArray();
 
         return declarations.Length == 0 ? null : string.Join(' ', declarations);

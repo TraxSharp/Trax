@@ -11,7 +11,7 @@ namespace Trax.Scheduler.Services.Operations;
 /// </param>
 /// <param name="InputJson">
 /// JSON payload that deserializes to the train's input type. Property names match whatever their
-/// case, and a property given twice is refused (<c>docs/0023</c>). <c>null</c> or blank is read as
+/// case, and a property given twice is refused (<c>docs/0023</c>). <see langword="null"/> or blank is read as
 /// an empty object, so a train whose input needs no values can be run without one.
 /// </param>
 public record RunTrainInput(string TrainName, string? InputJson = null);

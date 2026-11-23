@@ -10,7 +10,7 @@ namespace Trax.Mediator.Configuration;
 /// enforcing that the mediator is configured before the scheduler.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-mediator">SDK reference</seealso>
-public class TraxBuilderWithMediator
+public sealed class TraxBuilderWithMediator
 {
     internal TraxBuilderWithEffects EffectsBuilder { get; }
 

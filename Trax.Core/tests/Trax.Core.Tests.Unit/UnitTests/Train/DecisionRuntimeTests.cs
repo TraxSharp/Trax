@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -24,6 +25,9 @@ public class DecisionRuntimeTests : TestSetup
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
     private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
+    /// <summary>The clock <see cref="Hang"/> is measured on. A run that hangs never moves a fake clock, so it is the real one.</summary>
+    private static readonly TimeProvider RealTime = TimeProvider.System;
+
     #region Shadows
 
     [Test]
@@ -44,11 +48,11 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IShadow>(shadow)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         log.Should().Equal("Left");
-        await shadow.Entered.Task.WaitAsync(Hang);
+        await shadow.Entered.Task.WaitAsync(Hang, RealTime, CancellationToken.None);
         shadow.Token.IsCancellationRequested.Should().BeTrue("a shadow not waited for is stopped");
         observer
             .Decisions.Should()
@@ -57,7 +61,9 @@ public class DecisionRuntimeTests : TestSetup
             .ContainSingle()
             .Which.Should()
             .Match<ShadowAnswer>(s =>
-                s.Answer == null && !s.Agrees && s.Error!.Contains("did not answer within 0s")
+                s.Answer == null
+                && !s.Agrees
+                && s.Error.NotNull().Contains("did not answer within 0s")
             );
     }
 
@@ -76,10 +82,10 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IDecider>(new ScriptedDecider().Choose(Lane.Left))
                     .With<IShadow>(shadow)
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
-        await shadow.Entered.Task.WaitAsync(Hang);
+        await shadow.Entered.Task.WaitAsync(Hang, RealTime, CancellationToken.None);
         var handle = () => shadow.Token.WaitHandle;
         handle
             .Should()
@@ -127,7 +133,7 @@ public class DecisionRuntimeTests : TestSetup
             run.ServiceProvider
         )
             .RunEither("x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         observer
@@ -164,7 +170,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IOtherShadow>(second)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
         live.Seen.Should().BeSameAs(basket, "the live decider is handed the run's own state");
@@ -193,7 +199,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IShadow>(shadow)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         shadow.Inner.Requests.Should().BeEmpty("a shadow with no copy of its own is not asked");
@@ -202,7 +208,9 @@ public class DecisionRuntimeTests : TestSetup
             .Shadows.Single()
             .Should()
             .Match<ShadowAnswer>(s =>
-                s.Answer == null && !s.Agrees && s.Error!.Contains("could not be made through JSON")
+                s.Answer == null
+                && !s.Agrees
+                && s.Error.NotNull().Contains("could not be made through JSON")
             );
     }
 
@@ -226,7 +234,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IShadow>(shadow)
                     .With<IDecisionObserver>(observer)
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime, CancellationToken.None);
 
         result.IsRight.Should().BeTrue();
         shadow.Inner.Requests.Should().BeEmpty();
@@ -265,11 +273,11 @@ public class DecisionRuntimeTests : TestSetup
             run.ServiceProvider
         )
             .RunEither("x")
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         result.IsRight.Should().BeTrue();
-        var tracked = await made.Task.WaitAsync(Hang);
-        var disposed = () => tracked.Disposed.Task.WaitAsync(Hang);
+        var tracked = await made.Task.WaitAsync(Hang, RealTime);
+        var disposed = () => tracked.Disposed.Task.WaitAsync(Hang, RealTime);
         await disposed
             .Should()
             .NotThrowAsync("a shadow that never returns does not keep its scope for ever");
@@ -286,7 +294,7 @@ public class DecisionRuntimeTests : TestSetup
                     .With<IDecider>(new ScriptedDecider().Throws(new TimeoutException("down")))
                     .With<IShadow>(new HangingShadow())
             )
-            .WaitAsync(Hang);
+            .WaitAsync(Hang, RealTime);
 
         Failure(result).Should().BeOfType<TimeoutException>();
     }
@@ -622,7 +630,9 @@ public class DecisionRuntimeTests : TestSetup
                 "0004-a-recorded-answer-replays-only-into-the-same-state.md: the state is the one the recorded answer was given about"
             );
 
-        var made = observer.Decisions.Single(d => d.Question.Key == key);
+        var made = observer.Decisions.Single(d =>
+            string.Equals(d.Question.Key, key, StringComparison.Ordinal)
+        );
         made.Replayed.Should().BeTrue();
         made.ReplayRefused.Should().BeNull();
         made.StateHash.Should().Be(journal.StateHash(key));
@@ -657,7 +667,9 @@ public class DecisionRuntimeTests : TestSetup
             .Which.State.Should()
             .Be("2000");
 
-        var made = observer.Decisions.Single(d => d.Question.Key == key);
+        var made = observer.Decisions.Single(d =>
+            string.Equals(d.Question.Key, key, StringComparison.Ordinal)
+        );
         made.Replayed.Should().BeFalse();
         made.Decider.Should().Be(typeof(ScriptedDecider));
         made.ReplayRefused.Should().Contain("was given about a different state");
@@ -738,7 +750,8 @@ public class DecisionRuntimeTests : TestSetup
         observer
             .Decisions.Should()
             .OnlyContain(d =>
-                !d.Replayed && d.ReplayRefused!.Contains("was given about a different state")
+                !d.Replayed
+                && d.ReplayRefused.NotNull().Contains("was given about a different state")
             );
     }
 
@@ -793,7 +806,9 @@ public class DecisionRuntimeTests : TestSetup
             t => t.Switch<string, Lane>(s => Lanes(s, log)),
             new Services()
                 .With<IDecider>(decider)
-                .With<IDecisionReplay>(journal.HoldStateHash(QuestionKey.For<Lane>(), null))
+                .With<IDecisionReplay>(
+                    journal.HoldStateHash(QuestionKey.For<Lane>(), stateHash: null)
+                )
                 .With<IDecisionObserver>(observer)
         );
 
@@ -808,7 +823,8 @@ public class DecisionRuntimeTests : TestSetup
             .Decisions.Single()
             .Should()
             .Match<DecisionMade>(d =>
-                !d.Replayed && d.ReplayRefused!.Contains("recorded without a hash of the state")
+                !d.Replayed
+                && d.ReplayRefused.NotNull().Contains("recorded without a hash of the state")
             );
     }
 
@@ -1178,20 +1194,22 @@ public class DecisionRuntimeTests : TestSetup
             t => t.Chain(new Makes<T>(state)).Switch<T, Lane>(s => Lanes(s, []));
 
         var journal = await Recorded(
-            About(first),
-            new Services(),
-            new ScriptedDecider().Choose(Lane.Right)
-        );
+                About(first),
+                new Services(),
+                new ScriptedDecider().Choose(Lane.Right)
+            )
+            .ConfigureAwait(false);
         var decider = new ScriptedDecider().Choose(Lane.Left);
         var observer = new RecordingObserver();
 
         var result = await Run(
-            About(second),
-            new Services()
-                .With<IDecider>(decider)
-                .With<IDecisionReplay>(journal)
-                .With<IDecisionObserver>(observer)
-        );
+                About(second),
+                new Services()
+                    .With<IDecider>(decider)
+                    .With<IDecisionReplay>(journal)
+                    .With<IDecisionObserver>(observer)
+            )
+            .ConfigureAwait(false);
 
         result.IsRight.Should().BeTrue();
         return (decider.Requests.Count, observer.Decisions.Single());
@@ -1265,7 +1283,7 @@ public class DecisionRuntimeTests : TestSetup
 
     public sealed class Checkout
     {
-        public Payment Payment { get; set; } = null!;
+        public required Payment Payment { get; set; }
     }
 
     public sealed class IgnoredOrder
@@ -1316,7 +1334,7 @@ public class DecisionRuntimeTests : TestSetup
             .When(Lane.Left, l => l.Chain(new Mark(log, "Left")))
             .When(Lane.Right, r => r.Chain(new Mark(log, "Right")));
 
-    private class Becomes(string value) : Junction<string, string>
+    private sealed class Becomes(string value) : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(value);
     }
@@ -1419,7 +1437,7 @@ public class DecisionRuntimeTests : TestSetup
             .Decisions.Single()
             .Should()
             .Match<DecisionMade>(d =>
-                !d.Replayed && d.ReplayRefused!.Contains("outside its levels 0 to 2")
+                !d.Replayed && d.ReplayRefused.NotNull().Contains("outside its levels 0 to 2")
             );
     }
 
@@ -1957,7 +1975,7 @@ public class DecisionRuntimeTests : TestSetup
             : throw new AssertionException("the run did not fail");
 
     private static TrainExceptionData Data(Exception e) =>
-        (TrainExceptionData)e.Data["TrainExceptionData"]!;
+        (TrainExceptionData)e.Data["TrainExceptionData"].NotNull();
 
     private static FailureClass? ClassOf(Exception e) => Data(e).FailureClass;
 
@@ -2053,7 +2071,7 @@ public class DecisionRuntimeTests : TestSetup
     {
         public string Name { get; set; } = "";
 
-        public List<string> Items { get; } = [];
+        public IList<string> Items { get; } = [];
     }
 
     public interface IParcel;
@@ -2096,7 +2114,7 @@ public class DecisionRuntimeTests : TestSetup
         public static Task<DecisionResult> Left() =>
             Task.FromResult(
                 new DecisionResult(
-                    new Dictionary<string, Answer>
+                    new Dictionary<string, Answer>(StringComparer.Ordinal)
                     {
                         [QuestionKey.For<Lane>()] = new ChoiceAnswer("Left"),
                     }
@@ -2202,11 +2220,11 @@ public class DecisionRuntimeTests : TestSetup
             using (resource.Enter())
             {
                 entered.TrySetResult();
-                await shadowDone.Task.WaitAsync(Hang, ct);
+                await shadowDone.Task.WaitAsync(Hang, RealTime, ct).ConfigureAwait(false);
             }
 
             return new DecisionResult(
-                new Dictionary<string, Answer>
+                new Dictionary<string, Answer>(StringComparer.Ordinal)
                 {
                     [QuestionKey.For<Lane>()] = new ChoiceAnswer("Left"),
                 }
@@ -2225,11 +2243,11 @@ public class DecisionRuntimeTests : TestSetup
         {
             try
             {
-                await liveEntered.Task.WaitAsync(Hang, ct);
+                await liveEntered.Task.WaitAsync(Hang, RealTime, ct).ConfigureAwait(false);
 
                 using (resource.Enter())
                     return new DecisionResult(
-                        new Dictionary<string, Answer>
+                        new Dictionary<string, Answer>(StringComparer.Ordinal)
                         {
                             [QuestionKey.For<Lane>()] = new ChoiceAnswer("Left"),
                         }
@@ -2255,8 +2273,10 @@ public class DecisionRuntimeTests : TestSetup
     {
         public async Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct)
         {
-            await cts.CancelAsync();
-            return new DecisionResult(request.Questions.ToDictionary(q => q.Key, _ => answer));
+            await cts.CancelAsync().ConfigureAwait(false);
+            return new DecisionResult(
+                request.Questions.ToDictionary(q => q.Key, _ => answer, StringComparer.Ordinal)
+            );
         }
     }
 
@@ -2318,7 +2338,10 @@ public class DecisionRuntimeTests : TestSetup
     )
     {
         var journal = new Journal();
-        (await Run(chain, services.With<IDecider>(decider).With<IDecisionObserver>(journal), input))
+        (
+            await Run(chain, services.With(decider).With<IDecisionObserver>(journal), input)
+                .ConfigureAwait(false)
+        )
             .IsRight.Should()
             .BeTrue("the run being recorded must succeed");
         return journal;
@@ -2419,17 +2442,17 @@ public class DecisionRuntimeTests : TestSetup
         }
     }
 
-    private class Start : Junction<string, string>
+    private sealed class Start : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
-    private class StringToBool : Junction<string, bool>
+    private sealed class StringToBool : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => Task.FromResult(true);
     }
 
-    private class Mark(List<string> log, string name) : Junction<string, string>
+    private sealed class Mark(List<string> log, string name) : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {
@@ -2438,11 +2461,11 @@ public class DecisionRuntimeTests : TestSetup
         }
     }
 
-    private class CancelsRun(CancellationTokenSource cts) : Junction<string, string>
+    private sealed class CancelsRun(CancellationTokenSource cts) : Junction<string, string>
     {
         public override async Task<string> Run(string input)
         {
-            await cts.CancelAsync();
+            await cts.CancelAsync().ConfigureAwait(false);
             return input;
         }
     }

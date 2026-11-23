@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -46,6 +47,7 @@ public class MetadataRetentionTests : TestSetup
             DataContext,
             new SchedulerConfiguration { MetadataCleanup = cleanup },
             NullLogger<DeleteExpiredMetadataJunction>.Instance,
+            TimeProvider.System,
             discovery
         );
 
@@ -61,10 +63,22 @@ public class MetadataRetentionTests : TestSetup
         cleanup.AddTrainType(FastTrain);
         cleanup.AddTrainType(SlowTrain, TimeSpan.FromDays(30));
 
-        var fastRecent = await Seed(FastTrain, DateTime.UtcNow.AddHours(-1));
-        var fastAncient = await Seed(FastTrain, DateTime.UtcNow.AddDays(-31));
-        var slowRecent = await Seed(SlowTrain, DateTime.UtcNow.AddHours(-1));
-        var slowAncient = await Seed(SlowTrain, DateTime.UtcNow.AddDays(-31));
+        var fastRecent = await Seed(
+            FastTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
+        var fastAncient = await Seed(
+            FastTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-31)
+        );
+        var slowRecent = await Seed(
+            SlowTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
+        var slowAncient = await Seed(
+            SlowTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-31)
+        );
 
         await BuildJunction(cleanup).Run(new MetadataCleanupRequest());
 
@@ -83,8 +97,11 @@ public class MetadataRetentionTests : TestSetup
         cleanup.AddTrainType(FastTrain);
         cleanup.AddTrainType(SlowTrain);
 
-        var old = await Seed(FastTrain, DateTime.UtcNow.AddHours(-1));
-        var fresh = await Seed(SlowTrain, DateTime.UtcNow.AddMinutes(-5));
+        var old = await Seed(FastTrain, TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1));
+        var fresh = await Seed(
+            SlowTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
 
         await BuildJunction(cleanup).Run(new MetadataCleanupRequest());
 
@@ -99,8 +116,8 @@ public class MetadataRetentionTests : TestSetup
         cleanup.AddTrainType(FastTrain, TimeSpan.FromMinutes(1));
         cleanup.AddTrainType(SlowTrain);
 
-        var fast = await Seed(FastTrain, DateTime.UtcNow.AddHours(-1));
-        var slow = await Seed(SlowTrain, DateTime.UtcNow.AddHours(-1));
+        var fast = await Seed(FastTrain, TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1));
+        var slow = await Seed(SlowTrain, TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1));
 
         await BuildJunction(cleanup).Run(new MetadataCleanupRequest());
 
@@ -117,8 +134,11 @@ public class MetadataRetentionTests : TestSetup
         cleanup.AddTrainType(FastTrain);
         cleanup.AddTrainType(SlowTrain, TimeSpan.MaxValue);
 
-        var fast = await Seed(FastTrain, DateTime.UtcNow.AddHours(-1));
-        var slow = await Seed(SlowTrain, DateTime.UtcNow.AddDays(-3650));
+        var fast = await Seed(FastTrain, TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1));
+        var slow = await Seed(
+            SlowTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-3650)
+        );
 
         await BuildJunction(cleanup).Run(new MetadataCleanupRequest());
 
@@ -141,8 +161,14 @@ public class MetadataRetentionTests : TestSetup
         cleanup.AddTrainType(FastTrain);
         cleanup.AddTrainType(SlowTrain, TimeSpan.FromDays(30));
 
-        var fast = await Seed(FastTrain, DateTime.UtcNow.AddMinutes(-10));
-        var slow = await Seed(SlowTrain, DateTime.UtcNow.AddMinutes(-10));
+        var fast = await Seed(
+            FastTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+        );
+        var slow = await Seed(
+            SlowTrain,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+        );
 
         cleanup.RetentionPeriod = TimeSpan.FromMinutes(5);
 
@@ -167,8 +193,8 @@ public class MetadataRetentionTests : TestSetup
         var cleanup = NewCleanup();
         cleanup.AddTrainType(SlowTrain, TimeSpan.FromDays(30));
 
-        var kept = await Seed(SlowTrain, DateTime.UtcNow.AddHours(-1));
-        var swept = await Seed(SlowTrain, DateTime.UtcNow.AddDays(-31));
+        var kept = await Seed(SlowTrain, TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1));
+        var swept = await Seed(SlowTrain, TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-31));
 
         var keptQueue = await SeedWorkQueue(kept);
         var sweptQueue = await SeedWorkQueue(swept);
@@ -196,7 +222,9 @@ public class MetadataRetentionTests : TestSetup
 
         var seeded = new List<long>();
         foreach (var adminName in AdminTrains.FullNames)
-            seeded.Add((await Seed(adminName, DateTime.UtcNow.AddHours(-2))).Id);
+            seeded.Add(
+                (await Seed(adminName, TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2))).Id
+            );
 
         await BuildJunction(cleanup).Run(new MetadataCleanupRequest());
 
@@ -298,16 +326,19 @@ public class MetadataRetentionTests : TestSetup
         );
 
         var cleanup = NewCleanup();
-        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName!, TimeSpan.FromDays(30));
-        cleanup.AddTrainType(typeof(FakeRetentionTrain).FullName!, TimeSpan.FromMinutes(1));
+        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName.NotNull(), TimeSpan.FromDays(30));
+        cleanup.AddTrainType(
+            typeof(FakeRetentionTrain).FullName.NotNull(),
+            TimeSpan.FromMinutes(1)
+        );
 
         var byInterface = await Seed(
-            typeof(IFakeRetentionTrain).FullName!,
-            DateTime.UtcNow.AddHours(-1)
+            typeof(IFakeRetentionTrain).FullName.NotNull(),
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
         );
         var byClass = await Seed(
-            typeof(FakeRetentionTrain).FullName!,
-            DateTime.UtcNow.AddHours(-1)
+            typeof(FakeRetentionTrain).FullName.NotNull(),
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
         );
 
         await BuildJunction(cleanup, discovery).Run(new MetadataCleanupRequest());
@@ -320,8 +351,11 @@ public class MetadataRetentionTests : TestSetup
     public async Task Validator_InterfaceAndClassNamesDisagree_RefusesAtStartup()
     {
         var cleanup = NewCleanup();
-        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName!, TimeSpan.FromDays(30));
-        cleanup.AddTrainType(typeof(FakeRetentionTrain).FullName!, TimeSpan.FromMinutes(1));
+        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName.NotNull(), TimeSpan.FromDays(30));
+        cleanup.AddTrainType(
+            typeof(FakeRetentionTrain).FullName.NotNull(),
+            TimeSpan.FromMinutes(1)
+        );
 
         var validator = new MetadataCleanupConfigurationValidator(
             new SingleServiceProvider(
@@ -341,7 +375,7 @@ public class MetadataRetentionTests : TestSetup
     public async Task Validator_ConsistentConfiguration_StartsCleanly()
     {
         var cleanup = NewCleanup();
-        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName!, TimeSpan.FromDays(30));
+        cleanup.AddTrainType(typeof(IFakeRetentionTrain).FullName.NotNull(), TimeSpan.FromDays(30));
 
         var validator = new MetadataCleanupConfigurationValidator(
             new SingleServiceProvider(
@@ -360,9 +394,9 @@ public class MetadataRetentionTests : TestSetup
 
     #region Helpers
 
-    private interface IFakeRetentionTrain { }
+    private interface IFakeRetentionTrain;
 
-    private class FakeRetentionTrain : IFakeRetentionTrain { }
+    private sealed class FakeRetentionTrain : IFakeRetentionTrain;
 
     private sealed class FakeTrainDiscovery(Type serviceType, Type implementationType)
         : ITrainDiscoveryService
@@ -417,15 +451,16 @@ public class MetadataRetentionTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = TrainState.Completed;
         metadata.StartTime = startTime;
         metadata.EndTime = startTime.AddSeconds(1);
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -439,11 +474,12 @@ public class MetadataRetentionTests : TestSetup
                 TrainName = metadata.Name,
                 Input = null,
                 InputTypeName = null,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entryId = entry.Id;
         await DataContext
@@ -452,8 +488,9 @@ public class MetadataRetentionTests : TestSetup
                 setters
                     .SetProperty(wq => wq.MetadataId, metadata.Id)
                     .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
-            );
+                    .SetProperty(wq => wq.DispatchedAt, TimeProvider.System.GetUtcNow().UtcDateTime)
+            )
+            .ConfigureAwait(false);
 
         DataContext.Reset();
 
@@ -463,7 +500,7 @@ public class MetadataRetentionTests : TestSetup
     private async Task<bool> Exists(Metadata metadata)
     {
         DataContext.Reset();
-        return await DataContext.Metadatas.AnyAsync(m => m.Id == metadata.Id);
+        return await DataContext.Metadatas.AnyAsync(m => m.Id == metadata.Id).ConfigureAwait(false);
     }
 
     #endregion

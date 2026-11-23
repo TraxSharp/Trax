@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Trax.Core.Decisions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
@@ -52,7 +53,9 @@ internal static class CheckpointFixtures
     /// <summary>Remembers every checkpoint a run took.</summary>
     public sealed class Store : ICheckpointStore
     {
-        private readonly ConcurrentDictionary<string, TaskCompletionSource> _written = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource> _written = new(
+            StringComparer.Ordinal
+        );
 
         public List<CheckpointTaken> Taken { get; } = [];
 
@@ -82,7 +85,9 @@ internal static class CheckpointFixtures
         /// <summary>The checkpoint at <paramref name="nodeId"/>, read back as a resume restores it.</summary>
         public RestoredCheckpoint Restored(string nodeId)
         {
-            var taken = Taken.Single(t => t.NodeId == nodeId);
+            var taken = Taken.Single(t =>
+                string.Equals(t.NodeId, nodeId, StringComparison.Ordinal)
+            );
             return new RestoredCheckpoint(taken.NodeId, taken.StateType, taken.State, taken.Tracks);
         }
     }
@@ -167,7 +172,12 @@ internal static class CheckpointFixtures
                 throw new TimeoutException("summariser timed out");
 
             return Task.FromResult(
-                new Report($"{input.Topic} from {input.Source}, {input.Pages} pages")
+                new Report(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{input.Topic} from {input.Source}, {input.Pages} pages"
+                    )
+                )
             );
         }
     }

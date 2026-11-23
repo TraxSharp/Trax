@@ -32,7 +32,7 @@ public class ReplayDecisionsOnRetrySeedingTests
         await using var fx = await SchedulerE2EFixture.CreateAsync(_ => { });
 
         await ScheduleAsync(fx, "default");
-        await ScheduleAsync(fx, "opted-out", o => o.ReplayDecisionsOnRetry(false));
+        await ScheduleAsync(fx, "opted-out", o => o.ReplayDecisionsOnRetry(replay: false));
 
         (await Read(fx, "default")).ReplayDecisionsOnRetry.Should().BeTrue();
         (await Read(fx, "opted-out"))
@@ -45,7 +45,7 @@ public class ReplayDecisionsOnRetrySeedingTests
     {
         await using var fx = await SchedulerE2EFixture.CreateAsync(_ => { });
 
-        await ScheduleAsync(fx, "kept", o => o.ReplayDecisionsOnRetry(false));
+        await ScheduleAsync(fx, "kept", o => o.ReplayDecisionsOnRetry(replay: false));
         await ScheduleAsync(fx, "kept");
 
         (await Read(fx, "kept"))
@@ -54,7 +54,7 @@ public class ReplayDecisionsOnRetrySeedingTests
                 $"an unstated option keeps the manifest's value. See {Adr} and scheduler/0011"
             );
 
-        await ScheduleAsync(fx, "kept", o => o.ReplayDecisionsOnRetry(true));
+        await ScheduleAsync(fx, "kept", o => o.ReplayDecisionsOnRetry(replay: true));
 
         (await Read(fx, "kept"))
             .ReplayDecisionsOnRetry.Should()
@@ -70,20 +70,25 @@ public class ReplayDecisionsOnRetrySeedingTests
             ["batch-a", "batch-b"],
             id => (id, new SchedulerTestInput { Value = id }),
             Every.Minutes(5),
-            configureEach: (id, opts) => opts.ReplayDecisionsOnRetry = id != "batch-a"
+            configureEach: (id, opts) =>
+                opts.ReplayDecisionsOnRetry = !string.Equals(
+                    id,
+                    "batch-a",
+                    StringComparison.Ordinal
+                )
         );
         await ScheduleAsync(fx, "parent");
         await fx.Scheduler.ScheduleDependentAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             "dependent",
             new SchedulerTestInput { Value = "dependent" },
             "parent",
-            o => o.ReplayDecisionsOnRetry(false)
+            o => o.ReplayDecisionsOnRetry(replay: false)
         );
         await fx.Scheduler.ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             "once",
             new SchedulerTestInput { Value = "once" },
             TimeSpan.FromHours(1),
-            o => o.ReplayDecisionsOnRetry(false)
+            o => o.ReplayDecisionsOnRetry(replay: false)
         );
 
         (await Read(fx, "batch-a")).ReplayDecisionsOnRetry.Should().BeFalse(Adr);
@@ -112,7 +117,7 @@ public class ReplayDecisionsOnRetrySeedingTests
     {
         await using var fx = await SchedulerE2EFixture.CreateAsync(_ => { });
 
-        await ScheduleAsync(fx, "batch-kept", o => o.ReplayDecisionsOnRetry(false));
+        await ScheduleAsync(fx, "batch-kept", o => o.ReplayDecisionsOnRetry(replay: false));
 
         // Read-modify-write of an unstated option: it stays unstated, so the false stands.
         await fx.Scheduler.ScheduleManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit, string>(
@@ -142,13 +147,14 @@ public class ReplayDecisionsOnRetrySeedingTests
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
                 ReplayDecisionsOf = 4242,
-            }
+            },
+            TimeProvider.System
         );
         fx.DataContext.WorkQueues.Add(entry);
         await fx.DataContext.SaveChanges(CancellationToken.None);
 
         if (stateFalse)
-            await ScheduleAsync(fx, "queued-retry", o => o.ReplayDecisionsOnRetry(false));
+            await ScheduleAsync(fx, "queued-retry", o => o.ReplayDecisionsOnRetry(replay: false));
         else
             await ScheduleAsync(fx, "queued-retry");
 
@@ -175,14 +181,20 @@ public class ReplayDecisionsOnRetrySeedingTests
         var manifest = await ScheduleAsync(fx, "runtime");
         var ops = fx.Services.GetRequiredService<IOperationsService>();
 
-        (await ops.SetManifestsReplayDecisionsOnRetryAsync([], false, CancellationToken.None))
+        (
+            await ops.SetManifestsReplayDecisionsOnRetryAsync(
+                [],
+                replay: false,
+                CancellationToken.None
+            )
+        )
             .Success.Should()
             .BeFalse();
 
         (
             await ops.SetManifestsReplayDecisionsOnRetryAsync(
                 [manifest.Id],
-                true,
+                replay: true,
                 CancellationToken.None
             )
         )
@@ -191,7 +203,7 @@ public class ReplayDecisionsOnRetrySeedingTests
         (
             await ops.SetManifestsReplayDecisionsOnRetryAsync(
                 [manifest.Id],
-                false,
+                replay: false,
                 CancellationToken.None
             )
         )

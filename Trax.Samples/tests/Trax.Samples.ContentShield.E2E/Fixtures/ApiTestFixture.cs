@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.ContentShield.E2E.ApiTests;
@@ -13,16 +14,20 @@ public abstract class ApiTestFixture
     /// <summary>The moderator demo key the API registers in Development.</summary>
     protected const string ModeratorKey = Api.DemoKeys.ModeratorKey;
 
-    protected IServiceScope Scope { get; private set; } = null!;
+    protected AsyncServiceScope Scope { get; private set; }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     internal static TestRunner Runner => SharedApiSetup.Runner;
 
     [SetUp]
     public virtual async Task SetUp()
     {
-        Scope = SharedApiSetup.Factory.Services.CreateScope();
+        Scope = SharedApiSetup.Factory.Services.CreateAsyncScope();
         DataContext = (IDataContext)
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
 
@@ -33,12 +38,12 @@ public abstract class ApiTestFixture
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected static HttpClient GetHttpClient() => SharedApiSetup.Factory.CreateClient();

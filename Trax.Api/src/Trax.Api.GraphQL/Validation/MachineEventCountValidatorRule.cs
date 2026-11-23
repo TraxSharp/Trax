@@ -7,29 +7,6 @@ using HotChocolate.Validation;
 namespace Trax.Api.GraphQL.Validation;
 
 /// <summary>
-/// Marks a field under the <c>machines</c> root that writes an instance: <c>start</c>, <c>discard</c> and every
-/// event. <see cref="MachineEventCountValidatorRule"/> refuses an operation that selects more than one.
-/// </summary>
-internal sealed class MachineWriteField
-{
-    private static readonly MachineWriteField Marker = new();
-
-    private MachineWriteField() { }
-
-    /// <summary>Marks a field built through a descriptor as a machine write.</summary>
-    internal static IObjectFieldDescriptor Mark(IObjectFieldDescriptor descriptor)
-    {
-        descriptor.Extend().Configuration.Features.Set(Marker);
-        return descriptor;
-    }
-
-    /// <summary>True when <paramref name="field"/> was marked as a machine write.</summary>
-    internal static bool IsMachineWrite(IOutputFieldDefinition field) =>
-        field is IFeatureProvider provider
-        && provider.Features.Get<MachineWriteField>() is not null;
-}
-
-/// <summary>
 /// Refuses an operation that selects more than one machine write (<c>start</c>, <c>discard</c> or an event), on one
 /// machine or across several, before any of them runs. HotChocolate resolves the fields under a namespace in
 /// parallel, so two writes in one operation would race each other on the same instance, or commit one and refuse the

@@ -1,19 +1,5 @@
 namespace Trax.Adr.Guard.Tests.Fixtures;
 
-/// <summary>One ADR's identity, as both the document and the index row need to agree on it.</summary>
-public sealed record AdrSpec(
-    string Number,
-    string Slug,
-    string Title,
-    string[] Areas,
-    string[] Repos
-)
-{
-    public string FileName => $"{Number}-{Slug}.md";
-
-    public string Link => $"[{Number}](./{FileName})";
-}
-
 /// <summary>
 /// Canonical well-formed ADR and index text. Tests override one argument at a time, so
 /// each red case differs from the green baseline in exactly the way its name says.

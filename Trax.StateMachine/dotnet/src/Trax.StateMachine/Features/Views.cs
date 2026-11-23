@@ -3,25 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace Trax.StateMachine.Features;
 
-/// <summary>One machine a view reads: the caller's own instances of a user machine, or a system instance at its key.</summary>
-internal sealed record ViewRead(string Machine, string? Key);
-
-/// <summary>
-/// One field a view shows: a machine's state (<see cref="Source"/> is <c>state</c>), labelled per state if it gives
-/// labels, or one of the machine's context fields.
-/// </summary>
-internal sealed record ViewField(
-    string Name,
-    string Machine,
-    string Source,
-    IReadOnlyDictionary<string, string>? Labels
-)
-{
-    internal const string State = "state";
-
-    internal bool IsState => Source == State;
-}
-
 /// <summary>
 /// The view shape the glossary and the host file share: what a view reads and the fields it shows. The checks that
 /// need the machines (that a read machine exists and is read with its key exactly when it is a system machine) are
@@ -58,7 +39,7 @@ internal static partial class Views
             var field = fieldAt.Object(node);
             fieldAt.Closed(field, "from", "labels");
             var from = fieldAt["from"].Text(fieldAt.Required(field, "from"));
-            var match = Names.ViewSource().Match(from);
+            var match = Names.ViewSource.Match(from);
             if (!match.Success)
                 throw fieldAt["from"].Fail("is not 'machine.field' or 'machine.state'.");
             Dictionary<string, string>? labels = null;
@@ -75,7 +56,14 @@ internal static partial class Views
                     labels[state] = labelsAt[state].Text(label, 1, 200);
                 }
             }
-            shown.Add(new ViewField(name, match.Groups[1].Value, match.Groups[2].Value, labels));
+            shown.Add(
+                new ViewField(
+                    name,
+                    match.Groups["machine"].Value,
+                    match.Groups["member"].Value,
+                    labels
+                )
+            );
         }
         return (list, shown);
     }
@@ -103,10 +91,14 @@ internal static partial class Views
         + "Row";
 
     /// <summary>Whether <paramref name="pascal"/> is a GraphQL name a view's types can start with.</summary>
-    internal static bool IsGraphQLStem(string pascal) => GraphQLStem().IsMatch(pascal);
+    internal static bool IsGraphQLStem(string pascal) => GraphQLStem.IsMatch(pascal);
 
-    [GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9]*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex GraphQLStem();
+    [GeneratedRegex(
+        @"\A[A-Za-z][A-Za-z0-9]*\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex GraphQLStem { get; }
 
     /// <summary>
     /// Refuses a view whose name GraphQL cannot carry: one that is not words of ASCII letters and digits, the first
@@ -180,7 +172,7 @@ internal static partial class Views
                     .Fail(
                         $"'{machine}' is a user's machine: a view reads the caller's own, never one by key."
                     );
-            if (systemKey is not null && key != systemKey)
+            if (systemKey is not null && !string.Equals(key, systemKey, StringComparison.Ordinal))
                 throw itemAt.Fail(
                     $"'{machine}' is a system machine: a view reads it at its key, '{systemKey}'."
                 );

@@ -57,7 +57,11 @@ public sealed class ScriptedDecider : IDecider
             _ => new ChoiceAnswer(
                 choice.ToString(),
                 confidence,
-                probabilities?.ToDictionary(p => p.Key.ToString(), p => p.Value)
+                probabilities?.ToDictionary(
+                    p => p.Key.ToString(),
+                    p => p.Value,
+                    StringComparer.Ordinal
+                )
             )
             {
                 Model = model,
@@ -111,7 +115,7 @@ public sealed class ScriptedDecider : IDecider
         if (_failure is not null)
             return Task.FromException<DecisionResult>(_failure);
 
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
 
         foreach (var question in request.Questions)
             if (_answers.GetValueOrDefault(question.Key)?.Invoke(request) is { } answer)

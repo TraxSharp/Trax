@@ -8,6 +8,7 @@ using NSubstitute;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -67,8 +68,8 @@ public class FailureClassSchemaTests
         var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
         await SeedAsync(factory, FailureClass.Conflict, TrainState.Failed);
         await SeedAsync(factory, FailureClass.Transient, TrainState.Failed);
-        await SeedAsync(factory, null, TrainState.Failed);
-        await SeedAsync(factory, null, TrainState.Completed);
+        await SeedAsync(factory, failureClass: null, TrainState.Failed);
+        await SeedAsync(factory, failureClass: null, TrainState.Completed);
 
         var executor = await BuildExecutorAsync(factory);
 
@@ -115,34 +116,38 @@ public class FailureClassSchemaTests
         TrainState state
     )
     {
-        await using var db = await factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.Classified",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        meta.TrainState = state;
-        if (failureClass is { } recorded)
-            meta.AddException(
-                new TrainException(
-                    JsonSerializer.Serialize(
-                        new TrainExceptionData
-                        {
-                            TrainName = "Classified",
-                            TrainExternalId = meta.ExternalId,
-                            Type = "SomeException",
-                            Junction = "SomeJunction",
-                            Message = "failed",
-                            FailureClass = recorded,
-                        }
-                    )
-                )
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Classified",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
             );
-        await db.Track(meta);
-        await db.SaveChanges(default);
+            meta.TrainState = state;
+            if (failureClass is { } recorded)
+                meta.AddException(
+                    new TrainException(
+                        JsonSerializer.Serialize(
+                            new TrainExceptionData
+                            {
+                                TrainName = "Classified",
+                                TrainExternalId = meta.ExternalId,
+                                Type = "SomeException",
+                                Junction = "SomeJunction",
+                                Message = "failed",
+                                FailureClass = recorded,
+                            }
+                        )
+                    )
+                );
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task<IRequestExecutor> BuildExecutorAsync(IDataContextProviderFactory factory)
@@ -166,16 +171,17 @@ public class FailureClassSchemaTests
 
         return await _serviceProvider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ExecuteAsync(IRequestExecutor executor, string query)
     {
-        var result = await executor.ExecuteAsync(query);
+        var result = await executor.ExecuteAsync(query).ConfigureAwait(false);
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
-        operationResult!.Errors.Should().BeNullOrEmpty();
+        operationResult.NotNull().Errors.Should().BeNullOrEmpty();
 
         using var document = JsonDocument.Parse(operationResult.ToJson());
         return document.RootElement.GetProperty("data").Clone();

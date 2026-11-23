@@ -21,6 +21,7 @@ public class Note
     [Column("text")]
     public string Text { get; set; } = string.Empty;
 
+    /// <summary>When the note was written. Set it from the injected TimeProvider when you add one.</summary>
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 }

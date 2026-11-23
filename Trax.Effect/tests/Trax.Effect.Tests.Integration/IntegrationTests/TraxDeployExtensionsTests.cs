@@ -33,11 +33,12 @@ public class TraxDeployExtensionsTests
 
         var run = async () =>
             await host.RunTraxAsync(
-                [],
-                processExportPath: null,
-                processMigrates: true,
-                CancellationToken.None
-            );
+                    [],
+                    processExportPath: null,
+                    processMigrates: true,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await run.Should().NotThrowAsync();
         migration.Runs.Should().Be(1);
@@ -70,8 +71,8 @@ public class TraxDeployExtensionsTests
             foreach (var hosted in Services.GetServices<IHostedService>())
             {
                 if (hosted is IHostedLifecycleService lifecycle)
-                    await lifecycle.StartingAsync(cancellationToken);
-                await hosted.StartAsync(cancellationToken);
+                    await lifecycle.StartingAsync(cancellationToken).ConfigureAwait(false);
+                await hosted.StartAsync(cancellationToken).ConfigureAwait(false);
             }
         }
 

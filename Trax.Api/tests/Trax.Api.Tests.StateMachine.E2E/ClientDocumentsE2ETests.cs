@@ -175,33 +175,15 @@ public class ClientDocumentsE2ETests
     public async Task A_version_another_node_registered_runs_on_this_one()
     {
         const string database = "trax_sm_client_docs_versions";
-        var v1 = DocumentsFile(("OrderCard", OrderCard));
-        var v2 = DocumentsFile(("OrderCard", OrderCardV2));
+        var v1 = await DocumentsFileAsync(("OrderCard", OrderCard));
+        var v2 = await DocumentsFileAsync(("OrderCard", OrderCardV2));
         await E2EHost.RecreateDatabaseAsync(database);
         var a = await E2EHost.StartAsync(database, new CountingCharge(), Options(v1, "a"));
         IHost? b = null;
         try
         {
             b = await E2EHost.StartAsync(database, new CountingCharge(), Options(v2, "b"));
-            using (
-                var old = await b.PostPersistedAsync(
-                    ClientDocuments.IdOf("OrderCard", OrderCard),
-                    new { input = new { id = 1 } }
-                )
-            )
-                old.RootElement.GetProperty("data")
-                    .GetProperty("discover")
-                    .GetProperty("findOrder")
-                    .GetProperty("customer")
-                    .GetProperty("name")
-                    .GetString()
-                    .Should()
-                    .Be(
-                        "Ada",
-                        "a page built before the frontend's deploy keeps working on a node with the new "
-                            + "documents, per "
-                            + Adr
-                    );
+            await AssertOldVersionRunsAsync(b);
 
             // Node A started before B registered v2: it answers SERVER_OUTDATED until its next read of the store,
             // then runs it.
@@ -209,10 +191,8 @@ public class ClientDocumentsE2ETests
             string? title = null;
             var ran = await E2EWait.UntilAsync(async () =>
             {
-                using var answer = await a.PostPersistedAsync(
-                    newer,
-                    new { input = new { id = 2 } }
-                );
+                using var answer = await a.PostPersistedAsync(newer, new { input = new { id = 2 } })
+                    .ConfigureAwait(false);
                 if (
                     answer.RootElement.TryGetProperty("data", out var data)
                     && data.ValueKind == JsonValueKind.Object
@@ -250,34 +230,58 @@ public class ClientDocumentsE2ETests
         string[] codes = [];
         await E2EWait.UntilAsync(async () =>
         {
-            using var answer = await host.Host.PostPersistedAsync(
-                made,
-                new { input = new { id = 1 } }
-            );
+            using var answer = await host
+                .Host.PostPersistedAsync(made, new { input = new { id = 1 } })
+                .ConfigureAwait(false);
             codes = [.. MachineDocumentOps.Codes(answer)];
             return codes.SequenceEqual([RefusalCode.ClientOutdated.ToWire()]);
         });
         codes.Should().Equal([RefusalCode.ClientOutdated.ToWire()]);
     }
 
-    private string DocumentsFile(params (string Name, string Text)[] documents)
+    private static async Task AssertOldVersionRunsAsync(IHost b)
+    {
+        using (
+            var old = await b.PostPersistedAsync(
+                    ClientDocuments.IdOf("OrderCard", OrderCard),
+                    new { input = new { id = 1 } }
+                )
+                .ConfigureAwait(false)
+        )
+            old.RootElement.GetProperty("data")
+                .GetProperty("discover")
+                .GetProperty("findOrder")
+                .GetProperty("customer")
+                .GetProperty("name")
+                .GetString()
+                .Should()
+                .Be(
+                    "Ada",
+                    "a page built before the frontend's deploy keeps working on a node with the new "
+                        + "documents, per "
+                        + Adr
+                );
+    }
+
+    private async Task<string> DocumentsFileAsync(params (string Name, string Text)[] documents)
     {
         var path = Path.Combine(Path.GetTempPath(), $"trax-documents-{Guid.NewGuid():N}.json");
-        File.WriteAllText(
-            path,
-            JsonSerializer.Serialize(
-                new
-                {
-                    format = 1,
-                    documents = documents.Select(d => new
+        await File.WriteAllTextAsync(
+                path,
+                JsonSerializer.Serialize(
+                    new
                     {
-                        name = d.Name,
-                        source = $"src/{d.Name}.graphql",
-                        text = d.Text,
-                    }),
-                }
+                        format = 1,
+                        documents = documents.Select(d => new
+                        {
+                            name = d.Name,
+                            source = $"src/{d.Name}.graphql",
+                            text = d.Text,
+                        }),
+                    }
+                )
             )
-        );
+            .ConfigureAwait(false);
         _files.Add(path);
         return path;
     }
@@ -294,7 +298,7 @@ public class ClientDocumentsE2ETests
             GraphQL = graphql =>
             {
                 graphql = graphql.UsePersistedOperations(po =>
-                    po.SingleNode().RequirePersisted(true).ClientDocuments(file)
+                    po.SingleNode().RequirePersisted(require: true).ClientDocuments(file)
                 );
                 return maxExecutionDepth is { } depth ? graphql.MaxExecutionDepth(depth) : graphql;
             },
@@ -307,20 +311,25 @@ public class ClientDocumentsE2ETests
         int? maxExecutionDepth = null
     )
     {
-        file ??= DocumentsFile(texts.Select(t => (t.Split(' ', '(', '{')[1], t)).ToArray());
-        await E2EHost.RecreateDatabaseAsync(database);
+        file ??= await DocumentsFileAsync(
+                texts.Select(t => (t.Split(' ', '(', '{')[1], t)).ToArray()
+            )
+            .ConfigureAwait(false);
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         try
         {
-            var host = await E2EHost.StartAsync(
-                database,
-                new CountingCharge(),
-                Options(file, "single", maxExecutionDepth)
-            );
+            var host = await E2EHost
+                .StartAsync(
+                    database,
+                    new CountingCharge(),
+                    Options(file, "single", maxExecutionDepth)
+                )
+                .ConfigureAwait(false);
             return new HostedDatabase(database, host);
         }
         catch
         {
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
             throw;
         }
     }
@@ -330,7 +339,7 @@ public class ClientDocumentsE2ETests
         public async ValueTask DisposeAsync()
         {
             Host.Dispose();
-            await E2EHost.DropDatabaseAsync(Database);
+            await E2EHost.DropDatabaseAsync(Database).ConfigureAwait(false);
         }
     }
 }

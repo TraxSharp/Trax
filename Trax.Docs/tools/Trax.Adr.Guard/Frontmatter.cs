@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Adr.Guard;
 
 /// <summary>
@@ -45,7 +47,7 @@ public sealed class Frontmatter
     /// </summary>
     public static Frontmatter Parse(string documentText)
     {
-        var text = documentText.Replace("\r\n", "\n");
+        var text = documentText.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         if (!text.StartsWith("---\n", StringComparison.Ordinal))
             return new Frontmatter(
@@ -76,26 +78,22 @@ public sealed class Frontmatter
             if (trimmed.StartsWith("- ", StringComparison.Ordinal))
             {
                 if (pendingListKey is null)
-                    return new Frontmatter(
-                        $"line {i + 1}: list item '{trimmed}' does not follow a key"
-                    );
+                    return LineError(i, $"list item '{trimmed}' does not follow a key");
 
                 result._lists[pendingListKey].Add(Unquote(trimmed[2..].Trim()));
                 continue;
             }
 
-            var colon = line.IndexOf(':');
+            var colon = line.IndexOf(':', StringComparison.Ordinal);
             if (colon <= 0)
-                return new Frontmatter(
-                    $"line {i + 1}: '{line}' is neither 'key: value' nor a '- item'"
-                );
+                return LineError(i, $"'{line}' is neither 'key: value' nor a '- item'");
 
             var key = line[..colon];
-            if (key.Trim() != key)
-                return new Frontmatter($"line {i + 1}: key '{key}' must not be indented or padded");
+            if (!string.Equals(key.Trim(), key, StringComparison.Ordinal))
+                return LineError(i, $"key '{key}' must not be indented or padded");
 
             if (result.Has(key))
-                return new Frontmatter($"line {i + 1}: key '{key}' appears twice");
+                return LineError(i, $"key '{key}' appears twice");
 
             result._keys.Add(key);
             var value = line[(colon + 1)..].Trim();
@@ -112,22 +110,27 @@ public sealed class Frontmatter
 
             if (value.StartsWith('[') && value.EndsWith(']'))
             {
-                var inner = value[1..^1].Trim();
-                result._lists[key] =
-                    inner.Length == 0
-                        ? []
-                        : inner.Split(',').Select(v => Unquote(v.Trim())).ToList();
+                result._lists[key] = FlowList(value);
                 continue;
             }
 
             if (value.StartsWith('[') || value.EndsWith(']'))
-                return new Frontmatter($"line {i + 1}: key '{key}' has an unterminated flow list");
+                return LineError(i, $"key '{key}' has an unterminated flow list");
 
             result._scalars[key] = Unquote(value);
         }
 
         return result;
     }
+
+    private static List<string> FlowList(string value)
+    {
+        var inner = value[1..^1].Trim();
+        return inner.Length == 0 ? [] : inner.Split(',').Select(v => Unquote(v.Trim())).ToList();
+    }
+
+    private static Frontmatter LineError(int i, string message) =>
+        new(string.Create(CultureInfo.InvariantCulture, $"line {i + 1}: {message}"));
 
     private static string Unquote(string value) =>
         value.Length >= 2

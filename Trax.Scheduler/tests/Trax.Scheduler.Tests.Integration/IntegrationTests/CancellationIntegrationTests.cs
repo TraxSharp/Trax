@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -39,7 +40,7 @@ public class CancellationIntegrationTests : TestSetup
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
         loaded.Should().NotBeNull();
-        loaded!.CancellationRequested.Should().BeFalse();
+        loaded.NotNull().CancellationRequested.Should().BeFalse();
     }
 
     [Test]
@@ -52,7 +53,7 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -61,7 +62,7 @@ public class CancellationIntegrationTests : TestSetup
         var loaded = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        loaded!.CancellationRequested.Should().BeTrue();
+        loaded.NotNull().CancellationRequested.Should().BeTrue();
     }
 
     #endregion
@@ -78,8 +79,8 @@ public class CancellationIntegrationTests : TestSetup
         var loaded = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        loaded!.CurrentlyRunningJunction.Should().BeNull();
-        loaded!.JunctionStartedAt.Should().BeNull();
+        loaded.NotNull().CurrentlyRunningJunction.Should().BeNull();
+        loaded.NotNull().JunctionStartedAt.Should().BeNull();
     }
 
     [Test]
@@ -87,7 +88,7 @@ public class CancellationIntegrationTests : TestSetup
     {
         // Arrange
         var metadata = await CreateTestMetadata();
-        var junctionStartTime = DateTime.UtcNow;
+        var junctionStartTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Act — set step progress
         await DataContext
@@ -104,8 +105,9 @@ public class CancellationIntegrationTests : TestSetup
         var withProgress = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        withProgress!.CurrentlyRunningJunction.Should().Be("FetchDataJunction");
-        withProgress!
+        withProgress.NotNull().CurrentlyRunningJunction.Should().Be("FetchDataJunction");
+        withProgress
+            .NotNull()
             .JunctionStartedAt.Should()
             .BeCloseTo(junctionStartTime, TimeSpan.FromSeconds(1));
 
@@ -124,8 +126,8 @@ public class CancellationIntegrationTests : TestSetup
         var cleared = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        cleared!.CurrentlyRunningJunction.Should().BeNull();
-        cleared!.JunctionStartedAt.Should().BeNull();
+        cleared.NotNull().CurrentlyRunningJunction.Should().BeNull();
+        cleared.NotNull().JunctionStartedAt.Should().BeNull();
     }
 
     #endregion
@@ -158,7 +160,7 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
+                s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -281,7 +283,7 @@ public class CancellationIntegrationTests : TestSetup
         var loaded = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        loaded!.TrainState.Should().Be(TrainState.Cancelled);
+        loaded.NotNull().TrainState.Should().Be(TrainState.Cancelled);
     }
 
     [Test]
@@ -356,14 +358,15 @@ public class CancellationIntegrationTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "test" },
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -384,26 +387,4 @@ public class CancellationIntegrationTests : TestSetup
     }
 
     #endregion
-}
-
-/// <summary>
-/// Minimal concrete EffectTrain for testing step effect providers.
-/// </summary>
-public class TestProgressTrain : ServiceTrain<string, string>
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<PassThrough1_736>().Resolve();
-
-    private sealed class PassThrough1_736 : Junction<string, string>
-    {
-        public override Task<string> Run(string input) => Task.FromResult(input);
-    }
-}
-
-/// <summary>
-/// Minimal concrete EffectJunction for testing junction effect providers.
-/// </summary>
-public class TestProgressJunction : EffectJunction<string, string>
-{
-    public override Task<string> Run(string input) => Task.FromResult(input);
 }

@@ -78,13 +78,22 @@ public class BackgroundJob : IModel
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static BackgroundJob Create(CreateBackgroundJob dto)
     {
+        return Create(dto, TimeProvider.System);
+    }
+
+    /// <summary>Creates a new BackgroundJob ready for enqueue, stamped on the given clock.</summary>
+    /// <param name="dto">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static BackgroundJob Create(CreateBackgroundJob dto, TimeProvider timeProvider)
+    {
         return new BackgroundJob
         {
             MetadataId = dto.MetadataId,
             Input = dto.Input,
             InputType = dto.InputType,
             Priority = dto.Priority,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
         };
     }
 
@@ -105,7 +114,7 @@ public class BackgroundJob : IModel
 
     /// <summary>
     /// For JSON deserialization and EF Core materialization. Build a new job with
-    /// <see cref="Create"/>, which stamps <see cref="CreatedAt"/>.
+    /// <see cref="Create(CreateBackgroundJob)"/>, which stamps <see cref="CreatedAt"/>.
     /// </summary>
     [JsonConstructor]
     public BackgroundJob() { }

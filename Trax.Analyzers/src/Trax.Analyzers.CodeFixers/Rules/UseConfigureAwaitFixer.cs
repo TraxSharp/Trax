@@ -1,0 +1,260 @@
+using Microsoft.CodeAnalysis.Formatting;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class UseConfigureAwaitFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.UseConfigureAwaitFalse);
+
+    public override FixAllProvider GetFixAllProvider()
+    {
+        return WellKnownFixAllProviders.BatchFixer;
+    }
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        // The statement has the same span as the await expression when the semicolon is missing, and the argument when it is an argument: F(await task)
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null)
+            return;
+
+        context.RegisterCodeFix(
+            CodeAction.Create(
+                "Use ConfigureAwait(false)",
+                ct => AddConfigureAwait(context, nodeToFix, value: false, ct),
+                equivalenceKey: "Use ConfigureAwait(false)"),
+            context.Diagnostics);
+
+        context.RegisterCodeFix(
+            CodeAction.Create(
+                "Use ConfigureAwait(true)",
+                ct => AddConfigureAwait(context, nodeToFix, value: true, ct),
+                equivalenceKey: "Use ConfigureAwait(true)"),
+            context.Diagnostics);
+    }
+
+    private static async Task<Document> AddConfigureAwait(CodeFixContext context, SyntaxNode nodeToFix, bool value, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(context.Document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+
+        if (context.Diagnostics[0].Properties.TryGetValue(UseConfigureAwaitAnalyzerCommon.KindKey, out var kind))
+        {
+            if (kind is "foreach")
+            {
+                var foreachSyntax = nodeToFix.FirstAncestorOrSelf<ForEachStatementSyntax>();
+                if (foreachSyntax is null)
+                    return editor.GetChangedDocument();
+
+                var collection = foreachSyntax.Expression;
+                var newExpression = (ExpressionSyntax)generator.InvocationExpression(
+                       generator.MemberAccessExpression(collection.Parenthesize(), nameof(Task.ConfigureAwait)),
+                       generator.LiteralExpression(value))
+                       .Parenthesize();
+
+                var newForeachSyntax = foreachSyntax.WithExpression(newExpression);
+
+                editor.ReplaceNode(foreachSyntax, newForeachSyntax);
+                return editor.GetChangedDocument();
+            }
+            else if (kind is "using")
+            {
+                var usingSyntax = nodeToFix.FirstAncestorOrSelf<UsingStatementSyntax>();
+                if (usingSyntax is null)
+                    return editor.GetChangedDocument();
+
+                var expression = usingSyntax.Expression;
+                if (expression is not null)
+                {
+                    var newExpression = (ExpressionSyntax)generator.InvocationExpression(
+                           generator.MemberAccessExpression(expression.Parenthesize(), nameof(Task.ConfigureAwait)),
+                           generator.LiteralExpression(value))
+                           .Parenthesize();
+
+                    var newSyntax = usingSyntax.WithExpression(newExpression);
+                    editor.ReplaceNode(usingSyntax, newSyntax);
+                }
+
+                return editor.GetChangedDocument();
+            }
+        }
+
+        if (nodeToFix is AwaitExpressionSyntax awaitSyntax)
+        {
+            if (awaitSyntax.Expression is not null)
+            {
+                // The trailing trivia of the expression is the end of the line when the semicolon is missing
+                var newExpression = ((ExpressionSyntax)generator.InvocationExpression(
+                    generator.MemberAccessExpression(awaitSyntax.Expression.WithoutTrailingTrivia().Parenthesize(), nameof(Task.ConfigureAwait)),
+                    generator.LiteralExpression(value))
+                    .Parenthesize())
+                    .WithTrailingTrivia(awaitSyntax.Expression.GetTrailingTrivia());
+
+                var newInvokeExpression = awaitSyntax.WithExpression(newExpression);
+
+                editor.ReplaceNode(nodeToFix, newInvokeExpression);
+                return editor.GetChangedDocument();
+            }
+        }
+        else if (nodeToFix is VariableDeclaratorSyntax or ExpressionSyntax)
+        {
+            // await using (var a = expr);
+            // var a = expr; await using (a.ConfigureAwait(false));
+            var usingBlock = nodeToFix.Ancestors(ascendOutOfTrivia: true).OfType<UsingStatementSyntax>().FirstOrDefault(usingStatement =>
+            {
+                if (usingStatement.Declaration is not null)
+                    return usingStatement.Declaration.Span.Contains(nodeToFix.Span);
+
+                return usingStatement.Expression?.Span.Contains(nodeToFix.Span) == true;
+            });
+            if (usingBlock is not null)
+            {
+                if (usingBlock.Declaration is not null && usingBlock.Declaration.Variables.Count == 1)
+                {
+                    // Move statement before using
+                    // foreach variable, add
+                    var variablesStatement = SyntaxFactory.LocalDeclarationStatement(SyntaxFactory.VariableDeclaration(usingBlock.Declaration.Type, usingBlock.Declaration.Variables));
+                    var newUsingBlock = usingBlock
+                        .WithDeclaration(null)
+                        .WithExpression(AppendConfigureAwait(SyntaxFactory.IdentifierName(usingBlock.Declaration.Variables[0].Identifier)));
+
+                    if (TryInsertVariableStatementBeforeUsing(variablesStatement.WithLeadingTrivia(usingBlock.GetLeadingTrivia()), usingBlock, usingBlock.Declaration.Variables[0].Identifier.ValueText))
+                    {
+                        editor.ReplaceNode(usingBlock, newUsingBlock);
+                    }
+                    else
+                    {
+                        var newBlock = SyntaxFactory.Block(variablesStatement, newUsingBlock.WithoutLeadingTrivia())
+                            .WithLeadingTrivia(usingBlock.GetLeadingTrivia())
+                            .WithTrailingTrivia(usingBlock.GetTrailingTrivia())
+                            .WithAdditionalAnnotations(Formatter.Annotation);
+                        editor.ReplaceNode(usingBlock, newBlock);
+                    }
+
+                    return editor.GetChangedDocument();
+                }
+            }
+            else
+            {
+                // await using var a = expr;
+                // var a = expr; await var aConfigured = a.ConfigureAwait(false);
+                var usingStatement = nodeToFix.Ancestors(ascendOutOfTrivia: true).OfType<LocalDeclarationStatementSyntax>().FirstOrDefault();
+                if (usingStatement is not null && usingStatement.Declaration.Variables.Count == 1)
+                {
+                    var variablesStatement = SyntaxFactory.LocalDeclarationStatement(SyntaxFactory.VariableDeclaration(usingStatement.Declaration.Type, usingStatement.Declaration.Variables))
+                            .WithLeadingTrivia(usingStatement.GetLeadingTrivia());
+
+                    if (usingStatement.Parent is GlobalStatementSyntax { Statement: LocalDeclarationStatementSyntax, Parent: CompilationUnitSyntax compilationUnit } globalStatement)
+                    {
+                        var index = compilationUnit.Members.IndexOf(globalStatement);
+                        var usingStatements = SyntaxFactory.Block(SyntaxFactory.List(compilationUnit.Members
+                            .Skip(index + 1)
+                            .TakeWhile(m => m.IsKind(SyntaxKind.GlobalStatement))
+                            .Select(m => ((GlobalStatementSyntax)m).Statement)));
+
+                        foreach (var node in compilationUnit.Members.Skip(index + 1).TakeWhile(m => m.IsKind(SyntaxKind.GlobalStatement)))
+                        {
+                            editor.RemoveNode(node);
+                        }
+
+                        var newUsingStatement = SyntaxFactory.UsingStatement(
+                            declaration: null,
+                            expression: AppendConfigureAwait(SyntaxFactory.IdentifierName(usingStatement.Declaration.Variables[0].Identifier)),
+                            statement: usingStatements)
+                                .WithUsingKeyword(usingStatement.UsingKeyword)
+                                .WithAwaitKeyword(usingStatement.AwaitKeyword)
+                                .WithLeadingTrivia(usingStatement.GetLeadingTrivia());
+
+                        editor.InsertBefore(usingStatement, variablesStatement);
+                        editor.ReplaceNode(usingStatement, newUsingStatement);
+                    }
+                    else
+                    {
+                        var usingStatements = SyntaxFactory.Block();
+                        if (usingStatement.Parent is BlockSyntax statements)
+                        {
+                            var index = statements.Statements.IndexOf(usingStatement);
+                            usingStatements = SyntaxFactory.Block(SyntaxFactory.List(statements.Statements.Skip(index + 1)));
+
+                            foreach (var node in statements.Statements.Skip(index + 1))
+                            {
+                                editor.RemoveNode(node);
+                            }
+                        }
+
+                        var newUsingStatement = SyntaxFactory.UsingStatement(
+                            declaration: null,
+                            expression: AppendConfigureAwait(SyntaxFactory.IdentifierName(usingStatement.Declaration.Variables[0].Identifier)),
+                            statement: usingStatements.WithLeadingTrivia(usingStatement.GetTrailingTrivia()))
+                                .WithUsingKeyword(usingStatement.UsingKeyword)
+                                .WithAwaitKeyword(usingStatement.AwaitKeyword)
+                                .WithLeadingTrivia(usingStatement.GetLeadingTrivia());
+
+                        editor.InsertBefore(usingStatement, variablesStatement);
+                        editor.ReplaceNode(usingStatement, newUsingStatement);
+                    }
+
+                    return editor.GetChangedDocument();
+                }
+            }
+
+            if (nodeToFix is not ExpressionSyntax expression)
+                return context.Document;
+
+            editor.ReplaceNode(nodeToFix, AppendConfigureAwait(expression));
+            return editor.GetChangedDocument();
+        }
+
+        return context.Document;
+
+        bool TryInsertVariableStatementBeforeUsing(LocalDeclarationStatementSyntax variableStatement, UsingStatementSyntax usingStatement, string variableName)
+        {
+            // Moving the declaration out of the using statement widens the scope of the variable.
+            // When the name is already used elsewhere, keep the original scope by wrapping the statements in a block.
+            if (IsNameUsedOutsideOfUsingStatement(usingStatement, variableName))
+                return false;
+
+            // The declaration can only be extracted where a statement can be inserted just before the using statement.
+            // Moving it before an enclosing statement would evaluate the initializer before that statement,
+            // so the caller wraps the declaration and the using statement in a block instead.
+            if (usingStatement.Parent is BlockSyntax or SwitchSectionSyntax)
+            {
+                editor.InsertBefore(usingStatement, variableStatement);
+                return true;
+            }
+
+            if (usingStatement.Parent is GlobalStatementSyntax { Parent: CompilationUnitSyntax } globalStatement)
+            {
+                editor.InsertBefore(globalStatement, SyntaxFactory.GlobalStatement(variableStatement));
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool IsNameUsedOutsideOfUsingStatement(UsingStatementSyntax usingStatement, string variableName)
+        {
+            // The variable is moved to the declaration space of the enclosing function, so the name must not be used anywhere in it
+            var scope = usingStatement.FirstAncestorOrSelf<SyntaxNode>(node => node is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax or LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax or CompilationUnitSyntax);
+            if (scope is null)
+                return true;
+
+            foreach (var token in scope.DescendantTokens())
+            {
+                if (token.IsKind(SyntaxKind.IdentifierToken) && string.Equals(token.ValueText, variableName, StringComparison.Ordinal) && !usingStatement.Span.Contains(token.Span))
+                    return true;
+            }
+
+            return false;
+        }
+
+        ExpressionSyntax AppendConfigureAwait(ExpressionSyntax expressionSyntax)
+        {
+            return (ExpressionSyntax)generator.InvocationExpression(
+                generator.MemberAccessExpression(expressionSyntax, nameof(Task.ConfigureAwait)),
+                generator.LiteralExpression(value)).Parenthesize();
+        }
+    }
+}

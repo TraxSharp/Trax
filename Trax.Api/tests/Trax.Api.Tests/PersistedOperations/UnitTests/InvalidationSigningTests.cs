@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using AwesomeAssertions;
@@ -189,7 +190,7 @@ public class InvalidationSigningTests
         var verifier = Verifier(clock);
         var otherKey = "another-key-of-thirty-two-bytes!"u8.ToArray();
 
-        verifier.Accept(Exchange, Body, null).Should().BeFalse();
+        verifier.Accept(Exchange, Body, signature: null).Should().BeFalse();
         verifier.Accept(Exchange, Body, Sign(otherKey, Exchange, clock)).Should().BeFalse();
         verifier
             .Accept(Exchange, Body, Sign(TestInvalidationKey.Value, "trax.lifecycle", clock))
@@ -223,7 +224,7 @@ public class InvalidationSigningTests
             NullLogger.Instance
         );
 
-        verifier.Accept(Exchange, Body, null).Should().BeTrue();
+        verifier.Accept(Exchange, Body, signature: null).Should().BeTrue();
     }
 
     [Test]
@@ -242,7 +243,10 @@ public class InvalidationSigningTests
             timestamp,
             messageId
         );
-        var signature = $"v1,t={timestamp},n={messageId},s={Convert.ToBase64String(mac)}";
+        var signature = string.Create(
+            CultureInfo.InvariantCulture,
+            $"v1,t={timestamp},n={messageId},s={Convert.ToBase64String(mac)}"
+        );
 
         verifier
             .Accept(Exchange, Body, signature)
@@ -260,7 +264,10 @@ public class InvalidationSigningTests
             .Accept(
                 Exchange,
                 Body,
-                $"v1,t={timestamp},n={messageId},s={Convert.ToBase64String(ours)}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"v1,t={timestamp},n={messageId},s={Convert.ToBase64String(ours)}"
+                )
             )
             .Should()
             .BeTrue("the same construction under the invalidation tag is accepted");
@@ -290,7 +297,7 @@ public class InvalidationSigningTests
             NullLogger.Instance
         );
 
-        verifier.Accept("trax.somewhere_else", Body, null).Should().BeFalse();
+        verifier.Accept("trax.somewhere_else", Body, signature: null).Should().BeFalse();
     }
 
     private static byte[] MacUnder(
@@ -303,7 +310,12 @@ public class InvalidationSigningTests
     {
         var exchangeBytes = Encoding.UTF8.GetBytes(exchange);
         var input = Encoding
-            .UTF8.GetBytes($"{tag}\n{timestamp}\n{messageId}\n{exchangeBytes.Length}\n")
+            .UTF8.GetBytes(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{tag}\n{timestamp}\n{messageId}\n{exchangeBytes.Length}\n"
+                )
+            )
             .Concat(exchangeBytes)
             .Concat("\n"u8.ToArray())
             .Concat(Body)

@@ -104,14 +104,10 @@ public sealed class TraxJobRunnerOptions
             RunnerRequestSignature.EnsureKey(SigningKey, nameof(SigningKey));
 
         if (MaxClockSkew <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(
-                nameof(MaxClockSkew),
-                MaxClockSkew,
-                "MaxClockSkew must be positive."
-            );
+            throw OutOfRange(nameof(MaxClockSkew), MaxClockSkew, "MaxClockSkew must be positive.");
 
         if (MaxClockSkew > LongestClockSkew)
-            throw new ArgumentOutOfRangeException(
+            throw OutOfRange(
                 nameof(MaxClockSkew),
                 MaxClockSkew,
                 "MaxClockSkew must be at most one hour: a signed request is accepted for that long "
@@ -119,10 +115,17 @@ public sealed class TraxJobRunnerOptions
             );
 
         if (MaxRequestBodyBytes <= 0)
-            throw new ArgumentOutOfRangeException(
+            throw OutOfRange(
                 nameof(MaxRequestBodyBytes),
                 MaxRequestBodyBytes,
                 "MaxRequestBodyBytes must be positive."
             );
     }
+
+    // The option's own name is the parameter it names: the options are set by property, and checked together here.
+    private static ArgumentOutOfRangeException OutOfRange(
+        string option,
+        object value,
+        string message
+    ) => new(option, value, message);
 }

@@ -8,7 +8,7 @@ namespace Trax.Effect.Services.EffectRegistry;
 /// </summary>
 public class EffectRegistry : IEffectRegistry
 {
-    private record EffectRegistration(bool Enabled, bool Toggleable);
+    private sealed record EffectRegistration(bool Enabled, bool Toggleable);
 
     private readonly ConcurrentDictionary<Type, EffectRegistration> _effects = new();
 

@@ -29,10 +29,12 @@ internal sealed class SchemaAuthorizationPolicyValidator(IServiceProvider servic
 
     protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
-        using var scope = serviceProvider.CreateScope();
+        var scope = serviceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var executor = await scope
             .ServiceProvider.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync(TraxSchemaName, cancellationToken);
+            .GetExecutorAsync(TraxSchemaName, cancellationToken)
+            .ConfigureAwait(false);
 
         var named = PoliciesByLocation(executor.Schema);
         if (named.Count == 0)
@@ -41,7 +43,10 @@ internal sealed class SchemaAuthorizationPolicyValidator(IServiceProvider servic
         var policyProvider = scope.ServiceProvider.GetService<IAuthorizationPolicyProvider>();
         var missing = new List<string>();
         foreach (var (policy, locations) in named)
-            if (policyProvider is null || await policyProvider.GetPolicyAsync(policy) is null)
+            if (
+                policyProvider is null
+                || await policyProvider.GetPolicyAsync(policy).ConfigureAwait(false) is null
+            )
                 missing.Add(
                     $"'{policy}', named by @authorize on {string.Join(", ", locations.Order(StringComparer.Ordinal))}"
                 );
@@ -73,7 +78,9 @@ internal sealed class SchemaAuthorizationPolicyValidator(IServiceProvider servic
         {
             foreach (var directive in directives)
             {
-                if (directive.Definition.Name != "authorize")
+                if (
+                    !string.Equals(directive.Definition.Name, "authorize", StringComparison.Ordinal)
+                )
                     continue;
                 var policy = directive.ToValue<AuthorizeDirective>().Policy;
                 if (string.IsNullOrWhiteSpace(policy))

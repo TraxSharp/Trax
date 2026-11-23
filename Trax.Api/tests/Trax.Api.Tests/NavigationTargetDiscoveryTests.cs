@@ -52,7 +52,7 @@ public class NavigationTargetDiscoveryTests
     public sealed class DiscoveryModel
     {
         public ByProperty? Property { get; set; }
-        public List<ByList> List { get; set; } = [];
+        public IList<ByList> List { get; set; } = [];
         public IEnumerable<ByEnumerable> Enumerable { get; set; } = [];
         public ByArray[] Array { get; set; } = [];
         public string Name { get; set; } = "";

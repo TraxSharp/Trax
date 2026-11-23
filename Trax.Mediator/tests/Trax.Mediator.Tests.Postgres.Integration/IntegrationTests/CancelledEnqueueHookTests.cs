@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
@@ -26,8 +27,15 @@ public class CancelledEnqueueHookTests : TestSetup
     private async Task<int> RowsAsync(string trainNameFragment)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.CountAsync(w => w.TrainName!.Contains(trainNameFragment));
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains(trainNameFragment)
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -39,22 +47,32 @@ public class CancelledEnqueueHookTests : TestSetup
 
         using var cancel = new CancellationTokenSource();
         var outer = execution.QueueAsync(
-            typeof(IOrphanedHookTrain).FullName!,
+            typeof(IOrphanedHookTrain).FullName.NotNull(),
             "{}",
             ct: cancel.Token
         );
 
-        await OrphanedHookTrain.Started.Task.WaitAsync(SignalTimeout);
+        await OrphanedHookTrain.Started.Task.WaitAsync(
+            SignalTimeout,
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cancel.CancelAsync();
 
-        var act = async () => await outer.WaitAsync(SignalTimeout);
+        var act = async () =>
+            await outer
+                .WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // The caller has been told the enqueue failed. The hook, which ignores its token, is still
         // running; let it go on to enqueue.
         OrphanedHookTrain.Gate.TrySetResult();
 
-        var nested = async () => await OrphanedHookTrain.Nested.Task.WaitAsync(SignalTimeout);
+        var nested = async () =>
+            await OrphanedHookTrain
+                .Nested.Task.WaitAsync(SignalTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
         await nested
             .Should()
             .ThrowAsync<InvalidOperationException>(
@@ -95,12 +113,19 @@ public class CancelledEnqueueHookTests : TestSetup
             Started.TrySetResult();
 
             // Deliberately ignores the token.
-            await Gate.Task;
+            await Gate.Task.ConfigureAwait(false);
 
             try
             {
                 Nested.TrySetResult(
-                    await Execution!.QueueAsync(typeof(IOrphanNestedTrain).FullName!, "{}")
+                    await Execution
+                        .NotNull()
+                        .QueueAsync(
+                            typeof(IOrphanNestedTrain).FullName.NotNull(),
+                            "{}",
+                            ct: CancellationToken.None
+                        )
+                        .ConfigureAwait(false)
                 );
             }
             catch (Exception ex)

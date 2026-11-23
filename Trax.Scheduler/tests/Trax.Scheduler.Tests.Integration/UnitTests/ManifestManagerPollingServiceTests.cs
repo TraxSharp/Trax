@@ -60,12 +60,15 @@ public class ManifestManagerPollingServiceTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        await trainHit.Task.WaitAsync(SyncTimeout);
+        await trainHit.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
 
-        cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await train.Received().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
+        await train
+            .Received()
+            .Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -98,11 +101,14 @@ public class ManifestManagerPollingServiceTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        await trainHit.Task.WaitAsync(SyncTimeout);
+        await trainHit.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
 
-        cts.Cancel();
-        var stop = async () => await service.StopAsync(CancellationToken.None);
-        await stop.Should().NotThrowAsync("the catch block must swallow the train exception");
+        await cts.CancelAsync().ConfigureAwait(false);
+        var stop = async () =>
+            await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await stop.Should()
+            .NotThrowAsync("the catch block must swallow the train exception")
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -129,11 +135,18 @@ public class ManifestManagerPollingServiceTests
         // passed the train by, rather than never having run at all.
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
-        await logger.Skipped.Task.WaitAsync(SyncTimeout);
-        cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await logger.Skipped.Task.WaitAsync(
+            SyncTimeout,
+            TimeProvider.System,
+            CancellationToken.None
+        );
+        await cts.CancelAsync().ConfigureAwait(false);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
+        await train
+            .DidNotReceive()
+            .Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     /// <summary>Completes <see cref="Skipped"/> when the service logs a skipped cycle.</summary>
@@ -156,7 +169,11 @@ public class ManifestManagerPollingServiceTests
         )
         {
             if (
-                formatter(state, exception) == "ManifestManager is disabled, skipping polling cycle"
+                string.Equals(
+                    formatter(state, exception),
+                    "ManifestManager is disabled, skipping polling cycle",
+                    StringComparison.Ordinal
+                )
             )
                 Skipped.TrySetResult();
         }

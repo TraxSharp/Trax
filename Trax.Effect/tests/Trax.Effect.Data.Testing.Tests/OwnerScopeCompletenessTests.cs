@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Data.Testing.Tests;
 
@@ -31,7 +32,7 @@ public class OwnerScopeCompletenessTests
             PrincipalAccessorType = typeof(IOwnerPrincipal),
             NavigationScoped = navigationScoped ?? new Dictionary<Type, string>(),
             Exemptions = exemptions ?? new Dictionary<Type, string>(),
-            OwnerIdProperties = ownerIdProperties ?? new HashSet<string>(),
+            OwnerIdProperties = ownerIdProperties ?? new HashSet<string>(StringComparer.Ordinal),
             Gated = gated ?? new Dictionary<Type, string>(),
         };
 
@@ -46,7 +47,7 @@ public class OwnerScopeCompletenessTests
             .Options;
 
         using var context = (TContext)
-            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal())!;
+            Activator.CreateInstance(typeof(TContext), options, new NoPrincipal()).NotNull();
         return context.Model;
     }
 
@@ -111,7 +112,12 @@ public class OwnerScopeCompletenessTests
     {
         // EF declares a query filter on the hierarchy root only; PinnedNote has none of its own.
         var model = ModelOf<ScopedContext>();
-        model.FindEntityType(typeof(PinnedNote))!.GetDeclaredQueryFilters().Should().BeEmpty();
+        model
+            .FindEntityType(typeof(PinnedNote))
+            .NotNull()
+            .GetDeclaredQueryFilters()
+            .Should()
+            .BeEmpty();
 
         var result = DataLayerGuards.OwnerScopeCompleteness(
             model,
@@ -132,7 +138,12 @@ public class OwnerScopeCompletenessTests
 
         var result = DataLayerGuards.OwnerScopeCompleteness(
             ModelOf<ScalarOwnerContext>(),
-            Options(ownerIdProperties: new HashSet<string> { nameof(AuditRow.OwnerId) })
+            Options(
+                ownerIdProperties: new HashSet<string>(StringComparer.Ordinal)
+                {
+                    nameof(AuditRow.OwnerId),
+                }
+            )
         );
 
         result.Offenders.Should().ContainSingle().Which.Should().Contain(nameof(AuditRow));
@@ -254,7 +265,7 @@ public class OwnerScopeCompletenessTests
                 ModelOf<ScopedContext>(),
                 Options() with
                 {
-                    PrincipalAccessorType = null!,
+                    PrincipalAccessorType = Null.Of<Type>(),
                 }
             );
 

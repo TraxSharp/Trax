@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence.Integration;
 
@@ -68,10 +69,10 @@ public class ActorHierarchyTests
 
     private static List<string> Compile(string source)
     {
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Append(typeof(Actor).Assembly.Location)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Select(path => MetadataReference.CreateFromFile(path));
 
         return CSharpCompilation

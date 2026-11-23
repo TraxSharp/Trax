@@ -23,7 +23,8 @@ public class MetadataExternalIdLookupTests : TestSetup
     [Test]
     public async Task A_linq_lookup_by_external_id_reads_the_index()
     {
-        using var context = (DbContext)DataContextFactory.Create();
+        var context = (DbContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var externalId = Guid.NewGuid().ToString("N");
 
         var plan = await Explain(
@@ -44,7 +45,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         var wanted = await Persist(Guid.NewGuid().ToString("N"));
         await Persist(Guid.NewGuid().ToString("N"));
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.ExternalId == wanted.ExternalId)
@@ -63,7 +65,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         var stored = await Persist(Guid.NewGuid().ToString("N"));
         var longer = stored.ExternalId + "extra";
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context.Metadatas.AsNoTracking().AnyAsync(m => m.ExternalId == longer);
 
         found.Should().BeFalse();
@@ -75,7 +78,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         var stored = await Persist(Guid.NewGuid().ToString("N"));
         var prefix = stored.ExternalId[..8];
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context.Metadatas.AsNoTracking().AnyAsync(m => m.ExternalId == prefix);
 
         found.Should().BeFalse();
@@ -88,7 +92,8 @@ public class MetadataExternalIdLookupTests : TestSetup
         // the caller wrote still finds the run.
         var stored = await Persist("short-id");
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var found = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.ExternalId == "short-id")
@@ -100,41 +105,45 @@ public class MetadataExternalIdLookupTests : TestSetup
 
     private async Task<Metadata> Persist(string externalId)
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = "Trax.Effect.Tests.ExternalIdLookup",
                 ExternalId = externalId,
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.Completed;
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata;
     }
 
     private static async Task<string> Explain<T>(DbContext context, IQueryable<T> query)
     {
-        await using var command = (NpgsqlCommand)query.CreateDbCommand();
-        await context.Database.OpenConnectionAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var command = (NpgsqlCommand)query.CreateDbCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await context.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         command.Transaction = (NpgsqlTransaction)transaction.GetDbTransaction();
 
-        await using (
-            var off = new NpgsqlCommand(
-                "SET LOCAL enable_seqscan = off",
-                command.Connection,
-                command.Transaction
-            )
-        )
-            await off.ExecuteNonQueryAsync();
+        var off = new NpgsqlCommand(
+            "SET LOCAL enable_seqscan = off",
+            command.Connection,
+            command.Transaction
+        );
+        await using (off.ConfigureAwait(false))
+            await off.ExecuteNonQueryAsync().ConfigureAwait(false);
 
         command.CommandText = "EXPLAIN " + command.CommandText;
         var lines = new List<string>();
-        await using (var reader = await command.ExecuteReaderAsync())
-            while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using (reader.ConfigureAwait(false))
+            while (await reader.ReadAsync().ConfigureAwait(false))
                 lines.Add(reader.GetString(0));
 
         return string.Join('\n', lines);

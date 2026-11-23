@@ -10,6 +10,8 @@ package: Trax.Api.Auth.Jwt.Cognito.Issuer
 namespace: Trax.Api.Auth.Jwt.Cognito.Issuer
 source:
   - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito.Issuer/IRefreshTokenStore.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito.Issuer/RefreshTokenHandle.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito.Issuer/RefreshTokenClaims.cs
   - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito.Issuer/InMemoryRefreshTokenStore.cs
 ---
 

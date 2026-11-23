@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Effect.Tests.Meta.Tests;
 
 /// <summary>
@@ -7,18 +9,8 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md")]
 [TestFixture]
-public class NoFixedTaskDelayTests
+public partial class NoFixedTaskDelayTests
 {
-    private static readonly Regex DelayCall = new(
-        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex Justification = new(
-        @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// Pre-existing offenders that pre-date the determinism convention. Each entry is a
     /// repo-relative path. New code MUST NOT add fixed-duration Task.Delay / Thread.Sleep
@@ -53,28 +45,7 @@ public class NoFixedTaskDelayTests
             if (file.EndsWith("NoFixedTaskDelayTests.cs", StringComparison.Ordinal))
                 continue;
 
-            var raw = File.ReadAllText(file);
-            var lines = raw.Replace("\r\n", "\n").Split('\n');
-            var stripped = SourceText.StripCommentsAndStrings(raw);
-            var strippedLines = stripped.Replace("\r\n", "\n").Split('\n');
-
-            var rel = RepoRoot.Relative(file).Replace('\\', '/');
-            var count = 0;
-
-            for (var i = 0; i < strippedLines.Length; i++)
-            {
-                if (!DelayCall.IsMatch(strippedLines[i]))
-                    continue;
-                if (HasJustification(lines, i))
-                    continue;
-
-                count++;
-                if (!BaselineOffenders.ContainsKey(rel))
-                    newOffenders.Add($"{rel}:{i + 1}  -> {lines[i].Trim()}");
-            }
-
-            if (count > 0)
-                fileOffenderCounts[rel] = count;
+            ScanFile(file, File.ReadAllText(file), newOffenders, fileOffenderCounts);
         }
 
         // 1. No new fixed delays in files not on the baseline.
@@ -96,7 +67,10 @@ public class NoFixedTaskDelayTests
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
             if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
+                    )
                 );
         }
 
@@ -111,6 +85,43 @@ public class NoFixedTaskDelayTests
             );
     }
 
+    // Records each unjustified fixed delay in the file: a new offender when the file is not on the
+    // baseline, and the file's count either way.
+    private static void ScanFile(
+        string file,
+        string raw,
+        List<string> newOffenders,
+        Dictionary<string, int> fileOffenderCounts
+    )
+    {
+        var lines = raw.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var stripped = SourceText.StripCommentsAndStrings(raw);
+        var strippedLines = stripped.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+
+        var rel = RepoRoot.Relative(file).Replace('\\', '/');
+        var count = 0;
+
+        for (var i = 0; i < strippedLines.Length; i++)
+        {
+            if (!DelayCall.IsMatch(strippedLines[i]))
+                continue;
+            if (HasJustification(lines, i))
+                continue;
+
+            count++;
+            if (!BaselineOffenders.ContainsKey(rel))
+                newOffenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{i + 1}  -> {lines[i].Trim()}"
+                    )
+                );
+        }
+
+        if (count > 0)
+            fileOffenderCounts[rel] = count;
+    }
+
     private static bool HasJustification(string[] lines, int delayLineIndex)
     {
         var from = Math.Max(0, delayLineIndex - 3);
@@ -121,4 +132,18 @@ public class NoFixedTaskDelayTests
         }
         return false;
     }
+
+    [GeneratedRegex(
+        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DelayCall { get; }
+
+    [GeneratedRegex(
+        @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Justification { get; }
 }

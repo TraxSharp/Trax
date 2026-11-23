@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -25,7 +26,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class InputRecordedAtStartTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -35,7 +36,7 @@ public class InputRecordedAtStartTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -54,17 +55,22 @@ public class InputRecordedAtStartTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task The_row_is_in_progress_with_its_input_while_the_body_runs()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IObservedTrain>();
 
         await train.Run(new StartInput(42));
 
-        var seen = _seen!;
+        var seen = _seen.NotNull();
         seen.State.Should().Be(TrainState.InProgress);
         seen.Input.Should()
             .NotBeNull(
@@ -76,12 +82,13 @@ public class InputRecordedAtStartTests
     [Test]
     public async Task An_excluded_input_is_not_written_at_start_either()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IExcludedTrain>();
 
         await train.Run(new StartInput(7));
 
-        var seen = _seen!;
+        var seen = _seen.NotNull();
         seen.State.Should().Be(TrainState.InProgress);
         seen.Input.Should().BeNull("the host excluded this train's input");
     }
@@ -101,9 +108,13 @@ public class InputRecordedAtStartTests
     {
         public override async Task<Unit> Run(StartInput input)
         {
-            var id = Metadata!.TrainMetadataId;
-            using var context = (IDataContext)factory.Create();
-            var row = await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+            var id = Metadata.NotNull().TrainMetadataId;
+            var context = (IDataContext)factory.Create();
+            await using var contextDisposal = context.ConfigureAwait(false);
+            var row = await context
+                .Metadatas.AsNoTracking()
+                .SingleAsync(m => m.Id == id, cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
             _seen = new SeenRow(row.TrainState, row.Input);
 
             return Unit.Default;

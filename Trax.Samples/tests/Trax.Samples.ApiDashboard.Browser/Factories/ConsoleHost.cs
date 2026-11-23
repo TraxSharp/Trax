@@ -12,6 +12,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -55,6 +56,7 @@ public sealed class ConsoleHost : IAsyncDisposable
         {
             Port = int.TryParse(
                 Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"),
+                System.Globalization.CultureInfo.InvariantCulture,
                 out var port
             )
                 ? port
@@ -84,12 +86,13 @@ public sealed class ConsoleHost : IAsyncDisposable
     /// <summary>Starts the host on an empty <c>trax</c> schema, so every run sees a first start.</summary>
     public static async Task<ConsoleHost> StartAsync()
     {
-        await DropTraxSchemaAsync();
+        await DropTraxSchemaAsync().ConfigureAwait(false);
         var app = Build();
-        await app.StartAsync();
+        await app.StartAsync(CancellationToken.None).ConfigureAwait(false);
         var address = new Uri(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.Single()
         );
         return new ConsoleHost(app, address);
@@ -98,13 +101,15 @@ public sealed class ConsoleHost : IAsyncDisposable
     /// <summary>Runs <paramref name="query"/> on a fresh data context, so it sees what the host committed.</summary>
     public async Task<T> QueryAsync<T>(Func<IDataContext, Task<T>> query)
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dataContext = await scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         try
         {
-            return await query(dataContext);
+            return await query(dataContext).ConfigureAwait(false);
         }
         finally
         {
@@ -119,12 +124,14 @@ public sealed class ConsoleHost : IAsyncDisposable
     public IHostedService MachineSweep =>
         Services
             .GetServices<IHostedService>()
-            .Single(s => s.GetType().Name == "InvokeOutcomeReconciler");
+            .Single(s =>
+                string.Equals(s.GetType().Name, "InvokeOutcomeReconciler", StringComparison.Ordinal)
+            );
 
     public async ValueTask DisposeAsync()
     {
-        await _app.StopAsync();
-        await _app.DisposeAsync();
+        await _app.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await _app.DisposeAsync().ConfigureAwait(false);
         NpgsqlConnection.ClearAllPools();
     }
 
@@ -137,7 +144,7 @@ public sealed class ConsoleHost : IAsyncDisposable
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         // Two configured categories, so the scheduler page has log levels to show and change.
         builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?>
+            new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["Logging:LogLevel:Default"] = "Warning",
                 [$"Logging:LogLevel:{LoggedCategory}"] = "Warning",
@@ -153,7 +160,34 @@ public sealed class ConsoleHost : IAsyncDisposable
         builder.Services.AddSingleton<ISnapshotPrincipal, NoSnapshotPrincipal>();
         builder.Services.AddSingleton<Outages>();
         builder.Services.AddSingleton<Holds>();
-        builder.Services.AddTrax(trax =>
+        AddTraxEffectsAndScheduler(builder.Services);
+        builder.Services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: OperatorRole)
+                .RequireAuthorization()
+                .UsePersistedOperations(po =>
+                    po.SingleNode()
+                        .RequirePersisted(require: true)
+                        .GateManagement(roles: ApiAdminRole)
+                )
+        );
+
+        var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseTraxGraphQL();
+        // The GraphQL endpoint authorizes everything the app reads; the shell is open here because
+        // a browser cannot present the API key on a page load (Trax.Api/docs/adr/0039).
+        app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
+        return app;
+    }
+
+    // Effects, machines, the mediator, and a scheduler that polls every second or two.
+    private static void AddTraxEffectsAndScheduler(IServiceCollection services)
+    {
+        services.AddTrax(trax =>
             trax.AddEffects(effects =>
                     effects
                         .UsePostgres(ConnectionString)
@@ -191,35 +225,19 @@ public sealed class ConsoleHost : IAsyncDisposable
                         )
                 )
         );
-        builder.Services.AddTraxGraphQL(graphql =>
-            graphql
-                .ExposeOperationQueries()
-                .ExposeOperationMutations()
-                .GateOperations(roles: OperatorRole)
-                .RequireAuthorization()
-                .UsePersistedOperations(po =>
-                    po.SingleNode().RequirePersisted(true).GateManagement(roles: ApiAdminRole)
-                )
-        );
-
-        var app = builder.Build();
-        app.UseAuthentication();
-        app.UseAuthorization();
-        app.UseTraxGraphQL();
-        // The GraphQL endpoint authorizes everything the app reads; the shell is open here because
-        // a browser cannot present the API key on a page load (Trax.Api/docs/adr/0039).
-        app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
-        return app;
     }
 
     private static async Task DropTraxSchemaAsync()
     {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DROP SCHEMA IF EXISTS trax CASCADE;",
-            connection
-        );
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(ConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

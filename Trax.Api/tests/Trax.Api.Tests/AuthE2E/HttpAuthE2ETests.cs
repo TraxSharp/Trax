@@ -164,7 +164,7 @@ public class HttpAuthE2ETests
         // but lifetime check fails.
         var key = new SymmetricSecurityKey(JwtKey);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var expired = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
             issuer: JwtIssuer,
             audience: JwtAudience,

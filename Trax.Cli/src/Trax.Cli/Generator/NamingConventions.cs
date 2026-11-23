@@ -5,7 +5,7 @@ namespace Trax.Cli.Generator;
 
 public static partial class NamingConventions
 {
-    private static readonly HashSet<string> CSharpKeywords = new()
+    private static readonly HashSet<string> CSharpKeywords = new(StringComparer.Ordinal)
     {
         "abstract",
         "as",
@@ -113,7 +113,7 @@ public static partial class NamingConventions
             return name;
 
         // Split on separators: _, -, spaces, and camelCase boundaries
-        var parts = SplitPattern().Split(name).Where(p => p.Length > 0).ToList();
+        var parts = SplitPattern.Split(name).Where(p => p.Length > 0).ToList();
 
         if (parts.Count == 0)
             return name;
@@ -151,9 +151,9 @@ public static partial class NamingConventions
         if (string.IsNullOrEmpty(name))
             return name;
 
-        var parts = SplitPattern().Split(name).Where(p => p.Length > 0).ToList();
+        var parts = SplitPattern.Split(name).Where(p => p.Length > 0).ToList();
 
-        return string.Join("-", parts.Select(p => p.ToLowerInvariant()));
+        return string.Join('-', parts.Select(p => p.ToLowerInvariant()));
     }
 
     public static string DeriveGroupName(string operationName)
@@ -228,6 +228,10 @@ public static partial class NamingConventions
         return name;
     }
 
-    [GeneratedRegex(@"[_\-\s.,]+|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")]
-    private static partial Regex SplitPattern();
+    [GeneratedRegex(
+        @"[_\-\s.,]+|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SplitPattern { get; }
 }

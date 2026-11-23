@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
@@ -34,7 +36,8 @@ public class HarnessBrowserTests : ConsoleTest
                 .CountAsync(d =>
                     d.Status == DeadLetterStatus.AwaitingIntervention
                     && d.Reason == first.Reason
-                    && d.Manifest!.Name == typeof(IImportFeedTrain).FullName
+                    && d.Manifest != null
+                    && d.Manifest.Name == typeof(IImportFeedTrain).FullName
                 )
         );
         awaiting.Should().BeGreaterThanOrEqualTo(2);
@@ -46,7 +49,10 @@ public class HarnessBrowserTests : ConsoleTest
         var group = page.Group(nameof(IImportFeedTrain), first.Reason);
         await Assertions
             .Expect(group)
-            .ToContainTextAsync($"{awaiting} dead letters", new() { Timeout = Render });
+            .ToContainTextAsync(
+                string.Create(CultureInfo.InvariantCulture, $"{awaiting} dead letters"),
+                new() { Timeout = Render }
+            );
         await Assertions.Expect(group).ToContainTextAsync(first.Reason);
         foreach (var manifest in manifests)
             await Assertions
@@ -103,7 +109,7 @@ public class HarnessBrowserTests : ConsoleTest
             .ToContainTextAsync("Staged", new() { Timeout = Render });
         await Assertions
             .Expect(queue.Row(blocked.Id))
-            .ToContainTextAsync(blocked.SubjectKey!, new() { Timeout = Render });
+            .ToContainTextAsync(blocked.SubjectKey.NotNull(), new() { Timeout = Render });
     }
 
     [Test]

@@ -37,6 +37,7 @@ public sealed class TestJwksServer : IAsyncDisposable
     public IReadOnlyDictionary<string, SigningCredentials> SigningCredentialsByKid { get; }
 
     public TestTokenIssuer CreateIssuer(string audience);
+    public TestTokenIssuer CreateIssuer(string audience, TimeProvider clock);
     public string AddSigningKey(RSA? rsa = null);
     public bool RemoveSigningKey(string kid);
     public ValueTask DisposeAsync();
@@ -62,6 +63,7 @@ public sealed record TestJwksServerOptions
 | `SigningKeyIds` | Every `kid` the JWKS publishes. |
 | `SigningCredentialsByKid` | A snapshot of every published credential, keyed by `kid`. |
 | `CreateIssuer(audience)` | A [TestTokenIssuer](/docs/sdk-reference/api-auth/test-token-issuer) for this server's issuer and current key, holding every published key so `WithSigningKey(kid)` can switch. |
+| `CreateIssuer(audience, clock)` | The same, with tokens whose default `nbf` and `exp` are read from `clock`. |
 | `AddSigningKey(rsa)` | Publishes another key, a new 2048-bit one when `rsa` is null, makes it current, and returns its `kid`. The server disposes it. |
 | `RemoveSigningKey(kid)` | Removes a key from the JWKS. When it was current, another remaining key becomes current. Returns `false` for an unknown `kid`. |
 | `DisposeAsync()` | Stops the host and releases every key. |

@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Samples.ContentShield.Runner;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -33,10 +35,10 @@ internal sealed class TestRunner : Function
 
     public static TestRunner Start(string connectionString)
     {
-        var baseUrl = $"http://127.0.0.1:{FreePort()}";
+        var baseUrl = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{FreePort()}");
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
-                new Dictionary<string, string?>
+                new Dictionary<string, string?>(StringComparer.Ordinal)
                 {
                     ["ConnectionStrings:TraxDatabase"] = connectionString,
                     ["ConnectionStrings:RabbitMQ"] = TestRabbitMq.ConnectionString,
@@ -81,7 +83,7 @@ internal sealed class TestRunner : Function
         (ITraxRequestHandler)(
             descriptor.ImplementationFactory?.Invoke(sp)
             ?? descriptor.ImplementationInstance
-            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!)
+            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType.NotNull())
         );
 
     private static int FreePort()

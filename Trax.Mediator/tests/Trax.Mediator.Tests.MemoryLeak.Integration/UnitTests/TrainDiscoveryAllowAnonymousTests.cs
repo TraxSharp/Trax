@@ -103,7 +103,7 @@ public class TrainDiscoveryAllowAnonymousTests
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
-    public class AnonBaseTrainImpl : AnonBase, IAnonBaseTrain { }
+    public class AnonBaseTrainImpl : AnonBase, IAnonBaseTrain;
 
     public interface IPlainAnonTrain : IServiceTrain<EmptyIn, EmptyOut>;
 

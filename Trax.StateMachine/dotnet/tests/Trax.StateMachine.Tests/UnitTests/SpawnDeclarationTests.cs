@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -89,7 +90,7 @@ public class SpawnDeclarationTests
         var spawn = Built().Definition.Invokes[Order.Fulfilling];
 
         spawn.Spawn.Should().NotBeNull();
-        spawn.Spawn!.ChildMachine.Should().Be(typeof(LineMachine));
+        spawn.Spawn.NotNull().ChildMachine.Should().Be(typeof(LineMachine));
         spawn.Spawn.ChildIdField.Should().Be("lineId");
     }
 
@@ -112,20 +113,25 @@ public class SpawnDeclarationTests
             .Subject.Snapshot;
 
         moved.State.Should().Be(nameof(Order.Shipped));
-        moved.Context["bin"]!.GetValue<string>().Should().Be("B7");
+        moved.Context["bin"].NotNull().GetValue<string>().Should().Be("B7");
     }
 
     [Test]
     public void Its_outcomes_export_as_a_trains_do()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(Built()))!;
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(Built())).NotNull();
 
-        var outcomes = ir["outcomes"]!.AsObject();
+        var outcomes = ir["outcomes"].NotNull().AsObject();
         outcomes
             .Select(o => o.Key)
             .Should()
             .BeEquivalentTo("Fulfilling.done", "Fulfilling.failed", "Fulfilling.cancelled");
-        outcomes["Fulfilling.done"]!["output"]!["fields"]![0]!["name"]!
+        outcomes["Fulfilling.done"]
+            .NotNull()["output"]
+            .NotNull()["fields"]
+            .NotNull()[0]
+            .NotNull()["name"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("bin");

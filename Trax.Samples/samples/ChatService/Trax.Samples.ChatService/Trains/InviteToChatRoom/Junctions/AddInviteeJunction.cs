@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 using Trax.Core.Junction;
 using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
@@ -12,13 +13,14 @@ public class AddInviteeJunction(
     ChatDbContext db,
     TraxPrincipal caller,
     ChatDirectory directory,
-    ILogger<AddInviteeJunction> logger
+    ILogger<AddInviteeJunction> logger,
+    TimeProvider clock
 ) : Junction<InviteToChatRoomInput, InviteToChatRoomOutput>
 {
     public override async Task<InviteToChatRoomOutput> Run(InviteToChatRoomInput input)
     {
-        var invitee = directory.Find(input.UserId)!;
-        var now = DateTime.UtcNow;
+        var invitee = directory.Find(input.UserId).NotNull();
+        var now = clock.GetUtcNow().UtcDateTime;
 
         db.ChatParticipants.Add(
             new ChatParticipant
@@ -30,7 +32,7 @@ public class AddInviteeJunction(
                 JoinedAt = now,
             }
         );
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "User {CallerId} added {UserId} to room {ChatRoomId}",

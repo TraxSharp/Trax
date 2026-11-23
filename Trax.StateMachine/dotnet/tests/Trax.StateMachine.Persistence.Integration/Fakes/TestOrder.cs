@@ -1,22 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence.Integration.Fakes;
-
-public enum OrderState
-{
-    Draft,
-    Review,
-    Placed,
-}
-
-public enum OrderTrigger
-{
-    Next,
-    Back,
-    Place,
-    Reset,
-}
 
 /// <summary>
 /// A neutral effectful wizard: <c>Draft -&gt; Review -&gt; Placed</c>, with <c>Placed</c> committed and an
@@ -33,15 +19,15 @@ public static class TestOrder
     private static bool ItemsNonEmpty(JsonObject ctx) => ctx["items"] is JsonArray a && a.Count > 0;
 
     private static bool ReceiptEmpty(JsonObject ctx) =>
-        ctx["receipt"] is null || ctx["receipt"]!.GetValueKind() == JsonValueKind.Null;
+        ctx["receipt"] is null || ctx["receipt"].NotNull().GetValueKind() == JsonValueKind.Null;
 
     private static bool ReceiptPresent(JsonObject ctx) =>
         ctx["receipt"]?.GetValueKind() == JsonValueKind.String
-        && ctx["receipt"]!.GetValue<string>().Length > 0;
+        && ctx["receipt"].NotNull().GetValue<string>().Length > 0;
 
     private static string? OrderId(JsonNode? input) =>
         input is JsonObject o && o["orderId"]?.GetValueKind() == JsonValueKind.String
-            ? o["orderId"]!.GetValue<string>()
+            ? o["orderId"].NotNull().GetValue<string>()
             : null;
 
     public static readonly MachineDefinition<OrderState, OrderTrigger> Definition = new()

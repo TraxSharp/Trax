@@ -61,8 +61,8 @@ public class StateMachineSelfCheckHealthCheckTests
                 Registration = new HealthCheckRegistration(
                     "state-machines",
                     _ => new StateMachineSelfCheckHealthCheck(machines),
-                    null,
-                    null
+                    failureStatus: null,
+                    tags: null
                 ),
             }
         );
@@ -132,7 +132,8 @@ public class StateMachineSelfCheckHealthCheckTests
     [Test]
     public async Task AddTraxStateMachineSelfCheck_registers_a_check_named_state_machines()
     {
-        await using var provider = Host(s => s.AddSingleton<IMachine, HealthPassMachine>());
+        var provider = Host(s => s.AddSingleton<IMachine, HealthPassMachine>());
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var report = await provider
             .GetRequiredService<HealthCheckService>()
@@ -145,11 +146,12 @@ public class StateMachineSelfCheckHealthCheckTests
     [Test]
     public async Task AddTraxStateMachineSelfCheck_reports_unhealthy_when_a_registered_machine_diverges()
     {
-        await using var provider = Host(s =>
+        var provider = Host(s =>
         {
             s.AddSingleton<IMachine, HealthPassMachine>();
             s.AddSingleton<IMachine, HealthFailMachineA>();
         });
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var report = await provider
             .GetRequiredService<HealthCheckService>()
@@ -162,10 +164,8 @@ public class StateMachineSelfCheckHealthCheckTests
     [Test]
     public async Task AddTraxStateMachineSelfCheck_uses_a_caller_supplied_name()
     {
-        await using var provider = Host(
-            s => s.AddSingleton<IMachine, HealthPassMachine>(),
-            "machines"
-        );
+        var provider = Host(s => s.AddSingleton<IMachine, HealthPassMachine>(), "machines");
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var report = await provider
             .GetRequiredService<HealthCheckService>()
@@ -179,7 +179,8 @@ public class StateMachineSelfCheckHealthCheckTests
     {
         // The check resolves IEnumerable<IMachine> when it runs, not when it is added, which is what lets a
         // host add the line once and have a newly-discovered machine covered with no edit.
-        await using var provider = Host(s => s.AddSingleton<IMachine, HealthFailMachineA>());
+        var provider = Host(s => s.AddSingleton<IMachine, HealthFailMachineA>());
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var report = await provider
             .GetRequiredService<HealthCheckService>()
@@ -192,7 +193,8 @@ public class StateMachineSelfCheckHealthCheckTests
     [Test]
     public async Task AddTraxStateMachineSelfCheck_is_healthy_for_a_host_with_no_machines_at_all()
     {
-        await using var provider = Host(_ => { });
+        var provider = Host(_ => { });
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var report = await provider
             .GetRequiredService<HealthCheckService>()

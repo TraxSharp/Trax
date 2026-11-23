@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HotChocolate.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.TrainLifecycleHook;
 using Trax.Samples.ChatService.Subscriptions;
@@ -26,14 +27,15 @@ namespace Trax.Samples.ChatService.Hooks;
 /// opted in (AllowOutputForBroadcastSubscribers) any user would read every room's
 /// messages. The room-scoped topic here is the only way a chat event leaves the server.
 /// </summary>
-public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
+public class ChatLifecycleHook(ITopicEventSender eventSender, TimeProvider clock)
+    : ITrainLifecycleHook
 {
-    private static readonly Dictionary<string, string> TrainEventTypes = new()
+    private static readonly Dictionary<string, string> TrainEventTypes = new(StringComparer.Ordinal)
     {
-        [typeof(ISendMessageTrain).FullName!] = "MessageSent",
-        [typeof(ICreateChatRoomTrain).FullName!] = "RoomCreated",
-        [typeof(IJoinChatRoomTrain).FullName!] = "UserJoined",
-        [typeof(IInviteToChatRoomTrain).FullName!] = "UserJoined",
+        [typeof(ISendMessageTrain).FullName.NotNull()] = "MessageSent",
+        [typeof(ICreateChatRoomTrain).FullName.NotNull()] = "RoomCreated",
+        [typeof(IJoinChatRoomTrain).FullName.NotNull()] = "UserJoined",
+        [typeof(IInviteToChatRoomTrain).FullName.NotNull()] = "UserJoined",
     };
 
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
@@ -65,10 +67,12 @@ public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleH
             ChatRoomId: chatRoomId,
             EventType: eventType,
             Payload: metadata.Output,
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? clock.GetUtcNow().UtcDateTime,
             TrainExternalId: metadata.ExternalId
         );
 
-        await eventSender.SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct);
+        await eventSender
+            .SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct)
+            .ConfigureAwait(false);
     }
 }

@@ -48,50 +48,7 @@ public static class MachineCensus
         var systemOwned = internals.SystemOwned;
 
         foreach (var trigger in machine.Triggers)
-        {
-            var kind = trigger.Kind.ToString();
-            switch (trigger.Kind)
-            {
-                case TriggerKind.Outcome:
-                    yield return new MachineCensusEntry(
-                        machine.Name,
-                        trigger.Name,
-                        kind,
-                        "server only: applied from the invoked train's outcome",
-                        ["server (invoked train outcome)"]
-                    );
-                    break;
-                case TriggerKind.Timer:
-                    // A timer carries the context unchanged, but it acts for whoever could have put the instance in its state, so it
-                    // is listed with the union of the rules of everything that enters that state.
-                    var acting = internals.TimerRules.GetValueOrDefault(trigger.Name) ?? [];
-                    yield return new MachineCensusEntry(
-                        machine.Name,
-                        trigger.Name,
-                        kind,
-                        acting.Count == 0
-                            ? "server only: fired by the state's timer"
-                            : "server only: fired by the state's timer, acting for "
-                                + string.Join(" or ", acting),
-                        ["server (timer)"]
-                    );
-                    break;
-                default:
-                    var rule = rules.Events.GetValueOrDefault(trigger.Name);
-                    yield return new MachineCensusEntry(
-                        machine.Name,
-                        trigger.Name,
-                        kind,
-                        systemOwned && rule is null
-                            ? "host code only (system-owned)"
-                            : rule?.ToString() ?? Undeclared,
-                        systemOwned
-                            ? ["host code (IMachineInstances, trusted: no rule is checked)"]
-                            : EventSurfaces(trigger.Kind)
-                    );
-                    break;
-            }
-        }
+            yield return TriggerEntry(machine, internals, trigger);
 
         foreach (
             var (read, rule) in new[]
@@ -127,6 +84,55 @@ public static class MachineCensus
         );
     }
 
+    private static MachineCensusEntry TriggerEntry(
+        IMachine machine,
+        IMachineInternals internals,
+        MachineTrigger trigger
+    )
+    {
+        var rules = internals.Rules;
+        var systemOwned = internals.SystemOwned;
+        var kind = trigger.Kind.ToString();
+        switch (trigger.Kind)
+        {
+            case TriggerKind.Outcome:
+                return new MachineCensusEntry(
+                    machine.Name,
+                    trigger.Name,
+                    kind,
+                    "server only: applied from the invoked train's outcome",
+                    ["server (invoked train outcome)"]
+                );
+            case TriggerKind.Timer:
+                // A timer carries the context unchanged, but it acts for whoever could have put the instance in its state, so it
+                // is listed with the union of the rules of everything that enters that state.
+                var acting = internals.TimerRules.GetValueOrDefault(trigger.Name) ?? [];
+                return new MachineCensusEntry(
+                    machine.Name,
+                    trigger.Name,
+                    kind,
+                    acting.Count == 0
+                        ? "server only: fired by the state's timer"
+                        : "server only: fired by the state's timer, acting for "
+                            + string.Join(" or ", acting),
+                    ["server (timer)"]
+                );
+            default:
+                var rule = rules.Events.GetValueOrDefault(trigger.Name);
+                return new MachineCensusEntry(
+                    machine.Name,
+                    trigger.Name,
+                    kind,
+                    systemOwned && rule is null
+                        ? "host code only (system-owned)"
+                        : rule?.ToString() ?? Undeclared,
+                    systemOwned
+                        ? ["host code (IMachineInstances, trusted: no rule is checked)"]
+                        : EventSurfaces(trigger.Kind)
+                );
+        }
+    }
+
     private static IReadOnlyList<string> EventSurfaces(TriggerKind kind) =>
         kind == TriggerKind.EffectBound
             ?
@@ -142,17 +148,3 @@ public static class MachineCensus
                 "host code acting for a client (ISnapshotDraftService.Advance, held to the rule)",
             ];
 }
-
-/// <summary>One trigger or read of a machine, as <see cref="MachineCensus.Describe"/> lists it.</summary>
-/// <param name="Machine">The machine's id.</param>
-/// <param name="Name">The trigger's name, the read's (<c>start</c>, <c>get</c>, the push (<c>&lt;machine&gt;Changed</c>)), or <c>discard</c>.</param>
-/// <param name="Kind">The trigger's <see cref="TriggerKind"/> name, <c>Read</c> for a read, or <c>Discard</c>.</param>
-/// <param name="Rule">The rule that guards it, as a reader would write it.</param>
-/// <param name="Surfaces">The surfaces that reach it, such as the machine's own operations or host code.</param>
-public sealed record MachineCensusEntry(
-    string Machine,
-    string Name,
-    string Kind,
-    string Rule,
-    IReadOnlyList<string> Surfaces
-);

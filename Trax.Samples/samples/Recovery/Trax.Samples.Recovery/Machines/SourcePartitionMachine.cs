@@ -1,81 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Trains.Ingest;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.Samples.Recovery.Machines;
-
-public enum PartitionState
-{
-    /// <summary>Discovery found the partition and started its instance.</summary>
-    Discovered,
-
-    /// <summary>The ingest train is running for the partition.</summary>
-    Ingesting,
-
-    /// <summary>The partition's works are in the corpus.</summary>
-    Ingested,
-
-    /// <summary>Ingested, but the model was unsure about some works, which wait for a person.</summary>
-    NeedsReview,
-
-    /// <summary>A person looked at the works held for review and let the partition through.</summary>
-    Approved,
-
-    /// <summary>The ingest run failed, or was reaped after its host died.</summary>
-    Failed,
-
-    /// <summary>An operator cancelled the ingest run.</summary>
-    Cancelled,
-}
-
-public enum PartitionTrigger
-{
-    /// <summary>Discovery's first move: run the ingest.</summary>
-    Ingest,
-
-    /// <summary>Run the ingest again after it failed or was cancelled: a new run, under a new token.</summary>
-    Retry,
-
-    /// <summary>A person let a partition held for review through.</summary>
-    Approve,
-}
-
-/// <summary>Which partition the instance is for. Every state carries it.</summary>
-public sealed record PartitionContext
-{
-    [MinLength(1)]
-    public string Source { get; init; } = "";
-
-    [MinLength(1)]
-    public string Month { get; init; } = "";
-}
-
-/// <summary>
-/// An ingested partition: which one, and what the ingest wrote, as counts and a fingerprint. Pointers,
-/// never rows: the works are in <c>topic_map.ingested_works</c>.
-/// </summary>
-public sealed record IngestedContext
-{
-    [MinLength(1)]
-    public string Source { get; init; } = "";
-
-    [MinLength(1)]
-    public string Month { get; init; } = "";
-
-    [MinLength(1)]
-    public string Fingerprint { get; init; } = "";
-
-    public int Works { get; init; }
-
-    public int Created { get; init; }
-
-    public int Merged { get; init; }
-
-    public int NeedsReview { get; init; }
-}
 
 /// <summary>
 /// One instance per partition of an index, a source and a month, owned by the system: discovery starts
@@ -137,8 +68,8 @@ public sealed class SourcePartitionMachine : Machine<PartitionState, PartitionTr
             .Context<PartitionContext>()
             .Invokes<IIngestPartitionTrain, IngestPartitionInput, IngestPartitionResult>(
                 ctx => new IngestPartitionInput(
-                    ctx["source"]!.GetValue<string>(),
-                    ctx["month"]!.GetValue<string>()
+                    ctx["source"].NotNull().GetValue<string>(),
+                    ctx["month"].NotNull().GetValue<string>()
                 )
             )
             // Tried in order: an unsure ingest goes to review, any other to Ingested.

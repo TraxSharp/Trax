@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Trax.Samples.Hub.Trains.Lookup;
 using Trax.Samples.Hub.Trains.Lookup.Junctions;
 
@@ -14,10 +15,16 @@ public class FetchDataJunctionTests
     [Test]
     public async Task Run_WithAnId_ReturnsTheRecordForThatId()
     {
-        var junction = new FetchDataJunction(NullLogger<FetchDataJunction>.Instance);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
+        var junction = new FetchDataJunction(NullLogger<FetchDataJunction>.Instance, clock);
 
         var output = await junction.Run(new LookupInput { Id = "42" });
 
         Assert.That(output.Id, Is.EqualTo("42"), "the lookup returns the record it was asked for");
+        Assert.That(
+            output.CreatedAt,
+            Is.EqualTo(clock.GetUtcNow().UtcDateTime),
+            "the record is stamped with the clock the junction was given"
+        );
     }
 }

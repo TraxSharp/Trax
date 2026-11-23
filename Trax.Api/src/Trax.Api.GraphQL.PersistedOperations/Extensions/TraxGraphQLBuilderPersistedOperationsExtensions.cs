@@ -90,6 +90,36 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<PersistedOperationCacheGeneration>();
 
+        AddCacheAndBroadcaster(services, options);
+        AddValidatorAndManagementGate(services);
+        AddManagementFields(builder, options);
+        AddStorage(services);
+
+        // HotChocolate's persisted-operation middleware resolves
+        // IOperationDocumentStorage from the schema-scoped service provider.
+        // Register it on the schema services so the request executor finds it.
+        builder.ConfigureSchema(schema =>
+        {
+            // HC's schema-services container does not forward to root. HotChocolate 16
+            // replaced IApplicationServiceProvider with an explicit bridge:
+            // AddApplicationService makes a root-container registration resolvable from
+            // the schema-scoped provider the persisted-operation middleware uses.
+            schema.AddApplicationService<DbPersistedOperationStorage>();
+            schema.AddApplicationService<HotChocolateOperationCacheInvalidator>();
+
+            AddTraxCaches(schema, options);
+            AddDocumentStorage(schema);
+            UseRequestMiddleware(schema);
+        });
+
+        return builder;
+    }
+
+    private static void AddCacheAndBroadcaster(
+        IServiceCollection services,
+        PersistedOperationsOptions options
+    )
+    {
         // Cache: in-memory wrapper if enabled, else no-op.
         if (options.CacheEnabled)
         {
@@ -122,7 +152,10 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 NoOpPersistedOperationBroadcaster
             >();
         }
+    }
 
+    private static void AddValidatorAndManagementGate(IServiceCollection services)
+    {
         // Validator: HotChocolate-backed in this path (we have a schema in process).
         // Replace overrides the no-op default from AddPersistedOperationStore if it
         // was also called.
@@ -154,7 +187,13 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 Services.PersistedOperationsManagementAccess
             >()
         );
+    }
 
+    private static void AddManagementFields(
+        TraxGraphQLBuilder builder,
+        PersistedOperationsOptions options
+    )
+    {
         // The management fields live at the root, behind the gate the host declared for them, and
         // never under operations: turning on persisted operations exposes nothing of the admin
         // namespace, and a pipeline that uploads documents needs none of its credential. With no
@@ -184,7 +223,10 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 );
             });
         }
+    }
 
+    private static void AddStorage(IServiceCollection services)
+    {
         // HotChocolate cache invalidator. The schema name is captured below
         // inside ConfigureSchema so the invalidator can evict the right executor.
         services.AddSingleton<HotChocolateOperationCacheInvalidator>();
@@ -210,123 +252,118 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // Allowlist matcher and the decision the enforcement middleware asks.
         services.AddSingleton<AllowlistMatcher>();
         services.AddSingleton<PersistedOperationPolicy>();
+    }
 
-        // HotChocolate's persisted-operation middleware resolves
-        // IOperationDocumentStorage from the schema-scoped service provider.
-        // Register it on the schema services so the request executor finds it.
-        builder.ConfigureSchema(schema =>
-        {
-            // HC's schema-services container does not forward to root. HotChocolate 16
-            // replaced IApplicationServiceProvider with an explicit bridge:
-            // AddApplicationService makes a root-container registration resolvable from
-            // the schema-scoped provider the persisted-operation middleware uses.
-            schema.AddApplicationService<DbPersistedOperationStorage>();
-            schema.AddApplicationService<HotChocolateOperationCacheInvalidator>();
-
-            // Substitute caches that can be emptied and that stamp their entries. HotChocolate's
-            // own document and prepared-operation caches assume a persisted-operation id maps to
-            // one document forever: they expose no way to drop an entry and never expire, which
-            // is exactly what re-uploading or deactivating a document under an existing id needs.
-            // Both are sized from the host's schema options, as HotChocolate sizes its own.
-            // See docs/adr/0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md.
-            //
-            // HotChocolate keeps the document cache as an application service keyed by schema
-            // name (TryAdd), and every AddGraphQL call for the schema forwards the schema's
-            // IDocumentCache to it. Registering Trax's under the same key, with Add, makes it the
-            // one every forward resolves, whatever order the host calls AddGraphQL in.
-            var schemaName = schema.Name;
-            schema.Services.AddKeyedSingleton<IDocumentCache>(
-                schemaName,
-                (applicationServices, _) =>
-                    new ClearableDocumentCache(
-                        HostSchemaOptions(
-                            applicationServices,
-                            schemaName
-                        ).OperationDocumentCacheSize,
+    private static void AddTraxCaches(
+        IRequestExecutorBuilder schema,
+        PersistedOperationsOptions options
+    )
+    {
+        // Substitute caches that can be emptied and that stamp their entries. HotChocolate's
+        // own document and prepared-operation caches assume a persisted-operation id maps to
+        // one document forever: they expose no way to drop an entry and never expire, which
+        // is exactly what re-uploading or deactivating a document under an existing id needs.
+        // Both are sized from the host's schema options, as HotChocolate sizes its own.
+        // See docs/adr/0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md.
+        //
+        // HotChocolate keeps the document cache as an application service keyed by schema
+        // name (TryAdd), and every AddGraphQL call for the schema forwards the schema's
+        // IDocumentCache to it. Registering Trax's under the same key, with Add, makes it the
+        // one every forward resolves, whatever order the host calls AddGraphQL in.
+        var schemaName = schema.Name;
+        schema.Services.AddKeyedSingleton<IDocumentCache>(
+            schemaName,
+            (applicationServices, _) =>
+                new ClearableDocumentCache(
+                    HostSchemaOptions(applicationServices, schemaName).OperationDocumentCacheSize,
+                    applicationServices.GetRequiredService<PersistedOperationCacheGeneration>(),
+                    applicationServices.GetRequiredService<TimeProvider>(),
+                    options.CacheMaxAge
+                )
+        );
+        schema.ConfigureSchemaServices(
+            (applicationServices, sc) =>
+            {
+                sc.AddSingleton(_ =>
+                    applicationServices.GetRequiredKeyedService<IDocumentCache>(schemaName)
+                );
+                sc.AddSingleton<IPreparedOperationCache>(
+                    schemaServices => new ClearablePreparedOperationCache(
+                        schemaServices
+                            .GetRequiredService<ISchemaDefinition>()
+                            .Features.GetRequired<IReadOnlySchemaOptions>()
+                            .PreparedOperationCacheSize,
                         applicationServices.GetRequiredService<PersistedOperationCacheGeneration>(),
                         applicationServices.GetRequiredService<TimeProvider>(),
                         options.CacheMaxAge
                     )
-            );
-            schema.ConfigureSchemaServices(
-                (applicationServices, sc) =>
-                {
-                    sc.AddSingleton(_ =>
-                        applicationServices.GetRequiredKeyedService<IDocumentCache>(schemaName)
-                    );
-                    sc.AddSingleton<IPreparedOperationCache>(
-                        schemaServices => new ClearablePreparedOperationCache(
-                            schemaServices
-                                .GetRequiredService<ISchemaDefinition>()
-                                .Features.GetRequired<IReadOnlySchemaOptions>()
-                                .PreparedOperationCacheSize,
-                            applicationServices.GetRequiredService<PersistedOperationCacheGeneration>(),
-                            applicationServices.GetRequiredService<TimeProvider>(),
-                            options.CacheMaxAge
-                        )
-                    );
-                }
-            );
+                );
+            }
+        );
+    }
 
-            schema.ConfigureSchemaServices(sc =>
-                sc.AddSingleton<IOperationDocumentStorage>(sp =>
-                {
-                    // Capture the schema name on the invalidator the first
-                    // time the schema services are built. ConfigureSchemaServices
-                    // runs lazily during executor build, by which time the root
-                    // provider has the singleton ready.
-                    sp.GetRequiredService<HotChocolateOperationCacheInvalidator>()
-                        .SetSchemaName(schema.Name);
-                    RequireTraxCaches(sp);
-                    return sp.GetRequiredService<DbPersistedOperationStorage>();
-                })
-            );
-            schema.UsePersistedOperationPipeline();
-            // Every cache the request fills is stamped with the generation it started in. This
-            // wraps the document cache, the persisted-operation read and the operation cache.
-            schema.UseRequest(
-                PersistedOperationCacheScopeMiddleware.Create,
-                key: PersistedOperationCacheScopeMiddleware.Key,
-                before: WellKnownRequestMiddleware.DocumentCacheMiddleware
-            );
-            // A persisted-operation id runs only the document the store holds for it. This runs
-            // before the document cache is consulted, so a document sent alongside an id is never
-            // bound to it. See
-            // docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md.
-            schema.UseRequest(
-                PersistedOperationIdBindingMiddleware.Create,
-                key: PersistedOperationIdBindingMiddleware.Key,
-                before: WellKnownRequestMiddleware.DocumentCacheMiddleware
-            );
-            // A machine document id this node does not serve is answered client-outdated or server-outdated
-            // before anything is looked up or cached. See
-            // Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
-            schema.AddApplicationService<Services.MachineDocumentRegistry>();
-            schema.UseRequest(
-                MachineDocumentMiddleware.Create,
-                key: MachineDocumentMiddleware.Key,
-                before: WellKnownRequestMiddleware.DocumentCacheMiddleware
-            );
-            // HotChocolate keys caches Trax cannot empty on the operation id, which it derives from
-            // the persisted-operation id; this adds the document's hash to it, so a re-upload under
-            // the same id is a new key to them. It runs before validation because anything after
-            // it (cost analysis, authorization) may normalize the document and fill one of them.
-            schema.UseRequest(
-                PersistedOperationIdHashMiddleware.Create,
-                key: PersistedOperationIdHashMiddleware.Key,
-                before: WellKnownRequestMiddleware.DocumentValidationMiddleware
-            );
-            // Enforcement runs here, after the document is parsed and before it is validated, so
-            // every transport that reaches the executor gets the same decision. See
-            // docs/adr/0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md.
-            schema.UseRequest(
-                PersistedOperationEnforcementMiddleware.Create,
-                key: PersistedOperationEnforcementMiddleware.Key,
-                after: WellKnownRequestMiddleware.DocumentParserMiddleware
-            );
-        });
+    private static void AddDocumentStorage(IRequestExecutorBuilder schema)
+    {
+        schema.ConfigureSchemaServices(sc =>
+            sc.AddSingleton<IOperationDocumentStorage>(sp =>
+            {
+                // Capture the schema name on the invalidator the first
+                // time the schema services are built. ConfigureSchemaServices
+                // runs lazily during executor build, by which time the root
+                // provider has the singleton ready.
+                sp.GetRequiredService<HotChocolateOperationCacheInvalidator>()
+                    .SetSchemaName(schema.Name);
+                RequireTraxCaches(sp);
+                return sp.GetRequiredService<DbPersistedOperationStorage>();
+            })
+        );
+        schema.UsePersistedOperationPipeline();
+    }
 
-        return builder;
+    private static void UseRequestMiddleware(IRequestExecutorBuilder schema)
+    {
+        // Every cache the request fills is stamped with the generation it started in. This
+        // wraps the document cache, the persisted-operation read and the operation cache.
+        schema.UseRequest(
+            PersistedOperationCacheScopeMiddleware.Create,
+            key: PersistedOperationCacheScopeMiddleware.Key,
+            before: WellKnownRequestMiddleware.DocumentCacheMiddleware
+        );
+        // A persisted-operation id runs only the document the store holds for it. This runs
+        // before the document cache is consulted, so a document sent alongside an id is never
+        // bound to it. See
+        // docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md.
+        schema.UseRequest(
+            PersistedOperationIdBindingMiddleware.Create,
+            key: PersistedOperationIdBindingMiddleware.Key,
+            before: WellKnownRequestMiddleware.DocumentCacheMiddleware
+        );
+        // A machine document id this node does not serve is answered client-outdated or server-outdated
+        // before anything is looked up or cached. See
+        // Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
+        schema.AddApplicationService<Services.MachineDocumentRegistry>();
+        schema.UseRequest(
+            MachineDocumentMiddleware.Create,
+            key: MachineDocumentMiddleware.Key,
+            before: WellKnownRequestMiddleware.DocumentCacheMiddleware
+        );
+        // HotChocolate keys caches Trax cannot empty on the operation id, which it derives from
+        // the persisted-operation id; this adds the document's hash to it, so a re-upload under
+        // the same id is a new key to them. It runs before validation because anything after
+        // it (cost analysis, authorization) may normalize the document and fill one of them.
+        schema.UseRequest(
+            PersistedOperationIdHashMiddleware.Create,
+            key: PersistedOperationIdHashMiddleware.Key,
+            before: WellKnownRequestMiddleware.DocumentValidationMiddleware
+        );
+        // Enforcement runs here, after the document is parsed and before it is validated, so
+        // every transport that reaches the executor gets the same decision. See
+        // docs/adr/0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md.
+        schema.UseRequest(
+            PersistedOperationEnforcementMiddleware.Create,
+            key: PersistedOperationEnforcementMiddleware.Key,
+            after: WellKnownRequestMiddleware.DocumentParserMiddleware
+        );
     }
 
     // persistedOperations on a root type: a namespace field carrying the management gate, so

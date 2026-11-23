@@ -6,6 +6,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -58,7 +59,7 @@ public class LifecycleSubscriptionAccessTests
     {
         var access = Access(b => b.ExposeOperationQueries().GateOperations(roles: "Admin"));
 
-        (await access.DataChangesFor(null)).Should().BeFalse();
+        (await access.DataChangesFor(user: null)).Should().BeFalse();
         (await access.DataChangesFor(new ClaimsPrincipal())).Should().BeFalse();
         (await access.DataChangesFor(new ClaimsPrincipal(new ClaimsIdentity())))
             .Should()
@@ -70,8 +71,8 @@ public class LifecycleSubscriptionAccessTests
     {
         var access = Access(b => b.ExposeOperationQueries().AllowAnonymousOperations());
 
-        (await access.LifecycleFor(null)).All.Should().BeTrue();
-        (await access.OperationsFor(null)).Should().BeTrue();
+        (await access.LifecycleFor(user: null)).All.Should().BeTrue();
+        (await access.OperationsFor(user: null)).Should().BeTrue();
     }
 
     [Test]
@@ -108,7 +109,7 @@ public class LifecycleSubscriptionAccessTests
 
         (await access.LifecycleFor(User(claims: "billing")))
             .Trains.Should()
-            .Contain(typeof(IPolicyTrain).FullName!);
+            .Contain(typeof(IPolicyTrain).FullName.NotNull());
         (await access.LifecycleFor(User()))
             .IsEmpty.Should()
             .BeTrue("the train's policy is not met, per " + Adr);
@@ -119,8 +120,10 @@ public class LifecycleSubscriptionAccessTests
     {
         var access = Access(trains: Train<IPolicyTrain>());
 
-        (await access.LifecycleFor(User())).Trains.Should().Contain(typeof(IPolicyTrain).FullName!);
-        (await access.LifecycleFor(null)).IsEmpty.Should().BeTrue();
+        (await access.LifecycleFor(User()))
+            .Trains.Should()
+            .Contain(typeof(IPolicyTrain).FullName.NotNull());
+        (await access.LifecycleFor(user: null)).IsEmpty.Should().BeTrue();
     }
 
     [Test]
@@ -131,7 +134,7 @@ public class LifecycleSubscriptionAccessTests
         (await Access(b => b.RequireAuthorization(), undeclared).LifecycleFor(User()))
             .Trains.Should()
             .Contain(
-                typeof(IUndeclaredTrain).FullName!,
+                typeof(IUndeclaredTrain).FullName.NotNull(),
                 "the endpoint policy is the gate of a train that declares none, per " + Adr
             );
         (await Access(trains: undeclared).LifecycleFor(User())).IsEmpty.Should().BeTrue();

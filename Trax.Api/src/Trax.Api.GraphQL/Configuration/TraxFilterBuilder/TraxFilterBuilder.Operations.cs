@@ -15,7 +15,7 @@ public partial class TraxFilterBuilder
     {
         // Idempotent: registering the same operation names twice makes HotChocolate
         // throw at schema build, so a repeated call is a no-op.
-        if (Modules.Any(m => m is CaseInsensitiveStringFilterModule))
+        if (Modules.Exists(m => m is CaseInsensitiveStringFilterModule))
             return this;
 
         Modules.Add(new CaseInsensitiveStringFilterModule());

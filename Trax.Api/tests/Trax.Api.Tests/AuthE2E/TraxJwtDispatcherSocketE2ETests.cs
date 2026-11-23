@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -14,6 +15,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -43,52 +45,12 @@ public class TraxJwtDispatcherSocketE2ETests
     {
         AuthE2EHost.EnsureDatabaseExists(Database);
         var cs = AuthE2EHost.ConnectionString(Database);
-        var jwks = await TestJwksServer.StartAsync();
+        var jwks = await TestJwksServer.StartAsync().ConfigureAwait(false);
 
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
-                    .ConfigureServices(s =>
-                    {
-                        s.AddLogging();
-                        s.AddRouting();
-                        s.AddTraxJwtAuth(
-                            "cognito",
-                            jwt =>
-                                jwt.UseAuthority(jwks.Issuer, Audience)
-                                    .AllowHttpMetadata()
-                                    // Generous on purpose. ADR 0014 asks that nothing
-                                    // slower than a deadline sit under it, and warming
-                                    // the configuration below achieves that directly:
-                                    // once it is cached no HTTP happens under the socket
-                                    // receive at all. Pinning this under the receive
-                                    // instead only moved the failure into setup, where a
-                                    // slow first connect to the loopback JWKS server blew
-                                    // a 5s budget on a loaded CI runner.
-                                    .CustomizeBearerOptions(o =>
-                                        o.BackchannelTimeout = WarmupBudget
-                                    )
-                        );
-                        s.AddTraxJwtAuth(
-                            "internal",
-                            jwt => jwt.UseSymmetricKey(InternalIssuer, Audience, InternalKey)
-                        );
-                        s.AddTraxJwtDispatcher(d =>
-                            d.MapIssuer(jwks.Issuer, "cognito")
-                                .MapIssuer(InternalIssuer, "internal")
-                        );
-                        // The scanned trains include one gated by AdminPolicy, which must be registered.
-                        s.AddAuthorization(o =>
-                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
-                        );
-                        s.AddTrax(trax =>
-                            trax.AddEffects(effects => effects.UsePostgres(cs).AddJson())
-                                .AddMediator(typeof(AuthE2EHost).Assembly)
-                        );
-                        s.AddTraxApi();
-                        s.AddDbContextFactory<TestDbContext>(o => o.UseNpgsql(cs));
-                        s.AddTraxGraphQL(graphql => graphql.AddDbContext<TestDbContext>());
-                    })
+                    .ConfigureServices(s => ConfigureHostServices(s, jwks, cs))
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -99,9 +61,46 @@ public class TraxJwtDispatcherSocketE2ETests
             )
             .Build();
 
-        await host.StartAsync();
-        await WarmJwksMetadataAsync(host, jwks);
+        await host.StartAsync().ConfigureAwait(false);
+        await WarmJwksMetadataAsync(host, jwks).ConfigureAwait(false);
         return (host, jwks);
+    }
+
+    private static void ConfigureHostServices(IServiceCollection s, TestJwksServer jwks, string cs)
+    {
+        s.AddLogging();
+        s.AddRouting();
+        s.AddTraxJwtAuth(
+            "cognito",
+            jwt =>
+                jwt.UseAuthority(jwks.Issuer, Audience)
+                    .AllowHttpMetadata()
+                    // Generous on purpose. ADR 0014 asks that nothing
+                    // slower than a deadline sit under it, and warming
+                    // the configuration below achieves that directly:
+                    // once it is cached no HTTP happens under the socket
+                    // receive at all. Pinning this under the receive
+                    // instead only moved the failure into setup, where a
+                    // slow first connect to the loopback JWKS server blew
+                    // a 5s budget on a loaded CI runner.
+                    .CustomizeBearerOptions(o => o.BackchannelTimeout = WarmupBudget)
+        );
+        s.AddTraxJwtAuth(
+            "internal",
+            jwt => jwt.UseSymmetricKey(InternalIssuer, Audience, InternalKey)
+        );
+        s.AddTraxJwtDispatcher(d =>
+            d.MapIssuer(jwks.Issuer, "cognito").MapIssuer(InternalIssuer, "internal")
+        );
+        // The scanned trains include one gated by AdminPolicy, which must be registered.
+        s.AddAuthorization(o => o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin")));
+        s.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UsePostgres(cs).AddJson())
+                .AddMediator(typeof(AuthE2EHost).Assembly)
+        );
+        s.AddTraxApi();
+        s.AddDbContextFactory<TestDbContext>(o => o.UseNpgsql(cs));
+        s.AddTraxGraphQL(graphql => graphql.AddDbContext<TestDbContext>());
     }
 
     /// <summary>
@@ -132,16 +131,22 @@ public class TraxJwtDispatcherSocketE2ETests
             // Prove the endpoint answers on a client we control before the
             // bearer handler's backchannel spends its attempt on it.
             using var probe = new HttpClient { Timeout = WarmupBudget };
-            (await probe.GetAsync(discovery)).EnsureSuccessStatusCode();
+            (await probe.GetAsync(discovery).ConfigureAwait(false)).EnsureSuccessStatusCode();
 
             using var cts = new CancellationTokenSource(WarmupBudget);
-            await options.ConfigurationManager!.GetConfigurationAsync(cts.Token);
+            await options
+                .ConfigurationManager.NotNull()
+                .GetConfigurationAsync(cts.Token)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException(
                 $"The cognito scheme's discovery document at {discovery} did not load within "
-                    + $"{WarmupBudget.TotalSeconds}s of host start.",
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{WarmupBudget.TotalSeconds}s of host start."
+                    ),
                 ex
             );
         }
@@ -151,10 +156,11 @@ public class TraxJwtDispatcherSocketE2ETests
     public async Task CognitoJwksToken_Acks()
     {
         var (host, jwks) = await StartAsync();
-        await using var _ = jwks;
+        var _ = jwks;
+        await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
-        var token = jwks.CreateIssuer(Audience)
+        var token = jwks.CreateIssuer(Audience, TimeProvider.System)
             .Mint(b => b.WithSubject("cog").WithClaim("name", "Cog"));
 
         using var ws = await ConnectAsync(host);
@@ -168,7 +174,8 @@ public class TraxJwtDispatcherSocketE2ETests
     public async Task InternalSymmetricToken_Acks()
     {
         var (host, jwks) = await StartAsync();
-        await using var _ = jwks;
+        var _ = jwks;
+        await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
         var token = TestTokenIssuer
@@ -186,7 +193,8 @@ public class TraxJwtDispatcherSocketE2ETests
     public async Task UnknownIssuer_Rejected()
     {
         var (host, jwks) = await StartAsync();
-        await using var _ = jwks;
+        var _ = jwks;
+        await using var _Disposal = _.ConfigureAwait(false);
         using var __ = host;
 
         var token = TestTokenIssuer
@@ -205,14 +213,22 @@ public class TraxJwtDispatcherSocketE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
+        return await client
+            .ConnectClosingAsync(new Uri(WsUri), CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task SendInitAsync(WebSocket ws, object payload)
     {
         var msg = JsonSerializer.Serialize(new { type = "connection_init", payload });
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ws.SendAsync(Encoding.UTF8.GetBytes(msg), WebSocketMessageType.Text, true, cts.Token);
+        await ws.SendAsync(
+                Encoding.UTF8.GetBytes(msg),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cts.Token
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
@@ -226,13 +242,15 @@ public class TraxJwtDispatcherSocketE2ETests
             WebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buffer, cts.Token);
+                result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException ex)
             {
                 throw new TimeoutException(
-                    $"No frame arrived within {budget.TotalSeconds}s. Every timeout under "
-                        + "this wait must be shorter than it (ADR 0014).",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"No frame arrived within {budget.TotalSeconds}s. Every timeout under "
+                    ) + "this wait must be shorter than it (ADR 0014).",
                     ex
                 );
             }
@@ -241,7 +259,8 @@ public class TraxJwtDispatcherSocketE2ETests
                     $"WebSocket closed unexpectedly: {result.CloseStatus} {result.CloseStatusDescription}"
                 );
             if (result.Count > 0)
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             if (result.EndOfMessage && ms.Length > 0)
                 break;
         }
@@ -259,11 +278,12 @@ public class TraxJwtDispatcherSocketE2ETests
                 using var ms = new MemoryStream();
                 while (!cts.IsCancellationRequested)
                 {
-                    var result = await ws.ReceiveAsync(buffer, cts.Token);
+                    var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                         return true;
                     if (result.Count > 0)
-                        ms.Write(buffer, 0, result.Count);
+                        await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                            .ConfigureAwait(false);
                     if (result.EndOfMessage)
                         break;
                 }
@@ -273,9 +293,9 @@ public class TraxJwtDispatcherSocketE2ETests
                     .Parse(Encoding.UTF8.GetString(ms.ToArray()))
                     .RootElement.GetProperty("type")
                     .GetString();
-                if (type == "connection_error")
+                if (string.Equals(type, "connection_error", StringComparison.Ordinal))
                     return true;
-                if (type == "connection_ack")
+                if (string.Equals(type, "connection_ack", StringComparison.Ordinal))
                     return false;
             }
         }

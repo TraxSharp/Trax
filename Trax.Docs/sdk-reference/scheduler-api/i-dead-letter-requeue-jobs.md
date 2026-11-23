@@ -11,6 +11,7 @@ namespace: Trax.Scheduler.Services.DeadLetterRequeue
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/IDeadLetterRequeueJobs.cs
   - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/DeadLetterRequeueJob.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/DeadLetterRequeueJobStatus.cs
   - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/DeadLetterRequeueJobs.cs
 ---
 

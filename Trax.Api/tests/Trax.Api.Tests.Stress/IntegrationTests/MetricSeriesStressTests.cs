@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Queries;
@@ -84,18 +85,23 @@ public class MetricSeriesStressTests : StressTestSetup
     {
         OperationsService.MetricSeriesRefusal(scope, range).Should().BeNull();
         await MeasureAsync(
-            $"operations.metrics.series({scope}, {range}) over {Runs:N0} runs",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"operations.metrics.series({scope}, {range}) over {Runs:N0} runs"
+            ),
             MetricsBudget,
             async (sp, ct) =>
             {
-                var series = await new MetricsQueries().GetSeries(
-                    Operations(sp),
-                    ct,
-                    scope,
-                    range,
-                    id: scope == MetricSeriesScope.Group ? _groupId : _manifestId,
-                    name: Train
-                );
+                var series = await new MetricsQueries()
+                    .GetSeries(
+                        Operations(sp),
+                        ct,
+                        scope,
+                        range,
+                        id: scope == MetricSeriesScope.Group ? _groupId : _manifestId,
+                        name: Train
+                    )
+                    .ConfigureAwait(false);
                 series.Buckets.Count.Should().BeLessThanOrEqualTo(OperationsService.MaxPageSize);
                 series.Buckets.Sum(b => b.Completed).Should().BePositive();
             }
@@ -115,7 +121,8 @@ public class MetricSeriesStressTests : StressTestSetup
             .MetricSeriesRefusal(scope, MetricSeriesRange.Last30Days)
             .Should()
             .NotBeNull();
-        using var services = ServiceProvider.CreateScope();
+        var services = ServiceProvider.CreateAsyncScope();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var read = () =>
             new MetricsQueries().GetSeries(
                 Operations(services.ServiceProvider),

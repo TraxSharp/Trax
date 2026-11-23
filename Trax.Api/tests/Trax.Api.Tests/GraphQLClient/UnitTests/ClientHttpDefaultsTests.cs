@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -101,7 +102,9 @@ public class ClientHttpDefaultsTests
         var validator = new GraphQLClientValidator(new FixedSchema("type Query { n: Int }"));
 
         for (var i = 0; i < GraphQLClientValidator.MaxCachedQueries + 50; i++)
-            await validator.ValidateAsync($"query Q{i} {{ n }}");
+            await validator.ValidateAsync(
+                string.Create(CultureInfo.InvariantCulture, $"query Q{i} {{ n }}")
+            );
 
         validator
             .CachedQueries.Count.Should()
@@ -118,7 +121,11 @@ public class ClientHttpDefaultsTests
             {
                 loads++;
                 return loads < 3
-                    ? Task.FromException<int>(new InvalidOperationException($"load {loads}"))
+                    ? Task.FromException<int>(
+                        new InvalidOperationException(
+                            string.Create(CultureInfo.InvariantCulture, $"load {loads}")
+                        )
+                    )
                     : Task.FromResult(42);
             },
             time

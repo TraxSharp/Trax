@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
@@ -72,13 +73,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, schedule, options, configureEach, ct: ct);
-                    return results.FirstOrDefault()!;
+                    await scheduler
+                        .ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            schedule,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );
@@ -208,13 +212,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyDependentAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, dependsOn, options, configureEach, ct: ct);
-                    return results.FirstOrDefault()!;
+                    await scheduler
+                        .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            dependsOn,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );
@@ -341,13 +348,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyDependentAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, _ => rootExternalId, options, configureEach, ct: ct);
-                    return results.FirstOrDefault()!;
+                    await scheduler
+                        .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            _ => rootExternalId,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );
@@ -475,13 +485,16 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyDependentAsync<
-                        TTrain,
-                        TInput,
-                        TOutput,
-                        TSource
-                    >(sourceList, map, dependsOn, options, configureEach, ct: ct);
-                    return results.FirstOrDefault()!;
+                    await scheduler
+                        .ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
+                            sourceList,
+                            map,
+                            dependsOn,
+                            options,
+                            configureEach,
+                            ct: ct
+                        )
+                        .ConfigureAwait(false);
                 },
             }
         );

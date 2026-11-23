@@ -15,7 +15,7 @@ public class AggregateMetricsJunction(ILogger<AggregateMetricsJunction> logger)
             input.ReportPeriod
         );
 
-        await Task.Delay(400);
+        await Task.Delay(400, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{Period}] Metrics aggregated — solar, battery, charging, and grid trading data compiled",

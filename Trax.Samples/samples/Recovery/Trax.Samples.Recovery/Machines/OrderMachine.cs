@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Samples.Recovery.Trains.Order;
 using Trax.StateMachine;
@@ -6,50 +7,6 @@ using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.Samples.Recovery.Machines;
-
-public enum OrderState
-{
-    /// <summary>Choosing what to eat.</summary>
-    Cart,
-
-    /// <summary>The order is on its way: <see cref="IDeliverOrderTrain"/> runs.</summary>
-    Ordered,
-
-    /// <summary>The run finished: the food is at the door.</summary>
-    Delivered,
-
-    /// <summary>The run failed or was cancelled, before the food arrived.</summary>
-    Cancelled,
-
-    /// <summary>Nobody ordered within <see cref="OrderMachine.CartWait"/>: the server cleared the cart.</summary>
-    Cleared,
-}
-
-public enum OrderTrigger
-{
-    /// <summary>Put an item from the menu in the cart.</summary>
-    AddItem,
-
-    /// <summary>Order what is in the cart.</summary>
-    PlaceOrder,
-}
-
-/// <summary>The order, one shape in every state: what is in the cart, and what it costs.</summary>
-public sealed record OrderContext
-{
-    public List<string>? Items { get; init; }
-
-    public decimal? Total { get; init; }
-}
-
-/// <summary>What a user starts an order with: nothing, the cart starts empty.</summary>
-public sealed record OrderStart;
-
-/// <summary>The input of <see cref="OrderTrigger.AddItem"/>: an item on the menu. The server prices it.</summary>
-public sealed record NewItem
-{
-    public string Item { get; init; } = "";
-}
 
 /// <summary>
 /// "Order a pizza": fill the cart, place the order, and the server takes it from there. <c>Ordered</c> runs
@@ -70,7 +27,10 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
     public const string MachineId = "order";
 
     /// <summary>What the kitchen makes, and its price.</summary>
-    public static readonly Dictionary<string, decimal> Menu = new()
+    public static readonly IReadOnlyDictionary<string, decimal> Menu = new Dictionary<
+        string,
+        decimal
+    >(StringComparer.Ordinal)
     {
         ["Margherita"] = 12m,
         ["Pepperoni"] = 14m,
@@ -134,15 +94,20 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
         new()
         {
             OrderId = $"order-{Guid.NewGuid():N}",
-            Items = cart["items"]!.AsArray().Select(i => i!.GetValue<string>()).ToList(),
-            Total = cart["total"]!.GetValue<decimal>(),
+            Items = cart["items"]
+                .NotNull()
+                .AsArray()
+                .Select(i => i.NotNull().GetValue<string>())
+                .ToList(),
+            Total = cart["total"].NotNull().GetValue<decimal>(),
         };
 
     // AddItem's reduction: the item goes in the cart at the menu's price, never one a client sends.
     private static JsonObject AddToCart(JsonObject cart, JsonNode? input)
     {
-        var item = input!["item"]!.GetValue<string>();
-        var items = cart["items"]?.AsArray().Select(i => i!.GetValue<string>()).ToList() ?? [];
+        var item = input.NotNull()["item"].NotNull().GetValue<string>();
+        var items =
+            cart["items"]?.AsArray().Select(i => i.NotNull().GetValue<string>()).ToList() ?? [];
         var total = cart["total"]?.GetValue<decimal>() ?? 0m;
         return new JsonObject
         {

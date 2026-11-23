@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
@@ -37,7 +38,7 @@ public static class AdminTrains
     /// Fully qualified type names of admin trains.
     /// </summary>
     public static readonly IReadOnlyList<string> FullNames = Types
-        .Select(t => t.FullName!)
+        .Select(t => t.FullName.NotNull())
         .ToList();
 
     /// <summary>

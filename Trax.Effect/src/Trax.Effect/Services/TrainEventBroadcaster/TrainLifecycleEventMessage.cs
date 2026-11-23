@@ -75,7 +75,7 @@ public record TrainLifecycleEventMessage(
                 or RoutedEventType;
 
     /// <summary>
-    /// The step of the run a junction event is about, or <c>null</c> for any other message. Set
+    /// The step of the run a junction event is about, or <see langword="null"/> for any other message. Set
     /// exactly when <see cref="IsJunctionEvent"/> is true of <see cref="EventType"/>. A junction
     /// event leaves <see cref="Output"/>, <see cref="FailureReason"/>, <see cref="FailureJunction"/>
     /// and <see cref="FailureException"/> null: it carries only what <see cref="JunctionEventPayload"/>
@@ -97,7 +97,7 @@ public record TrainLifecycleEventMessage(
 
     /// <summary>
     /// The type name of the exception a failed run recorded (<c>Metadata.FailureException</c>),
-    /// such as <c>TrainException</c>, or <c>null</c> for any other event. A receiver uses it to
+    /// such as <c>TrainException</c>, or <see langword="null"/> for any other event. A receiver uses it to
     /// decide, as the publishing host would, whether <see cref="FailureReason"/> is a message meant
     /// for the caller. A message from a publisher that predates the field has none.
     /// </summary>

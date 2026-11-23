@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Mediator.Exceptions;
 
 /// <summary>
@@ -24,7 +26,10 @@ public class QueueHookTimeoutException : InvalidOperationException
     /// <param name="limit">The <c>MaxQueueHookDuration</c> in force.</param>
     public QueueHookTimeoutException(string trainName, TimeSpan limit)
         : base(
-            $"{trainName}.OnQueue ran longer than {limit.TotalSeconds:0.###}s, the limit set by "
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{trainName}.OnQueue ran longer than {limit.TotalSeconds:0.###}s, the limit set by "
+            )
                 + "MaxQueueHookDuration, so the enqueue was rolled back. A hook that has to wait on "
                 + "something slow can defer promotion instead (DeferQueuePromotion)."
         )

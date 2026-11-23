@@ -197,12 +197,12 @@ public class TrainExposureAuthorizationTests
 
     private interface IConflictTrain;
 
-    private record StubInput
+    private sealed record StubInput
     {
         public string Value { get; init; } = "";
     }
 
-    private record StubOutput
+    private sealed record StubOutput
     {
         public string Result { get; init; } = "";
     }

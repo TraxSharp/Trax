@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -36,22 +37,30 @@ internal static class RequeueInputCheck
     public static string? RefusalFor(long metadataId, string? input)
     {
         if (string.IsNullOrWhiteSpace(input))
-            return $"Execution {metadataId} has no saved input to re-queue it with. Inputs are "
-                + "saved only when SaveTrainParameters() is on.";
+            return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Execution {metadataId} has no saved input to re-queue it with. Inputs are "
+                ) + "saved only when SaveTrainParameters() is on.";
 
         switch (SavedPlaceholder(input))
         {
             case "_truncated":
-                return $"Execution {metadataId}'s input was too large to save in full, so it "
-                    + "cannot be re-queued with what it ran with.";
+                return string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Execution {metadataId}'s input was too large to save in full, so it "
+                    ) + "cannot be re-queued with what it ran with.";
             case { } marker:
-                return $"Execution {metadataId}'s input could not be saved (it was recorded as a "
-                    + $"{marker} placeholder), so it cannot be re-queued with what it ran with.";
+                return string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Execution {metadataId}'s input could not be saved (it was recorded as a "
+                    ) + $"{marker} placeholder), so it cannot be re-queued with what it ran with.";
         }
 
         if (TraxRedaction.ContainsRedaction(input))
-            return $"Execution {metadataId}'s input has values masked by [TraxSensitive], so it "
-                + "cannot be re-queued with what it ran with.";
+            return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Execution {metadataId}'s input has values masked by [TraxSensitive], so it "
+                ) + "cannot be re-queued with what it ran with.";
 
         return null;
     }
@@ -61,7 +70,10 @@ internal static class RequeueInputCheck
     /// not a train, so it is not told to look the train's name up.
     /// </summary>
     public static string TrainNoLongerRegistered(long metadataId, string trainName) =>
-        $"Train {trainName} is no longer registered, so execution {metadataId} cannot be re-queued.";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Train {trainName} is no longer registered, so execution {metadataId} cannot be re-queued."
+        );
 
     /// <summary>
     /// The refusal for a run whose saved input no longer reads as its train's input type, which
@@ -74,8 +86,10 @@ internal static class RequeueInputCheck
         TrainRegistration registration,
         JsonException exception
     ) =>
-        $"The saved input of run {metadataId} no longer reads as "
-        + $"{registration.InputType.FullName}: {exception.Message}";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"The saved input of run {metadataId} no longer reads as "
+        ) + $"{registration.InputType.FullName}: {exception.Message}";
 
     /// <summary>
     /// The placeholder marker <paramref name="input"/> carries at its root with the value

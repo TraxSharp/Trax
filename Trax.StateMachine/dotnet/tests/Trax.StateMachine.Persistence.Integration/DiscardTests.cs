@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -28,7 +29,7 @@ public class DiscardTests(StoreProvider provider)
     private static async Task<Guid> Draft(InstanceHost host, string user)
     {
         var id = Guid.NewGuid();
-        await host.SeedDraft(user, id, UnlockedJson);
+        await host.SeedDraft(user, id, UnlockedJson).ConfigureAwait(false);
         return id;
     }
 
@@ -41,7 +42,8 @@ public class DiscardTests(StoreProvider provider)
     {
         using var scope = host.Scope();
         return await host.Service(scope, "turnstile")
-            .Discard(new Actor.Client(user), id, requestId);
+            .Discard(new Actor.Client(user), id, requestId)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -123,14 +125,14 @@ public class DiscardTests(StoreProvider provider)
                     DraftOwner.User(user),
                     "turnstile",
                     id,
-                    stored!.Token,
+                    stored.NotNull().Token,
                     new InvokeTokenWrite(token)
                 )
             )
                 .Should()
                 .BeTrue();
         }
-        cancellation.RowExists = () => host.Rows(id).Result.Count > 0;
+        cancellation.RowExists = async () => (await host.Rows(id).ConfigureAwait(false)).Count > 0;
 
         try
         {
@@ -163,13 +165,14 @@ public class DiscardTests(StoreProvider provider)
     {
         public List<string> Cancelled { get; } = [];
         public List<bool> RowExistedWhenCancelled { get; } = [];
-        public Func<bool>? RowExists { get; set; }
+        public Func<Task<bool>>? RowExists { get; set; }
 
-        public Task Cancel(string invokeToken, CancellationToken cancellationToken = default)
+        public async Task Cancel(string invokeToken, CancellationToken cancellationToken = default)
         {
             Cancelled.Add(invokeToken);
-            RowExistedWhenCancelled.Add(RowExists?.Invoke() ?? false);
-            return Task.CompletedTask;
+            RowExistedWhenCancelled.Add(
+                RowExists is not null && await RowExists().ConfigureAwait(false)
+            );
         }
     }
 }

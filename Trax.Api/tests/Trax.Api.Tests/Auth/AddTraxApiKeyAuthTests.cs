@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -58,13 +59,14 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth<TestResolver>();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(ApiKeyDefaults.PolicyName);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
     }
 
     [Test]
@@ -73,13 +75,14 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth<TestResolver>();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(ApiKeyDefaults.SchemeName);
     }
 
     [Test]
@@ -118,13 +121,14 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth(keys => keys.Add("admin-key", id: "admin", "Admin", "Player"));
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var resolver = sp.GetRequiredService<ITraxPrincipalResolver<string>>();
         var result = await resolver.ResolveAsync("admin-key", CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("admin");
+        result.NotNull().Id.Should().Be("admin");
         result.DisplayName.Should().Be("admin");
         result.Roles.Should().BeEquivalentTo("Admin", "Player");
         result.PrincipalType.Should().Be("apikey");
@@ -136,7 +140,8 @@ public class AddTraxApiKeyAuthTests
         var services = NewServices();
 
         services.AddTraxApiKeyAuth(keys => keys.Add("known", id: "alice"));
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var resolver = sp.GetRequiredService<ITraxPrincipalResolver<string>>();
         var result = await resolver.ResolveAsync("unknown", CancellationToken.None);
@@ -161,7 +166,7 @@ public class AddTraxApiKeyAuthTests
     {
         var services = NewServices();
 
-        var act = () => services.AddTraxApiKeyAuth((Action<ApiKeyBuilder>)null!);
+        var act = () => services.AddTraxApiKeyAuth((Action<ApiKeyBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -184,10 +189,11 @@ public class AddTraxApiKeyAuthTests
         services.AddSingleton<ILoggerFactory>(new RecordingLoggerFactory(logger));
 
         services.AddTraxApiKeyAuth<TestResolver>();
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var hostedServices = sp.GetServices<IHostedService>()
-            .Where(s => s.GetType().Name.Contains("Disclaimer"))
+            .Where(s => s.GetType().Name.Contains("Disclaimer", StringComparison.Ordinal))
             .ToList();
 
         hostedServices.Should().HaveCount(1);
@@ -208,7 +214,7 @@ public class AddTraxApiKeyAuthTests
 
         var hostedCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
 
         hostedCount.Should().Be(1);

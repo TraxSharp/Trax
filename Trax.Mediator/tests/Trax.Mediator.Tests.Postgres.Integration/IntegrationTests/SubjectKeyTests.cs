@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -31,17 +33,24 @@ public class SubjectKeyTests : TestSetup
     private async Task<WorkQueue?> EntryAsync(long id)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     [SetUp]
     public async Task ResetAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
-            .WorkQueues.Where(w => w.TrainName!.Contains("SubjectKeyTests"))
+            .WorkQueues.Where(w => w.TrainName != null && w.TrainName.Contains("SubjectKeyTests"))
             .ExecuteDeleteAsync();
     }
 
@@ -49,11 +58,12 @@ public class SubjectKeyTests : TestSetup
     public async Task A_train_that_does_not_override_the_key_enqueues_with_null()
     {
         var result = await Execution.QueueAsync(
-            typeof(IUnkeyedTrain).FullName!,
+            typeof(IUnkeyedTrain).FullName.NotNull(),
             "{\"customerId\":42}"
         );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .SubjectKey.Should()
             .BeNull("no key means no serialization — every existing train must be untouched");
     }
@@ -62,24 +72,28 @@ public class SubjectKeyTests : TestSetup
     public async Task A_train_that_overrides_the_key_stamps_it_on_the_entry()
     {
         var result = await Execution.QueueAsync(
-            typeof(IKeyedTrain).FullName!,
+            typeof(IKeyedTrain).FullName.NotNull(),
             "{\"customerId\":42}"
         );
 
-        (await EntryAsync(result.WorkQueueId))!.SubjectKey.Should().Be("customer-42");
+        (await EntryAsync(result.WorkQueueId)).NotNull().SubjectKey.Should().Be("customer-42");
     }
 
     [Test]
     public async Task The_key_is_derived_from_the_input_not_fixed_per_train()
     {
-        var first = await Execution.QueueAsync(typeof(IKeyedTrain).FullName!, "{\"customerId\":1}");
+        var first = await Execution.QueueAsync(
+            typeof(IKeyedTrain).FullName.NotNull(),
+            "{\"customerId\":1}"
+        );
         var second = await Execution.QueueAsync(
-            typeof(IKeyedTrain).FullName!,
+            typeof(IKeyedTrain).FullName.NotNull(),
             "{\"customerId\":2}"
         );
 
-        (await EntryAsync(first.WorkQueueId))!.SubjectKey.Should().Be("customer-1");
-        (await EntryAsync(second.WorkQueueId))!
+        (await EntryAsync(first.WorkQueueId)).NotNull().SubjectKey.Should().Be("customer-1");
+        (await EntryAsync(second.WorkQueueId))
+            .NotNull()
             .SubjectKey.Should()
             .Be("customer-2", "the key identifies the record, so it varies per mutation");
     }
@@ -88,7 +102,9 @@ public class SubjectKeyTests : TestSetup
     public async Task A_key_that_cannot_be_computed_aborts_the_enqueue()
     {
         var act = async () =>
-            await Execution.QueueAsync(typeof(IThrowingKeyTrain).FullName!, "{\"customerId\":42}");
+            await Execution
+                .QueueAsync(typeof(IThrowingKeyTrain).FullName.NotNull(), "{\"customerId\":42}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<Exception>()).WithMessage(
             "*cannot key this mutation*",
@@ -97,8 +113,13 @@ public class SubjectKeyTests : TestSetup
         );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("ThrowingKeyTrain")))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("ThrowingKeyTrain")
+            )
+        )
             .Should()
             .Be(0, "an aborted enqueue leaves no entry");
     }
@@ -107,11 +128,12 @@ public class SubjectKeyTests : TestSetup
     public async Task A_null_returned_by_the_override_is_stored_as_null()
     {
         var result = await Execution.QueueAsync(
-            typeof(INullKeyTrain).FullName!,
+            typeof(INullKeyTrain).FullName.NotNull(),
             "{\"customerId\":42}"
         );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .SubjectKey.Should()
             .BeNull("returning null is a legitimate 'this one needs no serialization'");
     }
@@ -122,7 +144,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = "";
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName.NotNull(), "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*empty or whitespace*",
@@ -138,7 +162,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = key;
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName.NotNull(), "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*empty or whitespace*",
@@ -147,8 +173,13 @@ public class SubjectKeyTests : TestSetup
         );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("SubjectKeyTests")))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("SubjectKeyTests")
+            )
+        )
             .Should()
             .Be(0, "a refused key writes no entry");
     }
@@ -170,7 +201,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = key;
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName.NotNull(), "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*unpaired surrogate*",
@@ -185,9 +218,12 @@ public class SubjectKeyTests : TestSetup
     {
         ConfigurableKeyTrain.Key = "order:\U0001F600";
 
-        var result = await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+        var result = await Execution.QueueAsync(
+            typeof(IConfigurableKeyTrain).FullName.NotNull(),
+            "{}"
+        );
 
-        (await EntryAsync(result.WorkQueueId))!.SubjectKey.Should().Be("order:\U0001F600");
+        (await EntryAsync(result.WorkQueueId)).NotNull().SubjectKey.Should().Be("order:\U0001F600");
     }
 
     [Test]
@@ -196,7 +232,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = new string('k', 513);
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName.NotNull(), "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*limit of 512*",
@@ -223,9 +261,13 @@ public class SubjectKeyTests : TestSetup
         key.Length.Should().Be(1024, "each character takes two UTF-16 units");
         ConfigurableKeyTrain.Key = key;
 
-        var result = await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+        var result = await Execution.QueueAsync(
+            typeof(IConfigurableKeyTrain).FullName.NotNull(),
+            "{}"
+        );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .SubjectKey.Should()
             .Be(
                 key,
@@ -240,7 +282,9 @@ public class SubjectKeyTests : TestSetup
         ConfigurableKeyTrain.Key = Emoji(513);
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+            await Execution
+                .QueueAsync(typeof(IConfigurableKeyTrain).FullName.NotNull(), "{}")
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*513 characters*",
@@ -261,8 +305,14 @@ public class SubjectKeyTests : TestSetup
         );
         ConfigurableKeyTrain.Key = key;
 
-        var first = await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
-        var second = await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+        var first = await Execution.QueueAsync(
+            typeof(IConfigurableKeyTrain).FullName.NotNull(),
+            "{}"
+        );
+        var second = await Execution.QueueAsync(
+            typeof(IConfigurableKeyTrain).FullName.NotNull(),
+            "{}"
+        );
 
         // Claim and dispatch the first entry the way the dispatcher does. Dispatching sets the
         // status the subject index covers, so this is where an oversized key would fail.
@@ -285,23 +335,30 @@ public class SubjectKeyTests : TestSetup
     /// </summary>
     private async Task<bool> ClaimAndDispatchAsync(long workQueueId)
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var dialect = scope.ServiceProvider.GetRequiredService<ISqlDialect>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var database = (DbContext)dataContext;
 
-        using var transaction = await dataContext.BeginTransaction(CancellationToken.None);
+        using var transaction = await dataContext
+            .BeginTransaction(CancellationToken.None)
+            .ConfigureAwait(false);
         var entry = await dataContext
             .WorkQueues.AsNoTracking()
-            .FirstAsync(w => w.Id == workQueueId);
-        await database.Database.ExecuteSqlRawAsync(dialect.LockSubject(), [entry.SubjectKey!]);
+            .FirstAsync(w => w.Id == workQueueId)
+            .ConfigureAwait(false);
+        await database
+            .Database.ExecuteSqlRawAsync(dialect.LockSubject(), [entry.SubjectKey.NotNull()])
+            .ConfigureAwait(false);
 
         var claimed = await dataContext
             .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), workQueueId)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
         if (claimed is null)
         {
-            await dataContext.RollbackTransaction();
+            await dataContext.RollbackTransaction().ConfigureAwait(false);
             return false;
         }
 
@@ -311,25 +368,30 @@ public class SubjectKeyTests : TestSetup
                 Name = claimed.TrainName,
                 ExternalId = claimed.ExternalId,
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
-        await dataContext.Track(metadata);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await dataContext.Track(metadata).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         claimed.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
         claimed.MetadataId = metadata.Id;
-        claimed.DispatchedAt = DateTime.UtcNow;
-        await dataContext.SaveChanges(CancellationToken.None);
-        await dataContext.CommitTransaction();
+        claimed.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await dataContext.CommitTransaction().ConfigureAwait(false);
         return true;
     }
 
     [Test]
     public async Task An_enqueue_with_no_input_is_still_keyed()
     {
-        var result = await Execution.QueueAsync(typeof(IKeyedTrain).FullName!, null);
+        var result = await Execution.QueueAsync(
+            typeof(IKeyedTrain).FullName.NotNull(),
+            inputJson: null
+        );
 
-        (await EntryAsync(result.WorkQueueId))!
+        (await EntryAsync(result.WorkQueueId))
+            .NotNull()
             .SubjectKey.Should()
             .Be(
                 "customer-0",
@@ -373,7 +435,10 @@ public class SubjectKeyTests : TestSetup
     public class KeyedTrain : ServiceTrain<KeyedInput, Unit>, IKeyedTrain
     {
         protected override string? QueueSubjectKey(Metadata metadata) =>
-            $"customer-{metadata.GetInput<KeyedInput>()!.CustomerId}";
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"customer-{metadata.GetInput<KeyedInput>().NotNull().CustomerId}"
+            );
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -42,8 +43,8 @@ public class BuilderValidationTests
     {
         var b = new PersistedOperationsBuilder()
             .SingleNode()
-            .RequirePersisted(false)
-            .LogNonPersistedRequests(false);
+            .RequirePersisted(require: false)
+            .LogNonPersistedRequests(log: false);
 
         Action act = () => b.Build();
         act.Should()
@@ -198,7 +199,7 @@ public class BuilderValidationTests
     [Test]
     public void UseDatabase_IsAcceptedButChoosesNothing()
     {
-        var useDatabase = typeof(PersistedOperationsBuilder).GetMethod("UseDatabase")!;
+        var useDatabase = typeof(PersistedOperationsBuilder).GetMethod("UseDatabase").NotNull();
         var b = new PersistedOperationsBuilder().SingleNode();
 
         useDatabase.Invoke(b, ["Host=elsewhere"]).Should().BeSameAs(b);
@@ -209,7 +210,8 @@ public class BuilderValidationTests
             .Throw<System.Reflection.TargetInvocationException>()
             .WithInnerException<ArgumentException>();
         typeof(PersistedOperationsOptions)
-            .GetProperty("DatabaseConnectionString")!
+            .GetProperty("DatabaseConnectionString")
+            .NotNull()
             .GetValue(b.Build())
             .Should()
             .Be(string.Empty);
@@ -219,7 +221,7 @@ public class BuilderValidationTests
     public void AllowOperations_NullArray_Throws()
     {
         var b = new PersistedOperationsBuilder();
-        Action act = () => b.AllowOperations(null!);
+        Action act = () => b.AllowOperations(Null.Of<string[]>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -227,7 +229,7 @@ public class BuilderValidationTests
     public void AllowOperationsMatching_NullPredicate_Throws()
     {
         var b = new PersistedOperationsBuilder();
-        Action act = () => b.AllowOperationsMatching(null!);
+        Action act = () => b.AllowOperationsMatching(Null.Of<Func<string, bool>>());
         act.Should().Throw<ArgumentNullException>();
     }
 

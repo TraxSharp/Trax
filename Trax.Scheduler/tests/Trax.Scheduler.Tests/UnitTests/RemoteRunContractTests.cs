@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RunExecutor;
 
@@ -50,7 +52,8 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunRequest>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!
+        deserialized
+            .NotNull()
             .TrainName.Should()
             .Be(
                 "My.Namespace.MyTrain",
@@ -116,7 +119,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(42);
+        deserialized.NotNull().MetadataId.Should().Be(42);
         deserialized.OutputJson.Should().Be("""{"value":"hello"}""");
         deserialized.OutputType.Should().Be("My.Namespace.MyOutput");
         deserialized.IsError.Should().BeFalse();
@@ -139,7 +142,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(0);
+        deserialized.NotNull().MetadataId.Should().Be(0);
         deserialized.IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Something went wrong");
         deserialized.OutputJson.Should().BeNull();
@@ -162,7 +165,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(123);
+        deserialized.NotNull().MetadataId.Should().Be(123);
         deserialized.IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Validation failed");
         deserialized.ExceptionType.Should().Be("InvalidOperationException");
@@ -194,12 +197,13 @@ public class RemoteRunContractTests
 
         json.Should()
             .Contain(
-                $"\"failureClass\":{wireValue}",
+                string.Create(CultureInfo.InvariantCulture, $"\"failureClass\":{wireValue}"),
                 "reordering FailureClass's members must not change what an older worker's value "
                     + "means. See docs/adr/0001-remote-execution-is-a-json-wire-contract.md"
             );
         JsonSerializer
-            .Deserialize<RemoteRunResponse>(json, RemoteRunJson.Read)!
+            .Deserialize<RemoteRunResponse>(json, RemoteRunJson.Read)
+            .NotNull()
             .FailureClass.Should()
             .Be(failureClass);
     }
@@ -220,7 +224,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.IsError.Should().BeTrue();
+        deserialized.NotNull().IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Generic error");
         deserialized.ExceptionType.Should().BeNull();
         deserialized.FailureJunction.Should().BeNull();
@@ -236,7 +240,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(10);
+        deserialized.NotNull().MetadataId.Should().Be(10);
         deserialized.OutputJson.Should().BeNull();
         deserialized.OutputType.Should().BeNull();
         deserialized.IsError.Should().BeFalse();
@@ -353,7 +357,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteJobResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(55);
+        deserialized.NotNull().MetadataId.Should().Be(55);
         deserialized.IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Something went wrong");
         deserialized.ExceptionType.Should().Be("InvalidOperationException");
@@ -369,7 +373,7 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteJobResponse>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.MetadataId.Should().Be(100);
+        deserialized.NotNull().MetadataId.Should().Be(100);
         deserialized.IsError.Should().BeFalse();
     }
 
@@ -389,7 +393,7 @@ public class RemoteRunContractTests
         var requestJson = JsonSerializer.Serialize(request);
         var receivedRequest = JsonSerializer.Deserialize<RemoteRunRequest>(requestJson);
         receivedRequest.Should().NotBeNull();
-        receivedRequest!.TrainName.Should().Be("Trax.Tests.MyTrain");
+        receivedRequest.NotNull().TrainName.Should().Be("Trax.Tests.MyTrain");
 
         var response = new RemoteRunResponse(
             MetadataId: 100,
@@ -400,7 +404,7 @@ public class RemoteRunContractTests
         var responseJson = JsonSerializer.Serialize(response);
         var receivedResponse = JsonSerializer.Deserialize<RemoteRunResponse>(responseJson);
         receivedResponse.Should().NotBeNull();
-        receivedResponse!.MetadataId.Should().Be(100);
+        receivedResponse.NotNull().MetadataId.Should().Be(100);
         receivedResponse.IsError.Should().BeFalse();
         receivedResponse.OutputJson.Should().Be("""{"result":"success"}""");
     }
@@ -421,7 +425,7 @@ public class RemoteRunContractTests
         var receivedResponse = JsonSerializer.Deserialize<RemoteRunResponse>(responseJson);
 
         receivedResponse.Should().NotBeNull();
-        receivedResponse!.IsError.Should().BeTrue();
+        receivedResponse.NotNull().IsError.Should().BeTrue();
         receivedResponse.ErrorMessage.Should().Contain("validation failed");
         receivedResponse.ExceptionType.Should().Be("TrainException");
         receivedResponse.FailureJunction.Should().Be("ValidateJunction");

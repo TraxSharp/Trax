@@ -1,0 +1,44 @@
+﻿namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class AttributeNameShouldEndWithAttributeAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.AttributeNameShouldEndWithAttribute,
+        title: "Class name should end with 'Attribute'",
+        messageFormat: "Class name should end with 'Attribute'",
+        RuleCategories.Naming,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.AttributeNameShouldEndWithAttribute));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var attributeType = compilationContext.Compilation.GetTypeByMetadataName("System.Attribute");
+            if (attributeType is null)
+                return;
+
+            compilationContext.RegisterSymbolAction(context => AnalyzeSymbol(context, attributeType), SymbolKind.NamedType);
+        });
+    }
+
+    private static void AnalyzeSymbol(SymbolAnalysisContext context, ITypeSymbol attributeType)
+    {
+        var symbol = (INamedTypeSymbol)context.Symbol;
+        if (symbol.Name is null)
+            return;
+
+        if (!symbol.Name.EndsWith("Attribute", System.StringComparison.Ordinal) && symbol.InheritsFrom(attributeType))
+        {
+            context.ReportDiagnostic(Rule, symbol);
+        }
+    }
+}

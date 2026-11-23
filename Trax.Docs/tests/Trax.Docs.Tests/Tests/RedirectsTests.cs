@@ -22,9 +22,9 @@ public class RedirectsTests
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
     [Test]
-    public void Redirects_AreOldDocsPaths_ClaimedOnce()
+    public async Task Redirects_AreOldDocsPaths_ClaimedOnce()
     {
-        var site = DocsSite.Load();
+        var site = await DocsSite.LoadAsync().ConfigureAwait(false);
         var problems = Problems(site);
 
         problems
@@ -109,7 +109,10 @@ public class RedirectsTests
         {
             if (!path.StartsWith("/docs/", StringComparison.Ordinal))
                 problems.Add($"{page}: {path} does not start with /docs/");
-            else if (path.Contains('#') || path.Contains('?'))
+            else if (
+                path.Contains('#', StringComparison.Ordinal)
+                || path.Contains('?', StringComparison.Ordinal)
+            )
                 problems.Add($"{page}: {path} carries an anchor or a query");
             else if (DocsSite.FileFor(path) is { } file && site.Pages.Contains(file))
                 problems.Add($"{page}: {path} is a live page ({file})");
@@ -117,12 +120,14 @@ public class RedirectsTests
 
         problems.AddRange(
             site.RedirectClaims.GroupBy(c => c.Path.TrimEnd('/'), StringComparer.Ordinal)
-                .Where(g => g.Count() > 1)
+                .Where(g => g.Skip(1).Any())
                 .Select(g =>
                     $"{g.Key} is claimed more than once, by "
                     + string.Join(
                         ", ",
-                        g.Select(c => c.Page).Distinct().Order(StringComparer.Ordinal)
+                        g.Select(c => c.Page)
+                            .Distinct(StringComparer.Ordinal)
+                            .Order(StringComparer.Ordinal)
                     )
                 )
         );

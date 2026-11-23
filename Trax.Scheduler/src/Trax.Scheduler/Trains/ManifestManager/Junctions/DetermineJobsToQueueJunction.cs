@@ -17,9 +17,10 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// all manifests that are due, applying only per-manifest guards (dead letters, duplicate
 /// queue entries, active executions).
 /// </remarks>
-internal class DetermineJobsToQueueJunction(
+internal sealed class DetermineJobsToQueueJunction(
     ILogger<DetermineJobsToQueueJunction> logger,
-    SchedulerConfiguration config
+    SchedulerConfiguration config,
+    TimeProvider timeProvider
 ) : EffectJunction<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(
@@ -32,7 +33,7 @@ internal class DetermineJobsToQueueJunction(
             "Starting DetermineJobsToQueueJunction to identify manifests due for execution"
         );
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var viewsToQueue = new List<ManifestDispatchView>();
 
         // Create a set of manifest IDs that were just dead-lettered in this cycle
@@ -40,6 +41,30 @@ internal class DetermineJobsToQueueJunction(
             .Select(dl => dl.ManifestId)
             .ToHashSet();
 
+        AddDueScheduled(views, newlyDeadLetteredManifestIds, now, viewsToQueue);
+
+        AddDueDependents(views, newlyDeadLetteredManifestIds, viewsToQueue);
+
+        if (viewsToQueue.Count > 0)
+            logger.LogInformation(
+                "DetermineJobsToQueueJunction completed: {ManifestsToQueueCount} manifests are due for execution",
+                viewsToQueue.Count
+            );
+        else
+            logger.LogDebug(
+                "DetermineJobsToQueueJunction completed: no manifests due for execution"
+            );
+
+        return viewsToQueue;
+    }
+
+    private void AddDueScheduled(
+        List<ManifestDispatchView> views,
+        HashSet<long> newlyDeadLetteredManifestIds,
+        DateTime now,
+        List<ManifestDispatchView> viewsToQueue
+    )
+    {
         // Filter to only time-based scheduled manifests (not manual-only or dependent)
         // Also skip manifests whose group is disabled
         var scheduledViews = views
@@ -80,7 +105,14 @@ internal class DetermineJobsToQueueJunction(
                 viewsToQueue.Add(view);
             }
         }
+    }
 
+    private void AddDueDependents(
+        List<ManifestDispatchView> views,
+        HashSet<long> newlyDeadLetteredManifestIds,
+        List<ManifestDispatchView> viewsToQueue
+    )
+    {
         // Evaluate dependent manifests (triggered by parent success, not by schedule)
         var dependentViews = views
             .Where(v =>
@@ -102,79 +134,79 @@ internal class DetermineJobsToQueueJunction(
                 if (ShouldSkipManifest(dependent, newlyDeadLetteredManifestIds))
                     continue;
 
-                // Find parent manifest in the loaded set (only enabled manifests are loaded)
-                var parent = views.FirstOrDefault(v =>
-                    v.Manifest.Id == dependent.Manifest.DependsOnManifestId
-                );
-                if (parent is null)
-                {
-                    logger.LogTrace(
-                        "Skipping dependent manifest {ManifestId} - parent manifest {ParentId} not found or disabled",
-                        dependent.Manifest.Id,
-                        dependent.Manifest.DependsOnManifestId
-                    );
-                    continue;
-                }
-
-                // Guard: if parent has a LastSuccessfulRun timestamp but no successful metadata
-                // record to back it up, the timestamp is stale (e.g. metadata was truncated/pruned).
-                // Skip the dependent to avoid firing it based on orphaned state.
-                if (parent.Manifest.LastSuccessfulRun != null && !parent.HasSuccessfulMetadata)
-                {
-                    logger.LogWarning(
-                        "Parent manifest {ParentId} (name: {ParentName}) has LastSuccessfulRun={LastRun} but no successful metadata — skipping dependent {DependentId}",
-                        parent.Manifest.Id,
-                        parent.Manifest.Name,
-                        parent.Manifest.LastSuccessfulRun,
-                        dependent.Manifest.Id
-                    );
-                    continue;
-                }
-
-                // Queue if the parent succeeded after the dependent's latest run started. That is
-                // when its latest successful run started, not when it finished, so a parent
-                // success that landed while the dependent was running earns it another run (with
-                // no run on record, history pruned, its own LastSuccessfulRun stands in); or when
-                // its latest cancelled run started, when later, because a cancelled run consumed
-                // the parent success it was started for but not one that landed while it ran.
-                var successBaseline =
-                    dependent.LatestSuccessfulRunStart ?? dependent.Manifest.LastSuccessfulRun;
-                var dependentBaseline =
-                    dependent.LatestCancelledRunStart is { } cancelled
-                    && (successBaseline == null || cancelled > successBaseline)
-                        ? cancelled
-                        : successBaseline;
-                if (
-                    parent.Manifest.LastSuccessfulRun != null
-                    && (
-                        dependentBaseline == null
-                        || parent.Manifest.LastSuccessfulRun > dependentBaseline
-                    )
-                )
-                {
-                    logger.LogDebug(
-                        "Dependent manifest {ManifestId} (name: {ManifestName}) is due - parent {ParentId} last succeeded at {ParentLastRun}",
-                        dependent.Manifest.Id,
-                        dependent.Manifest.Name,
-                        parent.Manifest.Id,
-                        parent.Manifest.LastSuccessfulRun
-                    );
+                if (IsDependentDue(dependent, views))
                     viewsToQueue.Add(dependent);
-                }
             }
         }
+    }
 
-        if (viewsToQueue.Count > 0)
-            logger.LogInformation(
-                "DetermineJobsToQueueJunction completed: {ManifestsToQueueCount} manifests are due for execution",
-                viewsToQueue.Count
+    private bool IsDependentDue(ManifestDispatchView dependent, List<ManifestDispatchView> views)
+    {
+        // Find parent manifest in the loaded set (only enabled manifests are loaded)
+        var parent = views.FirstOrDefault(v =>
+            v.Manifest.Id == dependent.Manifest.DependsOnManifestId
+        );
+        if (parent is null)
+        {
+            logger.LogTrace(
+                "Skipping dependent manifest {ManifestId} - parent manifest {ParentId} not found or disabled",
+                dependent.Manifest.Id,
+                dependent.Manifest.DependsOnManifestId
             );
-        else
+            return false;
+        }
+
+        // Guard: if parent has a LastSuccessfulRun timestamp but no successful metadata
+        // record to back it up, the timestamp is stale (e.g. metadata was truncated/pruned).
+        // Skip the dependent to avoid firing it based on orphaned state.
+        if (parent.Manifest.LastSuccessfulRun != null && !parent.HasSuccessfulMetadata)
+        {
+            logger.LogWarning(
+                "Parent manifest {ParentId} (name: {ParentName}) has LastSuccessfulRun={LastRun} but no successful metadata — skipping dependent {DependentId}",
+                parent.Manifest.Id,
+                parent.Manifest.Name,
+                parent.Manifest.LastSuccessfulRun,
+                dependent.Manifest.Id
+            );
+            return false;
+        }
+
+        var dependentBaseline = DependentBaseline(dependent);
+        if (
+            parent.Manifest.LastSuccessfulRun != null
+            && (dependentBaseline == null || parent.Manifest.LastSuccessfulRun > dependentBaseline)
+        )
+        {
             logger.LogDebug(
-                "DetermineJobsToQueueJunction completed: no manifests due for execution"
+                "Dependent manifest {ManifestId} (name: {ManifestName}) is due - parent {ParentId} last succeeded at {ParentLastRun}",
+                dependent.Manifest.Id,
+                dependent.Manifest.Name,
+                parent.Manifest.Id,
+                parent.Manifest.LastSuccessfulRun
             );
+            return true;
+        }
 
-        return viewsToQueue;
+        return false;
+    }
+
+    private static DateTime? DependentBaseline(ManifestDispatchView dependent)
+    {
+        // Queue if the parent succeeded after the dependent's latest run started. That is
+        // when its latest successful run started, not when it finished, so a parent
+        // success that landed while the dependent was running earns it another run (with
+        // no run on record, history pruned, its own LastSuccessfulRun stands in); or when
+        // its latest cancelled run started, when later, because a cancelled run consumed
+        // the parent success it was started for but not one that landed while it ran.
+        var successBaseline =
+            dependent.LatestSuccessfulRunStart ?? dependent.Manifest.LastSuccessfulRun;
+        var dependentBaseline =
+            dependent.LatestCancelledRunStart is { } cancelled
+            && (successBaseline == null || cancelled > successBaseline)
+                ? cancelled
+                : successBaseline;
+
+        return dependentBaseline;
     }
 
     /// <summary>

@@ -1,3 +1,6 @@
+using System.Globalization;
+using Trax.Core.Extensions;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -21,7 +24,7 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "docs/adr/0006-one-sample-per-major-feature-proven-end-to-end.md")]
 [TestFixture]
-public class FeatureCoverageTableTests
+public partial class FeatureCoverageTableTests
 {
     private const string Adr = "docs/adr/0006-one-sample-per-major-feature-proven-end-to-end.md";
     private const string Heading = "## Feature coverage";
@@ -39,33 +42,20 @@ public class FeatureCoverageTableTests
         "Trax.Cli",
     };
 
-    private static readonly Regex TestLink = new(
-        @"\[`(?<class>[^`]+)`\]\(https://github\.com/TraxSharp/Trax/blob/main/(?<repo>Trax\.[\w.]+?)/(?<path>[^)\s]+)\)",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex FeatureLink = new(
-        @"\[`(?<file>[^`]+\.feature)`\]\(https://github\.com/TraxSharp/Trax/blob/main/Trax\.Samples/(?<path>[^)\s]+)\)",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex FeaturePath = new(
-        @"^samples/[^/]+/(?:features|specs)/(?:[^/]+/)*[^/]+\.feature$",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex FeatureKeyword = new(@"^\s*Feature:", RegexOptions.Multiline);
-
     private sealed record Row(int Line, string Feature, string ProvedBy);
 
     private sealed record FeatureClaim(int Line, string File, string Path);
 
     private sealed record Claim(int Line, string Feature, string Class, string Repo, string Path);
 
-    private static List<Row> Rows()
+    private static async Task<List<Row>> RowsAsync()
     {
-        var lines = File.ReadAllLines(RepoRoot.Combine("README.md"));
-        var start = Array.FindIndex(lines, l => l.Trim() == Heading);
+        var lines = await File.ReadAllLinesAsync(RepoRoot.Combine("README.md"))
+            .ConfigureAwait(false);
+        var start = Array.FindIndex(
+            lines,
+            l => string.Equals(l.Trim(), Heading, StringComparison.Ordinal)
+        );
         if (start < 0)
             return new List<Row>();
 
@@ -81,7 +71,7 @@ public class FeatureCoverageTableTests
             var cells = line.Trim('|').Split('|').Select(c => c.Trim()).ToArray();
             if (
                 cells.Length < 3
-                || cells[1] == "Feature"
+                || string.Equals(cells[1], "Feature", StringComparison.Ordinal)
                 || cells.All(c => c.All(ch => ch is '-' or ':'))
             )
                 continue;
@@ -90,8 +80,8 @@ public class FeatureCoverageTableTests
         return rows;
     }
 
-    private static List<Claim> Claims() =>
-        Rows()
+    private static async Task<List<Claim>> ClaimsAsync() =>
+        (await RowsAsync().ConfigureAwait(false))
             .SelectMany(r =>
                 TestLink
                     .Matches(r.ProvedBy)
@@ -107,8 +97,8 @@ public class FeatureCoverageTableTests
             )
             .ToList();
 
-    private static List<FeatureClaim> FeatureClaims() =>
-        Rows()
+    private static async Task<List<FeatureClaim>> FeatureClaimsAsync() =>
+        (await RowsAsync().ConfigureAwait(false))
             .SelectMany(r =>
                 FeatureLink
                     .Matches(r.ProvedBy)
@@ -124,23 +114,32 @@ public class FeatureCoverageTableTests
     /// What is wrong with each feature-file link: a path outside a sample's <c>features/</c> or <c>specs/</c>, link
     /// text that is not the file's name, a file that does not exist, or one that declares no <c>Feature:</c>.
     /// </summary>
-    private static List<string> FeatureLinkProblems(IEnumerable<FeatureClaim> claims)
+    private static async Task<List<string>> FeatureLinkProblemsAsync(
+        IEnumerable<FeatureClaim> claims
+    )
     {
         var problems = new List<string>();
         foreach (var claim in claims)
         {
-            var at = $"README.md line {claim.Line}: {claim.File} -> {claim.Path}";
+            var at = string.Create(
+                CultureInfo.InvariantCulture,
+                $"README.md line {claim.Line}: {claim.File} -> {claim.Path}"
+            );
             var file = RepoRoot.Combine(claim.Path.Split('/'));
             if (
                 !FeaturePath.IsMatch(claim.Path)
                 || claim.Path.Split('/').Any(segment => segment is "." or "..")
             )
                 problems.Add($"{at} is not under samples/<Sample>/features/ or specs/");
-            else if (Path.GetFileName(claim.Path) != claim.File)
+            else if (
+                !string.Equals(Path.GetFileName(claim.Path), claim.File, StringComparison.Ordinal)
+            )
                 problems.Add($"{at}: the link text is not the file's name");
             else if (!File.Exists(file))
                 problems.Add($"{at} does not exist");
-            else if (!FeatureKeyword.IsMatch(File.ReadAllText(file)))
+            else if (
+                !FeatureKeyword.IsMatch(await File.ReadAllTextAsync(file).ConfigureAwait(false))
+            )
                 problems.Add($"{at} declares no Feature:");
         }
         return problems;
@@ -158,9 +157,12 @@ public class FeatureCoverageTableTests
                 var full = Path.GetFullPath(
                     Path.Combine(projectDir, include.Trim().Replace('\\', '/'))
                 );
-                var dir = Path.GetDirectoryName(full)!;
+                var dir = Path.GetDirectoryName(full).NotNull();
                 var name = Path.GetFileName(full);
-                if (!name.Contains('*') && !name.Contains('?'))
+                if (
+                    !name.Contains('*', StringComparison.Ordinal)
+                    && !name.Contains('?', StringComparison.Ordinal)
+                )
                     return [full];
                 return Directory.Exists(dir)
                     ? Directory.EnumerateFiles(dir, name).Select(Path.GetFullPath)
@@ -168,8 +170,8 @@ public class FeatureCoverageTableTests
             });
 
     [Test]
-    public void TheReadmeHasAFeatureCoverageTable() =>
-        Rows()
+    public async Task TheReadmeHasAFeatureCoverageTable() =>
+        (await RowsAsync().ConfigureAwait(false))
             .Should()
             .NotBeEmpty(
                 $"README.md must carry a '{Heading}' section with a table of features and the "
@@ -177,15 +179,17 @@ public class FeatureCoverageTableTests
             );
 
     [Test]
-    public void EveryRow_NamesATestClassOrSaysThereIsNone()
+    public async Task EveryRow_NamesATestClassOrSaysThereIsNone()
     {
-        var offenders = Rows()
+        var offenders = (await RowsAsync().ConfigureAwait(false))
             .Where(r =>
                 !TestLink.IsMatch(r.ProvedBy)
                 && !FeatureLink.IsMatch(r.ProvedBy)
                 && !r.ProvedBy.Contains(NoE2E, StringComparison.Ordinal)
             )
-            .Select(r => $"README.md line {r.Line}: {r.Feature}")
+            .Select(r =>
+                string.Create(CultureInfo.InvariantCulture, $"README.md line {r.Line}: {r.Feature}")
+            )
             .ToList();
 
         offenders
@@ -196,21 +200,30 @@ public class FeatureCoverageTableTests
                     + "feature file as [`name.feature`](https://github.com/TraxSharp/Trax/blob/main/"
                     + "Trax.Samples/samples/<Sample>/features/name.feature), or say "
                     + $"'{NoE2E}' when no end-to-end test exists anywhere. See {Adr}:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
     [Test]
-    public void EveryLink_HasTheShapeOfATestClassInATraxRepo()
+    public async Task EveryLink_HasTheShapeOfATestClassInATraxRepo()
     {
-        var offenders = Claims()
+        var offenders = (await ClaimsAsync().ConfigureAwait(false))
             .Where(c =>
                 !KnownRepos.Contains(c.Repo)
                 || !c.Path.StartsWith("tests/", StringComparison.Ordinal)
                 || !c.Class.EndsWith("Tests", StringComparison.Ordinal)
-                || Path.GetFileName(c.Path) != c.Class + ".cs"
+                || !string.Equals(
+                    Path.GetFileName(c.Path),
+                    c.Class + ".cs",
+                    StringComparison.Ordinal
+                )
             )
-            .Select(c => $"README.md line {c.Line}: {c.Class} -> {c.Repo}/{c.Path}")
+            .Select(c =>
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"README.md line {c.Line}: {c.Class} -> {c.Repo}/{c.Path}"
+                )
+            )
             .ToList();
 
         offenders
@@ -219,14 +232,16 @@ public class FeatureCoverageTableTests
                 "a feature-coverage link names a class ending in 'Tests', in a Trax repo, at "
                     + "tests/.../<Class>.cs, so a reader can find it and this guard can check it. "
                     + $"See {Adr}:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
     [Test]
-    public void EveryClassNamedForThisRepo_IsDeclaredInTheLinkedFile()
+    public async Task EveryClassNamedForThisRepo_IsDeclaredInTheLinkedFile()
     {
-        var claims = Claims().Where(c => c.Repo == ThisRepo).ToList();
+        var claims = (await ClaimsAsync().ConfigureAwait(false))
+            .Where(c => string.Equals(c.Repo, ThisRepo, StringComparison.Ordinal))
+            .ToList();
         claims.Should().NotBeEmpty($"the table names no class in this repo. See {Adr}.");
 
         var offenders = new List<string>();
@@ -235,14 +250,31 @@ public class FeatureCoverageTableTests
             var file = RepoRoot.Combine(claim.Path.Split('/'));
             if (!File.Exists(file))
             {
-                offenders.Add($"README.md line {claim.Line}: {claim.Path} does not exist");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"README.md line {claim.Line}: {claim.Path} does not exist"
+                    )
+                );
                 continue;
             }
 
-            var code = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
-            if (!Regex.IsMatch(code, $@"\bclass\s+{Regex.Escape(claim.Class)}\b"))
+            var code = SourceText.StripCommentsAndStrings(
+                await File.ReadAllTextAsync(file).ConfigureAwait(false)
+            );
+            if (
+                !Regex.IsMatch(
+                    code,
+                    $@"\bclass\s+{Regex.Escape(claim.Class)}\b",
+                    RegexOptions.None,
+                    TimeSpan.FromSeconds(1)
+                )
+            )
                 offenders.Add(
-                    $"README.md line {claim.Line}: {claim.Path} declares no class {claim.Class}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"README.md line {claim.Line}: {claim.Path} declares no class {claim.Class}"
+                    )
                 );
         }
 
@@ -252,50 +284,68 @@ public class FeatureCoverageTableTests
                 "every test class the feature-coverage table names in this repo must exist where "
                     + "the row links it; fix the row when a test moves or is renamed, and drop the "
                     + $"feature's claim only with a replacement. See {Adr}:\n"
-                    + string.Join("\n", offenders)
+                    + string.Join('\n', offenders)
             );
     }
 
     [Test]
-    public void EveryFeatureFileLinked_ExistsInASample()
+    public async Task EveryFeatureFileLinked_ExistsInASample()
     {
-        var claims = FeatureClaims();
+        var claims = await FeatureClaimsAsync().ConfigureAwait(false);
         claims
             .Should()
             .NotBeEmpty(
                 $"the table links no feature file; the CheckIn sample's row links its own. See {Adr}."
             );
 
-        var problems = FeatureLinkProblems(claims);
+        var problems = await FeatureLinkProblemsAsync(claims).ConfigureAwait(false);
         problems
             .Should()
             .BeEmpty(
                 "a feature-coverage link to a feature file names the file, under the sample's features/ "
                     + "or specs/ folder, and the file declares a Feature:. Fix the row when a feature file "
                     + $"moves or is renamed. See {Adr}:\n"
-                    + string.Join("\n", problems)
+                    + string.Join('\n', problems)
             );
     }
 
     [Test]
-    public void AFeatureLink_ToAMissingFileOrOutsideASamplesFeatures_IsAProblem()
+    public async Task AFeatureLink_ToAMissingFileOrOutsideASamplesFeatures_IsAProblem()
     {
-        FeatureLinkProblems([new(1, "gate.feature", "samples/CheckIn/features/gate.feature")])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gate.feature", "samples/CheckIn/features/gate.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeEmpty("the CheckIn sample's gate.feature exists and declares a Feature:");
-        FeatureLinkProblems([new(1, "gone.feature", "samples/CheckIn/features/gone.feature")])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gone.feature", "samples/CheckIn/features/gone.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Should()
             .EndWith("does not exist");
-        FeatureLinkProblems([
-                new(1, "gate.feature", "samples/CheckIn/features/checking-in.feature"),
-            ])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gate.feature", "samples/CheckIn/features/checking-in.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Should()
             .EndWith("the link text is not the file's name");
-        FeatureLinkProblems([new(1, "gate.feature", "tests/Trax.Samples.CheckIn.E2E/gate.feature")])
+        (
+            await FeatureLinkProblemsAsync([
+                    new(1, "gate.feature", "tests/Trax.Samples.CheckIn.E2E/gate.feature"),
+                ])
+                .ConfigureAwait(false)
+        )
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -303,26 +353,28 @@ public class FeatureCoverageTableTests
     }
 
     [Test]
-    public void EveryE2EProject_IsNamedByARow()
+    public async Task EveryE2EProject_IsNamedByARow()
     {
-        var linked = Claims()
-            .Where(c => c.Repo == ThisRepo)
+        var linked = (await ClaimsAsync().ConfigureAwait(false))
+            .Where(c => string.Equals(c.Repo, ThisRepo, StringComparison.Ordinal))
             .Select(c => c.Path.Split('/')[1])
             .ToHashSet(StringComparer.Ordinal);
-        var linkedFeatures = FeatureClaims()
+        var linkedFeatures = (await FeatureClaimsAsync().ConfigureAwait(false))
             .Select(c => Path.GetFullPath(RepoRoot.Combine(c.Path.Split('/'))))
             .ToHashSet(StringComparer.Ordinal);
 
         var unlisted = Directory
             .EnumerateDirectories(RepoRoot.Combine("tests"))
-            // A folder a retired project left behind (bin/ and obj/ only) is not a suite.
-            .Where(dir => Directory.EnumerateFiles(dir, "*.csproj").Any())
-            .Where(dir => Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal))
-            .Where(dir => !linked.Contains(Path.GetFileName(dir)))
-            .Where(dir => !CompiledFeatureFiles(dir).Any(linkedFeatures.Contains))
+            .Where(dir =>
+                // A folder a retired project left behind (bin/ and obj/ only) is not a suite.
+                Directory.EnumerateFiles(dir, "*.csproj").Any()
+                && Path.GetFileName(dir).EndsWith(".E2E", StringComparison.Ordinal)
+                && !linked.Contains(Path.GetFileName(dir))
+                && !CompiledFeatureFiles(dir).Any(linkedFeatures.Contains)
+            )
             .Select(Path.GetFileName)
             .OfType<string>()
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         unlisted
@@ -331,7 +383,31 @@ public class FeatureCoverageTableTests
                 "every E2E suite proves a feature, so the feature-coverage table must name at least "
                     + "one of its classes, or link a feature file it compiles as ReqnrollFeatureFiles. "
                     + $"See {Adr}. Unlisted:\n"
-                    + string.Join("\n", unlisted)
+                    + string.Join('\n', unlisted)
             );
     }
+
+    [GeneratedRegex(@"^\s*Feature:", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FeatureKeyword { get; }
+
+    [GeneratedRegex(
+        @"^samples/[^/]+/(?:features|specs)/(?:[^/]+/)*[^/]+\.feature$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FeaturePath { get; }
+
+    [GeneratedRegex(
+        @"\[`(?<file>[^`]+\.feature)`\]\(https://github\.com/TraxSharp/Trax/blob/main/Trax\.Samples/(?<path>[^)\s]+)\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FeatureLink { get; }
+
+    [GeneratedRegex(
+        @"\[`(?<class>[^`]+)`\]\(https://github\.com/TraxSharp/Trax/blob/main/(?<repo>Trax\.[\w.]+?)/(?<path>[^)\s]+)\)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TestLink { get; }
 }

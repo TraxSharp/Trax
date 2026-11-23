@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Reflection.Emit;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -21,7 +22,7 @@ internal static class Marked
     /// <summary>A new instance of <typeparamref name="TMachine"/>'s marked subclass.</summary>
     public static TMachine Machine<TMachine>()
         where TMachine : IMachine, new() =>
-        (TMachine)Activator.CreateInstance(TypeOf(typeof(TMachine)))!;
+        (TMachine)Activator.CreateInstance(TypeOf(typeof(TMachine))).NotNull();
 
     /// <summary>The marked subclass of <paramref name="machine"/>, which has the same simple name.</summary>
     public static Type TypeOf(Type machine) =>
@@ -39,7 +40,7 @@ internal static class Marked
                     type.DefineDefaultConstructor(MethodAttributes.Public);
                     type.SetCustomAttribute(
                         new CustomAttributeBuilder(
-                            typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes)!,
+                            typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes).NotNull(),
                             []
                         )
                     );

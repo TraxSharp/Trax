@@ -117,7 +117,7 @@ namespace Trax.Effect.Attributes
 }
 namespace Trax.Effect.Configuration.BroadcasterBuilder
 {
-    public class BroadcasterBuilder
+    public sealed class BroadcasterBuilder
     {
         public Trax.Effect.Services.EffectRegistry.IEffectRegistry? EffectRegistry { get; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
@@ -159,11 +159,11 @@ namespace Trax.Effect.Configuration.Deploy
     {
         public const int CurrentVersion = 1;
         public DeployManifest() { }
-        public System.Collections.Generic.List<Trax.Effect.Configuration.Deploy.DeployAuthenticationScheme> Authentication { get; set; }
+        public System.Collections.Generic.IList<Trax.Effect.Configuration.Deploy.DeployAuthenticationScheme> Authentication { get; set; }
         public Trax.Effect.Configuration.Deploy.DeployDatabase? Database { get; set; }
         public Trax.Effect.Configuration.Deploy.DeployEndpoints Endpoints { get; set; }
-        public System.Collections.Generic.List<string> Roles { get; set; }
-        public System.Collections.Generic.List<string> Transports { get; set; }
+        public System.Collections.Generic.IList<string> Roles { get; set; }
+        public System.Collections.Generic.IList<string> Transports { get; set; }
         public int Version { get; set; }
         public string Write() { }
         public static Trax.Effect.Configuration.Deploy.DeployManifest Read(string json) { }
@@ -189,17 +189,17 @@ namespace Trax.Effect.Configuration.TraxBuilder
     public class TraxBuilder
     {
         public TraxBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Trax.Effect.Services.EffectRegistry.IEffectRegistry registry) { }
-        public System.Collections.Generic.List<System.Reflection.Assembly> ContributedMediatorAssemblies { get; }
+        public System.Collections.Generic.IList<System.Reflection.Assembly> ContributedMediatorAssemblies { get; }
         public bool HasDataProvider { get; }
         public bool HasDatabaseProvider { get; }
         public bool MediatorConfigured { get; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabel(string key, string value) { }
-        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabels(System.Collections.Generic.Dictionary<string, string> labels) { }
+        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabels(System.Collections.Generic.IReadOnlyDictionary<string, string> labels) { }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder SetHostEnvironment(string environment) { }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder SetHostInstanceId(string instanceId) { }
     }
-    public class TraxBuilderWithEffects
+    public sealed class TraxBuilderWithEffects
     {
         public bool HasDataProvider { get; }
         public bool HasDatabaseProvider { get; }
@@ -432,6 +432,7 @@ namespace Trax.Effect.Models.BackgroundJob
         public int Priority { get; set; }
         public override string ToString() { }
         public static Trax.Effect.Models.BackgroundJob.BackgroundJob Create(Trax.Effect.Models.BackgroundJob.DTOs.CreateBackgroundJob dto) { }
+        public static Trax.Effect.Models.BackgroundJob.BackgroundJob Create(Trax.Effect.Models.BackgroundJob.DTOs.CreateBackgroundJob dto, System.TimeProvider timeProvider) { }
     }
 }
 namespace Trax.Effect.Models.BackgroundJob.DTOs
@@ -508,11 +509,15 @@ namespace Trax.Effect.Models.DeadLetter
         [System.ComponentModel.DataAnnotations.Schema.Column("status")]
         public Trax.Effect.Enums.DeadLetterStatus Status { get; set; }
         public void Acknowledge(string note) { }
+        public void Acknowledge(string note, System.TimeProvider timeProvider) { }
         public void LinkRetryMetadata(long retryMetadataId) { }
         public void MarkRetried(long retryMetadataId) { }
+        public void MarkRetried(long retryMetadataId, System.TimeProvider timeProvider) { }
         public void Requeue(string note) { }
+        public void Requeue(string note, System.TimeProvider timeProvider) { }
         public override string ToString() { }
         public static Trax.Effect.Models.DeadLetter.DeadLetter Create(Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter createDeadLetter) { }
+        public static Trax.Effect.Models.DeadLetter.DeadLetter Create(Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter createDeadLetter, System.TimeProvider timeProvider) { }
     }
 }
 namespace Trax.Effect.Models.EffectClaim
@@ -542,7 +547,7 @@ namespace Trax.Effect.Models.Host
         public string HostEnvironment { get; init; }
         public string HostInstanceId { get; init; }
         public string HostName { get; init; }
-        public System.Collections.Generic.Dictionary<string, string> Labels { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> Labels { get; init; }
         public static Trax.Effect.Models.Host.TraxHostInfo? Current { get; }
         public static Trax.Effect.Models.Host.TraxHostInfo AutoDetect() { }
     }
@@ -716,7 +721,7 @@ namespace Trax.Effect.Models.Log
         [System.ComponentModel.DataAnnotations.Schema.Column("message")]
         [System.Text.Json.Serialization.JsonPropertyName("message")]
         public string Message { get; set; }
-        public Trax.Effect.Models.Metadata.Metadata Metadata { get; set; }
+        public Trax.Effect.Models.Metadata.Metadata? Metadata { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("metadata_id")]
@@ -786,8 +791,8 @@ namespace Trax.Effect.Models.Manifest
     public class Exclusion
     {
         public Exclusion() { }
-        public System.Collections.Generic.List<System.DateOnly>? Dates { get; set; }
-        public System.Collections.Generic.List<System.DayOfWeek>? DaysOfWeek { get; set; }
+        public System.Collections.Generic.IReadOnlyList<System.DateOnly>? Dates { get; set; }
+        public System.Collections.Generic.IReadOnlyList<System.DayOfWeek>? DaysOfWeek { get; set; }
         public System.DateOnly? EndDate { get; set; }
         public System.TimeOnly? EndTime { get; set; }
         public System.DateOnly? StartDate { get; set; }
@@ -828,7 +833,7 @@ namespace Trax.Effect.Models.Manifest
         public bool IsEnabled { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_successful_run")]
         public System.DateTime? LastSuccessfulRun { get; set; }
-        public Trax.Effect.Models.ManifestGroup.ManifestGroup ManifestGroup { get; set; }
+        public Trax.Effect.Models.ManifestGroup.ManifestGroup? ManifestGroup { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("manifest_group_id")]
         public long ManifestGroupId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("max_retries")]
@@ -867,14 +872,14 @@ namespace Trax.Effect.Models.Manifest
         [System.ComponentModel.DataAnnotations.Schema.Column("variance_seconds")]
         public int? VarianceSeconds { get; set; }
         public System.Collections.Generic.ICollection<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; }
-        public System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> GetExclusions() { }
+        public System.Collections.Generic.IList<Trax.Effect.Models.Manifest.Exclusion> GetExclusions() { }
         public object GetProperties(System.Type propertyType) { }
         public TProperty GetProperties<TProperty>()
             where TProperty : Trax.Effect.Models.Manifest.IManifestProperties { }
         public object GetPropertiesUntyped() { }
         public object GetPropertiesUntyped(System.Collections.Generic.IEnumerable<System.Type> registeredInputTypes) { }
         public System.Type ResolvePropertyType(System.Collections.Generic.IEnumerable<System.Type> registeredInputTypes) { }
-        public void SetExclusions(System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> exclusions) { }
+        public void SetExclusions(System.Collections.Generic.IList<Trax.Effect.Models.Manifest.Exclusion> exclusions) { }
         public Trax.Core.Functional.Unit SetProperties(Trax.Effect.Models.Manifest.IManifestProperties properties) { }
         public override string ToString() { }
         public static Trax.Effect.Models.Manifest.Manifest Create(Trax.Effect.Models.Manifest.DTOs.CreateManifest manifest) { }
@@ -928,7 +933,7 @@ namespace Trax.Effect.Models.Metadata
         public Metadata() { }
         [System.ComponentModel.DataAnnotations.Schema.Column("cancel_requested")]
         public bool CancellationRequested { get; set; }
-        public System.Collections.Generic.ICollection<Trax.Effect.Models.Metadata.Metadata> Children { get; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.Metadata.Metadata>? Children { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("currently_running_junction")]
         public string? CurrentlyRunningJunction { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("decisions_recorded")]
@@ -979,7 +984,7 @@ namespace Trax.Effect.Models.Metadata
         public bool IsChild { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("junction_started_at")]
         public System.DateTime? JunctionStartedAt { get; set; }
-        public System.Collections.Generic.ICollection<Trax.Effect.Models.Log.Log> Logs { get; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.Log.Log>? Logs { get; }
         public Trax.Effect.Models.Manifest.Manifest? Manifest { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("manifest_id")]
         [System.Text.Json.Serialization.JsonInclude]
@@ -989,7 +994,7 @@ namespace Trax.Effect.Models.Metadata
         public string Name { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("output")]
         public string? Output { get; set; }
-        public Trax.Effect.Models.Metadata.Metadata Parent { get; }
+        public Trax.Effect.Models.Metadata.Metadata? Parent { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("parent_id")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("parent_id")]
@@ -1028,6 +1033,7 @@ namespace Trax.Effect.Models.Metadata
         public void SetOutputObject(dynamic? value) { }
         public override string ToString() { }
         public static Trax.Effect.Models.Metadata.Metadata Create(Trax.Effect.Models.Metadata.DTOs.CreateMetadata metadata) { }
+        public static Trax.Effect.Models.Metadata.Metadata Create(Trax.Effect.Models.Metadata.DTOs.CreateMetadata metadata, System.TimeProvider timeProvider) { }
     }
 }
 namespace Trax.Effect.Models.PersistedOperation
@@ -1374,6 +1380,7 @@ namespace Trax.Effect.Models.WorkQueue
         public string TrainName { get; set; }
         public override string ToString() { }
         public static Trax.Effect.Models.WorkQueue.WorkQueue Create(Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue dto) { }
+        public static Trax.Effect.Models.WorkQueue.WorkQueue Create(Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue dto, System.TimeProvider timeProvider) { }
     }
 }
 namespace Trax.Effect.Services.ChangeSignal
@@ -1411,6 +1418,7 @@ namespace Trax.Effect.Services.ChangeSignal
         public const string DroppedCounterName = "trax.change_signal.dropped";
         public const string MeterName = "Trax.ChangeSignal";
         public TraxChangeSignal(Trax.Effect.Services.ChangeSignal.ChangeSignalOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.ChangeSignal.TraxChangeSignal>? logger = null) { }
+        public TraxChangeSignal(Trax.Effect.Services.ChangeSignal.ChangeSignalOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.ChangeSignal.TraxChangeSignal>? logger, System.TimeProvider timeProvider) { }
         public System.Threading.Channels.ChannelReader<Trax.Effect.Services.ChangeSignal.ChangeDomain> Reader { get; }
         public long TotalDropped { get; }
         public void Complete() { }

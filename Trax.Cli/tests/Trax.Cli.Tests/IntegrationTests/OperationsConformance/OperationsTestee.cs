@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Cli.Tests.IntegrationTests.OperationsConformance.Generated;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests.OperationsConformance;
 
@@ -15,7 +16,7 @@ namespace Trax.Cli.Tests.IntegrationTests.OperationsConformance;
 /// </summary>
 internal sealed class OperationsTestee : IAsyncDisposable
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private TraxClient? _client;
     private HttpClient? _http;
     private GraphQLSubscriptionSocket? _socket;
@@ -25,20 +26,21 @@ internal sealed class OperationsTestee : IAsyncDisposable
     /// <summary>Answers one request line with its answer line, once the request settles.</summary>
     public async Task<string> AnswerAsync(string line)
     {
-        var request = JsonNode.Parse(line)!.AsObject();
-        var id = request["id"]!.GetValue<int>();
+        var request = JsonNode.Parse(line).NotNull().AsObject();
+        var id = request["id"].NotNull().GetValue<int>();
         JsonObject answer;
         try
         {
-            answer = request["op"]!.GetValue<string>() switch
+            answer = request["op"].NotNull().GetValue<string>() switch
             {
-                "open" => await OpenAsync(request),
-                "send" => await SendAsync(request),
+                "open" => await OpenAsync(request).ConfigureAwait(false),
+                "send" => await SendAsync(request).ConfigureAwait(false),
                 "subscribe" => Subscribe(request),
                 "events" => Events(),
                 "unsubscribe" => Unsubscribe(),
-                "dispose" => await CloseAsync(new JsonObject { ["disposed"] = true }),
-                "end" => await CloseAsync([]),
+                "dispose" => await CloseAsync(new JsonObject { ["disposed"] = true })
+                    .ConfigureAwait(false),
+                "end" => await CloseAsync([]).ConfigureAwait(false),
                 _ => new JsonObject { ["unsupported"] = true },
             };
         }
@@ -52,7 +54,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
 
     private async Task<JsonObject> OpenAsync(JsonObject request)
     {
-        await CloseAsync([]);
+        await CloseAsync([]).ConfigureAwait(false);
         var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
         if (request["requestTimeout"] is { } timeout)
             http.Timeout = TimeSpan.FromMilliseconds(timeout.GetValue<int>());
@@ -63,7 +65,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
                 new GraphQLSubscriptionSocketOptions
                 {
                     Endpoint = new Uri(
-                        request["socket"]!.GetValue<string>(),
+                        request["socket"].NotNull().GetValue<string>(),
                         UriKind.RelativeOrAbsolute
                     ),
                     AllowInsecureTransport = insecure,
@@ -74,7 +76,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
                 {
                     Http = http,
                     Endpoint = new Uri(
-                        request["endpoint"]!.GetValue<string>(),
+                        request["endpoint"].NotNull().GetValue<string>(),
                         UriKind.RelativeOrAbsolute
                     ),
                     AllowInsecureTransport = insecure,
@@ -103,7 +105,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
     {
         var client = _client ?? throw new InvalidOperationException("send before open");
         var variables = request["variables"];
-        return request["operation"]!.GetValue<string>() switch
+        return request["operation"].NotNull().GetValue<string>() switch
         {
             "Runs" => Answer(client.RunsAsync(Read<RunsVariables>(variables))),
             "Retry" => Answer(client.RetryAsync(Read<RetryVariables>(variables))),
@@ -113,7 +115,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
 
     private static async Task<JsonObject> Answer<T>(Task<TraxAnswer<T>> sending)
     {
-        var answer = await sending;
+        var answer = await sending.ConfigureAwait(false);
         if (answer.Failure is { } failure)
             return new JsonObject
             {
@@ -132,7 +134,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
         Unsubscribe();
         lock (_gate)
             _events = [];
-        _stream = request["operation"]!.GetValue<string>() switch
+        _stream = request["operation"].NotNull().GetValue<string>() switch
         {
             "Changes" => client.Changes(Read<ChangesVariables>(request["variables"]), Record),
             var other => throw new InvalidOperationException($"No stream {other} to follow."),
@@ -185,7 +187,7 @@ internal sealed class OperationsTestee : IAsyncDisposable
         Unsubscribe();
         _client = null;
         if (_socket is { } socket)
-            await socket.DisposeAsync();
+            await socket.DisposeAsync().ConfigureAwait(false);
         _socket = null;
         _http?.Dispose();
         _http = null;
@@ -199,5 +201,5 @@ internal sealed class OperationsTestee : IAsyncDisposable
     private static JsonNode? Write<T>(T value) =>
         JsonSerializer.SerializeToNode(value, TraxJson.Options);
 
-    public async ValueTask DisposeAsync() => await CloseAsync([]);
+    public async ValueTask DisposeAsync() => await CloseAsync([]).ConfigureAwait(false);
 }

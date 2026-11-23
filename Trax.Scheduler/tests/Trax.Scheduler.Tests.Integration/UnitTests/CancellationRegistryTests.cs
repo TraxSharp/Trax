@@ -101,7 +101,7 @@ public class CancellationRegistryTests
     }
 
     [Test]
-    public void Unregister_DoesNotDisposeCts()
+    public async Task Unregister_DoesNotDisposeCts()
     {
         // Arrange
         var cts = new CancellationTokenSource();
@@ -111,8 +111,8 @@ public class CancellationRegistryTests
         _registry.Unregister(1);
 
         // Assert — CTS should still be usable (not disposed)
-        var act = () => cts.Cancel();
-        act.Should().NotThrow();
+        var act = () => cts.CancelAsync();
+        await act.Should().NotThrowAsync().ConfigureAwait(false);
         cts.Dispose();
     }
 
@@ -271,7 +271,7 @@ public class CancellationRegistryTests
         // Act — 100 threads all try to cancel the same entry
         var tasks = Enumerable
             .Range(0, 100)
-            .Select(_ => Task.Run(() => _registry.TryCancel(1)))
+            .Select(_ => Task.Run(() => _registry.TryCancel(1), CancellationToken.None))
             .ToArray();
 
         // Assert
@@ -291,7 +291,7 @@ public class CancellationRegistryTests
             {
                 sources[i] = new CancellationTokenSource();
                 var cts = sources[i];
-                return Task.Run(() => _registry.Register(1, cts));
+                return Task.Run(() => _registry.Register(1, cts), CancellationToken.None);
             })
             .ToArray();
 

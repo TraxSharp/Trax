@@ -31,11 +31,11 @@ public class TopicMapDocumentsTests : RecoveryTestFixture
         var services = SharedRecoverySetup.Factory.Services;
         var committed = ClientManifest
             .Read(await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest))
-            .Machines.Single(m => m.Id == "topic-map");
+            .Machines.Single(m => string.Equals(m.Id, "topic-map", StringComparison.Ordinal));
 
         services
             .GetServices<IMachine>()
-            .Single(m => m.Name == "topic-map")
+            .Single(m => string.Equals(m.Name, "topic-map", StringComparison.Ordinal))
             .SchemaHash.Should()
             .Be(
                 committed.IrHash,
@@ -49,7 +49,7 @@ public class TopicMapDocumentsTests : RecoveryTestFixture
         var served = (
             await services
                 .GetRequiredService<IPersistedOperationStore>()
-                .ListAsync(null, CancellationToken.None)
+                .ListAsync(tenantKey: null, CancellationToken.None)
         )
             .Where(o =>
                 o.IsActive
@@ -89,11 +89,11 @@ public class TopicMapDocumentsTests : RecoveryTestFixture
             CancellationToken.None
         );
 
-        (await store.GetAsync(id, null, CancellationToken.None))
+        (await store.GetAsync(id, tenantKey: null, CancellationToken.None))
             .Should()
             .BeNull("the page no longer sends it, so the host stops serving it");
-        (await store.ListAsync(null, CancellationToken.None))
-            .Single(o => o.Id == id)
+        (await store.ListAsync(tenantKey: null, CancellationToken.None))
+            .Single(o => string.Equals(o.Id, id, StringComparison.Ordinal))
             .IsActive.Should()
             .BeFalse("it is kept, deactivated, as the record of what was served");
         var sent = await GraphQL.SendIdAsync(id, OperatorKey);

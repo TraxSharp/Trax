@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -34,7 +35,7 @@ public class MachineExposureCensusTests
                     + "posture, per "
                     + Adr
             );
-        var message = refusal!.ToString();
+        var message = refusal.NotNull().ToString();
         message.Should().Contain($"'{UndeclaredRuleMachine.MachineId}'").And.Contain("Back");
         message
             .Should()
@@ -56,7 +57,7 @@ public class MachineExposureCensusTests
         var entries = MachineCensus.Describe([new ShopMachine()]);
 
         var timer = entries
-            .Where(e => e.Kind == nameof(TriggerKind.Timer))
+            .Where(e => string.Equals(e.Kind, nameof(TriggerKind.Timer), StringComparison.Ordinal))
             .Should()
             .ContainSingle("the shop declares one timer, on Ordered, per " + Adr)
             .Subject;
@@ -77,7 +78,7 @@ public class MachineExposureCensusTests
                 "Submit and Ship (any authenticated caller) enter Ordered too"
             );
         entries
-            .Where(e => e.Kind == nameof(TriggerKind.Timer))
+            .Where(e => string.Equals(e.Kind, nameof(TriggerKind.Timer), StringComparison.Ordinal))
             .Should()
             .OnlyContain(e => e.Machine == ShopMachine.MachineId);
     }

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -12,7 +13,7 @@ namespace Trax.StateMachine;
 /// names and of its CLR type's format, no fields outside the
 /// schema, each field's constraints satisfied, a nested record's fields checked the same way, and every value of
 /// a dictionary or element of a list checked against its type, and every key of a dictionary against its key type.
-/// Returns <c>null</c> when valid, else a
+/// Returns <see langword="null"/> when valid, else a
 /// message. The message is non-contract detail (only "valid vs not" is the contract), so it is free to differ
 /// from a hand-written validator's wording. This is the schema-derived replacement for a hand-written
 /// <c>Holds(...)</c>.
@@ -34,7 +35,7 @@ internal static partial class SchemaValidator
         ValidateObject(schema.Fields, context, "");
 
     /// <summary>
-    /// Checks a trigger's input (or a train's output) against <paramref name="schema"/>. No input (<c>null</c>)
+    /// Checks a trigger's input (or a train's output) against <paramref name="schema"/>. No input (<see langword="null"/>)
     /// is read as an empty object, so it passes exactly when every field is nullable; anything other than an
     /// object is refused. Never throws: an input that cannot be read (a duplicate key, which a parsed
     /// <see cref="JsonObject"/> throws on when enumerated) is refused like any other bad input.
@@ -83,9 +84,9 @@ internal static partial class SchemaValidator
 
             if (!Matches(node, field.Type))
                 return $"'{name}' must be a {field.Type.ToString().ToLowerInvariant()}.";
-            if (!InRange(node!, field))
+            if (!InRange(node.NotNull(), field))
                 return $"'{name}' is out of range.";
-            if (Shapeless(node!, field) is { } shapeless)
+            if (Shapeless(node.NotNull(), field) is { } shapeless)
                 return $"'{name}' {shapeless}.";
 
             // A constraint names a field of the object being validated, whichever side (context or input) it
@@ -94,11 +95,17 @@ internal static partial class SchemaValidator
                 if (!RuleEvaluator.Evaluate(constraint, obj, obj))
                     return $"'{name}' failed a constraint.";
 
-            if (field.Fields is { } shape && ValidateShape(shape, node!, name) is { } nested)
+            if (
+                field.Fields is { } shape
+                && ValidateShape(shape, node.NotNull(), name) is { } nested
+            )
                 return nested;
-            if (field.Values is { } values && ValidateValues(values, node!, name) is { } value)
+            if (
+                field.Values is { } values
+                && ValidateValues(values, node.NotNull(), name) is { } value
+            )
                 return value;
-            if (field.Keys is { } keys && ValidateKeys(keys, node!, name) is { } key)
+            if (field.Keys is { } keys && ValidateKeys(keys, node.NotNull(), name) is { } key)
                 return key;
         }
 
@@ -122,8 +129,18 @@ internal static partial class SchemaValidator
             for (var i = 0; i < array.Count; i++)
             {
                 if (array[i] is not JsonObject element)
-                    return $"'{name}[{i}]' must be an object.";
-                if (ValidateObject(shape, element, $"{name}[{i}].") is { } problem)
+                    return string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"'{name}[{i}]' must be an object."
+                    );
+                if (
+                    ValidateObject(
+                        shape,
+                        element,
+                        string.Create(CultureInfo.InvariantCulture, $"{name}[{i}].")
+                    ) is
+                    { } problem
+                )
                     return problem;
             }
         return null;
@@ -141,7 +158,14 @@ internal static partial class SchemaValidator
         else if (node is JsonArray array)
         {
             for (var i = 0; i < array.Count; i++)
-                if (ValidateValue(values, array[i], $"{name}[{i}]") is { } problem)
+                if (
+                    ValidateValue(
+                        values,
+                        array[i],
+                        string.Create(CultureInfo.InvariantCulture, $"{name}[{i}]")
+                    ) is
+                    { } problem
+                )
                     return problem;
         }
         return null;
@@ -187,7 +211,7 @@ internal static partial class SchemaValidator
     // within the key type's range compared exactly: a key is text, never a double.
     private static bool IsIntegerKey(string key, FieldSchema keys)
     {
-        if (key.Length > 40 || !IntegerKeyPattern().IsMatch(key))
+        if (key.Length > 40 || !IntegerKeyPattern.IsMatch(key))
             return false;
         var value = BigInteger.Parse(
             key,
@@ -198,8 +222,12 @@ internal static partial class SchemaValidator
             && (keys.Maximum is not { } max || value <= new BigInteger(max));
     }
 
-    [GeneratedRegex("^(?:0|-?[1-9][0-9]*)\\z", RegexOptions.CultureInvariant)]
-    private static partial Regex IntegerKeyPattern();
+    [GeneratedRegex(
+        "^(?:0|-?[1-9][0-9]*)\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IntegerKeyPattern { get; }
 
     // Why a string is not a value of the field's CLR type: not one of its enum's names, or not of its format.
     // Null when it is, or the field has neither.

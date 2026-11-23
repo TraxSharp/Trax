@@ -11,23 +11,27 @@ namespace Trax.Adr.Guard.Guards;
 /// to be answered rather than left open.
 /// </para>
 /// </summary>
-public static class CensusGuards
+public static partial class CensusGuards
 {
     public const string OptOutMarker = "Not ADR-enforcing:";
 
-    private static readonly Regex ClassDeclaration = new(
+    [GeneratedRegex(
         @"\bclass\s+(?<name>[A-Za-z0-9]*Tests)\b",
-        RegexOptions.Compiled | RegexOptions.Singleline
-    );
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ClassDeclaration { get; }
 
     /// <summary>
     /// A citation of any ADR, local or central: <c>docs/adr/0003-x.md</c> or
     /// <c>Trax.Docs/adr/0003-x.md</c>. The <c>central</c> group marks the second.
     /// </summary>
-    private static readonly Regex AdrCitation = new(
+    [GeneratedRegex(
         @"(?<central>Trax\.Docs/)?adr/(?<file>\d{4}-[a-z0-9-]+\.md)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AdrCitation { get; }
 
     public static GuardResult EveryGuardIsClassified(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
@@ -55,10 +59,10 @@ public static class CensusGuards
 
         // Each claim with the ADR making it, because a claim is answered by the class that
         // names that ADR back, not by every class sharing the claimed name.
-        var claims = adrs.Select(a => (Adr: a, Section: a.Section(ExemplarGuards.Heading)))
-            .Where(x => x.Section is not null)
-            .SelectMany(x =>
-                ExemplarGuards.Claims(x.Section!).Select(c => (Name: c, x.Adr.FileName))
+        var claims = adrs.SelectMany(a =>
+                a.Section(ExemplarGuards.Heading) is { } section
+                    ? ExemplarGuards.Claims(section).Select(c => (Name: c, a.FileName))
+                    : Enumerable.Empty<(string Name, string FileName)>()
             )
             .ToList();
 
@@ -73,59 +77,81 @@ public static class CensusGuards
             .OrderBy(f => AdrCorpus.Relative(f, options), StringComparer.Ordinal);
 
         foreach (var file in files)
-        {
-            var path = AdrCorpus.Relative(file, options);
-
-            var source = File.ReadAllText(file);
-            var declarations = ExemplarGuards.Declarations(source);
-
-            foreach (var (guard, docstring) in GuardClasses(source))
-            {
-                // A guard is credited either because a local ADR names it, or because it names
-                // an ADR itself. The second case is what makes the census usable in a repo whose
-                // shared guards enforce decisions recorded in the central corpus: that corpus is
-                // not present here, so nothing local can name them.
-                //
-                // A claim credits only the class that answers it: the one in this file carrying
-                // the claiming ADR's attribute. Crediting by bare name let a second class sharing
-                // the name ride on the first's claim, neither named by a decision nor opted out.
-                var answersAClaim = claims.Any(c =>
-                    c.Name == guard
-                    && declarations.Any(d =>
-                        d.Name == guard && d.Adr.EndsWith(c.FileName, StringComparison.Ordinal)
-                    )
-                );
-                var credited = answersAClaim || CitesAnAdr(docstring, local, options);
-                var reason = OptOutReason(docstring);
-
-                if (credited && reason is not null)
-                {
-                    offenders.Add(
-                        $"{path}: '{guard}' is named by an ADR AND declares '{OptOutMarker}'. It is "
-                            + "one or the other; if it enforces the ADR, drop the marker."
-                    );
-                    continue;
-                }
-
-                if (!credited && reason is null)
-                {
-                    offenders.Add(
-                        $"{path}: '{guard}' is named by no ADR and does not opt out. Add it to an "
-                            + $"ADR's '## {ExemplarGuards.Heading}' section, or write '{OptOutMarker} "
-                            + "<reason>' in its docstring."
-                    );
-                    continue;
-                }
-
-                var problem = reason is null ? null : Reasons.Problem(reason);
-                if (problem is not null)
-                    offenders.Add($"{path}: '{guard}' {problem}");
-
-                classified++;
-            }
-        }
+            classified += ClassifyFile(
+                AdrCorpus.Relative(file, options),
+                File.ReadAllText(file),
+                claims,
+                local,
+                options,
+                offenders
+            );
 
         return new GuardResult("census/classified", offenders, classified, rule);
+    }
+
+    /// <summary>
+    /// Classifies every guard class in one file, adding its offenders, and returns how many it
+    /// classified.
+    /// </summary>
+    private static int ClassifyFile(
+        string path,
+        string source,
+        List<(string Name, string FileName)> claims,
+        HashSet<string> local,
+        GuardOptions options,
+        List<string> offenders
+    )
+    {
+        var classified = 0;
+        var declarations = ExemplarGuards.Declarations(source);
+
+        foreach (var (guard, docstring) in GuardClasses(source))
+        {
+            // A guard is credited either because a local ADR names it, or because it names
+            // an ADR itself. The second case is what makes the census usable in a repo whose
+            // shared guards enforce decisions recorded in the central corpus: that corpus is
+            // not present here, so nothing local can name them.
+            //
+            // A claim credits only the class that answers it: the one in this file carrying
+            // the claiming ADR's attribute. Crediting by bare name let a second class sharing
+            // the name ride on the first's claim, neither named by a decision nor opted out.
+            var answersAClaim = claims.Exists(c =>
+                string.Equals(c.Name, guard, StringComparison.Ordinal)
+                && declarations.Any(d =>
+                    string.Equals(d.Name, guard, StringComparison.Ordinal)
+                    && d.Adr.EndsWith(c.FileName, StringComparison.Ordinal)
+                )
+            );
+            var credited = answersAClaim || CitesAnAdr(docstring, local, options);
+            var reason = OptOutReason(docstring);
+
+            if (credited && reason is not null)
+            {
+                offenders.Add(
+                    $"{path}: '{guard}' is named by an ADR AND declares '{OptOutMarker}'. It is "
+                        + "one or the other; if it enforces the ADR, drop the marker."
+                );
+                continue;
+            }
+
+            if (!credited && reason is null)
+            {
+                offenders.Add(
+                    $"{path}: '{guard}' is named by no ADR and does not opt out. Add it to an "
+                        + $"ADR's '## {ExemplarGuards.Heading}' section, or write '{OptOutMarker} "
+                        + "<reason>' in its docstring."
+                );
+                continue;
+            }
+
+            var problem = reason is null ? null : Reasons.Problem(reason);
+            if (problem is not null)
+                offenders.Add($"{path}: '{guard}' {problem}");
+
+            classified++;
+        }
+
+        return classified;
     }
 
     /// <summary>
@@ -147,8 +173,13 @@ public static class CensusGuards
     /// </summary>
     private static IEnumerable<(string Name, string Docstring)> GuardClasses(string source)
     {
-        var lines = CSharp.WithoutLiterals(source).Replace("\r\n", "\n").Split('\n');
-        var blanked = CSharp.WithoutCommentsAndLiterals(source).Replace("\r\n", "\n");
+        var lines = CSharp
+            .WithoutLiterals(source)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n');
+        var blanked = CSharp
+            .WithoutCommentsAndLiterals(source)
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
 
         foreach (Match match in ClassDeclaration.Matches(blanked))
         {
@@ -193,7 +224,7 @@ public static class CensusGuards
             break;
         }
 
-        return string.Join("\n", doc);
+        return string.Join('\n', doc);
     }
 
     /// <summary>
@@ -252,8 +283,14 @@ public static class CensusGuards
         if (stop >= 0)
             after = after[..stop];
 
-        var cleaned = Regex.Replace(after, @"///|<[^>]+>", " ");
-        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+        var cleaned = DocCommentMarkup.Replace(after, " ");
+        cleaned = Whitespace.Replace(cleaned, " ").Trim();
         return cleaned.Length > 300 ? cleaned[..300] : cleaned;
     }
+
+    [GeneratedRegex(@"///|<[^>]+>", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DocCommentMarkup { get; }
+
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Whitespace { get; }
 }

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -14,7 +15,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainBusScopeIsolationTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -53,7 +54,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_TwoCalls_GetDifferentScopes()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result1 = await trainBus.RunAsync<ScopeTrackOutput>(new ScopeTrackInput());
@@ -65,7 +67,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_WithCancellationToken_CreatesChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result1 = await trainBus.RunAsync<ScopeTrackOutput>(
@@ -83,7 +86,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NonGeneric_CreatesChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         // Void overload — verifies it doesn't throw (scope creation works)
@@ -94,7 +98,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NonGeneric_WithCancellationToken_CreatesChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         await trainBus.RunAsync(new ScopeTrackInput(), CancellationToken.None);
@@ -104,7 +109,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_TrainScope_DiffersFromCallerScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var callerMarker = scope.ServiceProvider.GetRequiredService<ScopeMarker>();
 
@@ -120,7 +126,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_ScopeDisposed_AfterCompletion()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result = await trainBus.RunAsync<ScopeTrackOutput>(new ScopeTrackInput());
@@ -131,11 +138,14 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_FailingTrain_ScopeStillDisposed()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var act = async () =>
-            await trainBus.RunAsync<MemoryTestOutput>(MemoryTestModelFactory.CreateFailingInput());
+            await trainBus
+                .RunAsync<MemoryTestOutput>(MemoryTestModelFactory.CreateFailingInput())
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 
@@ -151,7 +161,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_NestedDispatch_EachTrainGetsOwnScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var result = await trainBus.RunAsync<NestedScopeTrackOutput>(new NestedScopeTrackInput());
@@ -166,7 +177,8 @@ public class TrainBusScopeIsolationTests
     [Test]
     public async Task RunAsync_Concurrent_AllGetUniqueScopeIds()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var tasks = Enumerable
@@ -187,7 +199,7 @@ public class TrainBusScopeIsolationTests
     [Test]
     public void InitializeTrain_ResolvesFromOwnScope_NotChildScope()
     {
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = _serviceProvider.NotNull().CreateScope();
         var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
         var callerMarker = scope.ServiceProvider.GetRequiredService<ScopeMarker>();
 
@@ -197,7 +209,7 @@ public class TrainBusScopeIsolationTests
         scopeTrackTrain.Should().NotBeNull();
         // InitializeTrain resolves from the TrainBus's own scope (the caller's scope),
         // not from a child scope — so the marker should match.
-        scopeTrackTrain!.Marker!.Id.Should().Be(callerMarker.Id);
+        scopeTrackTrain.NotNull().Marker.NotNull().Id.Should().Be(callerMarker.Id);
     }
 
     #endregion

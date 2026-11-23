@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -86,7 +87,11 @@ internal static class SavedInputReferences
     /// <exception cref="TrainInputValidationException">
     /// The plain form is larger than <paramref name="maxBytes"/>.
     /// </exception>
-    public static string Resolve(string json, TrainRegistration registration, int maxBytes)
+    public static async Task<string> ResolveAsync(
+        string json,
+        TrainRegistration registration,
+        int maxBytes
+    )
     {
         using var document = JsonDocument.Parse(json, DocumentOptions);
 
@@ -94,11 +99,12 @@ internal static class SavedInputReferences
         Collect(document.RootElement, ids);
 
         var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, WriterOptions))
+        var writer = new Utf8JsonWriter(buffer, WriterOptions);
+        await using (writer.ConfigureAwait(false))
         {
             var resolver = new Resolver(writer, ids, registration, maxBytes);
             resolver.Write(document.RootElement, depth: 0);
-            writer.Flush();
+            await writer.FlushAsync().ConfigureAwait(false);
             resolver.CheckSize();
         }
 
@@ -118,15 +124,20 @@ internal static class SavedInputReferences
     /// <exception cref="TrainInputValidationException">
     /// The compact form is larger than <paramref name="maxBytes"/>.
     /// </exception>
-    public static string Compact(string json, TrainRegistration registration, int maxBytes)
+    public static async Task<string> CompactAsync(
+        string json,
+        TrainRegistration registration,
+        int maxBytes
+    )
     {
         using var document = JsonDocument.Parse(json, DocumentOptions);
 
         var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, WriterOptions))
+        var writer = new Utf8JsonWriter(buffer, WriterOptions);
+        await using (writer.ConfigureAwait(false))
         {
             document.RootElement.WriteTo(writer);
-            writer.Flush();
+            await writer.FlushAsync().ConfigureAwait(false);
         }
 
         if (buffer.WrittenCount > maxBytes)
@@ -219,7 +230,7 @@ internal static class SavedInputReferences
 
     private static string IdOf(JsonProperty property) =>
         property.Value.ValueKind == JsonValueKind.String
-            ? property.Value.GetString()!
+            ? property.Value.GetString().NotNull()
             : throw Malformed($"{property.Name} is not a string");
 
     /// <summary>Every value carrying an <c>$id</c>, by that id.</summary>
@@ -229,7 +240,10 @@ internal static class SavedInputReferences
         {
             case JsonValueKind.Object:
                 var shape = ShapeOf(element, out var id);
-                if (shape is Shape.Identified or Shape.Collection && !ids.TryAdd(id!, element))
+                if (
+                    shape is Shape.Identified or Shape.Collection
+                    && !ids.TryAdd(id.NotNull(), element)
+                )
                     throw Malformed($"$id \"{id}\" is given to more than one value");
 
                 foreach (var property in element.EnumerateObject())
@@ -293,9 +307,9 @@ internal static class SavedInputReferences
             switch (shape)
             {
                 case Shape.Reference:
-                    if (!ids.TryGetValue(id!, out var target))
+                    if (!ids.TryGetValue(id.NotNull(), out var target))
                         throw Malformed($"$ref \"{id}\" names no $id");
-                    if (_open.Contains(id!))
+                    if (_open.Contains(id.NotNull()))
                         throw new JsonException(
                             $"The saved input refers to a value from inside itself ($ref \"{id}\"), "
                                 + "so it has no plain form to read."
@@ -305,13 +319,13 @@ internal static class SavedInputReferences
                     return;
 
                 case Shape.Collection:
-                    _open.Add(id!);
+                    _open.Add(id.NotNull());
                     Write(element.GetProperty(ValuesProperty), depth);
-                    _open.Remove(id!);
+                    _open.Remove(id.NotNull());
                     return;
 
                 case Shape.Identified:
-                    _open.Add(id!);
+                    _open.Add(id.NotNull());
                     break;
             }
 
@@ -327,7 +341,7 @@ internal static class SavedInputReferences
             writer.WriteEndObject();
 
             if (shape == Shape.Identified)
-                _open.Remove(id!);
+                _open.Remove(id.NotNull());
         }
 
         /// <summary>

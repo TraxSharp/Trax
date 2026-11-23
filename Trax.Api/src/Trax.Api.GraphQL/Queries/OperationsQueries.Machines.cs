@@ -21,7 +21,10 @@ public partial class OperationsQueries
     public async Task<IReadOnlyList<MachineDefinition>> GetMachines(
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => (await operationsService.GetMachinesAsync(ct)).Select(MachineDefinition.From).ToList();
+    ) =>
+        (await operationsService.GetMachinesAsync(ct).ConfigureAwait(false))
+            .Select(MachineDefinition.From)
+            .ToList();
 
     /// <summary>
     /// The event-storming board of a machine this host serves from features: who acts, what they ask, what happens,
@@ -36,7 +39,7 @@ public partial class OperationsQueries
         [Service] IOperationsService operationsService,
         CancellationToken ct
     ) =>
-        await operationsService.GetMachineBoardAsync(machine, ct) is { } board
+        await operationsService.GetMachineBoardAsync(machine, ct).ConfigureAwait(false) is { } board
             ? MachineBoard.From(board)
             : null;
 }

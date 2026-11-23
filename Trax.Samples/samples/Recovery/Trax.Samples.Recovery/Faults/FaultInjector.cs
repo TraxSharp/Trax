@@ -15,7 +15,9 @@ public sealed class FaultInjector
 {
     // One entry per armed point: a run can have more than one, each firing once.
     private readonly ConcurrentDictionary<(string RunId, CrashPoint Point), byte> _armed = new();
-    private readonly ConcurrentDictionary<string, CrashPoint> _everyAttempt = new();
+    private readonly ConcurrentDictionary<string, CrashPoint> _everyAttempt = new(
+        StringComparer.Ordinal
+    );
     private readonly ConcurrentDictionary<string, CrashPoint> _nextOrder = new(
         StringComparer.Ordinal
     );
@@ -39,7 +41,7 @@ public sealed class FaultInjector
     public void Disarm(string runId)
     {
         foreach (var key in _armed.Keys)
-            if (key.RunId == runId)
+            if (string.Equals(key.RunId, runId, StringComparison.Ordinal))
                 _armed.TryRemove(key, out _);
         _everyAttempt.TryRemove(runId, out _);
     }
@@ -56,7 +58,8 @@ public sealed class FaultInjector
 
     /// <summary>Whether a crash is still armed for the run.</summary>
     public bool IsArmed(string runId) =>
-        _armed.Keys.Any(key => key.RunId == runId) || _everyAttempt.ContainsKey(runId);
+        _armed.Keys.Any(key => string.Equals(key.RunId, runId, StringComparison.Ordinal))
+        || _everyAttempt.ContainsKey(runId);
 
     /// <summary>
     /// Fires the crash armed for <paramref name="runId"/> at <paramref name="point"/>, if any, and

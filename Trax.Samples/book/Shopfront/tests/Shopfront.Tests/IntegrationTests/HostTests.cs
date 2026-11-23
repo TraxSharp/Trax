@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shopfront.Auth;
+using Trax.Core.Extensions;
 
 namespace Shopfront.Tests.IntegrationTests;
 
@@ -17,7 +18,7 @@ public class HostTests
 
     private const string Orders = "{ discover { orders { nodes { customerId total } } } }";
 
-    private WebApplicationFactory<Program> _app = null!;
+    private WebApplicationFactory<Program>? _app;
 
     [SetUp]
     public async Task StartTheApplication()
@@ -30,23 +31,24 @@ public class HostTests
     }
 
     [TearDown]
-    public ValueTask StopTheApplication() => _app.DisposeAsync();
+    public async ValueTask StopTheApplication()
+    {
+        if (_app is not null)
+            await _app.DisposeAsync().ConfigureAwait(false);
+    }
 
     private HttpClient SignedIn(string user, string role)
     {
-        var client = _app.CreateClient();
+        var client = _app.NotNull().CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            DevJwt.Mint(user, role)
+            DevJwt.Mint(user, role, TimeProvider.System)
         );
         return client;
     }
 
     private static object Order(string sku, string paymentToken = "tok_visa") =>
-        new
-        {
-            input = new { paymentToken, lines = new[] { new { sku, quantity = 1 } } },
-        };
+        new { input = new { paymentToken, lines = new[] { new { sku, quantity = 1 } } } };
 
     private static JsonElement Placed(JsonElement response) =>
         response.GetProperty("data").GetProperty("dispatch").GetProperty("placeOrder");
@@ -54,7 +56,8 @@ public class HostTests
     [Test]
     public async Task Products_Anonymous_ListsTheCatalogue()
     {
-        var response = await _app.CreateClient()
+        var response = await _app.NotNull()
+            .CreateClient()
             .Post("{ discover { products(order: { sku: ASC }) { nodes { sku } } } }");
 
         response
@@ -71,7 +74,7 @@ public class HostTests
     [Test]
     public async Task PlaceOrder_Anonymous_IsNotAuthorized()
     {
-        var response = await _app.CreateClient().Post(PlaceOrder, Order("MUG"));
+        var response = await _app.NotNull().CreateClient().Post(PlaceOrder, Order("MUG"));
 
         response.ErrorCodes().Should().Contain("TRAX_AUTHORIZATION");
     }
@@ -89,7 +92,12 @@ public class HostTests
     {
         var response = await SignedIn("ada", Roles.Customer).Post(PlaceOrder, Order("MUG"));
 
-        Placed(response).GetProperty("output").GetProperty("total").GetDecimal().Should().Be(12.00m);
+        Placed(response)
+            .GetProperty("output")
+            .GetProperty("total")
+            .GetDecimal()
+            .Should()
+            .Be(12.00m);
     }
 
     [Test]

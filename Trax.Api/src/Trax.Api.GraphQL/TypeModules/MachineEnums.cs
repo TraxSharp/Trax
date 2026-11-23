@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HotChocolate.Types;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -24,7 +25,7 @@ internal static partial class MachineEnums
     public static IEnumerable<ITypeSystemMember> Types(IReadOnlyList<IMachine> machines) =>
         machines
             .SelectMany(Reached)
-            .DistinctBy(t => t.FullName ?? t.Name)
+            .DistinctBy(t => t.FullName ?? t.Name, StringComparer.Ordinal)
             .OrderBy(t => t.FullName ?? t.Name, StringComparer.Ordinal)
             .Select(Create);
 
@@ -78,8 +79,7 @@ internal static partial class MachineEnums
         foreach (var (surface, root) in neighbours.Surfaces)
         foreach (
             var type in Reached(root)
-                .Where(held.ContainsKey)
-                .Where(t => !neighbours.Accepted.Contains(t))
+                .Where(t => held.ContainsKey(t) && !neighbours.Accepted.Contains(t))
                 .OrderBy(t => t.FullName, StringComparer.Ordinal)
         )
             problems.Add(
@@ -146,7 +146,10 @@ internal static partial class MachineEnums
     {
         if (type.Assembly.GetName().Name is not { } name)
             return false;
-        if (name != "Trax" && !name.StartsWith("Trax.", StringComparison.Ordinal))
+        if (
+            !string.Equals(name, "Trax", StringComparison.Ordinal)
+            && !name.StartsWith("Trax.", StringComparison.Ordinal)
+        )
             return false;
         var segments = name.Split('.');
         return segments[1..] is not ["Samples", ..] && !segments.Contains("Tests");
@@ -158,7 +161,10 @@ internal static partial class MachineEnums
     /// </summary>
     public static bool IsFramework(Type type) =>
         type.Namespace is { } ns
-        && (ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal));
+        && (
+            string.Equals(ns, "System", StringComparison.Ordinal)
+            || ns.StartsWith("System.", StringComparison.Ordinal)
+        );
 
     private static void Walk(Type type, HashSet<Type> enums, HashSet<Type> seen)
     {
@@ -173,7 +179,7 @@ internal static partial class MachineEnums
         }
         if (type.IsArray)
         {
-            Walk(type.GetElementType()!, enums, seen);
+            Walk(type.GetElementType().NotNull(), enums, seen);
             return;
         }
         // A collection is its elements, however it is declared: List<T>, a class deriving from it, a dictionary's
@@ -209,9 +215,11 @@ internal static partial class MachineEnums
     private static ITypeSystemMember Create(Type enumType) =>
         (ITypeSystemMember)
             typeof(MachineEnums)
-                .GetMethod(nameof(Stored), BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetMethod(nameof(Stored), BindingFlags.NonPublic | BindingFlags.Static)
+                .NotNull()
                 .MakeGenericMethod(enumType)
-                .Invoke(null, null)!;
+                .Invoke(null, parameters: null)
+                .NotNull();
 
     private static EnumType<TEnum> Stored<TEnum>()
         where TEnum : struct, Enum => new MachineEnumType<TEnum>();
@@ -223,7 +231,7 @@ internal static partial class MachineEnums
     public static string? ValueNameProblem(Type enumType, string name)
     {
         var why =
-            !GraphQLName().IsMatch(name) ? "is not a GraphQL name"
+            !GraphQLName.IsMatch(name) ? "is not a GraphQL name"
             : name.StartsWith("__", StringComparison.Ordinal)
                 ? "starts with two underscores, which GraphQL keeps for introspection"
             : name is "true" or "false" or "null"
@@ -235,39 +243,6 @@ internal static partial class MachineEnums
                 + $"server stores them, but '{name}' {why}. Rename the member.";
     }
 
-    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$")]
-    private static partial Regex GraphQLName();
+    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex GraphQLName { get; }
 }
-
-/// <summary>
-/// A machine enum's GraphQL type: its values named as the server stores them. Its own class so a type the host binds
-/// to the same CLR enum can be told apart from it (<see cref="MachineEnumBindingInterceptor"/>).
-/// </summary>
-internal sealed class MachineEnumType<TEnum>() : EnumType<TEnum>(Describe)
-    where TEnum : struct, Enum
-{
-    private static void Describe(IEnumTypeDescriptor<TEnum> d)
-    {
-        d.BindValuesExplicitly();
-        foreach (var value in Enum.GetValues<TEnum>())
-        {
-            var name = JsonSerializer.Deserialize<string>(
-                JsonSerializer.Serialize(value, MachineSurface.Json)
-            )!;
-            if (MachineEnums.ValueNameProblem(typeof(TEnum), name) is { } problem)
-                throw new InvalidOperationException(problem);
-            d.Value(value).Name(name);
-        }
-    }
-}
-
-/// <summary>
-/// The other surfaces of the schema a machine enum could also reach (each exposed train's input and output, each query
-/// model's entity), and the enums the host accepted the machine's spelling for.
-/// </summary>
-/// <param name="Surfaces">How a refusal names the surface, and the CLR type it starts from.</param>
-/// <param name="Accepted">The enums <c>ShareEnumWithMachines</c> named.</param>
-internal sealed record MachineEnumNeighbours(
-    IReadOnlyList<(string Surface, Type Root)> Surfaces,
-    IReadOnlySet<Type> Accepted
-);

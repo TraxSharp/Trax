@@ -28,14 +28,14 @@ public class ParameterEffectConfiguration
 
     /// <summary>
     /// Hard byte ceiling per serialized parameter (applies to input <b>and</b> output).
-    /// Defaults to 1 MiB (1,048,576 bytes). <c>null</c> removes the ceiling.
+    /// Defaults to 1 MiB (1,048,576 bytes). <see langword="null"/> removes the ceiling.
     /// </summary>
     /// <remarks>
     /// A payload that serializes past this many UTF-8 bytes is aborted mid-serialization
     /// (before the whole thing is materialized) and stored as a small valid-JSON placeholder
     /// <c>{"_truncated": true, "_maxBytes": N}</c>. This is the automatic safety net that keeps
     /// a single unexpectedly-large train from exhausting host memory, so it is on unless a host
-    /// turns it off. Set a larger value for trains that legitimately carry more, or <c>null</c>
+    /// turns it off. Set a larger value for trains that legitimately carry more, or <see langword="null"/>
     /// to store parameters of any size. A value of 0 or less is refused with an
     /// <see cref="ArgumentOutOfRangeException"/>: it would store every parameter as the placeholder.
     /// </remarks>
@@ -48,7 +48,7 @@ public class ParameterEffectConfiguration
         {
             if (value is <= 0)
                 throw new ArgumentOutOfRangeException(
-                    nameof(MaxParameterBytes),
+                    nameof(value),
                     value,
                     "MaxParameterBytes must be a positive number of bytes, or null for no ceiling. "
                         + "A ceiling of 0 or less would store every input and output as the "
@@ -62,8 +62,8 @@ public class ParameterEffectConfiguration
 
     /// <summary>
     /// Optional predicate deciding whether a given train's INPUT should be serialized.
-    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <c>false</c> to skip.
-    /// <c>null</c> means no predicate. Evaluated in addition to <see cref="ExcludeInput(string)"/>.
+    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <see langword="false"/> to skip.
+    /// <see langword="null"/> means no predicate. Evaluated in addition to <see cref="ExcludeInput(string)"/>.
     /// </summary>
     /// <remarks>
     /// This is also the way to express an opt-<i>in</i>, which the exclusion helpers cannot:
@@ -130,8 +130,8 @@ public class ParameterEffectConfiguration
 
     /// <summary>
     /// Optional predicate deciding whether a given train's OUTPUT should be serialized.
-    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <c>false</c> to skip.
-    /// <c>null</c> means no predicate. Evaluated in addition to <see cref="ExcludeOutput(string)"/>.
+    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <see langword="false"/> to skip.
+    /// <see langword="null"/> means no predicate. Evaluated in addition to <see cref="ExcludeOutput(string)"/>.
     /// </summary>
     /// <remarks>
     /// This is the escape hatch for cases the type/string helpers can't express. For the common

@@ -1,0 +1,4 @@
+# What tools/sync-upstream.sh copied, and from where. Written by the script.
+analyzer=3.0.322
+analyzer_commit=bc308ada79fa9e7dcc53a46959ea0fd4ab7f596f
+roslyn_helpers=1.2.4

@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -25,44 +27,46 @@ public class EventAuthorizationTests(StoreProvider provider)
 
     private const RefusalCode Unauthenticated = RefusalCode.Unauthenticated;
 
-    private InstanceHost _host = null!;
-    private AuthorizingLauncher _launcher = null!;
+    private InstanceHost? _host;
+    private AuthorizingLauncher? _launcher;
 
     // One host per fixture: the matrix is large, and every test works on drafts of its own users.
     [OneTimeSetUp]
     public void SetUp()
     {
         _launcher = new AuthorizingLauncher();
-        _host = InstanceHost.Create(provider, launcher: _launcher);
+        _host = InstanceHost.Create(provider, launcher: _launcher.NotNull());
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static string NewUser(string name = "user") => $"{name}-{Guid.NewGuid():N}";
 
     private async Task<Guid> DeskIn(string owner, DeskState state)
     {
         var id = Guid.NewGuid();
-        await _host.Seed(owner, id, RuledDeskMachine.In(state));
+        await _host.NotNull().Seed(owner, id, RuledDeskMachine.In(state)).ConfigureAwait(false);
         return id;
     }
 
-    private async Task<string> StateOf(Guid id) => (await _host.Rows(id)).Single().State;
+    private async Task<string> StateOf(Guid id) =>
+        (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single().State;
 
     [Test]
     public async Task A_client_without_the_role_gets_forbidden_and_nothing_is_written()
     {
         var user = NewUser();
         var id = Guid.NewGuid();
-        await _host.Seed(user, id, RuledBuildMachine.In(BuildState.Draft));
-        var before = (await _host.Rows(id)).Single();
-        var queued = await _host.WorkQueueCount();
-        var launches = _launcher.Calls;
+        await _host.NotNull().Seed(user, id, RuledBuildMachine.In(BuildState.Draft));
+        var before = (await _host.NotNull().Rows(id)).Single();
+        var queued = await _host.NotNull().WorkQueueCount();
+        var launches = _launcher.NotNull().Calls;
 
         AdvanceOutcome outcome;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             outcome = await _host
+                .NotNull()
                 .Service(scope, RuledBuildMachine.Id)
                 .Advance(DeskRoles.Client(user), id, nameof(BuildTrigger.Build), requestId: "r1");
 
@@ -74,20 +78,23 @@ public class EventAuthorizationTests(StoreProvider provider)
                 RefusalCode.Forbidden,
                 $"the event's rule is checked before the invoked train's authorization. See {Adr}"
             );
-        var after = (await _host.Rows(id)).Single();
+        var after = (await _host.NotNull().Rows(id)).Single();
         after.State.Should().Be(before.State);
         after.Context.Should().Be(before.Context);
         after.ConcurrencyToken.Should().Be(before.ConcurrencyToken, "nothing was written");
         after.UpdatedAt.Should().Be(before.UpdatedAt);
         after.InvokeToken.Should().BeNull();
-        (await _host.WorkQueueCount()).Should().Be(queued, "no run was queued");
-        _launcher.Calls.Should().Be(launches, "a forbidden caller never reaches the train's check");
+        (await _host.NotNull().WorkQueueCount()).Should().Be(queued, "no run was queued");
+        _launcher
+            .NotNull()
+            .Calls.Should()
+            .Be(launches, "a forbidden caller never reaches the train's check");
     }
 
     /// <summary>A caller in the matrix: who it is and the roles it holds.</summary>
     public sealed record Caller(string Name, string[] Roles)
     {
-        public bool Authenticated => Name != "none";
+        public bool Authenticated => !string.Equals(Name, "none", StringComparison.Ordinal);
 
         public bool Holds(string role) => Roles.Contains(role, StringComparer.Ordinal);
 
@@ -177,29 +184,12 @@ public class EventAuthorizationTests(StoreProvider provider)
 
         if (surface == Surface.Send)
         {
-            await _host.Seed(owner, id, RuledShipMachine.Packing);
-            AdvanceOutcome sent;
-            using (var scope = _host.Scope())
-                sent = await _host.Service(scope, RuledShipMachine.Id).Send(actor, id, "send-1");
-
-            if (allowed)
-                sent.Should().BeOfType<AdvanceOutcome.Advanced>();
-            else
-                sent.Should()
-                    .BeOfType<AdvanceOutcome.Rejected>()
-                    .Which.Reason.Should()
-                    .BeOneOf(
-                        refusedAs,
-                        $"the effect-bound event's rule is checked though send names no trigger. See {Adr}"
-                    );
-            (await StateOf(id))
-                .Should()
-                .Be(allowed ? nameof(ShipState.Shipped) : nameof(ShipState.Packing));
+            await AssertSendSurface(owner, id, actor, allowed, refusedAs);
             return;
         }
 
-        await _host.Seed(owner, id, RuledDeskMachine.In(DeskState.Open));
-        using (var scope = _host.Scope())
+        await _host.NotNull().Seed(owner, id, RuledDeskMachine.In(DeskState.Open));
+        using (var scope = _host.NotNull().Scope())
         {
             var service =
                 surface == Surface.DraftService
@@ -207,7 +197,7 @@ public class EventAuthorizationTests(StoreProvider provider)
                         scope.ServiceProvider.GetRequiredService<ISnapshotStore>(),
                         scope.ServiceProvider.GetRequiredService<IEffectClaimStore>()
                     )
-                    : _host.Service(scope, RuledDeskMachine.Id);
+                    : _host.NotNull().Service(scope, RuledDeskMachine.Id);
 
             // The input check never runs for a forbidden caller: an input the event does not take is refused as
             // forbidden for them, and as invalid-input only for a caller the rule admits.
@@ -227,7 +217,7 @@ public class EventAuthorizationTests(StoreProvider provider)
                     $"the rule is checked before the input. See {Adr}"
                 );
 
-            var outcome = await service.Advance(actor, id, rule.ToString(), null, "ok");
+            var outcome = await service.Advance(actor, id, rule.ToString(), input: null, "ok");
             if (allowed)
                 outcome.Should().BeOfType<AdvanceOutcome.Advanced>();
             else
@@ -241,13 +231,45 @@ public class EventAuthorizationTests(StoreProvider provider)
         (await StateOf(id)).Should().Be(allowed ? nameof(DeskState.Done) : nameof(DeskState.Open));
     }
 
+    private async Task AssertSendSurface(
+        string owner,
+        Guid id,
+        Actor.Client actor,
+        bool allowed,
+        RefusalCode[] refusedAs
+    )
+    {
+        await _host.NotNull().Seed(owner, id, RuledShipMachine.Packing).ConfigureAwait(false);
+        AdvanceOutcome sent;
+        using (var scope = _host.NotNull().Scope())
+            sent = await _host
+                .NotNull()
+                .Service(scope, RuledShipMachine.Id)
+                .Send(actor, id, "send-1")
+                .ConfigureAwait(false);
+
+        if (allowed)
+            sent.Should().BeOfType<AdvanceOutcome.Advanced>();
+        else
+            sent.Should()
+                .BeOfType<AdvanceOutcome.Rejected>()
+                .Which.Reason.Should()
+                .BeOneOf(
+                    refusedAs,
+                    $"the effect-bound event's rule is checked though send names no trigger. See {Adr}"
+                );
+        (await StateOf(id).ConfigureAwait(false))
+            .Should()
+            .Be(allowed ? nameof(ShipState.Shipped) : nameof(ShipState.Packing));
+    }
+
     [Test]
     public async Task A_trusted_actor_is_not_held_to_event_rules_but_its_input_is_still_validated()
     {
         var key = MachineKey.Of("trusted", Guid.NewGuid().ToString());
-        await _host.Start<RuledSystemTurnstileMachine>(key);
+        await _host.NotNull().Start<RuledSystemTurnstileMachine>(key);
 
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         // Coin requires Operator, and host code holds no role: it is not checked.
@@ -280,10 +302,11 @@ public class EventAuthorizationTests(StoreProvider provider)
         var id = await DeskIn(owner, DeskState.Open);
 
         AdvanceOutcome outcome;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             outcome = await _host
+                .NotNull()
                 .Service(scope, RuledDeskMachine.Id)
-                .Advance(owner, id, nameof(DeskTrigger.OperatorOnly), null, "host-1");
+                .Advance(owner, id, nameof(DeskTrigger.OperatorOnly), input: null, "host-1");
 
         outcome
             .Should()
@@ -304,21 +327,28 @@ public class EventAuthorizationTests(StoreProvider provider)
                 {
                     string[] pool = [DeskRoles.Operator, DeskRoles.Admin, "operator", "Viewer"];
                     var roles = pool.Where((_, bit) => (mask & (1 << bit)) != 0).ToArray();
-                    var caller = new Caller($"roles {mask}", roles);
+                    var caller = new Caller(
+                        string.Create(CultureInfo.InvariantCulture, $"roles {mask}"),
+                        roles
+                    );
                     var rule = EventRules[ruleIndex];
                     var allowed = Satisfies(caller, rule);
 
                     var owner = NewUser();
-                    var id = await DeskIn(owner, DeskState.Open);
-                    var before = (await _host.Rows(id)).Single().ConcurrencyToken;
+                    var id = await DeskIn(owner, DeskState.Open).ConfigureAwait(false);
+                    var before = (await _host.NotNull().Rows(id).ConfigureAwait(false))
+                        .Single()
+                        .ConcurrencyToken;
 
                     AdvanceOutcome outcome;
-                    using (var scope = _host.Scope())
+                    using (var scope = _host.NotNull().Scope())
                         outcome = await _host
+                            .NotNull()
                             .Service(scope, RuledDeskMachine.Id)
-                            .Advance(DeskRoles.Client(owner, roles), id, rule.ToString());
+                            .Advance(DeskRoles.Client(owner, roles), id, rule.ToString())
+                            .ConfigureAwait(false);
 
-                    var row = (await _host.Rows(id)).Single();
+                    var row = (await _host.NotNull().Rows(id).ConfigureAwait(false)).Single();
                     var writes = row.ConcurrencyToken == before ? 0 : 1;
                     (outcome is AdvanceOutcome.Rejected { Reason: RefusalCode.Forbidden })
                         .Should()
@@ -327,7 +357,11 @@ public class EventAuthorizationTests(StoreProvider provider)
                 },
                 iter: 32,
                 threads: 1,
-                print: t => $"roles mask {t.Item1}, rule {EventRules[t.Item2]}"
+                print: t =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"roles mask {t.Item1}, rule {EventRules[t.Item2]}"
+                    )
             );
 
     [Test]
@@ -336,8 +370,8 @@ public class EventAuthorizationTests(StoreProvider provider)
         var owner = NewUser();
         var id = await DeskIn(owner, DeskState.Open);
 
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, RuledDeskMachine.Id);
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, RuledDeskMachine.Id);
         (
             await service.Advance(
                 DeskRoles.Client(owner, DeskRoles.Operator),
@@ -372,8 +406,8 @@ public class EventAuthorizationTests(StoreProvider provider)
         var owner = NewUser();
         var id = await DeskIn(owner, DeskState.Open);
 
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, RuledDeskMachine.Id);
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, RuledDeskMachine.Id);
         (
             await service.Advance(
                 DeskRoles.Client(owner, DeskRoles.Operator),
@@ -420,8 +454,8 @@ public class EventAuthorizationTests(StoreProvider provider)
     public async Task Start_requires_its_start_rule()
     {
         var owner = NewUser();
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, RuledDeskMachine.Id);
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, RuledDeskMachine.Id);
 
         (
             await service.Start(
@@ -434,7 +468,7 @@ public class EventAuthorizationTests(StoreProvider provider)
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.Forbidden, $"start declares its rule like an event. See {Adr}");
-        (await _host.UserRows(owner, RuledDeskMachine.Id))
+        (await _host.NotNull().UserRows(owner, RuledDeskMachine.Id))
             .Should()
             .BeEmpty("a forbidden start writes nothing");
 
@@ -447,7 +481,7 @@ public class EventAuthorizationTests(StoreProvider provider)
         )
             .Should()
             .BeOfType<StartOutcome.Started>();
-        (await _host.UserRows(owner, RuledDeskMachine.Id)).Should().ContainSingle();
+        (await _host.NotNull().UserRows(owner, RuledDeskMachine.Id)).Should().ContainSingle();
     }
 
     /// <summary>

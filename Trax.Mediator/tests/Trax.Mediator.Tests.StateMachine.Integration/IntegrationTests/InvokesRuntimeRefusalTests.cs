@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -26,28 +27,28 @@ public class InvokesRuntimeRefusalTests(StoreProvider provider)
 
     private const string User = "u1";
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InvokeHost.Create(provider);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task A_user_owned_instance_cannot_queue_a_broadcast_train()
     {
         var id = Guid.NewGuid();
 
-        var enter = () => _host.EnterRunning(User, id, "loud-stage");
+        var enter = () => _host.NotNull().EnterRunning(User, id, "loud-stage");
 
         (await enter.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
             .Contain("'loud-stage'")
             .And.Contain("ILoudTrain")
             .And.Contain("[TraxBroadcast]", $"the startup check's refusal, made again. See {Adr}");
-        (await _host.Row(id, "loud-stage"))!.State.Should().Be("Idle");
-        (await _host.Runs(id)).Should().BeEmpty("nothing is queued");
+        (await _host.NotNull().Row(id, "loud-stage")).NotNull().State.Should().Be("Idle");
+        (await _host.NotNull().Runs(id)).Should().BeEmpty("nothing is queued");
     }
 
     [Test]
@@ -55,21 +56,21 @@ public class InvokesRuntimeRefusalTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
 
-        var enter = () => _host.EnterRunning(User, id, "secret-stage");
+        var enter = () => _host.NotNull().EnterRunning(User, id, "secret-stage");
 
         (await enter.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
             .Contain("ISecretTrain")
             .And.Contain("SecretOutput")
             .And.Contain("[TraxSensitive]", $"the startup check's refusal, made again. See {Adr}");
-        (await _host.Row(id, "secret-stage"))!.State.Should().Be("Idle");
-        (await _host.Runs(id)).Should().BeEmpty("nothing is queued");
+        (await _host.NotNull().Row(id, "secret-stage")).NotNull().State.Should().Be("Idle");
+        (await _host.NotNull().Runs(id)).Should().BeEmpty("nothing is queued");
     }
 
     [Test]
     public void A_sensitive_output_is_not_applied_to_the_context()
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var machine = (IMachineInternals)
             scope.ServiceProvider.GetServices<IMachine>().OfType<SecretMachine>().Single();
         var running = new Snapshot
@@ -90,7 +91,8 @@ public class InvokesRuntimeRefusalTests(StoreProvider provider)
             .BeOfType<AdvanceResult.Rejected>(
                 $"a sensitive output never reaches the stored context. See {Adr}"
             )
-            .Which.Exception!.Message.Should()
+            .Which.Exception.NotNull()
+            .Message.Should()
             .Contain("[TraxSensitive]");
 
         machine

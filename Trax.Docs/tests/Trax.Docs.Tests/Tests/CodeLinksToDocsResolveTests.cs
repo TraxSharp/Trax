@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -22,22 +24,28 @@ namespace Trax.Docs.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class CodeLinksToDocsResolveTests
+public partial class CodeLinksToDocsResolveTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
     // A trailing period or slash is the sentence's or the URL's, not the page's.
-    private static readonly Regex DocsLink = new(
+    [GeneratedRegex(
         @"https://traxsharp\.net(?<path>/docs(?:/[A-Za-z0-9_\-]+)*)/?(?:#(?<anchor>[A-Za-z0-9_\-]+))?",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DocsLink { get; }
 
     [Test]
-    public void Every_DocsLink_InCode_Resolves()
+    public async Task Every_DocsLink_InCode_Resolves()
     {
-        var site = DocsSite.Load();
-        var links = CodeFiles().SelectMany(f => Links(f.Path, File.ReadAllText(f.Full))).ToList();
+        var site = await DocsSite.LoadAsync().ConfigureAwait(false);
+        var links = new List<(string Where, string Url, string Path, string? Anchor)>();
+        foreach (var f in CodeFiles())
+            links.AddRange(
+                Links(f.Path, await File.ReadAllTextAsync(f.Full).ConfigureAwait(false))
+            );
 
         links
             .Should()
@@ -65,16 +73,25 @@ public class CodeLinksToDocsResolveTests
     }
 
     [Test]
-    public void The_ConsolesGlossaryLinks_AreAmongThoseChecked()
+    public async Task The_ConsolesGlossaryLinks_AreAmongThoseChecked()
     {
         // The console links each Trax term to its own glossary entry (lib/vocabulary.ts). A move
         // of that file out of the scanned folder would leave those links unchecked.
-        var glossaryLinks = CodeFiles()
-            .Where(f =>
-                f.Path.EndsWith("ClientApp/src/lib/vocabulary.ts", StringComparison.Ordinal)
+        var links = new List<(string Where, string Url, string Path, string? Anchor)>();
+        foreach (
+            var f in CodeFiles()
+                .Where(f =>
+                    f.Path.EndsWith("ClientApp/src/lib/vocabulary.ts", StringComparison.Ordinal)
+                )
+        )
+            links.AddRange(
+                Links(f.Path, await File.ReadAllTextAsync(f.Full).ConfigureAwait(false))
+            );
+        var glossaryLinks = links
+            .Where(l =>
+                string.Equals(l.Path, "/docs/reference/glossary", StringComparison.Ordinal)
+                && l.Anchor is not null
             )
-            .SelectMany(f => Links(f.Path, File.ReadAllText(f.Full)))
-            .Where(l => l.Path == "/docs/reference/glossary" && l.Anchor is not null)
             .ToList();
 
         glossaryLinks
@@ -119,11 +136,11 @@ public class CodeLinksToDocsResolveTests
         string source
     )
     {
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         for (var i = 0; i < lines.Length; i++)
             foreach (Match m in DocsLink.Matches(lines[i]))
                 yield return (
-                    $"{file}:{i + 1}",
+                    string.Create(CultureInfo.InvariantCulture, $"{file}:{i + 1}"),
                     m.Value,
                     m.Groups["path"].Value,
                     m.Groups["anchor"].Success ? m.Groups["anchor"].Value : null

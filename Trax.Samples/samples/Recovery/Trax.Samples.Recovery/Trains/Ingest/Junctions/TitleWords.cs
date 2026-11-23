@@ -6,7 +6,9 @@ namespace Trax.Samples.Recovery.Trains.Ingest.Junctions;
 internal static partial class TitleWords
 {
     public static HashSet<string> Of(string title) =>
-        Word().Matches(title.ToLowerInvariant()).Select(m => m.Value).ToHashSet();
+        Word.Matches(title.ToLowerInvariant())
+            .Select(m => m.Value)
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>The words both titles hold, over the words either holds.</summary>
     public static double Jaccard(HashSet<string> a, HashSet<string> b)
@@ -17,6 +19,6 @@ internal static partial class TitleWords
         return (double)shared / (a.Count + b.Count - shared);
     }
 
-    [GeneratedRegex(@"[\p{L}\p{N}]+")]
-    private static partial Regex Word();
+    [GeneratedRegex(@"[\p{L}\p{N}]+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Word { get; }
 }

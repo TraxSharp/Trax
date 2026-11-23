@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -27,12 +29,15 @@ public sealed class Db(IServiceProvider services)
         CancellationToken cancellationToken = default
     )
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        var dataContext = await factory.CreateDbContextAsync(cancellationToken);
+        var dataContext = await factory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
         try
         {
-            return await query(dataContext);
+            return await query(dataContext).ConfigureAwait(false);
         }
         finally
         {
@@ -44,20 +49,22 @@ public sealed class Db(IServiceProvider services)
         Query(dc => dc.Manifests.AsNoTracking().SingleAsync(m => m.ExternalId == externalId));
 
     /// <summary>The highest metadata id so far: a marker that later runs are newer than.</summary>
-    public Task<long> LatestMetadataId() =>
-        Query(dc => dc.Metadatas.AsNoTracking().MaxAsync(m => (long?)m.Id))
-            .ContinueWith(t => t.Result ?? 0);
+    public async Task<long> LatestMetadataId() =>
+        await Query(dc => dc.Metadatas.AsNoTracking().MaxAsync(m => (long?)m.Id))
+            .ConfigureAwait(false)
+        ?? 0;
 
-    public Task<List<Metadata>> Runs(long manifestId, long afterId) =>
-        Query(dc =>
-            dc.Metadatas.AsNoTracking()
-                .Where(m => m.ManifestId == manifestId && m.Id > afterId)
-                .OrderBy(m => m.Id)
-                .ToListAsync()
-        );
+    public async Task<IReadOnlyList<Metadata>> Runs(long manifestId, long afterId) =>
+        await Query(dc =>
+                dc.Metadatas.AsNoTracking()
+                    .Where(m => m.ManifestId == manifestId && m.Id > afterId)
+                    .OrderBy(m => m.Id)
+                    .ToListAsync()
+            )
+            .ConfigureAwait(false);
 
     /// <summary>Waits for <paramref name="count"/> runs of a manifest, newer than <paramref name="afterId"/>, to reach <paramref name="state"/>.</summary>
-    public async Task<List<Metadata>> WaitForRuns(
+    public async Task<IReadOnlyList<Metadata>> WaitForRuns(
         long manifestId,
         TrainState state,
         int count,
@@ -68,43 +75,53 @@ public sealed class Db(IServiceProvider services)
         List<Metadata> runs = [];
         using var budget = new CancellationTokenSource(timeout);
 
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                if (budget.IsCancellationRequested)
-                    return false;
-                try
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
                 {
-                    runs = await Query(
-                        dc =>
-                            dc.Metadatas.AsNoTracking()
-                                .Where(m =>
-                                    m.ManifestId == manifestId
-                                    && m.Id > afterId
-                                    && m.TrainState == state
-                                )
-                                .OrderBy(m => m.Id)
-                                .ToListAsync(budget.Token),
-                        budget.Token
-                    );
-                }
-                catch (OperationCanceledException)
-                {
-                    return false;
-                }
-                return runs.Count >= count;
-            },
-            timeout,
-            PollInterval
-        );
+                    if (budget.IsCancellationRequested)
+                        return false;
+                    try
+                    {
+                        runs = await Query(
+                                dc =>
+                                    dc.Metadatas.AsNoTracking()
+                                        .Where(m =>
+                                            m.ManifestId == manifestId
+                                            && m.Id > afterId
+                                            && m.TrainState == state
+                                        )
+                                        .OrderBy(m => m.Id)
+                                        .ToListAsync(budget.Token),
+                                budget.Token
+                            )
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return false;
+                    }
+                    return runs.Count >= count;
+                },
+                timeout,
+                PollInterval,
+                budget.Token
+            )
+            .ConfigureAwait(false);
 
         if (!reached)
         {
-            var all = await Runs(manifestId, afterId);
+            var all = await Runs(manifestId, afterId).ConfigureAwait(false);
             Assert.Fail(
-                $"Expected {count} {state} run(s) of manifest {manifestId} after metadata {afterId} "
-                    + $"within {timeout.TotalSeconds}s; saw "
-                    + $"[{string.Join(", ", all.Select(r => $"{r.Id}:{r.TrainState}"))}]."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Expected {count} {state} run(s) of manifest {manifestId} after metadata {afterId} "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"within {timeout.TotalSeconds}s; saw "
+                    )
+                    + $"[{string.Join(", ", all.Select(r => string.Create(CultureInfo.InvariantCulture, $"{r.Id}:{r.TrainState}")))}]."
             );
         }
 
@@ -116,7 +133,7 @@ public sealed class Db(IServiceProvider services)
         TrainState state,
         long afterId,
         TimeSpan timeout
-    ) => (await WaitForRuns(manifestId, state, 1, afterId, timeout))[0];
+    ) => (await WaitForRuns(manifestId, state, 1, afterId, timeout).ConfigureAwait(false))[0];
 
     /// <summary>Waits for a dead letter of the manifest, newer than <paramref name="afterId"/>, in <paramref name="status"/>.</summary>
     public async Task<DeadLetter> WaitForDeadLetter(
@@ -129,48 +146,57 @@ public sealed class Db(IServiceProvider services)
         DeadLetter? deadLetter = null;
         using var budget = new CancellationTokenSource(timeout);
 
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                if (budget.IsCancellationRequested)
-                    return false;
-                try
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
                 {
-                    deadLetter = await Query(
-                        dc =>
-                            dc.DeadLetters.AsNoTracking()
-                                .Where(d =>
-                                    d.ManifestId == manifestId
-                                    && d.Id > afterId
-                                    && d.Status == status
-                                )
-                                .OrderByDescending(d => d.Id)
-                                .FirstOrDefaultAsync(budget.Token),
-                        budget.Token
-                    );
-                }
-                catch (OperationCanceledException)
-                {
-                    return false;
-                }
-                return deadLetter is not null;
-            },
-            timeout,
-            PollInterval
-        );
+                    if (budget.IsCancellationRequested)
+                        return false;
+                    try
+                    {
+                        deadLetter = await Query(
+                                dc =>
+                                    dc.DeadLetters.AsNoTracking()
+                                        .Where(d =>
+                                            d.ManifestId == manifestId
+                                            && d.Id > afterId
+                                            && d.Status == status
+                                        )
+                                        .OrderByDescending(d => d.Id)
+                                        .FirstOrDefaultAsync(budget.Token),
+                                budget.Token
+                            )
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return false;
+                    }
+                    return deadLetter is not null;
+                },
+                timeout,
+                PollInterval,
+                budget.Token
+            )
+            .ConfigureAwait(false);
 
         reached
             .Should()
             .BeTrue(
-                $"manifest {manifestId} should have a {status} dead letter after {afterId} within {timeout.TotalSeconds}s"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"manifest {manifestId} should have a {status} dead letter after {afterId} within {timeout.TotalSeconds}s"
+                )
             );
-        return deadLetter!;
+        return deadLetter.NotNull();
     }
 
     /// <summary>Waits until <paramref name="condition"/> holds, failing the test with <paramref name="because"/> when it never does.</summary>
     public async Task WaitUntil(Func<Task<bool>> condition, TimeSpan timeout, string because)
     {
-        var reached = await Polling.WaitUntilAsync(condition, timeout, PollInterval);
+        var reached = await Polling
+            .WaitUntilAsync(condition, timeout, PollInterval)
+            .ConfigureAwait(false);
         reached.Should().BeTrue(because);
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Trax.Core.Testing.Infrastructure;
 
@@ -7,69 +8,115 @@ namespace Trax.Core.Testing.Guards;
 /// Test-hygiene guard checkers. Each scans the configured test roots and returns a
 /// <see cref="GuardResult"/>; the consumer asserts <c>Offenders</c> is empty with its own framework.
 /// </summary>
-public static class HygieneGuards
+public static partial class HygieneGuards
 {
-    // Matches an [Ignore] attribute whether standalone ([Ignore] / [Ignore("...")]) or combined with
-    // others ([Test, Ignore(...)]), i.e. preceded by an open bracket or a comma. The name may be
-    // qualified (NUnit.Framework.Ignore) or carry its suffix (IgnoreAttribute), and the list may
-    // span lines, so it is matched against the whole file rather than line by line. The lookahead
-    // leaves a following comma for the next attribute in the same list.
-    private static readonly Regex IgnoreAttribute = new(
-        @"(?:\[|,)\s*(?:[\w.]+\.)?Ignore(?:Attribute)?(?=\s*(?:\(|\]|,))",
-        RegexOptions.Compiled
-    );
-
     // A per-case skip: [TestCase(1, Ignore = "...")] or IgnoreReason = on a case or fixture
     // attribute. Same effect as [Ignore], one case at a time.
-    private static readonly Regex IgnoreNamedArgument = new(
+    [GeneratedRegex(
         @"\[[^\]]*?\b(?:TestCase|TestCaseSource|TestFixture|TestFixtureSource)(?:Attribute)?\b[^\]]*?\b(?:Ignore|IgnoreReason)\s*=(?!=)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex IgnoreNamedArgument { get; }
 
     private static readonly (string Name, Regex Pattern)[] LegacyAssertPatterns =
     [
-        ("Assert.That", new Regex(@"\bAssert\.That\b", RegexOptions.Compiled)),
-        ("Assert.AreEqual", new Regex(@"\bAssert\.AreEqual\b", RegexOptions.Compiled)),
-        ("Assert.AreNotEqual", new Regex(@"\bAssert\.AreNotEqual\b", RegexOptions.Compiled)),
-        ("Assert.AreSame", new Regex(@"\bAssert\.AreSame\b", RegexOptions.Compiled)),
-        ("Assert.AreNotSame", new Regex(@"\bAssert\.AreNotSame\b", RegexOptions.Compiled)),
-        ("Assert.IsTrue", new Regex(@"\bAssert\.IsTrue\b", RegexOptions.Compiled)),
-        ("Assert.IsFalse", new Regex(@"\bAssert\.IsFalse\b", RegexOptions.Compiled)),
-        ("Assert.IsNull", new Regex(@"\bAssert\.IsNull\b", RegexOptions.Compiled)),
-        ("Assert.IsNotNull", new Regex(@"\bAssert\.IsNotNull\b", RegexOptions.Compiled)),
-        ("Assert.IsEmpty", new Regex(@"\bAssert\.IsEmpty\b", RegexOptions.Compiled)),
-        ("Assert.IsNotEmpty", new Regex(@"\bAssert\.IsNotEmpty\b", RegexOptions.Compiled)),
-        ("Assert.Contains", new Regex(@"\bAssert\.Contains\b", RegexOptions.Compiled)),
-        ("ClassicAssert", new Regex(@"\bClassicAssert\.\w+", RegexOptions.Compiled)),
-        ("CollectionAssert", new Regex(@"\bCollectionAssert\.\w+", RegexOptions.Compiled)),
-        ("StringAssert", new Regex(@"\bStringAssert\.\w+", RegexOptions.Compiled)),
+        ("Assert.That", LegacyAssertThat),
+        ("Assert.AreEqual", LegacyAssertAreEqual),
+        ("Assert.AreNotEqual", LegacyAssertAreNotEqual),
+        ("Assert.AreSame", LegacyAssertAreSame),
+        ("Assert.AreNotSame", LegacyAssertAreNotSame),
+        ("Assert.IsTrue", LegacyAssertIsTrue),
+        ("Assert.IsFalse", LegacyAssertIsFalse),
+        ("Assert.IsNull", LegacyAssertIsNull),
+        ("Assert.IsNotNull", LegacyAssertIsNotNull),
+        ("Assert.IsEmpty", LegacyAssertIsEmpty),
+        ("Assert.IsNotEmpty", LegacyAssertIsNotEmpty),
+        ("Assert.Contains", LegacyAssertContains),
+        ("ClassicAssert", LegacyClassicAssert),
+        ("CollectionAssert", LegacyCollectionAssert),
+        ("StringAssert", LegacyStringAssert),
     ];
 
-    private static readonly Regex FixedDelay = new(
-        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
-        RegexOptions.Compiled
-    );
+    [GeneratedRegex(@"\bAssert\.That\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertThat { get; }
 
-    private static readonly Regex StartCall = new(@"\bStartAsync\s*\(", RegexOptions.Compiled);
+    [GeneratedRegex(@"\bAssert\.AreEqual\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreEqual { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreNotEqual\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreNotEqual { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreSame\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreSame { get; }
+
+    [GeneratedRegex(@"\bAssert\.AreNotSame\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertAreNotSame { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsTrue\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsTrue { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsFalse\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsFalse { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsNull\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsNull { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsNotNull\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsNotNull { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsEmpty\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsEmpty { get; }
+
+    [GeneratedRegex(@"\bAssert\.IsNotEmpty\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertIsNotEmpty { get; }
+
+    [GeneratedRegex(@"\bAssert\.Contains\b", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyAssertContains { get; }
+
+    [GeneratedRegex(@"\bClassicAssert\.\w+", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyClassicAssert { get; }
+
+    [GeneratedRegex(@"\bCollectionAssert\.\w+", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyCollectionAssert { get; }
+
+    [GeneratedRegex(@"\bStringAssert\.\w+", RegexOptions.None, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex LegacyStringAssert { get; }
+
+    [GeneratedRegex(
+        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex FixedDelay { get; }
+
+    [GeneratedRegex(@"\bStartAsync\s*\(", RegexOptions.Compiled, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex StartCall { get; }
 
     // A method, constructor or local function header ends the previous method's scan. Statements
     // never start with an access modifier, and a local function is a fresh scope too.
-    private static readonly Regex MemberDeclaration = new(
+    [GeneratedRegex(
         @"^\s*(?:(?:public|private|protected|internal|static|async|override|virtual|sealed)\s+)+[\w<>\[\],.?\s]+\(",
-        RegexOptions.Compiled
-    );
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex MemberDeclaration { get; }
 
-    private static readonly Regex Synchronisation = new(
+    [GeneratedRegex(
         @"\bWaitAsync\s*\(|\bWait(?:Until|For)\w*\s*\(|\bEventually\w*\s*\(|\b\w*Until\w*Async\s*\("
             + @"|\bWhenReached\s*\(|\bawait\s+[\w.!()]+\.(?:Task|Current)\b|\bTask\.When(?:All|Any)\s*\("
             + @"|\.StopAsync\s*\(|\bawait\s+[A-Za-z_]\w*\s*;",
-        RegexOptions.Compiled
-    );
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex Synchronisation { get; }
 
-    private static readonly Regex ReceivedCheck = new(
+    [GeneratedRegex(
         @"\.(?:Received|DidNotReceive|ReceivedWithAnyArgs|DidNotReceiveWithAnyArgs)\s*\(",
-        RegexOptions.Compiled
-    );
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex ReceivedCheck { get; }
 
     private const string SynchronousStart = "synchronous-start:";
 
@@ -103,7 +150,7 @@ public static class HygieneGuards
                 lines.Add(stripped.Take(match.Index).Count(c => c == '\n') + 1);
 
             foreach (var line in lines)
-                offenders.Add($"{rel}:{line}");
+                offenders.Add(string.Create(CultureInfo.InvariantCulture, $"{rel}:{line}"));
         }
 
         var message =
@@ -133,7 +180,9 @@ public static class HygieneGuards
             foreach (var (name, pattern) in LegacyAssertPatterns)
             {
                 foreach (var (line, _) in SourceText.MatchingLines(stripped, pattern))
-                    offenders.Add($"{rel}:{line}  ({name})");
+                    offenders.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"{rel}:{line}  ({name})")
+                    );
             }
         }
 
@@ -164,10 +213,12 @@ public static class HygieneGuards
             if (options.FixedDelayKnownExceptions.Contains(rel))
                 continue;
 
-            var raw = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var raw = File.ReadAllText(file)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             var stripped = SourceText
                 .StripCommentsAndStrings(File.ReadAllText(file))
-                .Replace("\r\n", "\n")
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
                 .Split('\n');
 
             for (var i = 0; i < stripped.Length && i < raw.Length; i++)
@@ -176,7 +227,12 @@ public static class HygieneGuards
                     continue;
                 if (HasJustification(raw, i))
                     continue;
-                offenders.Add($"{rel}:{i + 1}  -> {raw[i].Trim()}");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{i + 1}  -> {raw[i].Trim()}"
+                    )
+                );
             }
         }
 
@@ -219,41 +275,15 @@ public static class HygieneGuards
         {
             inspected++;
             var rel = Rel(root, file);
-            var raw = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            var raw = File.ReadAllText(file)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
             var stripped = SourceText
                 .StripCommentsAndStrings(File.ReadAllText(file))
-                .Replace("\r\n", "\n")
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
                 .Split('\n');
 
-            int? started = null;
-            for (var i = 0; i < stripped.Length && i < raw.Length; i++)
-            {
-                var line = stripped[i];
-                if (MemberDeclaration.IsMatch(line))
-                {
-                    started = null;
-                    continue;
-                }
-                if (StartCall.IsMatch(line) && !HasMarker(raw, i, SynchronousStart))
-                {
-                    started = i;
-                    continue;
-                }
-                if (started is null)
-                    continue;
-                if (Synchronisation.IsMatch(line))
-                {
-                    started = null;
-                    continue;
-                }
-                if (ReceivedCheck.IsMatch(line))
-                {
-                    offenders.Add(
-                        $"{rel}:{i + 1}  -> {raw[i].Trim()}  (started at line {started.Value + 1})"
-                    );
-                    started = null;
-                }
-            }
+            AddUnsynchronisedChecks(rel, raw, stripped, offenders);
         }
 
         var message =
@@ -267,6 +297,51 @@ public static class HygieneGuards
             + string.Join("\n  ", offenders);
 
         return new GuardResult(offenders, inspected, message);
+    }
+
+    /// <summary>
+    /// Adds each line of one file that checks a substitute after a start with nothing between
+    /// them that waits for the started work.
+    /// </summary>
+    private static void AddUnsynchronisedChecks(
+        string rel,
+        string[] raw,
+        string[] stripped,
+        List<string> offenders
+    )
+    {
+        int? started = null;
+        for (var i = 0; i < stripped.Length && i < raw.Length; i++)
+        {
+            var line = stripped[i];
+            if (MemberDeclaration.IsMatch(line))
+            {
+                started = null;
+                continue;
+            }
+            if (StartCall.IsMatch(line) && !HasMarker(raw, i, SynchronousStart))
+            {
+                started = i;
+                continue;
+            }
+            if (started is null)
+                continue;
+            if (Synchronisation.IsMatch(line))
+            {
+                started = null;
+                continue;
+            }
+            if (ReceivedCheck.IsMatch(line))
+            {
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{rel}:{i + 1}  -> {raw[i].Trim()}  (started at line {started.Value + 1})"
+                    )
+                );
+                started = null;
+            }
+        }
     }
 
     private static bool HasMarker(string[] rawLines, int lineIndex, string marker)
@@ -296,4 +371,11 @@ public static class HygieneGuards
 
         return false;
     }
+
+    [GeneratedRegex(
+        @"(?:\[|,)\s*(?:[\w.]+\.)?Ignore(?:Attribute)?(?=\s*(?:\(|\]|,))",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex IgnoreAttribute { get; }
 }

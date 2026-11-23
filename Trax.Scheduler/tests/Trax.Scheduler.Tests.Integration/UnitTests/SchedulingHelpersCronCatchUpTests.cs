@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
@@ -16,8 +17,8 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulingHelpersCronCatchUpTests
 {
-    private SchedulerConfiguration _config = null!;
-    private ILogger _logger = null!;
+    private SchedulerConfiguration? _config;
+    private ILogger? _logger;
 
     [SetUp]
     public void SetUp()
@@ -32,7 +33,10 @@ public class SchedulingHelpersCronCatchUpTests
         var now = new DateTime(2026, 3, 4, 12, 0, 0, DateTimeKind.Utc);
         var manifest = DoNothingCron("* * * * * *", lastSuccess: now.AddDays(-2));
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -41,7 +45,10 @@ public class SchedulingHelpersCronCatchUpTests
         var now = new DateTime(2026, 3, 4, 12, 0, 30, DateTimeKind.Utc);
         var manifest = DoNothingCron("* * * * *", lastSuccess: now.AddYears(-1));
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeTrue();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeTrue();
     }
 
     [Test]
@@ -51,7 +58,10 @@ public class SchedulingHelpersCronCatchUpTests
         var manifest = DoNothingCron("* * * * *", lastSuccess: now.AddYears(-1));
         manifest.MisfireThresholdSeconds = 10;
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .BeFalse();
     }
 
     [TestCase(20, true)]
@@ -67,7 +77,10 @@ public class SchedulingHelpersCronCatchUpTests
         var now = occurrence.AddSeconds(secondsAfterOccurrence);
         var manifest = DoNothingCron("0 3 * * *", lastSuccess: occurrence.AddDays(-10));
 
-        SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().Be(expected);
+        SchedulingHelpers
+            .ShouldRunNow(manifest, now, _config.NotNull(), _logger.NotNull())
+            .Should()
+            .Be(expected);
     }
 
     [Test]

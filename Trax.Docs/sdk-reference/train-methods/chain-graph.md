@@ -7,6 +7,8 @@ package: Trax.Core
 namespace: Trax.Core.Monad
 source:
   - Trax.Core/src/Trax.Core/Monad/ChainGraph.cs
+  - Trax.Core/src/Trax.Core/Monad/ChainGraphNode.cs
+  - Trax.Core/src/Trax.Core/Monad/ChainGraphTrack.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 14

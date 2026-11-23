@@ -27,7 +27,7 @@ public class ShortCircuitTests : TestSetup
         train.Exception.Should().BeNull();
         returnValue.IsRight.Should().BeTrue();
         returnValue.ValueUnsafe().Should().BeTrue();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().ContainValue(inputString.Equals("hello", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -50,8 +50,11 @@ public class ShortCircuitTests : TestSetup
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
         returnValue.IsRight.Should().BeTrue();
-        returnValue.ValueUnsafe().Should().Be((inputString.Equals("hello"), inputString.First()));
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
+        returnValue
+            .ValueUnsafe()
+            .Should()
+            .Be((inputString.Equals("hello", StringComparison.Ordinal), inputString.First()));
+        train.Memory.Should().ContainValue(inputString.Equals("hello", StringComparison.Ordinal));
         train.Memory.Should().ContainValue(inputString.First());
     }
 
@@ -76,7 +79,9 @@ public class ShortCircuitTests : TestSetup
         train.Exception.Should().BeNull();
         returnValue.IsLeft.Should().BeTrue();
         returnValue.Swap().ValueUnsafe().Should().BeOfType<NotImplementedException>();
-        train.Memory.Should().NotContainValue(inputString.Equals("hello"));
+        train
+            .Memory.Should()
+            .NotContainValue(inputString.Equals("hello", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -126,28 +131,29 @@ public class ShortCircuitTests : TestSetup
         train.Exception.Should().BeNull();
     }
 
-    private class TestExceptionJunction : Junction<string, bool>
+    private sealed class TestExceptionJunction : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => throw new NotImplementedException();
     }
 
-    private class TestTupleOutputJunction : Junction<string, (bool, char)>
+    private sealed class TestTupleOutputJunction : Junction<string, (bool, char)>
     {
         public override async Task<(bool, char)> Run(string input) =>
-            (input.Equals("hello"), input.First());
+            (input.Equals("hello", StringComparison.Ordinal), input.First());
     }
 
-    private class TestJunction : Junction<string, bool>
+    private sealed class TestJunction : Junction<string, bool>
     {
-        public override async Task<bool> Run(string input) => input.Equals("hello");
+        public override async Task<bool> Run(string input) =>
+            input.Equals("hello", StringComparison.Ordinal);
     }
 
-    private class TestJunctionStringOutput : Junction<string, string>
+    private sealed class TestJunctionStringOutput : Junction<string, string>
     {
         public override async Task<string> Run(string input) => input + "world";
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();
@@ -164,7 +170,7 @@ public class ShortCircuitTests : TestSetup
         }
     }
 
-    private class TestTrainOption : Train<Maybe, string>
+    private sealed class TestTrainOption : Train<Maybe, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

@@ -1,0 +1,42 @@
+using Microsoft.CodeAnalysis.CodeRefactorings;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class AbstractTypesShouldNotHaveConstructorsFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.AbstractTypesShouldNotHaveConstructors);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        if (root?.FindNode(context.Span, getInnermostNodeForTie: true) is not ConstructorDeclarationSyntax ctorSyntax)
+            return;
+
+        var title = "Make constructor protected";
+        var codeAction = CodeAction.Create(
+            title,
+            ct => MakeConstructorProtected(context.Document, ctorSyntax, ct),
+            equivalenceKey: title);
+
+        context.RegisterCodeFix(codeAction, context.Diagnostics);
+    }
+
+    private static async Task<Document> MakeConstructorProtected(Document document, ConstructorDeclarationSyntax ctorSyntax, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+
+        var modifiers = ctorSyntax.Modifiers;
+        foreach (var modifier in modifiers.Where(m => m.IsKind(SyntaxKind.PublicKeyword) || m.IsKind(SyntaxKind.InternalKeyword)))
+        {
+            modifiers = modifiers.Remove(modifier);
+        }
+
+        modifiers = modifiers.Add(SyntaxFactory.Token(SyntaxKind.ProtectedKeyword));
+
+        editor.ReplaceNode(ctorSyntax, ctorSyntax.WithModifiers(modifiers));
+        return editor.GetChangedDocument();
+    }
+}

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -80,7 +81,11 @@ public class ApiKeyLengthEnvironmentTests
         services.AddTraxApiKeyAuth(builder =>
         {
             for (var i = 0; i < keys.Length; i++)
-                builder.Add(keys[i], id: $"key-{i}", "User");
+                builder.Add(
+                    keys[i],
+                    id: string.Create(CultureInfo.InvariantCulture, $"key-{i}"),
+                    "User"
+                );
         });
         return StartAllAsync(services);
     }
@@ -95,9 +100,12 @@ public class ApiKeyLengthEnvironmentTests
 
     private static async Task StartAllAsync(ServiceCollection services)
     {
-        await using var provider = services.BuildServiceProvider();
-        foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(CancellationToken.None);
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            foreach (var hosted in provider.GetServices<IHostedService>())
+                await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     private sealed class Environment(string name) : IHostEnvironment

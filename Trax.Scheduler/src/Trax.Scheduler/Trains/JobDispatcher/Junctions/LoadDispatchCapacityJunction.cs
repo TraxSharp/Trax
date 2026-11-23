@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -14,7 +15,7 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// Loads dispatch capacity: global active count, per-group active counts, and per-group limits.
 /// Short-circuits with empty entries when there is nothing to dispatch or the global limit is reached.
 /// </summary>
-internal class LoadDispatchCapacityJunction(
+internal sealed class LoadDispatchCapacityJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ILogger<LoadDispatchCapacityJunction> logger,
@@ -53,7 +54,8 @@ internal class LoadDispatchCapacityJunction(
             )
             .GroupBy(x => x.GroupId)
             .Select(g => new { GroupId = g.Key, Count = g.Count() })
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         var activeMetadataCount = activeCounts.Sum(x => x.Count);
 
@@ -70,12 +72,13 @@ internal class LoadDispatchCapacityJunction(
 
         var groupActiveCounts = activeCounts
             .Where(x => x.GroupId.HasValue)
-            .ToDictionary(x => x.GroupId!.Value, x => x.Count);
+            .ToDictionary(x => x.GroupId.NotNull().Value, x => x.Count);
 
         // Load per-group limits (only groups that have a limit set)
         var groupLimits = await dataContext
             .ManifestGroups.Where(g => g.MaxActiveJobs != null)
-            .ToDictionaryAsync(g => g.Id, g => g.MaxActiveJobs!.Value, CancellationToken);
+            .ToDictionaryAsync(g => g.Id, g => g.MaxActiveJobs.NotNull().Value, CancellationToken)
+            .ConfigureAwait(false);
 
         return new DispatchContext(entries, activeMetadataCount, groupActiveCounts, groupLimits);
     }

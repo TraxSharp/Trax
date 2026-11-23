@@ -37,8 +37,8 @@ public class DeadLetterMutations
         // The overload is called only when asked, so a host whose scheduler predates it keeps the
         // default path.
         askAfresh
-            ? await scheduler.RequeueDeadLetterAsync(id, askAfresh: true, ct)
-            : await scheduler.RequeueDeadLetterAsync(id, ct);
+            ? await scheduler.RequeueDeadLetterAsync(id, askAfresh: true, ct).ConfigureAwait(false)
+            : await scheduler.RequeueDeadLetterAsync(id, ct).ConfigureAwait(false);
 
     /// <summary>
     /// Marks one dead letter acknowledged without running it again, recording <c>note</c> as the
@@ -49,7 +49,7 @@ public class DeadLetterMutations
         string note,
         [Service] ITraxScheduler scheduler,
         CancellationToken ct
-    ) => await scheduler.AcknowledgeDeadLetterAsync(id, note, ct);
+    ) => await scheduler.AcknowledgeDeadLetterAsync(id, note, ct).ConfigureAwait(false);
 
     /// <summary>
     /// Requeues the listed dead letters. At most one work queue entry is created per manifest: dead
@@ -64,8 +64,10 @@ public class DeadLetterMutations
         bool askAfresh = false
     ) =>
         askAfresh
-            ? await scheduler.RequeueDeadLettersAsync(ids, askAfresh: true, ct)
-            : await scheduler.RequeueDeadLettersAsync(ids, ct);
+            ? await scheduler
+                .RequeueDeadLettersAsync(ids, askAfresh: true, ct)
+                .ConfigureAwait(false)
+            : await scheduler.RequeueDeadLettersAsync(ids, ct).ConfigureAwait(false);
 
     /// <summary>
     /// Marks the listed dead letters acknowledged without running them again, recording <c>note</c>
@@ -76,7 +78,7 @@ public class DeadLetterMutations
         string note,
         [Service] ITraxScheduler scheduler,
         CancellationToken ct
-    ) => await scheduler.AcknowledgeDeadLettersAsync(ids, note, ct);
+    ) => await scheduler.AcknowledgeDeadLettersAsync(ids, note, ct).ConfigureAwait(false);
 
     /// <summary>
     /// Starts requeueing every dead letter awaiting intervention, creating at most one work queue
@@ -96,7 +98,7 @@ public class DeadLetterMutations
         [Service] IDeadLetterRequeueJobs jobs,
         CancellationToken ct,
         bool askAfresh = false
-    ) => DeadLetterRequeueJob.From(await jobs.StartAsync(askAfresh, ct));
+    ) => DeadLetterRequeueJob.From(await jobs.StartAsync(askAfresh, ct).ConfigureAwait(false));
 
     /// <summary>
     /// Marks every dead letter awaiting intervention acknowledged, recording <c>note</c> on each. A
@@ -106,5 +108,5 @@ public class DeadLetterMutations
         string note,
         [Service] ITraxScheduler scheduler,
         CancellationToken ct
-    ) => await scheduler.AcknowledgeAllDeadLettersAsync(note, ct);
+    ) => await scheduler.AcknowledgeAllDeadLettersAsync(note, ct).ConfigureAwait(false);
 }

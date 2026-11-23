@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
@@ -27,7 +28,11 @@ internal static class MachineGraph
     ) =>
         Drawn
             .GetValue(machine, _ => new())
-            .GetOrAdd((current, vertical), key => Draw(machine, key.Current, key.Vertical));
+            .GetOrAdd(
+                (current, vertical),
+                (key, arg) => Draw(arg, key.Current, key.Vertical),
+                machine
+            );
 
     private static IReadOnlyList<string> Draw(
         MachinesResultOperationsMachines machine,
@@ -40,7 +45,8 @@ internal static class MachineGraph
         var states = machine
             .States.Select(s => new GraphState(
                 TerminalText.Line(s.Name),
-                s.IsInitial || s.Name == machine.InitialState,
+                s.IsInitial
+                    || string.Equals(s.Name, machine.InitialState, StringComparison.Ordinal),
                 s.IsFinal,
                 Note(s) is { } note ? TerminalText.Line(note) : null
             ))
@@ -65,7 +71,9 @@ internal static class MachineGraph
         foreach (var timer in machine.Timers)
             if (
                 !machine.Transitions.Any(t =>
-                    t.From == timer.State && t.To == timer.Target && t.Command == timer.Command
+                    string.Equals(t.From, timer.State, StringComparison.Ordinal)
+                    && string.Equals(t.To, timer.Target, StringComparison.Ordinal)
+                    && string.Equals(t.Command, timer.Command, StringComparison.Ordinal)
                 )
             )
                 edges.Add(
@@ -101,10 +109,14 @@ internal static class MachineGraph
         }
         var parts = new[]
         {
-            span.Days > 0 ? $"{span.Days}d" : null,
-            span.Hours > 0 ? $"{span.Hours}h" : null,
-            span.Minutes > 0 ? $"{span.Minutes}m" : null,
-            span.Seconds > 0 ? $"{span.Seconds}s" : null,
+            span.Days > 0 ? string.Create(CultureInfo.InvariantCulture, $"{span.Days}d") : null,
+            span.Hours > 0 ? string.Create(CultureInfo.InvariantCulture, $"{span.Hours}h") : null,
+            span.Minutes > 0
+                ? string.Create(CultureInfo.InvariantCulture, $"{span.Minutes}m")
+                : null,
+            span.Seconds > 0
+                ? string.Create(CultureInfo.InvariantCulture, $"{span.Seconds}s")
+                : null,
         }.Where(p => p is not null);
         var text = string.Concat(parts);
         return text.Length == 0 ? "0s" : text;

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -23,15 +24,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -49,7 +51,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.Id.Should().Be(manifest.Id);
+        foundManifest.NotNull().Id.Should().Be(manifest.Id);
     }
 
     [Theory]
@@ -59,7 +61,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestProperties
         {
@@ -73,8 +76,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -94,7 +97,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.Id.Should().Be(manifest.Id);
+        foundManifest.NotNull().Id.Should().Be(manifest.Id);
 
         var retrievedConfig = foundManifest.GetProperties<TestManifestProperties>();
         retrievedConfig.Should().NotBeNull();
@@ -110,15 +113,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -137,7 +141,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.Id.Should().Be(manifest.Id);
+        foundManifest.NotNull().Id.Should().Be(manifest.Id);
         foundManifest.ExternalId.Should().Be(manifest.ExternalId);
     }
 
@@ -148,7 +152,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var initialConfig = new TestManifestProperties
         {
@@ -162,8 +167,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -189,7 +194,7 @@ public class ManifestTests : TestSetup
             Enabled = true,
         };
 
-        foundManifest!.SetProperties(updatedConfig);
+        foundManifest.NotNull().SetProperties(updatedConfig);
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -197,7 +202,7 @@ public class ManifestTests : TestSetup
         var updatedManifest = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifestId);
         updatedManifest.Should().NotBeNull();
 
-        var retrievedConfig = updatedManifest!.GetProperties<TestManifestProperties>();
+        var retrievedConfig = updatedManifest.NotNull().GetProperties<TestManifestProperties>();
         retrievedConfig.Name.Should().Be("UpdatedConfig");
         retrievedConfig.Value.Should().Be(100);
         retrievedConfig.Enabled.Should().BeTrue();
@@ -210,7 +215,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestProperties
         {
@@ -224,8 +230,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -244,7 +250,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.PropertyType.Should().Be(typeof(TestManifestProperties));
+        foundManifest.NotNull().PropertyType.Should().Be(typeof(TestManifestProperties));
     }
 
     [Theory]
@@ -254,16 +260,10 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        var group = new MG.ManifestGroup
-        {
-            Name = $"group-{Guid.NewGuid():N}",
-            Priority = 0,
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
+        var group = NewTestGroup();
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
 
@@ -286,14 +286,10 @@ public class ManifestTests : TestSetup
         await context.SaveChanges(CancellationToken.None);
 
         // Create metadata (train execution) linked to the manifest
-        var metadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestMetadataCanLinkToManifest),
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { TestInput = "value" },
-                ManifestId = manifest.Id,
-            }
+        var metadata = NewManifestMetadata(
+            nameof(TestMetadataCanLinkToManifest),
+            new { TestInput = "value" },
+            manifest
         );
 
         await context.Track(metadata);
@@ -307,9 +303,9 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundMetadata.Should().NotBeNull();
-        foundMetadata!.ManifestId.Should().Be(manifest.Id);
+        foundMetadata.NotNull().ManifestId.Should().Be(manifest.Id);
         foundMetadata.Manifest.Should().NotBeNull();
-        foundMetadata.Manifest!.Id.Should().Be(manifest.Id);
+        foundMetadata.Manifest.NotNull().Id.Should().Be(manifest.Id);
     }
 
     [Theory]
@@ -319,16 +315,10 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        var group = new MG.ManifestGroup
-        {
-            Name = $"group-{Guid.NewGuid():N}",
-            Priority = 0,
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
+        var group = NewTestGroup();
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
 
@@ -351,24 +341,16 @@ public class ManifestTests : TestSetup
         await context.SaveChanges(CancellationToken.None);
 
         // Create multiple metadata records (train executions) linked to the same manifest
-        var metadata1 = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run1",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Run = 1 },
-                ManifestId = manifest.Id,
-            }
+        var metadata1 = NewManifestMetadata(
+            nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run1",
+            new { Run = 1 },
+            manifest
         );
 
-        var metadata2 = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run2",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Run = 2 },
-                ManifestId = manifest.Id,
-            }
+        var metadata2 = NewManifestMetadata(
+            nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run2",
+            new { Run = 2 },
+            manifest
         );
 
         await context.Track(metadata1);
@@ -383,7 +365,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.Metadatas.Should().HaveCount(2);
+        foundManifest.NotNull().Metadatas.Should().HaveCount(2);
         foundManifest.Metadatas.Should().Contain(m => m.Id == metadata1.Id);
         foundManifest.Metadatas.Should().Contain(m => m.Id == metadata2.Id);
     }
@@ -395,15 +377,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -426,7 +409,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.ExternalId.Should().Be(customExternalId);
+        foundManifest.NotNull().ExternalId.Should().Be(customExternalId);
     }
 
     [Theory]
@@ -436,15 +419,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -468,7 +452,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.ExternalId.Should().Be(longExternalId);
+        foundManifest.NotNull().ExternalId.Should().Be(longExternalId);
     }
 
     [Theory]
@@ -478,15 +462,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -509,7 +494,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.ExternalId.Should().Be(shortExternalId);
+        foundManifest.NotNull().ExternalId.Should().Be(shortExternalId);
     }
 
     #region Scheduling Property Tests
@@ -521,15 +506,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -556,7 +542,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.IsEnabled.Should().BeTrue();
+        foundManifest.NotNull().IsEnabled.Should().BeTrue();
         foundManifest.ScheduleType.Should().Be(ScheduleType.Cron);
         foundManifest.CronExpression.Should().Be("0 3 * * *");
         foundManifest.MaxRetries.Should().Be(5);
@@ -570,15 +556,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -602,7 +589,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.ScheduleType.Should().Be(ScheduleType.Interval);
+        foundManifest.NotNull().ScheduleType.Should().Be(ScheduleType.Interval);
         foundManifest.IntervalSeconds.Should().Be(300);
     }
 
@@ -613,15 +600,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -646,7 +634,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        foundManifest!.IsEnabled.Should().BeFalse();
+        foundManifest.NotNull().IsEnabled.Should().BeFalse();
     }
 
     [Theory]
@@ -656,15 +644,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -683,15 +672,18 @@ public class ManifestTests : TestSetup
         var foundManifest = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifestId);
         foundManifest.Should().NotBeNull();
 
-        var successTime = DateTime.UtcNow;
-        foundManifest!.LastSuccessfulRun = successTime;
+        var successTime = TimeProvider.System.GetUtcNow().UtcDateTime;
+        foundManifest.NotNull().LastSuccessfulRun = successTime;
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
         // Assert
         var updatedManifest = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifestId);
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().BeCloseTo(successTime, TimeSpan.FromSeconds(1));
+        updatedManifest
+            .NotNull()
+            .LastSuccessfulRun.Should()
+            .BeCloseTo(successTime, TimeSpan.FromSeconds(1));
     }
 
     [Theory]
@@ -701,15 +693,16 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var group = new MG.ManifestGroup
         {
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -758,16 +751,18 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
-        var scheduledTime = DateTime.UtcNow.AddMinutes(-5);
+        var scheduledTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
                 Name = nameof(TestMetadataCanHaveScheduledTime),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Test = "value" },
-            }
+            },
+            TimeProvider.System
         );
         metadata.ScheduledTime = scheduledTime;
 
@@ -780,7 +775,10 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundMetadata.Should().NotBeNull();
-        foundMetadata!.ScheduledTime.Should().BeCloseTo(scheduledTime, TimeSpan.FromSeconds(1));
+        foundMetadata
+            .NotNull()
+            .ScheduledTime.Should()
+            .BeCloseTo(scheduledTime, TimeSpan.FromSeconds(1));
     }
 
     #endregion
@@ -805,7 +803,7 @@ public class ManifestTests : TestSetup
         // Assert - JSON should contain $type and NOT contain $id/$values
         manifest.Properties.Should().NotBeNull();
         manifest.Properties.Should().Contain("\"$type\"");
-        manifest.Properties.Should().Contain(typeof(TestManifestProperties).FullName!);
+        manifest.Properties.Should().Contain(typeof(TestManifestProperties).FullName.NotNull());
         manifest.Properties.Should().NotContain("\"$id\"");
         manifest.Properties.Should().NotContain("\"$values\"");
     }
@@ -817,7 +815,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestPropertiesWithEnum
         {
@@ -831,8 +830,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -851,7 +850,7 @@ public class ManifestTests : TestSetup
 
         // Assert
         foundManifest.Should().NotBeNull();
-        var retrieved = foundManifest!.GetProperties<TestManifestPropertiesWithEnum>();
+        var retrieved = foundManifest.NotNull().GetProperties<TestManifestPropertiesWithEnum>();
         retrieved.Name.Should().Be("EnumTest");
         retrieved.Category.Should().Be(TestCategory.Beta);
         retrieved.Values.Should().BeEquivalentTo([1, 2, 3]);
@@ -864,7 +863,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestPropertiesWithEnum
         {
@@ -878,8 +878,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -895,7 +895,7 @@ public class ManifestTests : TestSetup
 
         // Act
         var foundManifest = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
-        var result = foundManifest!.GetPropertiesUntyped();
+        var result = foundManifest.NotNull().GetPropertiesUntyped();
 
         // Assert
         result.Should().BeOfType<TestManifestPropertiesWithEnum>();
@@ -912,7 +912,8 @@ public class ManifestTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var config = new TestManifestPropertiesWithEnum
         {
@@ -926,8 +927,8 @@ public class ManifestTests : TestSetup
             Name = $"group-{Guid.NewGuid():N}",
             Priority = 0,
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -943,7 +944,7 @@ public class ManifestTests : TestSetup
 
         // Act
         var foundManifest = await context.Manifests.FirstOrDefaultAsync(x => x.Id == manifest.Id);
-        var retrieved = foundManifest!.GetProperties<TestManifestPropertiesWithEnum>();
+        var retrieved = foundManifest.NotNull().GetProperties<TestManifestPropertiesWithEnum>();
 
         // Assert - List should round-trip without $values wrapping issues
         retrieved.Values.Should().HaveCount(5);
@@ -973,6 +974,28 @@ public class ManifestTests : TestSetup
     {
         public string Name { get; set; } = string.Empty;
         public TestCategory Category { get; set; }
-        public List<int> Values { get; set; } = [];
+        public IList<int> Values { get; set; } = [];
     }
+
+    private static MG.ManifestGroup NewTestGroup() =>
+        new()
+        {
+            Name = $"group-{Guid.NewGuid():N}",
+            Priority = 0,
+            IsEnabled = true,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+        };
+
+    private static Metadata NewManifestMetadata(string name, object input, Manifest manifest) =>
+        Metadata.Create(
+            new CreateMetadata
+            {
+                Name = name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = input,
+                ManifestId = manifest.Id,
+            },
+            TimeProvider.System
+        );
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -18,6 +19,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -100,7 +102,7 @@ public class RegistrationOrderTests
         AddGraphQL(services);
         AddApiKeyAuth(services);
 
-        var act = async () => await RunHostedServicesAsync(services);
+        var act = async () => await RunHostedServicesAsync(services).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -119,7 +121,7 @@ public class RegistrationOrderTests
                 )
         );
 
-        var act = async () => await RunHostedServicesAsync(services);
+        var act = async () => await RunHostedServicesAsync(services).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*AddTraxApiKeyAuth*")
@@ -133,7 +135,7 @@ public class RegistrationOrderTests
         var services = BaseServices();
         AddGraphQL(services);
 
-        var act = async () => await RunHostedServicesAsync(services);
+        var act = async () => await RunHostedServicesAsync(services).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -196,7 +198,7 @@ public class RegistrationOrderTests
         );
         AddAuthorizationWithPolicy(services);
 
-        var act = async () => await RunHostedServicesAsync(services);
+        var act = async () => await RunHostedServicesAsync(services).ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -233,7 +235,7 @@ public class RegistrationOrderTests
         AddGraphQL(services);
         services.AddSingleton(Views());
 
-        var act = async () => await RunHostedServicesAsync(services);
+        var act = async () => await RunHostedServicesAsync(services).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*'shop sign'*")
@@ -258,12 +260,19 @@ public class RegistrationOrderTests
 
     private static Trax.StateMachine.Persistence.FromIr.MachineViewCatalog Views() =>
         new(
-            new Dictionary<string, Trax.StateMachine.Features.HostView>
+            new Dictionary<string, Trax.StateMachine.Features.HostView>(StringComparer.Ordinal)
             {
                 ["shop sign"] = new(
                     "shop sign",
                     [new Trax.StateMachine.Features.ViewRead("shop", "shop/main")],
-                    [new Trax.StateMachine.Features.ViewField("open", "shop", "state", null)],
+                    [
+                        new Trax.StateMachine.Features.ViewField(
+                            "open",
+                            "shop",
+                            "state",
+                            Labels: null
+                        ),
+                    ],
                     Trax.StateMachine.Features.AccessRule.AnyAuthenticated
                 ),
             }
@@ -300,7 +309,7 @@ public class RegistrationOrderTests
     {
         var provider = services.BuildServiceProvider();
         foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(CancellationToken.None);
+            await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>The interceptor HotChocolate would run for a connection_init on this host.</summary>
@@ -309,7 +318,8 @@ public class RegistrationOrderTests
         var provider = services.BuildServiceProvider();
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
 
         return executor.Schema.Services.GetService<ISocketSessionInterceptor>()?.GetType().Name
             ?? "<none>";
@@ -335,7 +345,8 @@ public class RegistrationOrderTests
         var provider = services.BuildServiceProvider();
         return await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -346,16 +357,21 @@ public class RegistrationOrderTests
     private static async Task<string?> GatedQueryErrorCodeAsync(WebApplication app)
     {
         using var client = new HttpClient { BaseAddress = BaseAddress(app) };
-        using var response = await client.PostAsync(
-            "/trax/graphql",
-            new StringContent(
-                """{"query":"{ discover { gatedOrderTestWidgets { totalCount } } }"}""",
-                Encoding.UTF8,
-                "application/json"
+        using var response = await client
+            .PostAsync(
+                "/trax/graphql",
+                new StringContent(
+                    """{"query":"{ discover { gatedOrderTestWidgets { totalCount } } }"}""",
+                    Encoding.UTF8,
+                    "application/json"
+                ),
+                cancellationToken: CancellationToken.None
             )
-        );
+            .ConfigureAwait(false);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response
+            .Content.ReadAsStringAsync(cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
         var errors = JsonDocument.Parse(body).RootElement.GetProperty("errors");
         return errors[0].GetProperty("extensions").GetProperty("code").GetString();
     }
@@ -391,14 +407,15 @@ public class RegistrationOrderTests
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
     private static Uri BaseAddress(WebApplication app) =>
         new(
             app.Services.GetRequiredService<IServer>()
-                .Features.Get<IServerAddressesFeature>()!
+                .Features.Get<IServerAddressesFeature>()
+                .NotNull()
                 .Addresses.First()
         );
 
@@ -424,7 +441,7 @@ public class RegistrationOrderTests
         var app = builder.Build();
         app.UseRouting();
         app.UseTraxGraphQL();
-        await app.StartAsync();
+        await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
         return app;
     }
 
@@ -435,20 +452,29 @@ public class RegistrationOrderTests
         using var client = new ClientWebSocket();
         client.Options.AddSubProtocol("graphql-transport-ws");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        await client.ConnectAsync(
-            new Uri($"ws://{baseUri.Host}:{baseUri.Port}/trax/graphql"),
-            cts.Token
-        );
+        await client
+            .ConnectAsync(
+                new Uri(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"ws://{baseUri.Host}:{baseUri.Port}/trax/graphql"
+                    )
+                ),
+                cts.Token
+            )
+            .ConfigureAwait(false);
 
-        await client.SendAsync(
-            Encoding.UTF8.GetBytes("""{"type":"connection_init","payload":{}}"""),
-            WebSocketMessageType.Text,
-            true,
-            cts.Token
-        );
+        await client
+            .SendAsync(
+                Encoding.UTF8.GetBytes("""{"type":"connection_init","payload":{}}"""),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cts.Token
+            )
+            .ConfigureAwait(false);
 
         var buffer = new byte[4096];
-        var received = await client.ReceiveAsync(buffer, cts.Token);
+        var received = await client.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
         if (received.MessageType == WebSocketMessageType.Close)
             return "(closed)";
 
@@ -480,31 +506,4 @@ public class RegistrationOrderTests
     }
 
     #endregion
-}
-
-public class OrderTestDbContext(DbContextOptions<OrderTestDbContext> options) : DbContext(options)
-{
-    public DbSet<OrderTestWidget> Widgets => Set<OrderTestWidget>();
-}
-
-public class GatedOrderTestDbContext(DbContextOptions<GatedOrderTestDbContext> options)
-    : DbContext(options)
-{
-    public DbSet<GatedOrderTestWidget> Widgets => Set<GatedOrderTestWidget>();
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "orderTestWidgets")]
-public class OrderTestWidget
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}
-
-[TraxAuthorize]
-[TraxQueryModel(Name = "gatedOrderTestWidgets")]
-public class GatedOrderTestWidget
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
 }

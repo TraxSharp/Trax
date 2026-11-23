@@ -1,14 +1,19 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Mediator.Services.ChainVerification;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="ITrainChainGraphs"/> the mediator registers: reads each registered train's
+/// declared chain on first request and keeps it.
+/// </summary>
 /// <remarks>
 /// <para>A chain that was read is kept for the life of the host. A chain that could not be read is
 /// not: the failure is remembered for <see cref="RetryAfter"/>, so a page that polls does not
@@ -38,17 +43,38 @@ internal sealed class TrainChainGraphs(
         StringComparer.Ordinal
     );
 
-    public ChainGraph? Find(string train) => Lookup(train)?.Graph;
+    // Find and FindDeclared answer synchronously. A chain already read, or one with nothing to
+    // read, is answered on the caller's thread; a read runs off it, so disposing the scope
+    // asynchronously cannot deadlock a caller with a synchronization context (a Blazor circuit).
+    public ChainGraph? Find(string train) =>
+        TryKnown(train, out var known, out var toRead)
+            ? known?.Graph
+            : Task.Run(() => ReadAndKeepAsync(train, toRead)).GetAwaiter().GetResult()?.Graph;
 
-    public DeclaredTrainChain? FindDeclared(string train) => Lookup(train)?.Chain;
+    public DeclaredTrainChain? FindDeclared(string train) =>
+        TryKnown(train, out var known, out var toRead)
+            ? known?.Chain
+            : Task.Run(() => ReadAndKeepAsync(train, toRead)).GetAwaiter().GetResult()?.Chain;
 
-    private Declared? Lookup(string train)
+    /// <summary>
+    /// True with the answer when <paramref name="train"/> needs no read: it was read already, no
+    /// registered train has that name, or its last read failed less than
+    /// <see cref="RetryAfter"/> ago. False with the registration to read otherwise.
+    /// </summary>
+    private bool TryKnown(
+        string train,
+        out Declared? known,
+        [NotNullWhen(false)] out TrainRegistration? toRead
+    )
     {
-        if (string.IsNullOrWhiteSpace(train))
-            return null;
+        known = null;
+        toRead = null;
 
-        if (_chains.TryGetValue(train, out var known))
-            return known;
+        if (string.IsNullOrWhiteSpace(train))
+            return true;
+
+        if (_chains.TryGetValue(train, out known))
+            return true;
 
         var registration = discoveryService
             .DiscoverTrains()
@@ -57,17 +83,23 @@ internal sealed class TrainChainGraphs(
             );
 
         if (registration is null)
-            return null;
+            return true;
 
         if (
             _failedAt.TryGetValue(train, out var failedAt)
             && _time.GetUtcNow() - failedAt < RetryAfter
         )
-            return null;
+            return true;
 
+        toRead = registration;
+        return false;
+    }
+
+    private async Task<Declared?> ReadAndKeepAsync(string train, TrainRegistration registration)
+    {
         // Two callers asking at once may both read it; a chain is a declaration, so they read the
         // same thing and the first one kept is the one every later caller gets.
-        var read = Read(registration);
+        var read = await ReadAsync(registration).ConfigureAwait(false);
 
         if (read is null)
         {
@@ -79,13 +111,6 @@ internal sealed class TrainChainGraphs(
         return _chains.GetOrAdd(train, read);
     }
 
-    /// <summary>
-    /// Reads the train's chain off the caller's thread, so disposing the scope asynchronously
-    /// cannot deadlock a caller with a synchronization context (a Blazor circuit).
-    /// </summary>
-    private Declared? Read(TrainRegistration registration) =>
-        Task.Run(() => ReadAsync(registration)).GetAwaiter().GetResult();
-
     private async Task<Declared?> ReadAsync(TrainRegistration registration)
     {
         try
@@ -93,29 +118,34 @@ internal sealed class TrainChainGraphs(
             // An async scope, because a train's scoped dependency may implement only
             // IAsyncDisposable, which a synchronous Dispose refuses outright, as the startup check
             // does.
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var train = Build(scope.ServiceProvider, registration);
+            var scope = scopeFactory.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+            {
+                var train = Build(scope.ServiceProvider, registration);
 
-            var chain = (ChainRecorder)
-                train
-                    .GetType()
-                    .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)!
-                    .Invoke(train, null)!;
+                var chain = (ChainRecorder)
+                    train
+                        .GetType()
+                        .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)
+                        .NotNull()
+                        .Invoke(train, parameters: null)
+                        .NotNull();
 
-            return new Declared(
-                ChainGraph.From(
-                    chain,
-                    train.GetType(),
-                    registration.InputType,
-                    registration.OutputType
-                ),
-                new DeclaredTrainChain(
-                    train.GetType(),
-                    chain,
-                    registration.InputType,
-                    registration.OutputType
-                )
-            );
+                return new Declared(
+                    ChainGraph.From(
+                        chain,
+                        train.GetType(),
+                        registration.InputType,
+                        registration.OutputType
+                    ),
+                    new DeclaredTrainChain(
+                        train.GetType(),
+                        chain,
+                        registration.InputType,
+                        registration.OutputType
+                    )
+                );
+            }
         }
         catch (Exception e)
         {

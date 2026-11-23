@@ -15,16 +15,18 @@ public static class DevJwt
         "shopfront-dev-signing-key-do-not-use-in-production"
     );
 
-    public static string Mint(string user, string role) =>
+    public static string Mint(string user, string role, TimeProvider clock) =>
         new JsonWebTokenHandler().CreateToken(
             new SecurityTokenDescriptor
             {
                 Issuer = Issuer,
                 Audience = Audience,
-                Subject = new ClaimsIdentity(
-                    [new Claim("sub", user), new Claim("name", user), new Claim("role", role)]
-                ),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Subject = new ClaimsIdentity([
+                    new Claim("sub", user),
+                    new Claim("name", user),
+                    new Claim("role", role),
+                ]),
+                Expires = clock.GetUtcNow().UtcDateTime.AddHours(1),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(Key),
                     SecurityAlgorithms.HmacSha256

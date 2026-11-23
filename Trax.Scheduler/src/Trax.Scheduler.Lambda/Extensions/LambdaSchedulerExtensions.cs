@@ -94,7 +94,8 @@ public static class LambdaSchedulerExtensions
                 CreateSubmitter = services => new LambdaJobSubmitter(
                     services.GetRequiredKeyedService<IAmazonLambda>(clientKey),
                     options,
-                    services.GetRequiredService<ILogger<LambdaJobSubmitter>>()
+                    services.GetRequiredService<ILogger<LambdaJobSubmitter>>(),
+                    services.GetRequiredService<TimeProvider>()
                 ),
                 Description = $"UseLambdaWorkers({options.FunctionName})",
             }

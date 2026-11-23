@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine;
 
@@ -26,24 +27,24 @@ public static class CorpusReplay
         where TState : struct, Enum
         where TTrigger : struct, Enum
     {
-        var doc = (JsonObject)JsonNode.Parse(goldenJson)!;
+        var doc = (JsonObject)JsonNode.Parse(goldenJson).NotNull();
         var diffs = new List<string>();
 
-        foreach (var node in (JsonArray)doc["cases"]!)
+        foreach (var node in (JsonArray)doc["cases"].NotNull())
         {
-            var c = (JsonObject)node!;
-            var given = (JsonObject)c["given"]!;
-            var when = (JsonObject)c["when"]!;
-            var expect = (JsonObject)c["expect"]!;
+            var c = (JsonObject)node.NotNull();
+            var given = (JsonObject)c["given"].NotNull();
+            var when = (JsonObject)c["when"].NotNull();
+            var expect = (JsonObject)c["expect"].NotNull();
 
             var snap = new Snapshot
             {
-                Machine = given["machine"]!.GetValue<string>(),
-                Version = given["version"]!.GetValue<int>(),
-                State = given["state"]!.GetValue<string>(),
-                Context = (JsonObject)given["context"]!.DeepClone(),
+                Machine = given["machine"].NotNull().GetValue<string>(),
+                Version = given["version"].NotNull().GetValue<int>(),
+                State = given["state"].NotNull().GetValue<string>(),
+                Context = (JsonObject)given["context"].NotNull().DeepClone(),
             };
-            var trigger = when["trigger"]!.GetValue<string>();
+            var trigger = when["trigger"].NotNull().GetValue<string>();
             var input = when["input"]?.DeepClone();
 
             // Each trigger kind replays through the entry point that owns it, as the twin enumerates it: an invoked
@@ -64,11 +65,15 @@ public static class CorpusReplay
                 _ => ("internal-error", null, null),
             };
 
-            var wantOutcome = expect["outcome"]!.GetValue<string>();
+            var wantOutcome = expect["outcome"].NotNull().GetValue<string>();
             var wantWire = expect["wire"]?.GetValue<string>();
             var wantReason = expect["reason"]?.GetValue<string>();
 
-            if (outcome != wantOutcome || wire != wantWire || reason != wantReason)
+            if (
+                !string.Equals(outcome, wantOutcome, StringComparison.Ordinal)
+                || !string.Equals(wire, wantWire, StringComparison.Ordinal)
+                || !string.Equals(reason, wantReason, StringComparison.Ordinal)
+            )
             {
                 var payload = input is null ? "" : " " + input.ToJsonString();
                 diffs.Add(

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Client;
 
 namespace Trax.Api.Console.Terminal.Tests.Fakes;
@@ -18,7 +19,7 @@ internal sealed class FakeHost : ITraxTransport
 
     /// <summary>Answers <paramref name="operation"/> with <paramref name="data"/>, whatever its variables.</summary>
     public FakeHost Answer(string operation, string data) =>
-        Answer(operation, _ => (JsonObject)JsonNode.Parse(data)!);
+        Answer(operation, _ => (JsonObject)JsonNode.Parse(data).NotNull());
 
     /// <summary>Answers <paramref name="operation"/> with the data <paramref name="answer"/> builds from its variables.</summary>
     public FakeHost Answer(string operation, Func<JsonObject, JsonObject> answer) =>
@@ -57,12 +58,13 @@ internal sealed class FakeHost : ITraxTransport
                 var held = new TaskCompletionSource<JsonObject>(
                     TaskCreationOptions.RunContinuationsAsynchronously
                 );
-                using var registration = ct.Register(() =>
+                var registration = ct.Register(() =>
                 {
                     held.TrySetCanceled(ct);
                     cancelled.TrySetResult();
                 });
-                return await held.Task;
+                await using var registrationDisposal = registration.ConfigureAwait(false);
+                return await held.Task.ConfigureAwait(false);
             }
         );
 
@@ -78,7 +80,10 @@ internal sealed class FakeHost : ITraxTransport
 
     /// <summary>The variables of every request for <paramref name="operation"/>, in order.</summary>
     public IReadOnlyList<JsonObject> Sent(string operation) =>
-        Requests.Where(r => r.Document.Name == operation).Select(r => r.Variables).ToList();
+        Requests
+            .Where(r => string.Equals(r.Document.Name, operation, StringComparison.Ordinal))
+            .Select(r => r.Variables)
+            .ToList();
 
     public async Task<TraxAnswer> ExecuteAsync(
         TraxRequest request,
@@ -98,12 +103,15 @@ internal sealed class FakeHost : ITraxTransport
                     new TraxGraphQLError(
                         $"The fake host has no answer for {request.Document.Name}.",
                         "FAKE",
-                        null,
-                        null
+                        Path: null,
+                        Extensions: null
                     ),
                 ],
             }
-            : new TraxAnswer { Data = await answer(request.Variables, cancellationToken) };
+            : new TraxAnswer
+            {
+                Data = await answer(request.Variables, cancellationToken).ConfigureAwait(false),
+            };
     }
 
     public IDisposable Subscribe(TraxRequest request, ISubscriptionSink sink)
@@ -122,7 +130,9 @@ internal sealed class FakeHost : ITraxTransport
     public bool Follows(string operation)
     {
         lock (_streams)
-            return _streams.Any(s => s.Request.Document.Name == operation);
+            return _streams.Exists(s =>
+                string.Equals(s.Request.Document.Name, operation, StringComparison.Ordinal)
+            );
     }
 
     /// <summary>Pushes a frame with <paramref name="data"/> to every follower of <paramref name="operation"/>.</summary>
@@ -131,7 +141,9 @@ internal sealed class FakeHost : ITraxTransport
         List<ISubscriptionSink> sinks;
         lock (_streams)
             sinks = _streams
-                .Where(s => s.Request.Document.Name == operation)
+                .Where(s =>
+                    string.Equals(s.Request.Document.Name, operation, StringComparison.Ordinal)
+                )
                 .Select(s => s.Sink)
                 .ToList();
         foreach (var sink in sinks)

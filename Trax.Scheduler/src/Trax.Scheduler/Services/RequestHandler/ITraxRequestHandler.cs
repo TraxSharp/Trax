@@ -46,17 +46,10 @@ public interface ITraxRequestHandler
     /// <summary>
     /// Runs a train synchronously and returns the serialized output (direct run path).
     /// Catches train failures and wraps them in <see cref="RemoteRunResponse"/> with
-    /// <see cref="RemoteRunResponse.IsError"/> set to <c>true</c>.
+    /// <see cref="RemoteRunResponse.IsError"/> set to <see langword="true"/>.
     /// </summary>
     /// <param name="request">The remote run request containing train name and serialized input</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>The response containing serialized output or error details</returns>
     Task<RemoteRunResponse> RunTrainAsync(RemoteRunRequest request, CancellationToken ct = default);
 }
-
-/// <summary>
-/// Result of a successful job execution via <see cref="ITraxRequestHandler.ExecuteJobAsync"/>.
-/// </summary>
-/// <param name="MetadataId">The metadata ID of the executed job</param>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
-public record ExecuteJobResult(long MetadataId);

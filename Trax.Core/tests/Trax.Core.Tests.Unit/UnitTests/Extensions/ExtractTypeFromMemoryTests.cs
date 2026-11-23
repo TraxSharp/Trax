@@ -115,7 +115,7 @@ public class ExtractTypeFromMemoryTests : TestSetup
 
         result.Should().NotBeNull();
         result.Length.Should().Be(3);
-        result.Should().Contain(false);
+        result.Should().Contain(expected: false);
         result.Should().Contain("hello");
         result.Should().Contain(1);
     }
@@ -139,7 +139,7 @@ public class ExtractTypeFromMemoryTests : TestSetup
         monad.Exception.Should().NotBeNull();
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() => Resolve();
     }

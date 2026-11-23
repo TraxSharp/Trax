@@ -19,7 +19,7 @@ namespace Trax.Api.Auth.ApiKey;
 /// <list type="bullet">
 /// <item>Missing header: <see cref="AuthenticateResult.NoResult"/>. Lets other schemes run and <c>[AllowAnonymous]</c> routes stay open.</item>
 /// <item>Header present more than once: <see cref="AuthenticateResult.Fail(string)"/>. Ambiguous credentials are refused without invoking the resolver.</item>
-/// <item>Present but invalid (resolver returns <c>null</c> or throws): <see cref="AuthenticateResult.Fail(string)"/>. Short-circuits the pipeline.</item>
+/// <item>Present but invalid (resolver returns <see langword="null"/> or throws): <see cref="AuthenticateResult.Fail(string)"/>. Short-circuits the pipeline.</item>
 /// <item>Valid: <see cref="AuthenticateResult.Success"/> with the mapped principal.</item>
 /// </list>
 /// </para>
@@ -48,13 +48,15 @@ internal sealed class ApiKeyAuthHandler(
         // value (RFC 7230 §3.2.2). That produces a single StringValues entry that
         // slips past the Count > 1 check above. Reject any value containing a comma
         // so ambiguous credentials are never handed to the resolver.
-        if (apiKey.Contains(','))
+        if (apiKey.Contains(',', StringComparison.Ordinal))
             return AuthenticateResult.Fail("Ambiguous API key header.");
 
         TraxPrincipal? principal;
         try
         {
-            principal = await resolver.ResolveAsync(apiKey, Context.RequestAborted);
+            principal = await resolver
+                .ResolveAsync(apiKey, Context.RequestAborted)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {

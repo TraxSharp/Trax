@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
 using Trax.StateMachine.Persistence.Integration.Fakes;
@@ -17,8 +18,8 @@ namespace Trax.StateMachine.Persistence.Integration;
 [TestFixture(StoreProvider.Sqlite)]
 public class EffectBindingTests(StoreProvider provider)
 {
-    private InstanceHost _host = null!;
-    private CountingCharge _charge = null!;
+    private InstanceHost? _host;
+    private CountingCharge? _charge;
 
     [OneTimeSetUp]
     public void SetUp()
@@ -30,21 +31,21 @@ public class EffectBindingTests(StoreProvider provider)
             services: s =>
             {
                 s.AddIrMachines([machine]);
-                s.AddSingleton<IFeatureCharge>(_charge);
+                s.AddSingleton<IFeatureCharge>(_charge.NotNull());
             }
         );
     }
 
     [OneTimeTearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Ada_sends_Pay_twice_with_one_request_id_and_is_charged_once()
     {
         var ada = DeskRoles.Client($"ada-{Guid.NewGuid():N}");
-        var before = _charge.Calls;
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, "feature-checkout");
+        var before = _charge.NotNull().Calls;
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, "feature-checkout");
         var id = (await service.Start(ada, new JsonObject(), requestId: "s1"))
             .Should()
             .BeOfType<StartOutcome.Started>()
@@ -61,7 +62,9 @@ public class EffectBindingTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Subject;
-        added.Snapshot.Context["total"]!
+        added
+            .Snapshot.Context["total"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be($"{FeatureCheckout.UnitPrice}", "the host's reduction prices the cart");
@@ -72,10 +75,10 @@ public class EffectBindingTests(StoreProvider provider)
         var first = await service.Send(ada, id, "pay-1");
         var second = await service.Send(ada, id, "pay-1");
 
-        _charge.Calls.Should().Be(before + 1, "a run-once effect runs once");
+        _charge.NotNull().Calls.Should().Be(before + 1, "a run-once effect runs once");
         var paid = first.Should().BeOfType<AdvanceOutcome.Advanced>().Subject.Snapshot;
         paid.State.Should().Be("Paid");
-        paid.Context["receipt"]!.GetValue<string>().Should().StartWith("charge-");
+        paid.Context["receipt"].NotNull().GetValue<string>().Should().StartWith("charge-");
         var again = second.Should().BeOfType<AdvanceOutcome.Advanced>().Subject.Snapshot;
         again.State.Should().Be(paid.State);
         JsonNode
@@ -88,9 +91,9 @@ public class EffectBindingTests(StoreProvider provider)
     public async Task A_client_cannot_fire_the_effects_trigger_itself()
     {
         var ada = DeskRoles.Client($"ada-{Guid.NewGuid():N}");
-        var before = _charge.Calls;
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, "feature-checkout");
+        var before = _charge.NotNull().Calls;
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, "feature-checkout");
         var id = (await service.Start(ada, new JsonObject(), requestId: "s1"))
             .Should()
             .BeOfType<StartOutcome.Started>()
@@ -117,7 +120,7 @@ public class EffectBindingTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>("only a send runs the charge and fires Pay")
             .Which.Reason.Should()
             .Be(RefusalCode.EffectBound);
-        _charge.Calls.Should().Be(before, "a refused Pay charges nothing");
+        _charge.NotNull().Calls.Should().Be(before, "a refused Pay charges nothing");
         var loaded = (await service.Load(ada, id))
             .Should()
             .BeOfType<LoadResult.Loaded>()
@@ -130,24 +133,33 @@ public class EffectBindingTests(StoreProvider provider)
     public void A_host_file_whose_effect_type_is_not_an_effect_interface_is_refused()
     {
         var served = FeatureCheckout.Served();
-        var ir = JsonNode.Parse(served.ExportIr())!.AsObject();
+        var ir = JsonNode.Parse(served.ExportIr()).NotNull().AsObject();
         var host = new HostMachine(
             "feature-checkout",
             IrMachines.Hash(ir),
-            null,
+            SystemKey: null,
             AccessRule.AnyAuthenticated,
             AccessRule.AnyAuthenticated,
-            new Dictionary<string, TriggerAccess>(),
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal),
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         )
         {
-            Effects = new Dictionary<string, string> { ["Pay"] = typeof(CountingCharge).FullName! },
-            Rules = new Dictionary<string, string> { ["priced"] = typeof(TotalIsPriced).FullName! },
-            Reductions = new Dictionary<string, string>
+            Effects = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["add-item"] = typeof(AddPricedItem).FullName!,
+                ["Pay"] = typeof(CountingCharge).FullName.NotNull(),
             },
-            Migrations = new Dictionary<int, string> { [1] = typeof(BackfillTotal).FullName! },
+            Rules = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["priced"] = typeof(TotalIsPriced).FullName.NotNull(),
+            },
+            Reductions = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["add-item"] = typeof(AddPricedItem).FullName.NotNull(),
+            },
+            Migrations = new Dictionary<int, string>
+            {
+                [1] = typeof(BackfillTotal).FullName.NotNull(),
+            },
         };
 
         var act = () =>

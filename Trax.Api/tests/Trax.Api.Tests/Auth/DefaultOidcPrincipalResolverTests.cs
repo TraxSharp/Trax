@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AwesomeAssertions;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Oidc;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -35,7 +36,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Id.Should().Be("user-42");
+        result.NotNull().Id.Should().Be("user-42");
     }
 
     [Test]
@@ -53,7 +54,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("Alice");
+        result.NotNull().DisplayName.Should().Be("Alice");
     }
 
     [Test]
@@ -66,7 +67,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("alice@example.com");
+        result.NotNull().DisplayName.Should().Be("alice@example.com");
     }
 
     [Test]
@@ -83,7 +84,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().BeEquivalentTo("admins", "engineers");
+        result.NotNull().Roles.Should().BeEquivalentTo("admins", "engineers");
     }
 
     [Test]
@@ -96,7 +97,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.PrincipalType.Should().Be(OidcDefaults.PrincipalType);
+        result.NotNull().PrincipalType.Should().Be(OidcDefaults.PrincipalType);
     }
 
     [Test]
@@ -109,7 +110,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims.Should().ContainKey("tenant_id").WhoseValue.Should().Be("acme");
+        result.NotNull().Claims.Should().ContainKey("tenant_id").WhoseValue.Should().Be("acme");
     }
 
     [Test]
@@ -122,7 +123,7 @@ public class DefaultOidcPrincipalResolverTests
             CancellationToken.None
         );
 
-        (result!.Claims?.ContainsKey("groups") ?? false).Should().BeFalse();
+        (result.NotNull().Claims?.ContainsKey("groups") ?? false).Should().BeFalse();
     }
 
     [Test]
@@ -130,7 +131,10 @@ public class DefaultOidcPrincipalResolverTests
     {
         var resolver = new DefaultOidcPrincipalResolver();
 
-        var act = async () => await resolver.ResolveAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await resolver
+                .ResolveAsync(Null.Of<Trax.Api.Auth.Oidc.OidcTokenInput>(), CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }

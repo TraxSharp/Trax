@@ -12,17 +12,20 @@ namespace Trax.Api.Tests.Fakes;
 /// </summary>
 internal static class SeededManifests
 {
-    public static IDataContextProviderFactory With(params string[] externalIds)
+    public static async Task<IDataContextProviderFactory> WithAsync(params string[] externalIds)
     {
         var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
-        using var db = factory.CreateDbContextAsync(default).GetAwaiter().GetResult();
-        foreach (var externalId in externalIds)
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var manifest = Manifest.Create(new CreateManifest { Name = typeof(object) });
-            manifest.ExternalId = externalId;
-            db.Track(manifest).GetAwaiter().GetResult();
+            foreach (var externalId in externalIds)
+            {
+                var manifest = Manifest.Create(new CreateManifest { Name = typeof(object) });
+                manifest.ExternalId = externalId;
+                await db.Track(manifest).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        db.SaveChanges(default).GetAwaiter().GetResult();
         return factory;
     }
 }

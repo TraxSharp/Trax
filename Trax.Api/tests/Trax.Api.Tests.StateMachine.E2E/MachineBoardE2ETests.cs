@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.FromIr;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -24,7 +25,7 @@ public class MachineBoardE2ETests
           machine lanes stickies { id kind machine label scenarios { file line scenario } } links { from to } } } }
         """;
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -52,7 +53,7 @@ public class MachineBoardE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -90,7 +91,9 @@ public class MachineBoardE2ETests
         var stickies = board.GetProperty("stickies").EnumerateArray().ToList();
         stickies.Should().OnlyContain(s => s.GetProperty("machine").GetString() == machine);
         var actors = stickies
-            .Where(s => s.GetProperty("kind").GetString() == "actor")
+            .Where(s =>
+                string.Equals(s.GetProperty("kind").GetString(), "actor", StringComparison.Ordinal)
+            )
             .Select(s => s.GetProperty("id").GetString())
             .ToList();
         actors.Should().Contain("actor:anyone signed in", "the machine's own actor is still drawn");
@@ -99,7 +102,7 @@ public class MachineBoardE2ETests
             .Should()
             .OnlyContain(
                 a =>
-                    links.Any(l =>
+                    links.Exists(l =>
                         l.GetProperty("from").GetString() == a
                         || l.GetProperty("to").GetString() == a
                     ),
@@ -122,11 +125,13 @@ public class MachineBoardE2ETests
     [Test]
     public async Task A_machine_not_served_from_features_has_no_board()
     {
-        using var answer = await _host.PostAsync(
-            Query,
-            new { machine = WizardMachine.MachineId },
-            apiKey: E2EHost.OperatorKey
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostAsync(
+                Query,
+                new { machine = WizardMachine.MachineId },
+                apiKey: E2EHost.OperatorKey
+            );
 
         answer
             .RootElement.GetProperty("data")
@@ -139,11 +144,9 @@ public class MachineBoardE2ETests
     [Test]
     public async Task Anyone_but_an_operator_is_refused()
     {
-        using var answer = await _host.PostAsync(
-            Query,
-            new { machine = "v-order" },
-            apiKey: E2EHost.AliceKey
-        );
+        using var answer = await _host
+            .NotNull()
+            .PostAsync(Query, new { machine = "v-order" }, apiKey: E2EHost.AliceKey);
 
         answer.RootElement.TryGetProperty("errors", out var errors).Should().BeTrue();
         // The operations gate's own refusal, as for every operations read.
@@ -157,7 +160,10 @@ public class MachineBoardE2ETests
 
     private async Task<JsonElement> Board(string key, string machine)
     {
-        using var answer = await _host.PostAsync(Query, new { machine }, apiKey: key);
+        using var answer = await _host
+            .NotNull()
+            .PostAsync(Query, new { machine }, apiKey: key)
+            .ConfigureAwait(false);
         answer
             .RootElement.TryGetProperty("errors", out _)
             .Should()

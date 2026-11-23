@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Samples.Board.Machines;
@@ -10,68 +11,74 @@ using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Board.Tickets;
 
-/// <summary>A ticket as the board holds it: its state and its context.</summary>
-public sealed record Ticket(TicketState State, TicketContext Context)
-{
-    public string Id => Context.Id;
-
-    public Report Report => Reports.All[Context.Report];
-
-    /// <summary>The lane the ticket is in, or null for Done and Closed.</summary>
-    public string? Lane =>
-        TicketMachine.Lanes.FirstOrDefault(l => l.Value == State).Key is { } lane ? lane : null;
-}
-
 /// <summary>
 /// Reads the board and moves tickets on it, as the host. Every train that touches a ticket goes through here, so each
 /// move is the ticket machine's own transition, checked by its guards, and nothing else writes a ticket.
 /// </summary>
-public sealed class TicketBoard(IMachineInstances instances, IDataContextProviderFactory trax)
+public sealed class TicketBoard(
+    IMachineInstances instances,
+    IDataContextProviderFactory trax,
+    TimeProvider clock
+)
 {
     /// <summary>How long a claim holds a ticket before another worker may take it.</summary>
     public static readonly TimeSpan Lease = TimeSpan.FromMinutes(10);
 
-    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     public async Task<Ticket?> Find(string ticketId, CancellationToken ct)
     {
         var id = TicketMachine.IdFor(ticketId);
-        await using var db = await trax.CreateDbContextAsync(ct);
-        var row = await db
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d =>
-                d.Machine == TicketMachine.MachineId
-                && d.OwnerKind == SnapshotOwnerKind.System
-                && d.Id == id
-            )
-            .Select(d => new { d.State, d.Context })
-            .FirstOrDefaultAsync(ct);
-        return row is null ? null : Read(row.State, row.Context);
+        var db = await trax.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var row = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(d =>
+                    d.Machine == TicketMachine.MachineId
+                    && d.OwnerKind == SnapshotOwnerKind.System
+                    && d.Id == id
+                )
+                .Select(d => new { d.State, d.Context })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            return row is null ? null : Read(row.State, row.Context);
+        }
     }
 
     public async Task<IReadOnlyList<Ticket>> All(CancellationToken ct)
     {
-        await using var db = await trax.CreateDbContextAsync(ct);
-        var rows = await db
-            .SnapshotDrafts.AsNoTracking()
-            .Where(d =>
-                d.Machine == TicketMachine.MachineId && d.OwnerKind == SnapshotOwnerKind.System
-            )
-            .Select(d => new { d.State, d.Context })
-            .ToListAsync(ct);
-        return rows.Select(r => Read(r.State, r.Context))
-            .OrderBy(t => t.Id, StringComparer.Ordinal)
-            .ToList();
+        var db = await trax.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var rows = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(d =>
+                    d.Machine == TicketMachine.MachineId && d.OwnerKind == SnapshotOwnerKind.System
+                )
+                .Select(d => new { d.State, d.Context })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            return rows.Select(r => Read(r.State, r.Context))
+                .OrderBy(t => t.Id, StringComparer.Ordinal)
+                .ToList();
+        }
     }
 
     public async Task<Ticket> File(string ticketId, Report report, CancellationToken ct)
     {
-        await instances.Start<TicketMachine>(
-            TicketMachine.KeyFor(ticketId),
-            TicketMachine.ContextFor(ticketId, report.Key),
-            ct
-        );
-        return (await Find(ticketId, ct))!;
+        await instances
+            .Start<TicketMachine>(
+                TicketMachine.KeyFor(ticketId),
+                TicketMachine.ContextFor(ticketId, report.Key),
+                ct
+            )
+            .ConfigureAwait(false);
+        return (await Find(ticketId, ct).ConfigureAwait(false)).NotNull();
     }
 
     /// <summary>Fires one of the ticket machine's triggers, as the host.</summary>
@@ -101,13 +108,16 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
     {
         if (ticket is null)
             return "no such ticket";
-        if (ticket.Lane != lane)
+        if (!string.Equals(ticket.Lane, lane, StringComparison.Ordinal))
             return $"{ticket.Id} is in {ticket.State}, not in {lane}";
-        if (worker is null || ticket.Context.ClaimedBy != worker)
+        if (
+            worker is null
+            || !string.Equals(ticket.Context.ClaimedBy, worker, StringComparison.Ordinal)
+        )
             return $"{ticket.Id} is not claimed by {(worker is null ? "anyone" : Name(worker))}; claim it first";
-        if (Lapsed(ticket))
+        if (Lapsed(ticket, clock.GetUtcNow()))
         {
-            await Fire(ticket.Id, TicketTrigger.Release, null, ct);
+            await Fire(ticket.Id, TicketTrigger.Release, input: null, ct).ConfigureAwait(false);
             return $"the claim on {ticket.Id} ran out; claim it again";
         }
         return null;
@@ -118,11 +128,14 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
     /// and an assignment hold the whole key; a note shows the name.
     /// </summary>
     public static string Name(string? principal) =>
-        principal is null ? "" : principal[(principal.IndexOf(':') + 1)..];
+        principal is null
+            ? ""
+            : principal[(principal.IndexOf(':', StringComparison.Ordinal) + 1)..];
 
-    public static bool Lapsed(Ticket ticket) =>
+    /// <summary>Whether the ticket's claim is older than the lease at <paramref name="now"/>.</summary>
+    public static bool Lapsed(Ticket ticket, DateTimeOffset now) =>
         ticket.Context.ClaimedAt is { } at
-        && DateTimeOffset.Parse(at, CultureInfo.InvariantCulture) + Lease < DateTimeOffset.UtcNow;
+        && DateTimeOffset.Parse(at, CultureInfo.InvariantCulture) + Lease < now;
 
     private static Ticket Read(string state, string context) =>
         new(
@@ -141,14 +154,4 @@ public sealed class TicketBoard(IMachineInstances instances, IDataContextProvide
             AdvanceOutcome.LoadError e => e.Message,
             _ => outcome.ToString(),
         };
-}
-
-/// <summary>Reads a context the way the machines write it, for code that builds an invoked run's input.</summary>
-internal static class ContextReading
-{
-    public static string String(this JsonObject ctx, string field) =>
-        ctx[field]?.GetValue<string>() ?? "";
-
-    public static decimal Number(this JsonObject ctx, string field) =>
-        ctx[field]?.GetValue<decimal>() ?? 0m;
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Samples.Bookworm.Auth;
 using Trax.Samples.Bookworm.E2E.Fixtures;
 using Trax.Samples.Bookworm.E2E.Utilities;
@@ -19,7 +20,10 @@ public class LendingIntegrityTests : ApiTestFixture
 
         var second = await GraphQL.PostAsync(Borrow(bookId), ApiKeyDefaults.OtherMemberKey);
 
-        GraphQLClient.FirstError(second).Should().Be($"Book {bookId} is already on loan.");
+        GraphQLClient
+            .FirstError(second)
+            .Should()
+            .Be(string.Create(CultureInfo.InvariantCulture, $"Book {bookId} is already on loan."));
     }
 
     [Test]
@@ -36,7 +40,10 @@ public class LendingIntegrityTests : ApiTestFixture
         var bookId = await NewBookAsync();
         var loanId = await BorrowAsync(bookId, ApiKeyDefaults.MemberKey);
         var returned = await GraphQL.PostAsync(
-            $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) {{ output {{ loanId }} }} }} }} }}",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) {{ output {{ loanId }} }} }} }} }}"
+            ),
             ApiKeyDefaults.MemberKey
         );
         GraphQLClient.HasErrors(returned).Should().BeFalse(returned.RootElement.GetRawText());
@@ -69,7 +76,9 @@ public class LendingIntegrityTests : ApiTestFixture
             .Where(GraphQLClient.HasErrors)
             .Select(GraphQLClient.FirstError)
             .Should()
-            .AllBe($"Book {bookId} is already on loan.");
+            .AllBe(
+                string.Create(CultureInfo.InvariantCulture, $"Book {bookId} is already on loan.")
+            );
     }
 
     [Test]
@@ -81,7 +90,7 @@ public class LendingIntegrityTests : ApiTestFixture
         // The librarian reads every loan and member, so it can check who the loan was recorded for.
         var doc = await GraphQL.PostAsync(
             "{ discover { lending { loans(where: { id: { eq: "
-                + loanId
+                + loanId.ToString(CultureInfo.InvariantCulture)
                 + " } }) { nodes { memberId } } members { nodes { id name } } } } }",
             ApiKeyDefaults.LibrarianKey
         );

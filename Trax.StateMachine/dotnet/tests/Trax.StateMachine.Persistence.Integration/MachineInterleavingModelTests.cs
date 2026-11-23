@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -66,7 +68,9 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             },
             services: s => s.AddSingleton<IOrderCharge>(charge)
         );
-        var owner = DeskRoles.Client($"model-{seed}-{Guid.NewGuid():N}");
+        var owner = DeskRoles.Client(
+            string.Create(CultureInfo.InvariantCulture, $"model-{seed}-{Guid.NewGuid():N}")
+        );
         var ids = new List<Guid>();
         Task<AdvanceOutcome>? held = null;
         var log = new List<string>();
@@ -77,92 +81,135 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             var id = ids.Count == 0 ? (Guid?)null : ids[random.Next(ids.Count)];
             log.Add($"{step} {id}");
             charge.Clear();
-            switch (step)
-            {
-                case Step.Start:
-                    if (await Drive.TryStart(host, owner, Machine) is StartOutcome.Started started)
-                        ids.Add(started.Id);
-                    break;
-                case Step.Go or Step.Cancel or Step.Restart when id is { } target:
-                    await Drive.Event(host, owner, Machine, target, step.ToString());
-                    break;
-                case Step.Edit when id is { } target:
-                    await Drive.Event(
-                        host,
-                        owner,
-                        Machine,
-                        target,
-                        nameof(PendingPayTrigger.Edit),
-                        new JsonObject { ["note"] = $"n{n}" }
-                    );
-                    break;
-                case Step.Send when id is { } target:
-                    await Swallow(Drive.Send(host, owner, Machine, target));
-                    break;
-                case Step.SendHeld when id is { } target && held is null:
-                    charge.Script(ChargeRun.Hold);
-                    held = Drive.Send(host, owner, Machine, target);
-                    // The send either holds the effect or is refused before it: wait for whichever comes first.
-                    await Task.WhenAny(charge.Entered, held);
-                    break;
-                case Step.SendFailing when id is { } target:
-                    charge.Script(ChargeRun.Fail);
-                    await Swallow(Drive.Send(host, owner, Machine, target));
-                    break;
-                case Step.SendTimingOut when id is { } target:
-                    charge.Script(ChargeRun.TimeOut);
-                    await Swallow(Drive.Send(host, owner, Machine, target));
-                    break;
-                case Step.Release when held is not null:
-                    charge.Release();
-                    await Swallow(held);
-                    held = null;
-                    break;
-                case Step.Discard when id is { } target:
-                    await Drive.Discard(host, owner, Machine, target);
-                    break;
-                case Step.Timer when id is { } target:
-                    await RawSql.Execute(
-                        host,
-                        $"UPDATE {RawSql.Table(host)} SET due_at = created_at WHERE due_at IS NOT NULL"
-                    );
-                    await Drive.SweepTimers(host);
-                    break;
-                case Step.PassLease:
-                    if (held is null)
-                    {
-                        await PassLeases(host);
-                        await Drive.SweepTimers(host);
-                    }
-                    break;
-                case Step.SweepDrafts:
-                    await Drive.SweepDrafts(host);
-                    break;
-            }
+            held = await RunStep(host, owner, charge, ids, held, step, id, n).ConfigureAwait(false);
 
-            await Check(host, owner, charge, seed, log);
+            await Check(host, owner, charge, seed, log).ConfigureAwait(false);
         }
 
         if (held is not null)
         {
             charge.Release();
-            await Swallow(held);
+            await Swallow(held).ConfigureAwait(false);
         }
-        await PassLeases(host);
-        await Drive.SweepTimers(host);
-        await Check(host, owner, charge, seed, log);
-        var marked = (await host.UserRows(owner.UserKey, Machine)).Select(r => r.Id).ToList();
+        await PassLeases(host).ConfigureAwait(false);
+        await Drive.SweepTimers(host).ConfigureAwait(false);
+        await Check(host, owner, charge, seed, log).ConfigureAwait(false);
+        var marked = (await host.UserRows(owner.UserKey, Machine).ConfigureAwait(false))
+            .Select(r => r.Id)
+            .ToList();
         foreach (var id in marked)
-            (await RawSql.PendingEffect(host, id))
+            (await RawSql.PendingEffect(host, id).ConfigureAwait(false))
                 .Token.Should()
-                .BeNull($"seed {seed}: every mark is finished once its lease has passed ({Adr})");
+                .BeNull(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"seed {seed}: every mark is finished once its lease has passed ({Adr})"
+                    )
+                );
+    }
+
+    // Runs one step of a sequence; answers the send it leaves holding its effect, if any.
+    private static async Task<Task<AdvanceOutcome>?> RunStep(
+        InstanceHost host,
+        Actor.Client owner,
+        ControlledCharge charge,
+        List<Guid> ids,
+        Task<AdvanceOutcome>? held,
+        Step step,
+        Guid? id,
+        int n
+    )
+    {
+        switch (step)
+        {
+            case Step.Start:
+                if (
+                    await Drive.TryStart(host, owner, Machine).ConfigureAwait(false)
+                    is StartOutcome.Started started
+                )
+                    ids.Add(started.Id);
+                break;
+            case Step.Go or Step.Cancel or Step.Restart when id is { } target:
+                await Drive
+                    .Event(host, owner, Machine, target, step.ToString())
+                    .ConfigureAwait(false);
+                break;
+            case Step.Edit when id is { } target:
+                await Edit(host, owner, target, n).ConfigureAwait(false);
+                break;
+            case Step.Send when id is { } target:
+                await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
+                break;
+            case Step.SendHeld when id is { } target && held is null:
+                charge.Script(ChargeRun.Hold);
+                held = Drive.Send(host, owner, Machine, target);
+                // The send either holds the effect or is refused before it: wait for whichever comes first.
+                await Task.WhenAny(charge.Entered, held).ConfigureAwait(false);
+                break;
+            case Step.SendFailing when id is { } target:
+                charge.Script(ChargeRun.Fail);
+                await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
+                break;
+            case Step.SendTimingOut when id is { } target:
+                charge.Script(ChargeRun.TimeOut);
+                await Swallow(Drive.Send(host, owner, Machine, target)).ConfigureAwait(false);
+                break;
+            case Step.Release when held is not null:
+                charge.Release();
+                await Swallow(held).ConfigureAwait(false);
+                held = null;
+                break;
+            case Step.Discard when id is { } target:
+                await Drive.Discard(host, owner, Machine, target).ConfigureAwait(false);
+                break;
+            case Step.Timer when id is { } target:
+                await ExpireTimers(host).ConfigureAwait(false);
+                break;
+            case Step.PassLease:
+                if (held is null)
+                {
+                    await PassLeases(host).ConfigureAwait(false);
+                    await Drive.SweepTimers(host).ConfigureAwait(false);
+                }
+                break;
+            case Step.SweepDrafts:
+                await Drive.SweepDrafts(host).ConfigureAwait(false);
+                break;
+        }
+        return held;
+    }
+
+    private static async Task Edit(InstanceHost host, Actor.Client owner, Guid target, int n)
+    {
+        await Drive
+            .Event(
+                host,
+                owner,
+                Machine,
+                target,
+                nameof(PendingPayTrigger.Edit),
+                new JsonObject { ["note"] = string.Create(CultureInfo.InvariantCulture, $"n{n}") }
+            )
+            .ConfigureAwait(false);
+    }
+
+    // Every armed timer is due now, and the sweep fires them.
+    private static async Task ExpireTimers(InstanceHost host)
+    {
+        await RawSql
+            .Execute(
+                host,
+                $"UPDATE {RawSql.Table(host)} SET due_at = created_at WHERE due_at IS NOT NULL"
+            )
+            .ConfigureAwait(false);
+        await Drive.SweepTimers(host).ConfigureAwait(false);
     }
 
     private static async Task Swallow(Task task)
     {
         try
         {
-            await task;
+            await task.ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
@@ -176,7 +223,7 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             $"UPDATE {RawSql.Table(host)} SET effect_lease_until = created_at WHERE effect_token IS NOT NULL"
         );
 
-    private async Task Check(
+    private static async Task Check(
         InstanceHost host,
         Actor.Client owner,
         ControlledCharge charge,
@@ -184,15 +231,18 @@ public class MachineInterleavingModelTests(StoreProvider provider)
         List<string> log
     )
     {
-        var rows = await host.UserRows(owner.UserKey, Machine);
-        var because = $"seed {seed}, after: {string.Join(", ", log)} ({Adr})";
+        var rows = await host.UserRows(owner.UserKey, Machine).ConfigureAwait(false);
+        var because = string.Create(
+            CultureInfo.InvariantCulture,
+            $"seed {seed}, after: {string.Join(", ", log)} ({Adr})"
+        );
         using var scope = new AssertionScope();
 
         var drafts = 0;
         foreach (var row in rows)
         {
-            var (token, _) = await RawSql.PendingEffect(host, row.Id);
-            var context = JsonNode.Parse(row.Context)!;
+            var (token, _) = await RawSql.PendingEffect(host, row.Id).ConfigureAwait(false);
+            var context = JsonNode.Parse(row.Context).NotNull();
             var receipt = context["receipt"]?.GetValue<string>() ?? "";
             var ran = charge
                 .Receipts.Where(r => r.Key.Contains(row.Id.ToString(), StringComparison.Ordinal))
@@ -214,7 +264,7 @@ public class MachineInterleavingModelTests(StoreProvider provider)
             }
             if (row.State is nameof(PendingPayState.Expired) or nameof(PendingPayState.Cancelled))
                 ran.Should().BeEmpty($"no row holds two outcomes for one effect; {because}");
-            if (await RawSql.ServerRecord(host, row.Id) != true)
+            if (await RawSql.ServerRecord(host, row.Id).ConfigureAwait(false) != true)
                 drafts++;
         }
         drafts

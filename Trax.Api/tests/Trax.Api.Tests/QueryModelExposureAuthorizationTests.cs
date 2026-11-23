@@ -128,16 +128,16 @@ public class QueryModelExposureAuthorizationTests
 
     public class BareContext(DbContextOptions<BareContext> options) : DbContext(options)
     {
-        public DbSet<BareRow> Rows { get; set; } = null!;
+        public DbSet<BareRow> Rows => Set<BareRow>();
     }
 
     public class AuthorizedContext(DbContextOptions<AuthorizedContext> options) : DbContext(options)
     {
-        public DbSet<AuthorizedRow> Rows { get; set; } = null!;
+        public DbSet<AuthorizedRow> Rows => Set<AuthorizedRow>();
     }
 
     public class AnonContext(DbContextOptions<AnonContext> options) : DbContext(options)
     {
-        public DbSet<AnonRow> Rows { get; set; } = null!;
+        public DbSet<AnonRow> Rows => Set<AnonRow>();
     }
 }

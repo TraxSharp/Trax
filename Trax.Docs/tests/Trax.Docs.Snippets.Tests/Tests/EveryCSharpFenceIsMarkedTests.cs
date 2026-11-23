@@ -28,14 +28,13 @@ public class EveryCSharpFenceIsMarkedTests
         "tests/Trax.Docs.Snippets.Tests/KnownUnmarkedFencePages.txt";
 
     [Test]
-    public void Every_CSharpFence_OnAPageOrSkill_IsMarked()
+    public async Task Every_CSharpFence_OnAPageOrSkill_IsMarked()
     {
-        var unmarked = Fences
-            .OnPagesAndSkills()
+        var unmarked = (await Fences.OnPagesAndSkillsAsync().ConfigureAwait(false))
             .Where(f => f.IsCSharp && f.Markers.Count == 0)
             .ToList();
         var pages = unmarked.Select(f => f.Page).ToHashSet(StringComparer.Ordinal);
-        var known = KnownUnmarked();
+        var known = (await EntriesAsync().ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
 
         var offenders = unmarked
             .Where(f => !known.Contains(f.Page))
@@ -72,9 +71,9 @@ public class EveryCSharpFenceIsMarkedTests
     }
 
     [Test]
-    public void KnownUnmarkedFencePages_IsSortedAndUnique()
+    public async Task KnownUnmarkedFencePages_IsSortedAndUnique()
     {
-        var lines = Entries();
+        var lines = await EntriesAsync().ConfigureAwait(false);
 
         lines
             .Should()
@@ -86,10 +85,9 @@ public class EveryCSharpFenceIsMarkedTests
     }
 
     [Test]
-    public void Fence_CarriesAtMostOneMarker()
+    public async Task Fence_CarriesAtMostOneMarker()
     {
-        var offenders = Fences
-            .OnPagesAndSkills()
+        var offenders = (await Fences.OnPagesAndSkillsAsync().ConfigureAwait(false))
             .Where(f => f.Markers.Count > 1)
             .Select(f => $"{f.Location}  ({string.Join(", ", f.Markers)})")
             .ToList();
@@ -106,10 +104,9 @@ public class EveryCSharpFenceIsMarkedTests
     }
 
     [Test]
-    public void SignatureFence_IsNotCompiled()
+    public async Task SignatureFence_IsNotCompiled()
     {
-        var offenders = Fences
-            .OnPagesAndSkills()
+        var offenders = (await Fences.OnPagesAndSkillsAsync().ConfigureAwait(false))
             .Where(f => f.IsCompiled && f.IsUnderSignature)
             .Select(f => $"{f.Location}  (under ## {f.Section})")
             .ToList();
@@ -157,11 +154,12 @@ public class EveryCSharpFenceIsMarkedTests
         fences[4].Markers.Should().Equal(Fences.Marker, Fences.FragmentMarker);
     }
 
-    private static List<string> Entries() =>
-        File.ReadAllLines(RepoRoot.Combine(KnownUnmarkedFile.Split('/')))
+    private static async Task<List<string>> EntriesAsync() =>
+        (
+            await File.ReadAllLinesAsync(RepoRoot.Combine(KnownUnmarkedFile.Split('/')))
+                .ConfigureAwait(false)
+        )
             .Select(l => l.Trim())
             .Where(l => l.Length > 0 && !l.StartsWith('#'))
             .ToList();
-
-    private static HashSet<string> KnownUnmarked() => Entries().ToHashSet(StringComparer.Ordinal);
 }

@@ -11,13 +11,23 @@ public class ValidateJoinJunction(ChatDbContext db, TraxPrincipal caller)
 {
     public override async Task<JoinChatRoomInput> Run(JoinChatRoomInput input)
     {
-        if (!await db.ChatRooms.AnyAsync(r => r.Id == input.ChatRoomId))
+        if (
+            !await db
+                .ChatRooms.AnyAsync(
+                    r => r.Id == input.ChatRoomId,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
+        )
             throw new TrainException($"Chat room {input.ChatRoomId} does not exist.");
 
         if (
-            await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
-            )
+            await db
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
         )
             throw new TrainException($"You are already a participant in room {input.ChatRoomId}.");
 

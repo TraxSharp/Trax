@@ -32,10 +32,12 @@ public class SubjectKeyStorageTests : TestSetup
         var key = FourByteKey(WorkQueue.MaxSubjectKeyLength);
         Encoding.UTF8.GetByteCount(key).Should().Be(4 * WorkQueue.MaxSubjectKeyLength);
 
-        using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
-                new CreateWorkQueue { TrainName = "Subject.Key.Train", SubjectKey = key }
+                new CreateWorkQueue { TrainName = "Subject.Key.Train", SubjectKey = key },
+                TestTime.Clock
             );
             await context.Track(entry);
             await context.SaveChanges(CancellationToken.None);
@@ -52,7 +54,8 @@ public class SubjectKeyStorageTests : TestSetup
                 );
         }
 
-        using var readBack = (IDataContext)DataContextFactory.Create();
+        var readBack = (IDataContext)DataContextFactory.Create();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         var stored = await readBack.WorkQueues.AsNoTracking().SingleAsync(q => q.SubjectKey == key);
 
         stored.Status.Should().Be(WorkQueueStatus.Dispatched);

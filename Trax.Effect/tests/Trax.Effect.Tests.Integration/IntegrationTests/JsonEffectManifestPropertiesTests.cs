@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -32,7 +33,7 @@ public class JsonEffectManifestPropertiesTests
 {
     private const string Secret = "sk-live-hunter2";
     private readonly CapturingLoggerProvider _logs = new();
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -54,17 +55,23 @@ public class JsonEffectManifestPropertiesTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_scheduled_runs_manifest_properties_are_not_written_to_the_log()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var charge = new ChargeInput { Customer = "ada", ApiKey = Secret };
 
         long metadataId;
-        using (var seed = (IDataContext)factory.Create())
+        var seed = (IDataContext)factory.Create();
+        await using (seed.ConfigureAwait(false))
         {
             var group = new ManifestGroup { Name = "billing" };
             seed.ManifestGroups.Add(group);
@@ -80,11 +87,12 @@ public class JsonEffectManifestPropertiesTests
             var pending = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(IChargeTrain).FullName!,
+                    Name = typeof(IChargeTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ManifestId = manifest.Id,
-                }
+                },
+                TestTime.Clock
             );
             seed.Metadatas.Add(pending);
             await seed.SaveChanges(CancellationToken.None);
@@ -93,14 +101,15 @@ public class JsonEffectManifestPropertiesTests
 
         // What the scheduler's job runner does: load the row with its manifest, then run the
         // train under it.
-        using var load = (IDataContext)factory.Create();
+        var load = (IDataContext)factory.Create();
+        await using var loadDisposal = load.ConfigureAwait(false);
         var metadata = await load
             .Metadatas.Include(m => m.Manifest)
             .SingleAsync(m => m.Id == metadataId);
         var train = (ChargeTrain)scope.ServiceProvider.GetRequiredService<IChargeTrain>();
         _logs.Lines.Clear();
 
-        await train.Run(charge, metadata);
+        await train.Run(charge, metadata, CancellationToken.None);
 
         _logs
             .Lines.Should()
@@ -116,7 +125,8 @@ public class JsonEffectManifestPropertiesTests
     {
         // The scheduler's own dispatcher is a train whose junction returns the queued entries,
         // and AddJunctionLogger(serializeJunctionData: true) logs each junction's output.
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILoadQueueTrain>();
         _logs.Lines.Clear();
 
@@ -139,13 +149,13 @@ public class JsonEffectManifestPropertiesTests
         public string ApiKey { get; set; } = "";
     }
 
-    private class ChargeTrain : ServiceTrain<ChargeInput, Unit>, IChargeTrain
+    private sealed class ChargeTrain : ServiceTrain<ChargeInput, Unit>, IChargeTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
-    public interface IChargeTrain : IServiceTrain<ChargeInput, Unit> { }
+    public interface IChargeTrain : IServiceTrain<ChargeInput, Unit>;
 
     public class LoadQueuedJunction : EffectJunction<Unit, List<WorkQueue>>
     {
@@ -156,7 +166,7 @@ public class JsonEffectManifestPropertiesTests
                     WorkQueue.Create(
                         new CreateWorkQueue
                         {
-                            TrainName = typeof(IChargeTrain).FullName!,
+                            TrainName = typeof(IChargeTrain).FullName.NotNull(),
                             Input = $$"""{"customer":"ada","apiKey":"{{Secret}}"}""",
                             InputTypeName = typeof(ChargeInput).FullName,
                         }
@@ -165,13 +175,13 @@ public class JsonEffectManifestPropertiesTests
             );
     }
 
-    private class LoadQueueTrain : ServiceTrain<Unit, List<WorkQueue>>, ILoadQueueTrain
+    private sealed class LoadQueueTrain : ServiceTrain<Unit, List<WorkQueue>>, ILoadQueueTrain
     {
         protected override Task<Either<Exception, List<WorkQueue>>> Junctions() =>
             Chain<LoadQueuedJunction>().Resolve();
     }
 
-    public interface ILoadQueueTrain : IServiceTrain<Unit, List<WorkQueue>> { }
+    public interface ILoadQueueTrain : IServiceTrain<Unit, List<WorkQueue>>;
 
     private sealed class CapturingLoggerProvider : ILoggerProvider
     {

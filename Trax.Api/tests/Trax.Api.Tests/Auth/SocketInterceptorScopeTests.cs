@@ -6,6 +6,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -100,7 +101,8 @@ public class SocketInterceptorScopeTests
     [Test]
     public async Task ApiKeyInterceptor_ResolvesTheScopedResolverPerConnection()
     {
-        using var provider = NewAppProvider();
+        var provider = NewAppProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
             provider.GetRequiredService<ILogger<TraxApiKeySocketInterceptor>>()
@@ -109,12 +111,14 @@ public class SocketInterceptorScopeTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+            Payload(
+                new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, "the-key")
+            ),
             CancellationToken.None
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.Identity!.IsAuthenticated.Should().BeTrue();
+        http.User.Identity.NotNull().IsAuthenticated.Should().BeTrue();
     }
 
     /// <summary>
@@ -133,9 +137,10 @@ public class SocketInterceptorScopeTests
                 seen.Add(resolver);
             return resolver;
         });
-        using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
@@ -147,7 +152,12 @@ public class SocketInterceptorScopeTests
             var (session, _) = NewSession();
             await interceptor.OnConnectAsync(
                 session,
-                Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+                Payload(
+                    new TraxApiKeySocketInterceptor.ConnectionInitPayload(
+                        AuthToken: null,
+                        "the-key"
+                    )
+                ),
                 CancellationToken.None
             );
         }
@@ -168,9 +178,10 @@ public class SocketInterceptorScopeTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddScoped<ITraxPrincipalResolver<string>>(_ => created = new());
-        using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
@@ -180,11 +191,13 @@ public class SocketInterceptorScopeTests
 
         await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+            Payload(
+                new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, "the-key")
+            ),
             CancellationToken.None
         );
 
-        created!.Disposed.Should().BeTrue();
+        created.NotNull().Disposed.Should().BeTrue();
     }
 
     /// <summary>
@@ -198,9 +211,10 @@ public class SocketInterceptorScopeTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddScoped<ITraxPrincipalResolver<string>>(_ => created = new() { Throw = true });
-        using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var interceptor = new TraxApiKeySocketInterceptor(
             new TraxApplicationServices(provider),
@@ -210,12 +224,14 @@ public class SocketInterceptorScopeTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxApiKeySocketInterceptor.ConnectionInitPayload(null, "the-key")),
+            Payload(
+                new TraxApiKeySocketInterceptor.ConnectionInitPayload(AuthToken: null, "the-key")
+            ),
             CancellationToken.None
         );
 
         result.Accepted.Should().BeFalse();
-        created!.Disposed.Should().BeTrue();
+        created.NotNull().Disposed.Should().BeTrue();
     }
 
     private sealed class CountingResolver : ITraxPrincipalResolver<string>

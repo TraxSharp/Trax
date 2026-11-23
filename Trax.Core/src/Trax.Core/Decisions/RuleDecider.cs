@@ -40,7 +40,7 @@ public sealed class RuleDecider : IDecider
     /// <inheritdoc />
     public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken)
     {
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
 
         foreach (var question in request.Questions)
         {

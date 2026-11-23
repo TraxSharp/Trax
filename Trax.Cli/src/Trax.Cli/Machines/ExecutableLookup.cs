@@ -180,7 +180,14 @@ internal static class ExecutableLookup
             : path.StartsWith('/');
 
     private static bool HasDirectory(string path, bool windows) =>
-        path.Contains('/') || (windows && (path.Contains('\\') || path.Contains(':')));
+        path.Contains('/', StringComparison.Ordinal)
+        || (
+            windows
+            && (
+                path.Contains('\\', StringComparison.Ordinal)
+                || path.Contains(':', StringComparison.Ordinal)
+            )
+        );
 
     private static string Join(string dir, string name, bool windows)
     {
@@ -197,6 +204,6 @@ internal static class ExecutableLookup
             return true;
         const UnixFileMode anyExecute =
             UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
-        return (File.GetUnixFileMode(path) & anyExecute) != 0;
+        return (File.GetUnixFileMode(path) & anyExecute) != UnixFileMode.None;
     }
 }

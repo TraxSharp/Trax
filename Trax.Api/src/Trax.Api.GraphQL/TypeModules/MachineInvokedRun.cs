@@ -53,10 +53,11 @@ internal static class MachineInvokedRun
         if (ctx.Services.GetService<ISnapshotPrincipal>()?.CurrentUserKey is not { } userKey)
             return null;
 
-        using var db = await ctx
+        var db = await ctx
             .Services.GetRequiredService<IDataContextProviderFactory>()
             .CreateDbContextAsync(ctx.RequestAborted)
             .ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .SnapshotDrafts.AsNoTracking()
             .Where(x =>

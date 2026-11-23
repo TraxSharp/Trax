@@ -36,7 +36,7 @@ public sealed class TestTokenIssuer
     /// Construct an issuer that signs with <paramref name="credentials"/> by
     /// default but can switch to any other entry in <paramref name="keyset"/>
     /// via <see cref="WithSigningKey"/>. Used by
-    /// <see cref="TestJwksServer.CreateIssuer"/> to enable kid rotation in
+    /// <see cref="TestJwksServer.CreateIssuer(string)"/> to enable kid rotation in
     /// tests.
     /// </summary>
     public TestTokenIssuer(
@@ -45,21 +45,39 @@ public sealed class TestTokenIssuer
         SigningCredentials credentials,
         IReadOnlyDictionary<string, SigningCredentials>? keyset
     )
+        : this(issuer, defaultAudience, credentials, keyset, TimeProvider.System) { }
+
+    /// <summary>
+    /// Construct an issuer as the constructor without <paramref name="clock"/> does, whose
+    /// tokens' default <c>nbf</c> and <c>exp</c> are read from <paramref name="clock"/>.
+    /// </summary>
+    public TestTokenIssuer(
+        string issuer,
+        string defaultAudience,
+        SigningCredentials credentials,
+        IReadOnlyDictionary<string, SigningCredentials>? keyset,
+        TimeProvider clock
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultAudience);
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(clock);
         Issuer = issuer;
         DefaultAudience = defaultAudience;
         _credentials = credentials;
         _keyset = keyset;
+        Clock = clock;
     }
+
+    /// <summary>The clock a token's default <c>nbf</c> and <c>exp</c> are read from.</summary>
+    public TimeProvider Clock { get; }
 
     /// <summary>
     /// Return a new issuer that signs with the key identified by
     /// <paramref name="kid"/>. Throws if no key with that kid is in the
     /// issuer's keyset (only issuers minted via
-    /// <see cref="TestJwksServer.CreateIssuer"/> have a populated keyset).
+    /// <see cref="TestJwksServer.CreateIssuer(string)"/> have a populated keyset).
     /// </summary>
     public TestTokenIssuer WithSigningKey(string kid)
     {
@@ -75,7 +93,7 @@ public sealed class TestTokenIssuer
                     + $"Known kids: [{string.Join(", ", _keyset.Keys)}]",
                 nameof(kid)
             );
-        return new TestTokenIssuer(Issuer, DefaultAudience, creds, _keyset);
+        return new TestTokenIssuer(Issuer, DefaultAudience, creds, _keyset, Clock);
     }
 
     /// <summary>
@@ -105,7 +123,7 @@ public sealed class TestTokenIssuer
     /// </summary>
     public string Mint(Action<TestTokenBuilder>? configure = null)
     {
-        var builder = new TestTokenBuilder(Issuer, DefaultAudience);
+        var builder = new TestTokenBuilder(Issuer, DefaultAudience, Clock);
         configure?.Invoke(builder);
 
         var token = new JwtSecurityToken(
@@ -118,93 +136,4 @@ public sealed class TestTokenIssuer
         );
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
-}
-
-/// <summary>
-/// Fluent builder for an individual JWT minted by <see cref="TestTokenIssuer"/>.
-/// </summary>
-public sealed class TestTokenBuilder
-{
-    private readonly List<Claim> _claims = new();
-
-    internal TestTokenBuilder(string issuer, string audience)
-    {
-        IssuerValue = issuer;
-        AudienceValue = audience;
-        NotBeforeValue = DateTime.UtcNow.AddMinutes(-1);
-        ExpiresValue = DateTime.UtcNow.AddMinutes(5);
-    }
-
-    internal string IssuerValue { get; private set; }
-    internal string AudienceValue { get; private set; }
-    internal DateTime NotBeforeValue { get; private set; }
-    internal DateTime ExpiresValue { get; private set; }
-
-    /// <summary>Sets the <c>sub</c> claim.</summary>
-    public TestTokenBuilder WithSubject(string sub)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sub);
-        _claims.RemoveAll(c => c.Type == "sub");
-        _claims.Add(new Claim("sub", sub));
-        return this;
-    }
-
-    /// <summary>Appends a claim. Multiple calls with the same type are allowed.</summary>
-    public TestTokenBuilder WithClaim(string type, string value)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(type);
-        ArgumentNullException.ThrowIfNull(value);
-        _claims.Add(new Claim(type, value));
-        return this;
-    }
-
-    /// <summary>Appends a role claim (<see cref="ClaimTypes.Role"/>).</summary>
-    public TestTokenBuilder WithRole(string role)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(role);
-        _claims.Add(new Claim(ClaimTypes.Role, role));
-        return this;
-    }
-
-    /// <summary>Overrides the issuer (<c>iss</c>) for this token only.</summary>
-    public TestTokenBuilder WithIssuer(string issuer)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
-        IssuerValue = issuer;
-        return this;
-    }
-
-    /// <summary>Overrides the audience (<c>aud</c>) for this token only.</summary>
-    public TestTokenBuilder WithAudience(string audience)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(audience);
-        AudienceValue = audience;
-        return this;
-    }
-
-    /// <summary>Sets the not-before timestamp.</summary>
-    public TestTokenBuilder WithNotBefore(DateTime notBefore)
-    {
-        NotBeforeValue = notBefore;
-        return this;
-    }
-
-    /// <summary>Sets the expiration timestamp.</summary>
-    public TestTokenBuilder WithExpires(DateTime expires)
-    {
-        ExpiresValue = expires;
-        return this;
-    }
-
-    /// <summary>Sets the lifetime relative to now (nbf = now-1min, exp = now+lifetime).</summary>
-    public TestTokenBuilder WithLifetime(TimeSpan lifetime)
-    {
-        if (lifetime <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(lifetime), "Lifetime must be positive.");
-        NotBeforeValue = DateTime.UtcNow.AddMinutes(-1);
-        ExpiresValue = DateTime.UtcNow.Add(lifetime);
-        return this;
-    }
-
-    internal IEnumerable<Claim> GetClaims() => _claims;
 }

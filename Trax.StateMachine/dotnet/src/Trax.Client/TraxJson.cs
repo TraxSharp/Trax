@@ -34,6 +34,8 @@ public static class TraxJson
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             TypeInfoResolver = resolver.WithAddedModifier(LeaveOutUnset),
         };
         options.MakeReadOnly();

@@ -19,12 +19,14 @@ public class NoLegacyAssertTests
     public void TestSources_UseOnly_AwesomeAssertions() => AssertClean(RepoRoot.Path);
 
     [Test]
-    public void Guard_fails_on_a_classic_assert()
+    public async Task Guard_fails_on_a_classic_assert()
     {
-        using var repo = new SyntheticRepo().Write(
-            "tests/Sample/SampleTests.cs",
-            "public class SampleTests { public void T() { ClassicAssert.AreEqual(1, 1); } }"
-        );
+        using var repo = new SyntheticRepo();
+        await repo.Write(
+                "tests/Sample/SampleTests.cs",
+                "public class SampleTests { public void T() { ClassicAssert.AreEqual(1, 1); } }"
+            )
+            .ConfigureAwait(false);
 
         var act = () => AssertClean(repo.Root);
 

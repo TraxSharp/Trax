@@ -11,12 +11,12 @@ namespace Trax.Scheduler.Services.Operations;
 /// <c>operations.getTrains</c> returns as <c>ServiceTypeName</c>).
 /// </param>
 /// <param name="InputJson">
-/// JSON payload that deserializes to the train's input type. <c>null</c> or blank is read as
+/// JSON payload that deserializes to the train's input type. <see langword="null"/> or blank is read as
 /// an empty object, so a train whose input needs no values can be queued without one.
 /// </param>
 /// <param name="Priority">Dispatch priority 0-31. Higher values run first. Defaults to 0.</param>
 /// <param name="ScheduledAt">
-/// Earliest UTC time the entry should be picked up. <c>null</c> means dispatch immediately.
+/// Earliest UTC time the entry should be picked up. <see langword="null"/> means dispatch immediately.
 /// </param>
 public record QueueTrainInput(
     string TrainName,

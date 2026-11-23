@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Scheduling;
@@ -7,7 +8,7 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// </summary>
 /// <remarks>
 /// Schedule is an immutable record that encapsulates scheduling configuration.
-/// Use the static factory methods <see cref="FromInterval"/> and <see cref="FromCron"/>
+/// Use the static factory methods <see cref="FromInterval"/> and <see cref="FromCron(string)"/>
 /// to create instances, or use the <see cref="Every"/> and <see cref="Cron"/> helper classes
 /// for more readable schedule definitions.
 /// </remarks>
@@ -100,12 +101,25 @@ public record Schedule
     /// var schedule = Schedule.FromCron("*/15 * * * * *");  // Every 15 seconds (6-field)
     /// </code>
     /// </example>
-    public static Schedule FromCron(string expression)
+    public static Schedule FromCron(string expression) => FromCron(expression, TimeProvider.System);
+
+    /// <summary>
+    /// As <see cref="FromCron(string)"/>, checking that the expression fires within ten years of
+    /// the time <paramref name="timeProvider"/> gives.
+    /// </summary>
+    /// <param name="expression">A 5-field or 6-field cron expression, in UTC.</param>
+    /// <param name="timeProvider">The clock the next occurrence is searched from.</param>
+    /// <exception cref="FormatException">
+    /// <paramref name="expression"/> is not a valid cron expression, or it never fires within ten
+    /// years of that time.
+    /// </exception>
+    internal static Schedule FromCron(string expression, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(expression);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         var parsed = CronParser.Parse(expression);
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var next = parsed.GetNextOccurrence(now, TimeZoneInfo.Utc);
         if (next is null || next > now.AddYears(CronSearchWindowYears))
             throw new FormatException(
@@ -119,7 +133,7 @@ public record Schedule
     }
 
     /// <summary>
-    /// How far ahead <see cref="FromCron"/> looks for a cron expression's next occurrence before
+    /// How far ahead <see cref="FromCron(string)"/> looks for a cron expression's next occurrence before
     /// refusing it as one that never fires.
     /// </summary>
     internal const int CronSearchWindowYears = 10;
@@ -157,7 +171,8 @@ public record Schedule
         if (Interval is null)
             return "* * * * *"; // Default to every minute
 
-        var totalSeconds = (int)Math.Max(1, Math.Round(Interval.Value.TotalSeconds));
+        var totalSeconds = (int)
+            Math.Max(1, Math.Round(Interval.Value.TotalSeconds, MidpointRounding.ToEven));
 
         // Sub-minute intervals: produce 6-field cron with seconds
         if (totalSeconds < 60)
@@ -165,22 +180,37 @@ public record Schedule
             return totalSeconds switch
             {
                 1 => "* * * * * *",
-                <= 30 when 60 % totalSeconds == 0 => $"*/{totalSeconds} * * * * *",
-                _ => $"*/{ClosestDivisorOf60(totalSeconds)} * * * * *",
+                <= 30 when 60 % totalSeconds == 0 => string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*/{totalSeconds} * * * * *"
+                ),
+                _ => string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"*/{ClosestDivisorOf60(totalSeconds)} * * * * *"
+                ),
             };
         }
 
-        var totalMinutes = (int)Math.Max(1, Math.Round(Interval.Value.TotalMinutes));
+        var totalMinutes = (int)
+            Math.Max(1, Math.Round(Interval.Value.TotalMinutes, MidpointRounding.ToEven));
 
         return totalMinutes switch
         {
             1 => "* * * * *",
-            <= 30 when 60 % totalMinutes == 0 => $"*/{totalMinutes} * * * *",
+            <= 30 when 60 % totalMinutes == 0 => string.Create(
+                CultureInfo.InvariantCulture,
+                $"*/{totalMinutes} * * * *"
+            ),
             60 => "0 * * * *",
-            > 60 when totalMinutes % 60 == 0 && 24 % (totalMinutes / 60) == 0 =>
-                $"0 */{totalMinutes / 60} * * *",
+            > 60 when totalMinutes % 60 == 0 && 24 % (totalMinutes / 60) == 0 => string.Create(
+                CultureInfo.InvariantCulture,
+                $"0 */{totalMinutes / 60} * * *"
+            ),
             // For intervals that don't map cleanly to cron, use the closest divisor of 60
-            _ => $"*/{ClosestDivisorOf60(totalMinutes)} * * * *",
+            _ => string.Create(
+                CultureInfo.InvariantCulture,
+                $"*/{ClosestDivisorOf60(totalMinutes)} * * * *"
+            ),
         };
     }
 

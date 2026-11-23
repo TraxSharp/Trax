@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Services.JobSubmitter;
@@ -25,7 +26,7 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// );
 /// </code>
 /// </remarks>
-internal class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmitter
+internal sealed class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmitter
 {
     private int _jobCounter;
 
@@ -44,9 +45,14 @@ internal class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmit
     /// <inheritdoc />
     public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
     {
-        var jobId = $"inmemory-{Interlocked.Increment(ref _jobCounter)}";
+        var jobId = string.Create(
+            CultureInfo.InvariantCulture,
+            $"inmemory-{Interlocked.Increment(ref _jobCounter)}"
+        );
 
-        await jobRunnerTrain.Run(new RunJobRequest(metadataId), cancellationToken);
+        await jobRunnerTrain
+            .Run(new RunJobRequest(metadataId), cancellationToken)
+            .ConfigureAwait(false);
 
         return jobId;
     }
@@ -58,9 +64,14 @@ internal class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmit
         CancellationToken cancellationToken
     )
     {
-        var jobId = $"inmemory-{Interlocked.Increment(ref _jobCounter)}";
+        var jobId = string.Create(
+            CultureInfo.InvariantCulture,
+            $"inmemory-{Interlocked.Increment(ref _jobCounter)}"
+        );
 
-        await jobRunnerTrain.Run(new RunJobRequest(metadataId, input), cancellationToken);
+        await jobRunnerTrain
+            .Run(new RunJobRequest(metadataId, input), cancellationToken)
+            .ConfigureAwait(false);
 
         return jobId;
     }

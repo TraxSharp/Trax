@@ -7,40 +7,47 @@ public class SkillRulesTests
         [.. SkillRules.Check(skills.Skills).Select(p => p.ToString())];
 
     [Test]
-    public void AWellFormedSkill_HasNoProblems()
+    public async Task AWellFormedSkill_HasNoProblems()
     {
-        using var skills = new TempSkills()
-            .Skill("trax-write-a-train", body: "See [the layout](layout.md#top).\n")
-            .File_("trax-write-a-train/layout.md");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills
+            .SkillAsync("trax-write-a-train", body: "See [the layout](layout.md#top).\n")
+            .ConfigureAwait(false);
+        await skills.FileAsync("trax-write-a-train/layout.md").ConfigureAwait(false);
 
         Problems(skills).Should().BeEmpty();
     }
 
     [Test]
-    public void ASkillWithoutTheInternalMarker_IsRefused()
+    public async Task ASkillWithoutTheInternalMarker_IsRefused()
     {
         // Without it, `npx skills add TraxSharp/Trax` serves the skill from main: the CLI's
         // recursive fallback finds Trax.Docs/skills/ (skills 1.7.4, 2026-10-20).
-        using var skills = new TempSkills().Skill("trax", metadata: "");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax", metadata: "").ConfigureAwait(false);
 
         Problems(skills).Should().ContainSingle().Which.Should().Contain("internal: true");
     }
 
     [Test]
-    public void AStampedVersionInTheSource_IsRefused()
+    public async Task AStampedVersionInTheSource_IsRefused()
     {
-        using var skills = new TempSkills().Skill(
-            "trax",
-            metadata: "metadata:\n  internal: true\n  trax-version: \"1.0.0\"\n"
-        );
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills
+            .SkillAsync(
+                "trax",
+                metadata: "metadata:\n  internal: true\n  trax-version: \"1.0.0\"\n"
+            )
+            .ConfigureAwait(false);
 
         Problems(skills).Should().ContainSingle().Which.Should().Contain("the release writes it");
     }
 
     [Test]
-    public void ANameThatIsNotTheFolder_IsRefused()
+    public async Task ANameThatIsNotTheFolder_IsRefused()
     {
-        using var skills = new TempSkills().Skill("trax", name: "trax-core");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax", name: "trax-core").ConfigureAwait(false);
 
         Problems(skills)
             .Should()
@@ -52,20 +59,23 @@ public class SkillRulesTests
     [TestCase("Trax")]
     [TestCase("trax_core")]
     [TestCase("trax--core")]
-    public void ANameOutsideTheSpec_IsRefused(string folder)
+    public async Task ANameOutsideTheSpec_IsRefused(string folder)
     {
-        using var skills = new TempSkills().Skill(folder);
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync(folder).ConfigureAwait(false);
 
         Problems(skills).Should().ContainSingle().Which.Should().Contain("lowercase words");
     }
 
     [Test]
-    public void AMissingOrOverlongDescription_IsRefused()
+    public async Task AMissingOrOverlongDescription_IsRefused()
     {
-        using var skills = new TempSkills()
-            .Skill("a", description: "\"\"")
-            .Skill("b", description: new string('x', SkillRules.MaxDescriptionLength + 1))
-            .Skill("c", description: "Use for <train> work.");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("a", description: "\"\"").ConfigureAwait(false);
+        await skills
+            .SkillAsync("b", description: new string('x', SkillRules.MaxDescriptionLength + 1))
+            .ConfigureAwait(false);
+        await skills.SkillAsync("c", description: "Use for <train> work.").ConfigureAwait(false);
 
         Problems(skills)
             .Should()
@@ -77,12 +87,15 @@ public class SkillRulesTests
     }
 
     [Test]
-    public void AnUnknownKey_IsRefused()
+    public async Task AnUnknownKey_IsRefused()
     {
-        using var skills = new TempSkills().Skill(
-            "trax",
-            metadata: "allowed-tools: Bash\nmetadata:\n  internal: true\n  owner: me\n"
-        );
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills
+            .SkillAsync(
+                "trax",
+                metadata: "allowed-tools: Bash\nmetadata:\n  internal: true\n  owner: me\n"
+            )
+            .ConfigureAwait(false);
 
         Problems(skills)
             .Should()
@@ -93,18 +106,21 @@ public class SkillRulesTests
     }
 
     [Test]
-    public void AScriptInASkill_IsRefused()
+    public async Task AScriptInASkill_IsRefused()
     {
-        using var skills = new TempSkills().Skill("trax").File_("trax/scripts/setup.sh");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax").ConfigureAwait(false);
+        await skills.FileAsync("trax/scripts/setup.sh").ConfigureAwait(false);
 
         Problems(skills).Should().ContainSingle().Which.Should().Contain("never a script");
     }
 
     [Test]
-    public void ALinkedFileInASkill_IsRefused()
+    public async Task ALinkedFileInASkill_IsRefused()
     {
-        using var skills = new TempSkills().Skill("trax");
-        skills.Link("trax/extra.md", skills.Outside().File);
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax").ConfigureAwait(false);
+        skills.Link("trax/extra.md", (await skills.OutsideAsync().ConfigureAwait(false)).File);
 
         Problems(skills)
             .Should()
@@ -116,11 +132,12 @@ public class SkillRulesTests
     }
 
     [Test]
-    public void ALinkedFolderInASkill_IsRefused_AndNotEntered()
+    public async Task ALinkedFolderInASkill_IsRefused_AndNotEntered()
     {
-        using var skills = new TempSkills().Skill("trax");
-        var outside = skills.Outside().Folder;
-        File.WriteAllText(Path.Combine(outside, "run.sh"), "echo");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax").ConfigureAwait(false);
+        var outside = (await skills.OutsideAsync().ConfigureAwait(false)).Folder;
+        await File.WriteAllTextAsync(Path.Combine(outside, "run.sh"), "echo").ConfigureAwait(false);
         skills.Link("trax/more", outside, folder: true);
 
         Problems(skills)
@@ -131,10 +148,11 @@ public class SkillRulesTests
     }
 
     [Test]
-    public void ALinkedSkillFolder_IsRefused()
+    public async Task ALinkedSkillFolder_IsRefused()
     {
-        using var source = new TempSkills().Skill("trax");
-        using var skills = new TempSkills();
+        using var source = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await source.SkillAsync("trax").ConfigureAwait(false);
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
         skills.Link("trax", Path.Combine(source.Skills, "trax"), folder: true);
 
         Problems(skills)
@@ -145,22 +163,26 @@ public class SkillRulesTests
     }
 
     [Test]
-    public void AFileOutsideAnySkill_IsRefused()
+    public async Task AFileOutsideAnySkill_IsRefused()
     {
-        using var skills = new TempSkills().Skill("trax").File_("notes.md");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax").ConfigureAwait(false);
+        await skills.FileAsync("notes.md").ConfigureAwait(false);
 
         Problems(skills).Should().ContainSingle().Which.Should().StartWith("notes.md: ");
     }
 
     [Test]
-    public void ALinkThatIsMissingOrLeavesTheSkill_IsRefused()
+    public async Task ALinkThatIsMissingOrLeavesTheSkill_IsRefused()
     {
-        using var skills = new TempSkills()
-            .Skill(
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills
+            .SkillAsync(
                 "trax",
                 body: "[a](missing.md) [b](../other/SKILL.md) [c](https://traxsharp.net/docs) [d](#x)\n"
             )
-            .Skill("other");
+            .ConfigureAwait(false);
+        await skills.SkillAsync("other").ConfigureAwait(false);
 
         Problems(skills)
             .Should()
@@ -171,17 +193,21 @@ public class SkillRulesTests
     }
 
     [Test]
-    public void ALinkInsideAFence_IsNotALink()
+    public async Task ALinkInsideAFence_IsNotALink()
     {
-        using var skills = new TempSkills().Skill("trax", body: "```md\n[a](missing.md)\n```\n");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills
+            .SkillAsync("trax", body: "```md\n[a](missing.md)\n```\n")
+            .ConfigureAwait(false);
 
         Problems(skills).Should().BeEmpty();
     }
 
     [Test]
-    public void BrokenFrontmatter_IsReportedAndStopsTheOtherRules()
+    public async Task BrokenFrontmatter_IsReportedAndStopsTheOtherRules()
     {
-        using var skills = new TempSkills().Skill("trax", metadata: "  stray: indent\n");
+        using var skills = await TempSkills.CreateAsync().ConfigureAwait(false);
+        await skills.SkillAsync("trax", metadata: "  stray: indent\n").ConfigureAwait(false);
 
         Problems(skills).Should().ContainSingle().Which.Should().Contain("frontmatter:");
     }

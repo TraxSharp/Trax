@@ -1,0 +1,146 @@
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class MergeIsPatternChecksAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.MergeIsPatternChecks,
+        title: "Merge is expressions on the same value",
+        messageFormat: "Merge is expressions on the same value",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.MergeIsPatternChecks));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            if (context.Compilation.GetCSharpLanguageVersion() < LanguageVersion.CSharp9)
+                return;
+
+            context.RegisterOperationAction(AnalyzeBinary, OperationKind.Binary);
+        });
+    }
+
+    private static void AnalyzeBinary(OperationAnalysisContext context)
+    {
+        var operation = (IBinaryOperation)context.Operation;
+        if (operation.OperatorKind is not (BinaryOperatorKind.ConditionalAnd or BinaryOperatorKind.ConditionalOr))
+            return;
+
+        if (operation.Syntax is not BinaryExpressionSyntax rootExpression)
+            return;
+
+        if (rootExpression.Parent is BinaryExpressionSyntax parentExpression && parentExpression.IsKind(rootExpression.Kind()))
+            return;
+
+        if (!HasMergeableContiguousCandidates(rootExpression, operation.SemanticModel!, context.CancellationToken))
+            return;
+
+        context.ReportDiagnostic(Rule, rootExpression);
+    }
+
+    private static bool HasMergeableContiguousCandidates(BinaryExpressionSyntax rootExpression, SemanticModel semanticModel, CancellationToken cancellationToken)
+    {
+        var terms = new List<ExpressionSyntax>();
+        FlattenLogicalTerms(rootExpression, rootExpression.Kind(), terms);
+
+        var currentGroup = new List<MergeCandidate>();
+        foreach (var term in terms)
+        {
+            if (TryCreateMergeCandidate(term, semanticModel, cancellationToken, out var candidate))
+            {
+                if (currentGroup.Count == 0 || MergeIsPatternChecksCommon.AreSameMergeTarget(currentGroup[0].Target, candidate.Target))
+                {
+                    currentGroup.Add(candidate);
+                }
+                else
+                {
+                    if (CanMergeCandidates(rootExpression.Kind(), currentGroup))
+                        return true;
+
+                    currentGroup.Clear();
+                    currentGroup.Add(candidate);
+                }
+            }
+            else
+            {
+                if (CanMergeCandidates(rootExpression.Kind(), currentGroup))
+                    return true;
+
+                currentGroup.Clear();
+            }
+        }
+
+        return CanMergeCandidates(rootExpression.Kind(), currentGroup);
+    }
+
+    private static void FlattenLogicalTerms(ExpressionSyntax expression, SyntaxKind operatorKind, List<ExpressionSyntax> terms)
+    {
+        if (expression is BinaryExpressionSyntax binaryExpression && binaryExpression.IsKind(operatorKind))
+        {
+            FlattenLogicalTerms(binaryExpression.Left, operatorKind, terms);
+            FlattenLogicalTerms(binaryExpression.Right, operatorKind, terms);
+            return;
+        }
+
+        terms.Add(expression);
+    }
+
+    private static bool TryCreateMergeCandidate(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken cancellationToken, out MergeCandidate candidate)
+    {
+        candidate = default;
+
+        var operation = semanticModel.GetOperation(expression, cancellationToken);
+        if (operation is null)
+            return false;
+
+        operation = UnwrapOperation(operation);
+        if (operation is not IIsPatternOperation isPatternOperation)
+            return false;
+
+        if (!MergeIsPatternChecksCommon.TryGetMergeTarget(isPatternOperation.Value, out var mergeTarget))
+            return false;
+
+        var patternSyntax = isPatternOperation.Pattern.Syntax as PatternSyntax;
+        candidate = new(mergeTarget, patternSyntax);
+        return true;
+    }
+
+    private static IOperation UnwrapOperation(IOperation operation)
+    {
+        operation = operation.UnwrapConversions();
+        while (operation is IParenthesizedOperation parenthesizedOperation)
+        {
+            operation = parenthesizedOperation.Operand.UnwrapConversions();
+        }
+
+        return operation;
+    }
+
+    private static bool CanMergeCandidates(SyntaxKind logicalExpressionKind, List<MergeCandidate> mergeCandidates)
+    {
+        if (mergeCandidates.Count <= 1)
+            return false;
+
+        foreach (var candidate in mergeCandidates)
+        {
+            if (candidate.Pattern is not null && !MergeIsPatternChecksCommon.CanMergePattern(logicalExpressionKind, candidate.Pattern))
+                return false;
+        }
+
+        return true;
+    }
+
+    private readonly record struct MergeCandidate(MergeIsPatternChecksCommon.MergeTarget Target, PatternSyntax? Pattern);
+}

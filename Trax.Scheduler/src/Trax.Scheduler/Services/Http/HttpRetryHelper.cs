@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.RequestSigning;
 
@@ -19,7 +21,11 @@ internal static class HttpRetryHelper
         HttpStatusCode.ServiceUnavailable,
     ];
 
-    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private static readonly MediaTypeHeaderValue JsonContentType = new("application/json")
     {
@@ -33,6 +39,7 @@ internal static class HttpRetryHelper
     /// <param name="request">The request body to serialize as JSON.</param>
     /// <param name="options">Retry configuration.</param>
     /// <param name="logger">Logger for retry diagnostics.</param>
+    /// <param name="timeProvider">The clock the retries wait on and the signature is stamped from.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <param name="signingKey">When set, each attempt is signed with this key in the runner request signature header; null sends the request unsigned.</param>
     /// <param name="purpose">Which runner endpoint the signature is bound to.</param>
@@ -47,6 +54,7 @@ internal static class HttpRetryHelper
         object request,
         HttpRetryOptions options,
         ILogger? logger,
+        TimeProvider timeProvider,
         CancellationToken ct,
         byte[]? signingKey = null,
         RunnerRequestPurpose purpose = RunnerRequestPurpose.Execute,
@@ -76,7 +84,12 @@ internal static class HttpRetryHelper
             };
             if (signingKey is not null)
             {
-                var signature = RunnerRequestSignature.Create(signingKey, purpose, body);
+                var signature = RunnerRequestSignature.Create(
+                    signingKey,
+                    purpose,
+                    body,
+                    timeProvider
+                );
                 message.Headers.TryAddWithoutValidation(
                     RunnerRequestSignature.HeaderName,
                     signature
@@ -84,7 +97,7 @@ internal static class HttpRetryHelper
                 signed?.Invoke(signature);
             }
 
-            response = await client.SendAsync(message, completion, ct);
+            response = await client.SendAsync(message, completion, ct).ConfigureAwait(false);
 
             if (!TransientStatusCodes.Contains(response.StatusCode))
                 return response;
@@ -92,7 +105,7 @@ internal static class HttpRetryHelper
             if (attempt == maxRetries)
                 break;
 
-            var delay = ComputeDelay(attempt, response, options);
+            var delay = ComputeDelay(attempt, response, options, timeProvider);
 
             logger?.LogWarning(
                 "HTTP {StatusCode} from remote endpoint, retrying in {DelayMs}ms (attempt {Attempt}/{MaxRetries})",
@@ -102,10 +115,10 @@ internal static class HttpRetryHelper
                 maxRetries
             );
 
-            await Task.Delay(delay, ct);
+            await Task.Delay(delay, timeProvider, ct).ConfigureAwait(false);
         }
 
-        return response!;
+        return response.NotNull();
     }
 
     /// <summary>
@@ -114,7 +127,8 @@ internal static class HttpRetryHelper
     internal static TimeSpan ComputeDelay(
         int attempt,
         HttpResponseMessage response,
-        HttpRetryOptions options
+        HttpRetryOptions options,
+        TimeProvider timeProvider
     )
     {
         // Respect Retry-After header if the server provides one
@@ -126,7 +140,7 @@ internal static class HttpRetryHelper
 
             if (retryAfter.Date is { } date)
             {
-                var serverDelay = date - DateTimeOffset.UtcNow;
+                var serverDelay = date - timeProvider.GetUtcNow();
                 if (serverDelay > TimeSpan.Zero)
                     return Clamp(serverDelay, options);
             }
@@ -136,11 +150,15 @@ internal static class HttpRetryHelper
         var exponentialMs = options.BaseDelay.TotalMilliseconds * Math.Pow(2, attempt);
 
         // Add jitter: ±25%
-        var jitterFactor = 0.75 + Random.Shared.NextDouble() * 0.5;
+        var jitterFactor = 0.75 + Jitter() * 0.5;
         var delayMs = exponentialMs * jitterFactor;
 
         return Clamp(TimeSpan.FromMilliseconds(delayMs), options);
     }
+
+    // A number in [0, 1) that spreads the retries of many callers apart.
+    private static double Jitter() =>
+        RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue;
 
     private static TimeSpan Clamp(TimeSpan delay, HttpRetryOptions options)
     {

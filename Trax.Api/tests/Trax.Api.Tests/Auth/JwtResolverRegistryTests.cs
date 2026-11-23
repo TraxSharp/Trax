@@ -41,7 +41,7 @@ public class JwtResolverRegistryTests
     {
         var registry = new JwtResolverRegistry();
 
-        Action act = () => registry.Register(null!, _ => A);
+        Action act = () => registry.Register(Null.Of<string>(), _ => A);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -61,7 +61,16 @@ public class JwtResolverRegistryTests
     {
         var registry = new JwtResolverRegistry();
 
-        Action act = () => registry.Register("alpha", null!);
+        Action act = () =>
+            registry.Register(
+                "alpha",
+                Null.Of<
+                    Func<
+                        IServiceProvider,
+                        Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>
+                    >
+                >()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -83,7 +92,7 @@ public class JwtResolverRegistryTests
         var registry = new JwtResolverRegistry();
         registry.Register("alpha", _ => A);
 
-        Action act = () => registry.Resolve("alpha", null!);
+        Action act = () => registry.Resolve("alpha", Null.Of<IServiceProvider>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -93,7 +102,8 @@ public class JwtResolverRegistryTests
     {
         var registry = new JwtResolverRegistry();
 
-        Action act = () => registry.Resolve(null!, new ServiceCollection().BuildServiceProvider());
+        Action act = () =>
+            registry.Resolve(Null.Of<string>(), new ServiceCollection().BuildServiceProvider());
 
         act.Should().Throw<ArgumentException>();
     }
@@ -127,7 +137,7 @@ public class JwtResolverRegistryTests
         var registry = new JwtResolverRegistry();
 
         Action act = () =>
-            registry.TryResolve(null!, new ServiceCollection().BuildServiceProvider());
+            registry.TryResolve(Null.Of<string>(), new ServiceCollection().BuildServiceProvider());
 
         act.Should().Throw<ArgumentException>();
     }
@@ -138,7 +148,7 @@ public class JwtResolverRegistryTests
         var registry = new JwtResolverRegistry();
         registry.Register("alpha", _ => A);
 
-        Action act = () => registry.TryResolve("alpha", null!);
+        Action act = () => registry.TryResolve("alpha", Null.Of<IServiceProvider>());
 
         act.Should().Throw<ArgumentNullException>();
     }

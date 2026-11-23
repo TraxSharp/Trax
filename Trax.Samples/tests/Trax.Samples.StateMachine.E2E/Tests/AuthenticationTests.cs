@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Factories;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
@@ -48,7 +49,7 @@ public class AuthenticationTests : StateMachineTestFixture
 
     private static TestCaseData Case(string machine, string operation, object variables) =>
         new TestCaseData(
-            StateMachineClient.DocumentOf(machine, operation)!.Id,
+            StateMachineClient.DocumentOf(machine, operation).NotNull().Id,
             variables
         ).SetArgDisplayNames($"{machine}.{operation}");
 
@@ -75,7 +76,7 @@ public class AuthenticationTests : StateMachineTestFixture
     {
         var requestId = $"start-{Guid.NewGuid():N}";
         var response = await GraphQL.SendIdAsync(
-            StateMachineClient.DocumentOf(Turnstile, "start")!.Id,
+            StateMachineClient.DocumentOf(Turnstile, "start").NotNull().Id,
             Anonymous,
             new { requestId }
         );
@@ -93,7 +94,7 @@ public class AuthenticationTests : StateMachineTestFixture
         );
         count.Parameters.AddWithValue("requestId", requestId);
 
-        ((long)(await count.ExecuteScalarAsync())!)
+        ((long)(await count.ExecuteScalarAsync()).NotNull())
             .Should()
             .Be(0, "a refused start stores no draft under any caller");
     }
@@ -119,7 +120,7 @@ public class AuthenticationTests : StateMachineTestFixture
         schemes.Select(s => s.Name).Should().NotContain(ApiKeyDefaults.SchemeName, Adr);
 
         var response = await graphQL.SendIdAsync(
-            StateMachineClient.DocumentOf(Turnstile, "start")!.Id,
+            StateMachineClient.DocumentOf(Turnstile, "start").NotNull().Id,
             Alice,
             new { requestId = "start-production" }
         );
@@ -137,7 +138,7 @@ public class AuthenticationTests : StateMachineTestFixture
         await using var factory = new ProductionStateMachineApiFactory(builder =>
             builder.ConfigureTestServices(services =>
                 services.AddTraxApiKeyAuth(keys =>
-                    keys.Add(Caller.Alice.ApiKey!, id: "alice", "User")
+                    keys.Add(Caller.Alice.ApiKey.NotNull(), id: "alice", "User")
                 )
             )
         );

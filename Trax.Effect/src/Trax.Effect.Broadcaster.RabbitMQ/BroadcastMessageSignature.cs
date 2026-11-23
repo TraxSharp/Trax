@@ -5,22 +5,6 @@ using System.Text;
 
 namespace Trax.Effect.Broadcaster.RabbitMQ;
 
-/// <summary>What <see cref="BroadcastMessageSignature.Verify"/> found.</summary>
-internal enum BroadcastSignatureVerdict
-{
-    /// <summary>The signature matches and its timestamp is within the allowed skew.</summary>
-    Accepted,
-
-    /// <summary>The message carries no signature.</summary>
-    Missing,
-
-    /// <summary>The signature is malformed or does not match the message.</summary>
-    Invalid,
-
-    /// <summary>The signature matches, but its timestamp is further from this clock than allowed.</summary>
-    Stale,
-}
-
 /// <summary>
 /// The signature a broadcaster puts on each message, in the <see cref="Header"/> header:
 /// <c>v1,t=&lt;unix seconds&gt;,n=&lt;message id&gt;,s=&lt;base64 HMAC-SHA256&gt;</c>. The MAC covers
@@ -119,7 +103,7 @@ internal static class BroadcastMessageSignature
         var parts = signature.Split(',');
         if (
             parts.Length != 4
-            || parts[0] != Version
+            || !string.Equals(parts[0], Version, StringComparison.Ordinal)
             || !parts[1].StartsWith("t=", StringComparison.Ordinal)
             || !parts[2].StartsWith("n=", StringComparison.Ordinal)
             || !parts[3].StartsWith("s=", StringComparison.Ordinal)

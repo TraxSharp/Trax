@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Configuration;
@@ -72,8 +73,10 @@ public class MediatorBuilderConcurrencyTests
         using var provider = services.BuildServiceProvider();
 
         var config = provider.GetRequiredService<MediatorConfiguration>();
-        config.ConcurrencyOverrides.Should().ContainKey(typeof(IMemoryTestTrain).FullName!);
-        config.ConcurrencyOverrides[typeof(IMemoryTestTrain).FullName!].Should().Be(15);
+        config
+            .ConcurrencyOverrides.Should()
+            .ContainKey(typeof(IMemoryTestTrain).FullName.NotNull());
+        config.ConcurrencyOverrides[typeof(IMemoryTestTrain).FullName.NotNull()].Should().Be(15);
     }
 
     [Test]
@@ -94,8 +97,8 @@ public class MediatorBuilderConcurrencyTests
 
         var config = provider.GetRequiredService<MediatorConfiguration>();
         config.ConcurrencyOverrides.Should().HaveCount(2);
-        config.ConcurrencyOverrides[typeof(IMemoryTestTrain).FullName!].Should().Be(15);
-        config.ConcurrencyOverrides[typeof(IFailingTestTrain).FullName!].Should().Be(5);
+        config.ConcurrencyOverrides[typeof(IMemoryTestTrain).FullName.NotNull()].Should().Be(15);
+        config.ConcurrencyOverrides[typeof(IFailingTestTrain).FullName.NotNull()].Should().Be(5);
     }
 
     [Test]

@@ -17,6 +17,7 @@ namespace Trax.Api.Auth.Jwt.Cognito
     public static class CognitoJwtBuilderExtensions
     {
         public static Trax.Api.Auth.Jwt.JwtBuilder UseCognito(this Trax.Api.Auth.Jwt.JwtBuilder builder, string region, string userPoolId, string clientId, Trax.Api.Auth.Jwt.Cognito.CognitoTokenUse tokenUse = 2) { }
+        public static Trax.Api.Auth.Jwt.JwtBuilder UseCognito(this Trax.Api.Auth.Jwt.JwtBuilder builder, string region, string userPoolId, string clientId, Trax.Api.Auth.Jwt.Cognito.CognitoTokenUse tokenUse, System.TimeProvider clock) { }
     }
     public sealed class CognitoJwtPrincipalResolver : Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>
     {

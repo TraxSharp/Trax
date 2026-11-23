@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -87,10 +88,7 @@ public class TriggerInputValidationTests
     public void An_input_constraint_is_checked_against_the_input_not_the_context()
     {
         // The context's tags are non-empty, so a [MinLength] read from the context would pass.
-        RangeMachine.Open().Context["tags"]!
-            .AsArray()
-            .Should()
-            .NotBeEmpty();
+        RangeMachine.Open().Context["tags"].NotNull().AsArray().Should().NotBeEmpty();
 
         ShouldBeInvalidInput(Build(ValidWith(i => i["tags"] = new JsonArray())));
     }
@@ -105,7 +103,7 @@ public class TriggerInputValidationTests
             RangeMachine.Machine.Advance(open, poke, new JsonObject { ["x"] = 1 })
         );
         RangeMachine
-            .Machine.Advance(open, poke, null)
+            .Machine.Advance(open, poke, input: null)
             .Should()
             .BeOfType<AdvanceResult.Transitioned>();
         RangeMachine
@@ -146,11 +144,11 @@ public class TriggerInputValidationTests
         // inside the engine's totality backstop.
         var input = JsonNode.Parse("""{"from":1,"from":2,"to":2,"note":null,"tags":["a"]}""");
 
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var advance = () => result = Build(input);
 
         advance.Should().NotThrow();
-        ShouldBeInvalidInput(result);
+        ShouldBeInvalidInput(result.NotNull());
     }
 
     [TestCase(true)]
@@ -202,11 +200,12 @@ public class TriggerInputValidationTests
             engine.Engine.Advance(open, build, new JsonObject { ["fromYear"] = 1 })
         );
 
-        var fields = ((JsonObject)JsonNode.Parse(IrExporter.Export(engine))!)["inputs"]!["Build"]![
-            "fields"
-        ]!
+        var fields = ((JsonObject)JsonNode.Parse(IrExporter.Export(engine)).NotNull())["inputs"]
+            .NotNull()["Build"]
+            .NotNull()["fields"]
+            .NotNull()
             .AsArray()
-            .Select(f => f!["name"]!.GetValue<string>());
+            .Select(f => f.NotNull()["name"].NotNull().GetValue<string>());
         fields.Should().Equal(["from_year"], "a [JsonIgnore] member is not part of the input");
     }
 
@@ -257,7 +256,7 @@ public class TriggerInputValidationTests
         engine.Advance(open, build, Valid()).Should().BeOfType<AdvanceResult.Transitioned>();
 
         var wrongLeaf = Valid();
-        wrongLeaf["inner"]!["count"] = "one";
+        wrongLeaf["inner"].NotNull()["count"] = "one";
         ShouldBeInvalidInput(engine.Advance(open, build, wrongLeaf));
 
         var wrongElement = Valid();
@@ -316,7 +315,7 @@ public class TriggerInputValidationTests
         public int Count { get; init; }
     }
 
-    public sealed record NestedInput
+    internal sealed record NestedInput
     {
         public Inner Inner { get; init; } = new();
         public List<Inner> Items { get; init; } = [];

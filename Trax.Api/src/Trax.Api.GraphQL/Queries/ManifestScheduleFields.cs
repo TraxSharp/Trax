@@ -53,7 +53,7 @@ internal static class ManifestScheduleFields
                     0,
                     OperationsService.MaxUpcomingRuns
                 );
-                var upcoming = await LoadAsync(ctx, id(ctx.Parent<T>()));
+                var upcoming = await LoadAsync(ctx, id(ctx.Parent<T>())).ConfigureAwait(false);
                 return (upcoming?.NextRuns ?? []).Take(count).ToList();
             });
 
@@ -65,7 +65,8 @@ internal static class ManifestScheduleFields
             )
             .Type<NonNullType<StringType>>()
             .Resolve(async ctx =>
-                (await LoadAsync(ctx, id(ctx.Parent<T>())))?.ScheduleText ?? string.Empty
+                (await LoadAsync(ctx, id(ctx.Parent<T>())).ConfigureAwait(false))?.ScheduleText
+                ?? string.Empty
             );
     }
 
@@ -73,35 +74,4 @@ internal static class ManifestScheduleFields
         ctx
             .Services.GetRequiredService<ManifestUpcomingRunsLoader>()
             .LoadAsync(manifestId, ctx.RequestAborted);
-}
-
-/// <summary>
-/// Batches every manifest a request asks the schedule of into one
-/// <see cref="IOperationsService.GetUpcomingRunsAsync"/> call per
-/// <see cref="OperationsService.MaxBatchSize"/> ids, each at the most times a field can ask for.
-/// </summary>
-internal sealed class ManifestUpcomingRunsLoader(
-    IOperationsService operations,
-    IBatchScheduler batchScheduler,
-    DataLoaderOptions options
-) : BatchDataLoader<long, ManifestUpcomingRuns>(batchScheduler, options)
-{
-    protected override async Task<IReadOnlyDictionary<long, ManifestUpcomingRuns>> LoadBatchAsync(
-        IReadOnlyList<long> keys,
-        CancellationToken cancellationToken
-    )
-    {
-        var result = new Dictionary<long, ManifestUpcomingRuns>(keys.Count);
-        foreach (var chunk in keys.Chunk(OperationsService.MaxBatchSize))
-        {
-            var rows = await operations.GetUpcomingRunsAsync(
-                chunk,
-                OperationsService.MaxUpcomingRuns,
-                cancellationToken
-            );
-            foreach (var row in rows)
-                result[row.ManifestId] = row;
-        }
-        return result;
-    }
 }

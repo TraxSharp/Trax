@@ -128,6 +128,7 @@ Resolving the concrete class instead of the interface skips the property injecti
 ## Example
 
 ```csharp compile
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
@@ -145,7 +146,7 @@ public class CreateOrderTrain(IOrderAlerts alerts)
 
     protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
         // TrainInput is the typed input of the run that failed.
-        => alerts.OrderFailed(TrainInput.CustomerId, exception.Message, ct);
+        => alerts.OrderFailed(TrainInput.NotNull().CustomerId, exception.Message, ct);
 }
 ```
 

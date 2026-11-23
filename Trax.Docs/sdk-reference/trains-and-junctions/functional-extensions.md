@@ -1,6 +1,6 @@
 ---
 title: FunctionalExtensions
-description: "Reference for AssertLoaded and AssertEachLoaded, which throw when a value or a navigation on each element of a collection has not been loaded."
+description: "Reference for AssertLoaded, AssertEachLoaded and NotNull, which throw when a value, or a navigation on each element of a collection, is null."
 type: reference
 area: trains
 package: Trax.Core
@@ -28,6 +28,11 @@ public static class FunctionalExtensions
         [CallerArgumentExpression("value")] string? valueExpr = null
     );
 
+    public static T NotNull<T>(
+        [NotNull] this T? value,
+        [CallerArgumentExpression(nameof(value))] string? valueExpr = null
+    );
+
     public static void AssertEachLoaded<T, U>(
         [NotNull] this IEnumerable<T> values,
         Func<T, U> selector,
@@ -51,9 +56,12 @@ public static class FunctionalExtensions
 | Method | Throws `InvalidOperationException` when | Message |
 |--------|------------------------------------------|---------|
 | `AssertLoaded` | `value` is `null` | `<valueExpr> has not been loaded` |
+| `NotNull` | `value` is `null` | `<valueExpr> is null` |
 | `AssertEachLoaded` | `selector` returns `null` for any element | `<valuesExpr>(<selectorExpr>) has not been loaded` |
 
 After `AssertLoaded` returns, the compiler treats `value` as not null (`[NotNull]`).
+
+`NotNull` is the same check written as an expression: it returns the value, so it goes where the null-forgiving operator would have, as in `type.GetElementType().NotNull()`.
 
 ## Example
 

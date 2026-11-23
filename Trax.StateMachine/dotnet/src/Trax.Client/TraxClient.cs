@@ -1,62 +1,10 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
-
-/// <summary>How a <see cref="TraxClient"/> reads answers and follows streams.</summary>
-public sealed record TraxClientOptions
-{
-    /// <summary>
-    /// The options variables are written and data read with; <see cref="TraxJson.Options"/> when null. The client
-    /// reads them with a copy that leaves every unset <see cref="Optional{T}"/> out of the JSON, whatever their
-    /// resolver: a source-generated <see cref="System.Text.Json.Serialization.JsonSerializerContext"/> included, which
-    /// is what a trimmed or native AOT app passes here.
-    /// </summary>
-    public JsonSerializerOptions? Json { get; init; }
-
-    /// <summary>
-    /// Delays before subscribing again after the socket dropped a stream. The last repeats for as long as the stream
-    /// is followed; they start over once a subscription delivers a frame. <see cref="TraxClient.DefaultResubscribeDelays"/>
-    /// when null or empty. Each is a step: the wait is drawn at random between half of it and the whole, so the
-    /// streams a host dropped together do not all come back together.
-    /// </summary>
-    public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
-
-    /// <summary>The clock the resubscribe delays run on; the system's when null.</summary>
-    public TimeProvider? Time { get; init; }
-
-    // Where each resubscribe wait is drawn from, a number from 0 to 1; Random.Shared when null. A test pins it.
-    internal Func<double>? Random { get; init; }
-}
-
-/// <summary>What a followed stream delivers.</summary>
-public abstract record TraxStreamEvent<T>
-{
-    private TraxStreamEvent() { }
-
-    /// <summary>One frame's data.</summary>
-    public sealed record Next(T Data) : TraxStreamEvent<T>;
-
-    /// <summary>
-    /// The socket dropped the stream; it is subscribed again after the resubscribe delays. Frames sent meanwhile are
-    /// lost.
-    /// </summary>
-    public sealed record Interrupted(string Reason) : TraxStreamEvent<T>;
-
-    /// <summary>The stream is subscribed again after an interruption: read again what it may have missed.</summary>
-    public sealed record Resumed : TraxStreamEvent<T>;
-
-    /// <summary>
-    /// The stream is over and is not subscribed again. The host completed it (neither is set), refused it or answered
-    /// a frame with errors (<see cref="Errors"/>); or <see cref="Failure"/> says why: the host refused the connection,
-    /// there is no socket to follow it over, a frame did not fit the document's result, or the handler threw.
-    /// </summary>
-    public sealed record Ended(
-        IReadOnlyList<TraxGraphQLError> Errors,
-        TraxTransportFailure? Failure
-    ) : TraxStreamEvent<T>;
-}
 
 /// <summary>
 /// Sends documents through an <see cref="ITraxTransport"/>, writing their variables and reading their data with
@@ -78,6 +26,10 @@ public sealed class TraxClient
     private readonly IReadOnlyList<TimeSpan> _delays;
     private readonly TimeProvider _time;
     private readonly Func<double> _random;
+
+    // A number from 0 to 1 for a resubscribe wait's jitter, when the options give no source of their own.
+    private static double NextJitter() =>
+        RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue;
 
     /// <summary>Builds the client over <paramref name="transport"/>.</summary>
     /// <exception cref="ArgumentException">
@@ -101,7 +53,7 @@ public sealed class TraxClient
             ? delays
             : DefaultResubscribeDelays;
         _time = options?.Time ?? TimeProvider.System;
-        _random = options?.Random ?? System.Random.Shared.NextDouble;
+        _random = options?.Random ?? NextJitter;
     }
 
     /// <summary>The transport the client sends through.</summary>
@@ -228,10 +180,10 @@ public sealed class TraxClient
         Action<TraxStreamEvent<TResult>> onEvent
     ) : ISubscriptionSink, IDisposable
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
 
         // Held while onEvent runs, so it is never called from two threads at once.
-        private readonly object _deliver = new();
+        private readonly Lock _deliver = new();
         private bool _wanted = true;
         private bool _ended;
         private bool _interrupted;
@@ -304,7 +256,7 @@ public sealed class TraxClient
             // and the resubscribe delays start over.
             lock (_gate)
                 _attempt = 0;
-            Deliver(new TraxStreamEvent<TResult>.Next(answer.Data!));
+            Deliver(new TraxStreamEvent<TResult>.Next(answer.Data.NotNull()));
         }
 
         public void Error(Exception error)
@@ -351,7 +303,7 @@ public sealed class TraxClient
             }
         }
 
-        public void Complete() => End([], null);
+        public void Complete() => End([], failure: null);
 
         private void End(IReadOnlyList<TraxGraphQLError> errors, TraxTransportFailure? failure)
         {
@@ -422,7 +374,7 @@ public sealed class TraxClient
             close?.Dispose();
             if (first)
                 Deliver(new TraxStreamEvent<TResult>.Interrupted(reason));
-            CancelAndDispose(previous);
+            _ = CancelAndDisposeAsync(previous);
             _ = Task.Delay(delay, client._time, timer)
                 .ContinueWith(
                     t =>
@@ -465,27 +417,19 @@ public sealed class TraxClient
                 timer = _timer;
                 _timer = null;
             }
-            CancelAndDispose(timer);
+            _ = CancelAndDisposeAsync(timer);
             close?.Dispose();
         }
 
-        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends.
-        private static void CancelAndDispose(CancellationTokenSource? timer)
+        // The token was taken before the source is disposed, and is cancelled first: a delay waiting on it ends. The
+        // token reads as cancelled once CancelAsync returns; the delay's callback runs on the thread pool, and the
+        // source is disposed after it.
+        private static async Task CancelAndDisposeAsync(CancellationTokenSource? timer)
         {
-            timer?.Cancel();
-            timer?.Dispose();
+            if (timer is null)
+                return;
+            await timer.CancelAsync().ConfigureAwait(false);
+            timer.Dispose();
         }
     }
-}
-
-// The resubscribe backoff the three clients share (conformance/client/PROTOCOL.md): the step is the attempt's delay, the
-// last repeating, and the wait is drawn uniformly between half the step and the whole of it, so the streams a host
-// dropped together do not all come back together. A draw of 0 waits the whole step.
-internal static class Backoff
-{
-    internal static TimeSpan Delay(
-        IReadOnlyList<TimeSpan> steps,
-        int attempt,
-        Func<double> random
-    ) => steps[Math.Min(attempt, steps.Count - 1)] * (1.0 - 0.5 * Math.Clamp(random(), 0.0, 1.0));
 }

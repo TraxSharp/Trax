@@ -22,8 +22,10 @@ public class BroadcastReplicaTests
     public async Task TwoReplicasOfOneApp_EachReceivesTheOthersEvent_AndDropsItsOwn()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
-        await using var b = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
+        var b = await Replica.StartAsync(bus);
+        await using var bDisposal = b.ConfigureAwait(false);
 
         await a.Hook.OnCompleted(CompletedRun("from-a"), CancellationToken.None);
         await b.Hook.OnCompleted(CompletedRun("from-b"), CancellationToken.None);
@@ -36,8 +38,10 @@ public class BroadcastReplicaTests
     public async Task TwoReplicasOfOneApp_KeepTheirExecutorForDisplay()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
-        await using var b = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
+        var b = await Replica.StartAsync(bus);
+        await using var bDisposal = b.ConfigureAwait(false);
 
         await a.Hook.OnCompleted(CompletedRun("from-a"), CancellationToken.None);
 
@@ -50,8 +54,10 @@ public class BroadcastReplicaTests
     public async Task ChangeSignalsFromAnotherReplica_AreDelivered()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
-        await using var b = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
+        var b = await Replica.StartAsync(bus);
+        await using var bDisposal = b.ConfigureAwait(false);
 
         await a.Sink.FlushAsync(
             [Trax.Effect.Services.ChangeSignal.ChangeDomain.WorkQueue],
@@ -69,7 +75,8 @@ public class BroadcastReplicaTests
     public async Task AnEventWithNoInstanceId_IsFromAnotherHost()
     {
         var bus = new InMemoryBus();
-        await using var a = await Replica.StartAsync(bus);
+        var a = await Replica.StartAsync(bus);
+        await using var aDisposal = a.ConfigureAwait(false);
 
         // A publisher on an older version stamps no instance id. It cannot be this host.
         await bus.PublishAsync(
@@ -78,7 +85,7 @@ public class BroadcastReplicaTests
                 ExternalId: "old-publisher",
                 TrainName: "T",
                 TrainState: "Completed",
-                Timestamp: DateTime.UtcNow,
+                Timestamp: TestTime.UtcDateTime,
                 FailureJunction: null,
                 FailureReason: null,
                 EventType: "Completed",
@@ -99,7 +106,8 @@ public class BroadcastReplicaTests
                 Name = "Replica.ITrain",
                 ExternalId = externalId,
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.Completed;
         return metadata;
@@ -153,15 +161,17 @@ public class BroadcastReplicaTests
                 .Single();
 
             // ExecuteAsync runs in the background, so wait for it to subscribe before publishing.
-            await receiverService.StartAsync(CancellationToken.None);
-            await receiver.Subscribed.WaitAsync(TimeSpan.FromSeconds(10));
+            await receiverService.StartAsync(CancellationToken.None).ConfigureAwait(false);
+            await receiver
+                .Subscribed.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
             return new Replica(provider, receiverService, handler);
         }
 
         public async ValueTask DisposeAsync()
         {
-            await _receiverService.StopAsync(CancellationToken.None);
-            await _provider.DisposeAsync();
+            await _receiverService.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await _provider.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -189,7 +199,7 @@ public class BroadcastReplicaTests
     /// <summary>A fanout that delivers each publish inline to every started receiver.</summary>
     private sealed class InMemoryBus : ITrainEventBroadcaster
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
         private readonly List<Func<TrainLifecycleEventMessage, CancellationToken, Task>> _subs = [];
         private readonly List<TrainLifecycleEventMessage> _published = [];
 
@@ -223,7 +233,7 @@ public class BroadcastReplicaTests
                 subs = _subs.ToList();
             }
             foreach (var sub in subs)
-                await sub(message, ct);
+                await sub(message, ct).ConfigureAwait(false);
         }
     }
 

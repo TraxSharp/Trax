@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 
 namespace Trax.Samples.Recovery.Records;
 
@@ -9,16 +10,16 @@ namespace Trax.Samples.Recovery.Records;
 /// </summary>
 public sealed class CaseFiles
 {
-    private readonly ConcurrentDictionary<string, Order> _orders = new();
+    private readonly ConcurrentDictionary<string, Order> _orders = new(StringComparer.Ordinal);
 
     // Who opened each case: only they may change it.
-    private readonly ConcurrentDictionary<string, string?> _openers = new();
+    private readonly ConcurrentDictionary<string, string?> _openers = new(StringComparer.Ordinal);
 
     /// <summary>The orders a refund run can be started for.</summary>
     public static readonly IReadOnlyDictionary<string, Order> Catalog = new Dictionary<
         string,
         Order
-    >
+    >(StringComparer.Ordinal)
     {
         ["A-1001"] = new("A-1001", 89.00m, "Arrived broken", 0, "dana@example.com"),
         ["A-1002"] = new("A-1002", 420.00m, "Never arrived", 0, "lee@example.com"),
@@ -55,18 +56,12 @@ public sealed class CaseFiles
         )
         {
             _orders[runId] = order with { PriorRefunds = order.PriorRefunds + 1 };
-            return $"Order {order.OrderId} now shows {order.PriorRefunds + 1} earlier refund(s).";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Order {order.OrderId} now shows {order.PriorRefunds + 1} earlier refund(s)."
+            );
         }
 
         throw new InvalidOperationException($"Run {runId} has no case file.");
     }
 }
-
-/// <summary>An order as the order system holds it.</summary>
-public sealed record Order(
-    string OrderId,
-    decimal Amount,
-    string Reason,
-    int PriorRefunds,
-    string CustomerEmail
-);

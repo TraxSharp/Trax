@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -33,7 +34,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
 
     /// <summary>
     /// The in-memory record of the current or most recent run: name, input/output types, start and end times,
-    /// the railway state, and <c>OutputJson</c> when the junction logger serializes output. <c>null</c> until the
+    /// the railway state, and <c>OutputJson</c> when the junction logger serializes output. <see langword="null"/> until the
     /// junction first runs, then replaced at the start of every run. It is not written to the database; junction
     /// effects read it, and the junction logger logs it.
     /// </summary>
@@ -67,7 +68,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     /// <param name="previousOutput">The previous junction's result, or the train input.</param>
     /// <param name="serviceTrain">The running train, whose metadata and junction effect runner are used.</param>
     /// <returns>The junction's result on the railway.</returns>
-    /// <exception cref="TrainException">The train's <c>Metadata</c> is <c>null</c>.</exception>
+    /// <exception cref="TrainException">The train's <c>Metadata</c> is <see langword="null"/>.</exception>
     public async Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         ServiceTrain<TTrainIn, TTrainOut> serviceTrain
@@ -78,7 +79,62 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
                 "ServiceTrain Metadata cannot be null. Something has gone horribly wrong."
             );
 
-        Metadata = JunctionMetadata.Create(
+        Metadata = NewMetadata(previousOutput, serviceTrain.Metadata);
+
+        if (serviceTrain.JunctionEffectRunner is not null)
+            await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput)
+                .ConfigureAwait(false);
+
+        Metadata.StartTimeUtc = serviceTrain.Clock.GetUtcNow().UtcDateTime;
+
+        // A junction skipped because an earlier one failed did not run, so it is not a step.
+        var events = previousOutput.IsRight ? JunctionEventRun.For(serviceTrain.Metadata) : null;
+        var position = events is null
+            ? -1
+            : await JunctionSteps
+                .Started(events, Metadata.Name, Metadata.StartTimeUtc.Value)
+                .ConfigureAwait(false);
+
+        Either<Exception, TOut> result;
+
+        try
+        {
+            result = await base.RailwayJunction(previousOutput, serviceTrain).ConfigureAwait(false);
+        }
+        catch (Exception thrown) when (events is not null)
+        {
+            // A cancellation of the run's token leaves the junction by throwing.
+            await ReportEnded(events, position, serviceTrain, thrown).ConfigureAwait(false);
+            throw;
+        }
+
+        Metadata.EndTimeUtc = serviceTrain.Clock.GetUtcNow().UtcDateTime;
+        Metadata.State = result.State;
+        // A Left input skips Run: an earlier junction failed and this one never executed.
+        Metadata.HasRan = previousOutput.IsRight;
+
+        if (events is not null)
+            await ReportEnded(
+                    events,
+                    position,
+                    serviceTrain,
+                    result.IsLeft ? result.Swap().ValueUnsafe() : null
+                )
+                .ConfigureAwait(false);
+
+        if (serviceTrain.JunctionEffectRunner is not null)
+            await AfterJunction(serviceTrain.JunctionEffectRunner, serviceTrain, result)
+                .ConfigureAwait(false);
+
+        return result;
+    }
+
+    // A fresh row for this junction's run, under the train's.
+    private JunctionMetadata NewMetadata(
+        Either<Exception, TIn> previousOutput,
+        Trax.Effect.Models.Metadata.Metadata trainMetadata
+    ) =>
+        JunctionMetadata.Create(
             new CreateJunctionMetadata
             {
                 Name = GetType().Name,
@@ -87,51 +143,8 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
                 OutputType = typeof(TOut),
                 State = previousOutput.State,
             },
-            serviceTrain.Metadata
+            trainMetadata
         );
-
-        if (serviceTrain.JunctionEffectRunner is not null)
-            await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput);
-
-        Metadata.StartTimeUtc = DateTime.UtcNow;
-
-        // A junction skipped because an earlier one failed did not run, so it is not a step.
-        var events = previousOutput.IsRight ? JunctionEventRun.For(serviceTrain.Metadata) : null;
-        var position = events is null
-            ? -1
-            : await JunctionSteps.Started(events, Metadata.Name, Metadata.StartTimeUtc.Value);
-
-        Either<Exception, TOut> result;
-
-        try
-        {
-            result = await base.RailwayJunction(previousOutput, serviceTrain);
-        }
-        catch (Exception thrown) when (events is not null)
-        {
-            // A cancellation of the run's token leaves the junction by throwing.
-            await ReportEnded(events, position, serviceTrain, thrown);
-            throw;
-        }
-
-        Metadata.EndTimeUtc = DateTime.UtcNow;
-        Metadata.State = result.State;
-        // A Left input skips Run: an earlier junction failed and this one never executed.
-        Metadata.HasRan = previousOutput.IsRight;
-
-        if (events is not null)
-            await ReportEnded(
-                events,
-                position,
-                serviceTrain,
-                result.IsLeft ? result.Swap().ValueUnsafe() : null
-            );
-
-        if (serviceTrain.JunctionEffectRunner is not null)
-            await AfterJunction(serviceTrain.JunctionEffectRunner, serviceTrain, result);
-
-        return result;
-    }
 
     /// <summary>
     /// Runs the junction effects' <c>BeforeJunctionExecution</c>. When the railway already carries a
@@ -150,7 +163,9 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             // The token this junction honours, read here because the base sets CancellationToken
             // only once the effects before it have run. Inside a Parallel branch it is the
             // branch's, so a cancelled sibling stops this branch's effects as well as its work.
-            await runner.BeforeJunctionExecution(this, serviceTrain, TokenFor(serviceTrain));
+            await runner
+                .BeforeJunctionExecution(this, serviceTrain, TokenFor(serviceTrain))
+                .ConfigureAwait(false);
         }
         catch (Exception e) when (previousOutput.IsLeft)
         {
@@ -177,7 +192,9 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     {
         try
         {
-            await runner.AfterJunctionExecution(this, serviceTrain, TokenFor(serviceTrain));
+            await runner
+                .AfterJunctionExecution(this, serviceTrain, TokenFor(serviceTrain))
+                .ConfigureAwait(false);
         }
         catch (Exception e) when (result.IsLeft)
         {
@@ -217,17 +234,19 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     {
         try
         {
-            await JunctionSteps.Ended(
-                events,
-                position,
-                Metadata!.Name,
-                Metadata.StartTimeUtc ?? DateTime.UtcNow,
-                Metadata.EndTimeUtc ?? DateTime.UtcNow,
-                failure,
-                failure is not null && IsCancellation(serviceTrain, failure),
-                serviceTrain.ServiceProvider,
-                serviceTrain.Logger
-            );
+            await JunctionSteps
+                .Ended(
+                    events,
+                    position,
+                    Metadata.NotNull().Name,
+                    Metadata.StartTimeUtc ?? serviceTrain.Clock.GetUtcNow().UtcDateTime,
+                    Metadata.EndTimeUtc ?? serviceTrain.Clock.GetUtcNow().UtcDateTime,
+                    failure,
+                    failure is not null && IsCancellation(serviceTrain, failure),
+                    serviceTrain.ServiceProvider,
+                    serviceTrain.Logger
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception e)
         {

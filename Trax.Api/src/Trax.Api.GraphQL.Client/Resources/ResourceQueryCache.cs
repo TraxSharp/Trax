@@ -12,10 +12,15 @@ internal static class ResourceQueryCache
 {
     private static readonly ConcurrentDictionary<Type, string> Cache = new();
 
-    public static string GetQuery(Type requestType) =>
-        Cache.GetOrAdd(requestType, LoadFromResource);
+    public static async Task<string> GetQueryAsync(Type requestType)
+    {
+        if (Cache.TryGetValue(requestType, out var cached))
+            return cached;
+        var loaded = await LoadFromResourceAsync(requestType).ConfigureAwait(false);
+        return Cache.GetOrAdd(requestType, loaded);
+    }
 
-    private static string LoadFromResource(Type type)
+    private static async Task<string> LoadFromResourceAsync(Type type)
     {
         var attribute =
             type.GetCustomAttribute<GraphQLQueryResourceAttribute>()
@@ -33,7 +38,7 @@ internal static class ResourceQueryCache
         foreach (var candidate in candidates)
         {
             if (Array.IndexOf(manifest, candidate) >= 0)
-                return ReadResource(assembly, candidate);
+                return await ReadResourceAsync(assembly, candidate).ConfigureAwait(false);
         }
 
         // Last resort, for a request whose namespace does not match the folder its file is in:
@@ -48,7 +53,7 @@ internal static class ResourceQueryCache
             .ToList();
 
         if (matches.Count == 1)
-            return ReadResource(assembly, matches[0]);
+            return await ReadResourceAsync(assembly, matches[0]).ConfigureAwait(false);
 
         if (matches.Count > 1)
             throw new InvalidOperationException(
@@ -95,14 +100,15 @@ internal static class ResourceQueryCache
             || manifestName[manifestName.Length - suffix.Length - 1] == '.'
         );
 
-    private static string ReadResource(Assembly assembly, string resourceName)
+    private static async Task<string> ReadResourceAsync(Assembly assembly, string resourceName)
     {
-        using var stream =
+        var stream =
             assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException(
                 $"Embedded resource '{resourceName}' was listed in the manifest but stream was null."
             );
+        await using var streamDisposal = stream.ConfigureAwait(false);
         using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        return await reader.ReadToEndAsync(CancellationToken.None).ConfigureAwait(false);
     }
 }

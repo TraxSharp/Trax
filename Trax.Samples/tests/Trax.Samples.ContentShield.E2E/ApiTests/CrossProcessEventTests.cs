@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.ContentShield.E2E.Fixtures;
 using Trax.Samples.ContentShield.E2E.Utilities;
@@ -19,14 +20,15 @@ public class CrossProcessEventTests : ApiTestFixture
     private static async Task<GraphQLWebSocketClient> SubscribeAsync(string apiKey)
     {
         // With API-key auth registered every socket must carry a credential.
-        var socket = await GraphQLWebSocketClient.ConnectAsync(
-            SharedApiSetup.Factory.Server.CreateWebSocketClient(),
-            apiKey: apiKey
-        );
-        await socket.SubscribeAsync(
-            "completed",
-            "subscription { onTrainCompleted { externalId trainName output } }"
-        );
+        var socket = await GraphQLWebSocketClient
+            .ConnectAsync(SharedApiSetup.Factory.Server.CreateWebSocketClient(), apiKey: apiKey)
+            .ConfigureAwait(false);
+        await socket
+            .SubscribeAsync(
+                "completed",
+                "subscription { onTrainCompleted { externalId trainName output } }"
+            )
+            .ConfigureAwait(false);
         return socket;
     }
 
@@ -45,12 +47,14 @@ public class CrossProcessEventTests : ApiTestFixture
                 }
                 """,
                 apiKey: ModeratorKey
-            );
+            )
+            .ConfigureAwait(false);
         queued.HasErrors.Should().BeFalse(queued.FirstErrorMessage);
         return queued
             .GetData("dispatch", "sendViolationNotice")
             .GetProperty("externalId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     /// <summary>
@@ -63,17 +67,23 @@ public class CrossProcessEventTests : ApiTestFixture
     )
     {
         var before = new List<JsonElement>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(45);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(45);
         while (true)
         {
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = deadline - TimeProvider.System.GetUtcNow().UtcDateTime;
             remaining.Should().BePositive("the runner's completion should reach the API");
 
-            var payload = await socket.ReceiveNextAsync(remaining);
+            var payload = await socket.ReceiveNextAsync(remaining).ConfigureAwait(false);
             if (!payload.TryGetProperty("data", out var data))
                 continue;
             var completed = data.GetProperty("onTrainCompleted");
-            if (completed.GetProperty("externalId").GetString() == externalId)
+            if (
+                string.Equals(
+                    completed.GetProperty("externalId").GetString(),
+                    externalId,
+                    StringComparison.Ordinal
+                )
+            )
                 return (completed, before);
             before.Add(completed);
         }

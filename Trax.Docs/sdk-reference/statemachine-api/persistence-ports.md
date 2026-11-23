@@ -9,16 +9,49 @@ nav_order: 8
 package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Ports.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StoredSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/PendingEffect.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/AppliedRequest.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/WrittenRow.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IRowReportingSnapshotStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IConditionalDraftDelete.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotPrincipal.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotEffect.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotDraftService.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/LoadResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/AutosaveResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/AdvanceOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StartOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/DiscardOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotDraftService.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IEffectRunnerSlot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IEndNotifierSlot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotWatchAccess.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Actor.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/CallerAuthorization.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ICallerAuthorization.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/CallerRules.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EfSnapshotStore.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EffectClaimStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StartRequest.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StartedRow.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/DraftExpiry.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ExpiredDraft.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/AbandonedEffect.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/LedgerClaim.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/DueRow.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ClaimResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/CompletedEffect.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IEffectClaimStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EfEffectClaimStore.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IdempotentEffect.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EffectOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EffectClaimSweeper.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/RequestIdRing.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/RecordedRequest.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotLimits.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotProblem.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotMachineRegistry.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ISnapshotMachineRegistry.cs
 ---
 
 # Persistence ports
@@ -399,10 +432,14 @@ the recorded `ContentFingerprint`, or `InProgress`. A null `lease` is `SnapshotL
 
 ```csharp fragment
 public EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null)
+public EfSnapshotStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
 public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = null)
+public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
 ```
 
-The default stores take the `IDataContext` their tables are reached through and the provider's `ISqlDialect`:
+The default stores take the `IDataContext` their tables are reached through and the provider's `ISqlDialect`, and
+the clock they stamp rows and check leases on: `AddStateMachines` passes the `TimeProvider` the container registers,
+and the constructors without one use the system clock.
 
 The dialect is how a lost race (a concurrent create of one draft, a claim on a key someone else holds) is told
 apart from a real failure, on Postgres and SQLite alike. Without one, such a race throws instead of returning

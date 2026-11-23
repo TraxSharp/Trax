@@ -1,0 +1,285 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UseAttributeIsDefinedAnalyzer : DiagnosticAnalyzer
+{
+    private const string EnumerableAnyMethodDocId = "M:System.Linq.Enumerable.Any``1(System.Collections.Generic.IEnumerable{``0})";
+    private const string EnumerableCountMethodDocId = "M:System.Linq.Enumerable.Count``1(System.Collections.Generic.IEnumerable{``0})";
+
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UseAttributeIsDefined,
+        title: "Use Attribute.IsDefined instead of GetCustomAttribute(s)",
+        messageFormat: "Use 'Attribute.IsDefined' instead of '{0}'",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Detects inefficient attribute existence checks that can be replaced with Attribute.IsDefined for better performance.",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseAttributeIsDefined));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var analyzerContext = new AnalyzerContext(compilationContext.Compilation);
+            if (analyzerContext.IsValid)
+            {
+                compilationContext.RegisterOperationAction(analyzerContext.AnalyzeBinary, OperationKind.Binary);
+                compilationContext.RegisterOperationAction(analyzerContext.AnalyzeIsPattern, OperationKind.IsPattern);
+                compilationContext.RegisterOperationAction(analyzerContext.AnalyzeInvocation, OperationKind.Invocation);
+            }
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        private readonly INamedTypeSymbol? _attributeSymbol = compilation.GetTypeByMetadataName("System.Attribute");
+        private readonly INamedTypeSymbol? _assemblySymbol = compilation.GetTypeByMetadataName("System.Reflection.Assembly");
+        private readonly INamedTypeSymbol? _moduleSymbol = compilation.GetTypeByMetadataName("System.Reflection.Module");
+        private readonly INamedTypeSymbol? _memberInfoSymbol = compilation.GetTypeByMetadataName("System.Reflection.MemberInfo");
+        private readonly INamedTypeSymbol? _typeSymbol = compilation.GetTypeByMetadataName("System.Type");
+        private readonly INamedTypeSymbol? _customAttributeExtensionsSymbol = compilation.GetTypeByMetadataName("System.Reflection.CustomAttributeExtensions");
+        private readonly IMethodSymbol? _enumerableAnyMethod = DocumentationCommentId.GetFirstSymbolForDeclarationId(EnumerableAnyMethodDocId, compilation) as IMethodSymbol;
+        private readonly IMethodSymbol? _enumerableCountMethod = DocumentationCommentId.GetFirstSymbolForDeclarationId(EnumerableCountMethodDocId, compilation) as IMethodSymbol;
+
+        public bool IsValid => _attributeSymbol is not null;
+
+        public void AnalyzeBinary(OperationAnalysisContext context)
+        {
+            var operation = (IBinaryOperation)context.Operation;
+            if (operation.OperatorKind is not (BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals or BinaryOperatorKind.GreaterThan or BinaryOperatorKind.LessThan or BinaryOperatorKind.GreaterThanOrEqual or BinaryOperatorKind.LessThanOrEqual))
+                return;
+
+            if (IsGetCustomAttributeComparison(operation.LeftOperand, operation.RightOperand, out var invocation))
+            {
+                context.ReportDiagnostic(Rule, operation, invocation!.TargetMethod.Name);
+                return;
+            }
+
+            if (IsGetCustomAttributesLengthComparison(operation, operation.LeftOperand, operation.RightOperand, lengthIsOnLeft: true, out _) ||
+                IsGetCustomAttributesLengthComparison(operation, operation.RightOperand, operation.LeftOperand, lengthIsOnLeft: false, out _))
+            {
+                context.ReportDiagnostic(Rule, operation, "GetCustomAttributes().Length");
+            }
+            else if (IsGetCustomAttributesCountComparison(operation, operation.LeftOperand, operation.RightOperand, countIsOnLeft: true, out _) ||
+                     IsGetCustomAttributesCountComparison(operation, operation.RightOperand, operation.LeftOperand, countIsOnLeft: false, out _))
+            {
+                context.ReportDiagnostic(Rule, operation, "GetCustomAttributes().Count()");
+            }
+        }
+
+        public void AnalyzeIsPattern(OperationAnalysisContext context)
+        {
+            var operation = (IIsPatternOperation)context.Operation;
+
+            if (!IsNullPattern(operation.Pattern))
+                return;
+
+            if (!IsGetCustomAttributeInvocation(operation.Value, out var invocation))
+                return;
+
+            context.ReportDiagnostic(Rule, operation, invocation!.TargetMethod.Name);
+        }
+
+        private static bool IsNullPattern(IPatternOperation pattern)
+        {
+            return pattern switch
+            {
+                IConstantPatternOperation { Value.ConstantValue: { HasValue: true, Value: null } } => true,
+                INegatedPatternOperation { Pattern: IConstantPatternOperation { Value.ConstantValue: { HasValue: true, Value: null } } } => true,
+                _ => false,
+            };
+        }
+
+        public void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+
+            // Check if this is the specific Any<T>(IEnumerable<T>) method
+            if (operation.TargetMethod.OriginalDefinition.IsEqualTo(_enumerableAnyMethod))
+            {
+                if (operation.Arguments.Length != 1)
+                    return;
+
+                var instance = operation.Arguments[0].Value;
+                if (!IsGetCustomAttributesInvocation(instance, out _))
+                    return;
+
+                context.ReportDiagnostic(Rule, operation, "GetCustomAttributes().Any()");
+            }
+        }
+
+        private bool IsGetCustomAttributeComparison(IOperation left, IOperation right, out IInvocationOperation? invocation)
+        {
+            if (right.IsNull())
+                return IsGetCustomAttributeInvocation(left, out invocation);
+
+            if (left.IsNull())
+                return IsGetCustomAttributeInvocation(right, out invocation);
+
+            invocation = null;
+            return false;
+        }
+
+        private bool IsGetCustomAttributesLengthComparison(IBinaryOperation binaryOp, IOperation lengthOperand, IOperation otherOperand, bool lengthIsOnLeft, out IInvocationOperation? invocation)
+        {
+            invocation = null;
+
+            if (lengthOperand is not IPropertyReferenceOperation propertyReference)
+                return false;
+
+            if (propertyReference.Property.Name is not "Length")
+                return false;
+
+            if (propertyReference.Instance is null)
+                return false;
+
+            if (!IsGetCustomAttributesInvocation(propertyReference.Instance, out invocation))
+                return false;
+
+            // Only allow clear-cut patterns that unambiguously check for existence
+            if (otherOperand.ConstantValue is not { HasValue: true, Value: int value })
+                return false;
+
+            // Validate that the operator + value combination makes sense
+            return IsValidLengthComparisonPattern(binaryOp.OperatorKind, value, lengthIsOnLeft);
+        }
+
+        private static bool IsValidLengthComparisonPattern(BinaryOperatorKind operatorKind, int value, bool lengthIsOnLeft)
+        {
+            if (lengthIsOnLeft)
+            {
+                return (operatorKind, value) switch
+                {
+                    (BinaryOperatorKind.Equals, 0) => true,                           // length == 0
+                    (BinaryOperatorKind.NotEquals, 0) => true,                        // length != 0
+                    (BinaryOperatorKind.GreaterThan, 0) => true,                      // length > 0
+                    (BinaryOperatorKind.GreaterThanOrEqual, 1) => true,               // length >= 1
+                    (BinaryOperatorKind.LessThan, 1) => true,                         // length < 1
+                    (BinaryOperatorKind.LessThanOrEqual, 0) => true,                  // length <= 0
+                    _ => false,
+                };
+            }
+            else
+            {
+                return (operatorKind, value) switch
+                {
+                    (BinaryOperatorKind.Equals, 0) => true,                           // 0 == length
+                    (BinaryOperatorKind.NotEquals, 0) => true,                        // 0 != length
+                    (BinaryOperatorKind.LessThan, 0) => true,                         // 0 < length (length > 0)
+                    (BinaryOperatorKind.LessThanOrEqual, 1) => true,                  // 1 <= length (length >= 1)
+                    (BinaryOperatorKind.GreaterThan, 1) => true,                      // 1 > length (length < 1)
+                    (BinaryOperatorKind.GreaterThanOrEqual, 0) => true,               // 0 >= length (length <= 0)
+                    _ => false,
+                };
+            }
+        }
+
+        private bool IsGetCustomAttributesCountComparison(IBinaryOperation binaryOp, IOperation countOperand, IOperation otherOperand, bool countIsOnLeft, out IInvocationOperation? invocation)
+        {
+            invocation = null;
+
+            if (countOperand is not IInvocationOperation countInvocation)
+                return false;
+
+            // Check if this is the specific Count<T>(IEnumerable<T>) method
+            if (_enumerableCountMethod is null ||
+                !SymbolEqualityComparer.Default.Equals(countInvocation.TargetMethod.OriginalDefinition, _enumerableCountMethod))
+                return false;
+
+            // Only detect Count() without predicate (1 argument = the collection itself)
+            if (countInvocation.Arguments.Length != 1)
+                return false;
+
+            var instance = countInvocation.Arguments[0].Value;
+            if (!IsGetCustomAttributesInvocation(instance, out invocation))
+                return false;
+
+            // Only allow clear-cut patterns that unambiguously check for existence
+            if (otherOperand.ConstantValue is not { HasValue: true, Value: int value })
+                return false;
+
+            // Use the same validation as Length (Count and Length have the same semantics)
+            return IsValidLengthComparisonPattern(binaryOp.OperatorKind, value, countIsOnLeft);
+        }
+
+        private bool IsGetCustomAttributeInvocation(IOperation operation, out IInvocationOperation? invocation)
+        {
+            invocation = operation.UnwrapConversions() as IInvocationOperation;
+            if (invocation is null || !IsAttributeProviderInvocation(invocation, "GetCustomAttribute"))
+            {
+                invocation = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsGetCustomAttributesInvocation(IOperation operation, out IInvocationOperation? invocation)
+        {
+            // The overloads returning an array are wrapped in an implicit conversion when they are used as an IEnumerable<T>
+            invocation = operation.UnwrapConversions() as IInvocationOperation;
+            if (invocation is null || !IsAttributeProviderInvocation(invocation, "GetCustomAttributes"))
+            {
+                invocation = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsAttributeProviderInvocation(IInvocationOperation invocation, string methodName)
+        {
+            if (invocation.TargetMethod.Name != methodName)
+                return false;
+
+            if (!IsMethodFromReflectionTypes(invocation.TargetMethod))
+                return false;
+
+            // For extension methods, the instance is in the first argument
+            var instance = invocation.Instance;
+            if (instance is null && invocation.TargetMethod.IsExtensionMethod && invocation.Arguments.Length > 0)
+            {
+                instance = invocation.Arguments[0].Value;
+            }
+            else if (instance is null && invocation.TargetMethod.IsStatic && SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingType, _attributeSymbol))
+            {
+                if (invocation.Arguments.Length > 0)
+                {
+                    instance = invocation.Arguments[0].Value;
+                }
+            }
+
+            if (instance is null)
+                return false;
+
+            return IsValidInstanceType(instance.Type);
+        }
+
+        private bool IsMethodFromReflectionTypes(IMethodSymbol method)
+        {
+            if (method.ContainingType.IsEqualToAny(_customAttributeExtensionsSymbol, _attributeSymbol))
+                return true;
+
+            // Instance methods of the reflection types, such as MemberInfo.GetCustomAttributes(Type, bool).
+            // Methods declared by the user are not considered, even when they are named GetCustomAttribute(s)
+            // and take a reflection type as their first parameter.
+            return !method.IsStatic && IsValidInstanceType(method.ContainingType);
+        }
+
+        private bool IsValidInstanceType(ITypeSymbol? type)
+        {
+            if (type is null)
+                return false;
+
+            return type.IsOrInheritsFrom(_assemblySymbol) ||
+                   type.IsOrInheritsFrom(_moduleSymbol) ||
+                   type.IsOrInheritsFrom(_memberInfoSymbol) ||
+                   type.IsOrInheritsFrom(_typeSymbol);
+        }
+    }
+}

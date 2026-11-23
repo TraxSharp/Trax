@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -22,18 +23,25 @@ public class RedirectTests
     {
         using var elsewhere = new Listener(_ => "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
         using var host = new Listener(_ =>
-            $"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{elsewhere.Port}/trax/graphql\r\n"
-            + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{elsewhere.Port}/trax/graphql\r\n"
+            ) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
         );
-        await using var session = ConsoleSession.Open(Target(host.Port));
+        await using var session = ConsoleSession.Open(await TargetAsync(host.Port));
 
-        var version = await session.CheckVersionAsync().WaitAsync(Deadline);
+        var version = await session.CheckVersionAsync().WaitAsync(Deadline, TimeProvider.System);
 
         version
             .Should()
             .BeOfType<VersionCheck.Failed>()
             .Which.Message.Should()
-            .Contain($"redirected to http://127.0.0.1:{elsewhere.Port}/trax/graphql")
+            .Contain(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"redirected to http://127.0.0.1:{elsewhere.Port}/trax/graphql"
+                )
+            )
             .And.Contain("follows no redirect");
         host.Requests.Should().ContainSingle().Which.Should().Contain("X-Api-Key: sk_live_1");
         // negative-wait: a followed redirect would reach elsewhere within this window.
@@ -49,10 +57,12 @@ public class RedirectTests
             "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
         );
         using var host = new Listener(_ =>
-            $"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{elsewhere.Port}/trax/graphql\r\n"
-            + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{elsewhere.Port}/trax/graphql\r\n"
+            ) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
         );
-        await using var session = ConsoleSession.Open(Target(host.Port));
+        await using var session = ConsoleSession.Open(await TargetAsync(host.Port));
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var stream = session.Client.OnDataChanged(e =>
@@ -64,7 +74,7 @@ public class RedirectTests
             )
                 stopped.TrySetResult();
         });
-        await stopped.Task.WaitAsync(Deadline);
+        await stopped.Task.WaitAsync(Deadline, TimeProvider.System);
 
         host.Requests.Should().NotBeEmpty();
         // negative-wait: a followed redirect would reach elsewhere within this window.
@@ -98,14 +108,18 @@ public class RedirectTests
             .And.NotContain("\u001b");
     }
 
-    private static ConsoleTarget Target(int port) =>
-        ConsoleTarget.Resolve(
-            $"http://127.0.0.1:{port}",
+    private static Task<ConsoleTarget> TargetAsync(int port) =>
+        ConsoleTarget.ResolveAsync(
+            string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}"),
             ConsoleTarget.DefaultGraphQLPath,
             apiKeyFile: null,
             tokenFile: null,
             sendText: false,
-            n => n == ConsoleTarget.ApiKeyVariable ? "sk_live_1" : null
+            n =>
+                string.Equals(n, ConsoleTarget.ApiKeyVariable, StringComparison.Ordinal)
+                    ? "sk_live_1"
+                    : null,
+            CancellationToken.None
         );
 
     private sealed class Answering(HttpResponseMessage response) : HttpMessageHandler
@@ -126,42 +140,58 @@ public class RedirectTests
         public Listener(Func<string, string> answer)
         {
             _listener.Start();
-            _ = Task.Run(async () =>
-            {
-                while (!_stop.IsCancellationRequested)
+            _ = Task.Run(
+                async () =>
                 {
-                    TcpClient client;
-                    try
+                    while (!_stop.IsCancellationRequested)
                     {
-                        client = await _listener.AcceptTcpClientAsync(_stop.Token);
-                    }
-                    catch (Exception)
-                    {
-                        return;
-                    }
-                    _ = Task.Run(async () =>
-                    {
-                        using (client)
+                        TcpClient client;
+                        try
                         {
-                            var stream = client.GetStream();
-                            var head = new StringBuilder();
-                            var buffer = new byte[4096];
-                            while (!head.ToString().Contains("\r\n\r\n"))
-                            {
-                                var read = await stream.ReadAsync(buffer, _stop.Token);
-                                if (read == 0)
-                                    break;
-                                head.Append(Encoding.ASCII.GetString(buffer, 0, read));
-                            }
-                            lock (_requests)
-                                _requests.Add(head.ToString());
-                            await stream.WriteAsync(
-                                Encoding.ASCII.GetBytes(answer(head.ToString()))
-                            );
+                            client = await _listener
+                                .AcceptTcpClientAsync(_stop.Token)
+                                .ConfigureAwait(false);
                         }
-                    });
-                }
-            });
+                        catch (Exception)
+                        {
+                            return;
+                        }
+                        _ = Task.Run(
+                            async () =>
+                            {
+                                using (client)
+                                {
+                                    var stream = client.GetStream();
+                                    var head = new StringBuilder();
+                                    var buffer = new byte[4096];
+                                    while (
+                                        !head.ToString()
+                                            .Contains("\r\n\r\n", StringComparison.Ordinal)
+                                    )
+                                    {
+                                        var read = await stream
+                                            .ReadAsync(buffer, _stop.Token)
+                                            .ConfigureAwait(false);
+                                        if (read == 0)
+                                            break;
+                                        head.Append(Encoding.ASCII.GetString(buffer, 0, read));
+                                    }
+                                    lock (_requests)
+                                        _requests.Add(head.ToString());
+                                    await stream
+                                        .WriteAsync(
+                                            Encoding.ASCII.GetBytes(answer(head.ToString())),
+                                            cancellationToken: CancellationToken.None
+                                        )
+                                        .ConfigureAwait(false);
+                                }
+                            },
+                            cancellationToken: CancellationToken.None
+                        );
+                    }
+                },
+                cancellationToken: CancellationToken.None
+            );
         }
 
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -72,26 +71,7 @@ internal sealed class MachineDocumentRegistration(
             && console.Count == 0
         )
         {
-            // No document of this node's, but the registration still runs: it marks the documents of every machine no
-            // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
-            registry.Publish(
-                [],
-                new Dictionary<string, int>(),
-                new Dictionary<string, StoredMachineDocument>()
-            );
-            try
-            {
-                await RegisterAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Could not register this node's empty set of machine documents; the documents of machines no node "
-                        + "serves are collected at the next attempt, in {Interval}.",
-                    Interval
-                );
-            }
+            await RegisterEmptyAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -105,7 +85,8 @@ internal sealed class MachineDocumentRegistration(
             .. ProgressDocuments.Generate(executor.Schema),
             .. ViewDocuments.Generate(executor.Schema),
         ];
-        var clientDocuments = LoadClientDocuments();
+        var clientDocuments = await LoadClientDocumentsAsync(cancellationToken)
+            .ConfigureAwait(false);
         // What a client document may reach, decided from what the host registered: the same reach judges the stored
         // documents other nodes registered (MachineDocumentMiddleware).
         var reach = ClientDocumentReach.Of(
@@ -121,6 +102,30 @@ internal sealed class MachineDocumentRegistration(
         IncludeConsoleDocuments(executor.Schema, console);
         await RegisterAsync(cancellationToken).ConfigureAwait(false);
         PublishConsoleDocumentIds();
+    }
+
+    // No document of this node's, but the registration still runs: it marks the documents of every machine no
+    // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
+    private async Task RegisterEmptyAsync(CancellationToken cancellationToken)
+    {
+        registry.Publish(
+            [],
+            new Dictionary<string, int>(StringComparer.Ordinal),
+            new Dictionary<string, StoredMachineDocument>(StringComparer.Ordinal)
+        );
+        try
+        {
+            await RegisterAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not register this node's empty set of machine documents; the documents of machines no node "
+                    + "serves are collected at the next attempt, in {Interval}.",
+                Interval
+            );
+        }
     }
 
     // The operations console's documents, when the host serves it. The console reaches optional parts of the schema
@@ -154,16 +159,26 @@ internal sealed class MachineDocumentRegistration(
 
     // Every client document the host names, each file resolved against the content root; a document's name used twice
     // across files refuses the start.
-    private IReadOnlyList<ClientDocument> LoadClientDocuments()
+    private async Task<IReadOnlyList<ClientDocument>> LoadClientDocumentsAsync(
+        CancellationToken cancellationToken
+    )
     {
         var root =
             services.GetService<IHostEnvironment>()?.ContentRootPath
             ?? Directory.GetCurrentDirectory();
         var documents = new List<ClientDocument>();
         foreach (var file in options.ClientDocumentFiles)
-        foreach (var document in Services.ClientDocuments.Load(Path.GetFullPath(file, root)))
+        foreach (
+            var document in await Services
+                .ClientDocuments.LoadAsync(Path.GetFullPath(file, root), cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
-            if (documents.Any(d => d.Name == document.Name))
+            if (
+                documents.Exists(d =>
+                    string.Equals(d.Name, document.Name, StringComparison.Ordinal)
+                )
+            )
                 throw new InvalidOperationException(
                     $"The {document.Owner} is named in two client documents files. Operation names are unique "
                         + "across a host's frontends."
@@ -195,7 +210,7 @@ internal sealed class MachineDocumentRegistration(
             PublishConsoleDocumentIds();
         }
         if (_collecting is null)
-            _collecting = Task.Run(() => CollectAsync(_stopping.Token));
+            _collecting = Task.Run(() => CollectAsync(_stopping.Token), cancellationToken);
     }
 
     public async Task StoppingAsync(CancellationToken cancellationToken)
@@ -222,7 +237,7 @@ internal sealed class MachineDocumentRegistration(
 
     private async Task RegisterAsync(CancellationToken cancellationToken)
     {
-        var readStartedAt = Stopwatch.GetTimestamp();
+        var readStartedAt = registry.Clock.GetTimestamp();
         var (ownVersions, stored) = await storage
             .RegisterMachineDocumentsAsync(
                 _documents,
@@ -246,7 +261,7 @@ internal sealed class MachineDocumentRegistration(
         {
             try
             {
-                await Task.Delay(Interval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(Interval, registry.Clock, stoppingToken).ConfigureAwait(false);
                 await RegisterAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

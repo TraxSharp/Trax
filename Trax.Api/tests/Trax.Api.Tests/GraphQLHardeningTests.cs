@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -11,6 +12,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Validation;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -86,7 +88,8 @@ public class GraphQLHardeningTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        Action act = () => builder.AllowIntrospection(null!);
+        Action act = () =>
+            builder.AllowIntrospection(Null.Of<Predicate<Microsoft.AspNetCore.Http.HttpContext>>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -107,7 +110,8 @@ public class GraphQLHardeningTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        Action act = () => builder.ConfigureCost(null!);
+        Action act = () =>
+            builder.ConfigureCost(Null.Of<Action<HotChocolate.CostAnalysis.CostOptions>>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -136,34 +140,33 @@ public class GraphQLHardeningTests
         return context;
     }
 
-    private static ISchemaDefinition ValidationSchema =>
-        field_ValidationSchema ??= BuildValidationSchema();
+    private static ISchemaDefinition ValidationSchema => field_ValidationSchema.NotNull();
 
     private static ISchemaDefinition? field_ValidationSchema;
 
-    private static ISchemaDefinition BuildValidationSchema() =>
-        new ServiceCollection()
-            .AddGraphQL()
-            .AddQueryType(d =>
-            {
-                d.Name("Query");
-                d.Field("foo").Type<StringType>().Resolve("foo");
-                d.Field("a").Type<StringType>().Resolve("a");
-                d.Field("b").Type<StringType>().Resolve("b");
-                d.Field("c").Type<StringType>().Resolve("c");
-                d.Field("d").Type<StringType>().Resolve("d");
-                d.Field("e").Type<StringType>().Resolve("e");
-                d.Field("f").Type<StringType>().Resolve("f");
-                d.Field("g").Type<StringType>().Resolve("g");
-                d.Field("h").Type<StringType>().Resolve("h");
-            })
-            .Services.BuildServiceProvider()
-            .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync()
-            .AsTask()
-            .GetAwaiter()
-            .GetResult()
-            .Schema;
+    [OneTimeSetUp]
+    public async Task BuildValidationSchema() =>
+        field_ValidationSchema = (
+            await new ServiceCollection()
+                .AddGraphQL()
+                .AddQueryType(d =>
+                {
+                    d.Name("Query");
+                    d.Field("foo").Type<StringType>().Resolve("foo");
+                    d.Field("a").Type<StringType>().Resolve("a");
+                    d.Field("b").Type<StringType>().Resolve("b");
+                    d.Field("c").Type<StringType>().Resolve("c");
+                    d.Field("d").Type<StringType>().Resolve("d");
+                    d.Field("e").Type<StringType>().Resolve("e");
+                    d.Field("f").Type<StringType>().Resolve("f");
+                    d.Field("g").Type<StringType>().Resolve("g");
+                    d.Field("h").Type<StringType>().Resolve("h");
+                })
+                .Services.BuildServiceProvider()
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync()
+                .ConfigureAwait(false)
+        ).Schema;
 
     [Test]
     public void OperationCountValidator_UnderCap_DoesNotReport()
@@ -252,7 +255,12 @@ public class GraphQLHardeningTests
     [Test]
     public void OperationCountValidator_FragmentOfNAliases_CountsN()
     {
-        var aliases = string.Join(" ", Enumerable.Range(0, 40).Select(i => $"a{i}: foo"));
+        var aliases = string.Join(
+            ' ',
+            Enumerable
+                .Range(0, 40)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"a{i}: foo"))
+        );
         var doc = Utf8GraphQLParser.Parse($"{{ ...F }} fragment F on Query {{ {aliases} }}");
 
         var atCap = NewValidatorContext(doc);
@@ -285,10 +293,15 @@ public class GraphQLHardeningTests
     {
         // Each fragment spreads the next one twice: expanding naively visits 2^30 spreads.
         var fragments = string.Join(
-            " ",
+            ' ',
             Enumerable
                 .Range(0, 30)
-                .Select(i => $"fragment F{i} on Query {{ ...F{i + 1} ...F{i + 1} }}")
+                .Select(i =>
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"fragment F{i} on Query {{ ...F{i + 1} ...F{i + 1} }}"
+                    )
+                )
         );
         var doc = Utf8GraphQLParser.Parse(
             $"{{ ...F0 }} {fragments} fragment F30 on Query {{ a: foo b: foo c: foo }}"

@@ -26,11 +26,13 @@ internal sealed class HttpCallerAuthorization(
         CancellationToken cancellationToken = default
     ) =>
         AuthenticatedUser() is { } user
-        && (await authorizationService.AuthorizeAsync(user, policy)).Succeeded;
+        && (
+            await authorizationService.AuthorizeAsync(user, policy).ConfigureAwait(false)
+        ).Succeeded;
 
     /// <inheritdoc/>
     public async Task<bool> IsPolicyRegistered(string policy) =>
-        await policyProvider.GetPolicyAsync(policy) is not null;
+        await policyProvider.GetPolicyAsync(policy).ConfigureAwait(false) is not null;
 
     private System.Security.Claims.ClaimsPrincipal? AuthenticatedUser() =>
         httpContextAccessor.HttpContext?.User is { Identity.IsAuthenticated: true } user

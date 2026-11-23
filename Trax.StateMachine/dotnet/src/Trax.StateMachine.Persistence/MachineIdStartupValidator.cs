@@ -72,7 +72,7 @@ internal sealed class MachineIdStartupValidator(IEnumerable<IMachine> machines)
         foreach (
             var clash in named
                 .GroupBy(m => m.Name, StringComparer.Ordinal)
-                .Where(g => g.Count() > 1)
+                .Where(g => g.Skip(1).Any())
                 .OrderBy(g => g.Key, StringComparer.Ordinal)
         )
         {
@@ -83,7 +83,7 @@ internal sealed class MachineIdStartupValidator(IEnumerable<IMachine> machines)
             var names = string.Join(" and ", types.Select(t => t.FullName));
             // A subclass has its base's id: the one type every other derives from is the one to keep.
             var leaf = types.SingleOrDefault(t =>
-                types.All(other => other == t || other.IsAssignableFrom(t))
+                types.TrueForAll(other => other == t || other.IsAssignableFrom(t))
             );
             var others = types.Count == 2 ? "the other" : "the others";
             problems.Add(
@@ -99,12 +99,4 @@ internal sealed class MachineIdStartupValidator(IEnumerable<IMachine> machines)
         }
         return problems;
     }
-}
-
-/// <summary>The registered machines, each type once: the same type registered twice is one machine.</summary>
-internal static class RegisteredMachines
-{
-    /// <summary><paramref name="machines"/> with each type kept once, the first registration of it.</summary>
-    public static IEnumerable<IMachine> Distinct(IEnumerable<IMachine> machines) =>
-        machines.DistinctBy(m => m.GetType());
 }

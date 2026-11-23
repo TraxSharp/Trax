@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -53,7 +54,7 @@ public class RemoteErrorRoundTripTests
         {
             TrainName = "",
             TrainExternalId = "",
-            Type = apiResponse!.ExceptionType!,
+            Type = apiResponse.NotNull().ExceptionType.NotNull(),
             Junction = apiResponse.FailureJunction ?? "Unknown",
             Message = apiResponse.ErrorMessage ?? "Remote train execution failed",
         };
@@ -67,7 +68,8 @@ public class RemoteErrorRoundTripTests
                 Name = "My.Namespace.IMyTrain",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(reconstructedException);
 
@@ -92,14 +94,14 @@ public class RemoteErrorRoundTripTests
 
         // Step 3: Wire round-trip
         var wireJson = JsonSerializer.Serialize(runnerResponse);
-        var apiResponse = JsonSerializer.Deserialize<RemoteRunResponse>(wireJson)!;
+        var apiResponse = JsonSerializer.Deserialize<RemoteRunResponse>(wireJson).NotNull();
 
         // Step 4: Reconstruct exception (as HttpRunExecutor does)
         var reconstructedData = new TrainExceptionData
         {
             TrainName = "",
             TrainExternalId = "",
-            Type = apiResponse.ExceptionType!,
+            Type = apiResponse.ExceptionType.NotNull(),
             Junction = apiResponse.FailureJunction ?? "Unknown",
             Message = apiResponse.ErrorMessage ?? "Remote train execution failed",
         };
@@ -113,7 +115,8 @@ public class RemoteErrorRoundTripTests
                 Name = "My.Namespace.IMyTrain",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(reconstructedException);
 
@@ -143,7 +146,7 @@ public class RemoteErrorRoundTripTests
 
         // Step 3: Wire round-trip
         var wireJson = JsonSerializer.Serialize(jobResponse);
-        var apiResponse = JsonSerializer.Deserialize<RemoteJobResponse>(wireJson)!;
+        var apiResponse = JsonSerializer.Deserialize<RemoteJobResponse>(wireJson).NotNull();
 
         // Step 4: HttpJobSubmitter reads the response
         apiResponse.IsError.Should().BeTrue();
@@ -158,7 +161,7 @@ public class RemoteErrorRoundTripTests
         var jobResponse = new RemoteJobResponse(MetadataId: 999);
 
         var wireJson = JsonSerializer.Serialize(jobResponse);
-        var apiResponse = JsonSerializer.Deserialize<RemoteJobResponse>(wireJson)!;
+        var apiResponse = JsonSerializer.Deserialize<RemoteJobResponse>(wireJson).NotNull();
 
         apiResponse.IsError.Should().BeFalse();
         apiResponse.MetadataId.Should().Be(999);
@@ -189,7 +192,7 @@ public class RemoteErrorRoundTripTests
         {
             TrainName = "",
             TrainExternalId = "",
-            Type = response.ExceptionType!,
+            Type = response.ExceptionType.NotNull(),
             Junction = response.FailureJunction ?? "Unknown",
             Message = response.ErrorMessage ?? "Remote train execution failed",
         };
@@ -202,7 +205,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(exception);
 
@@ -233,7 +237,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(exception);
 
@@ -267,7 +272,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -301,7 +307,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -346,7 +353,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -388,7 +396,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -419,7 +428,8 @@ public class RemoteErrorRoundTripTests
                 Name = "Test.Train",
                 ExternalId = "test",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act

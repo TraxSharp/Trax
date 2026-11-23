@@ -11,7 +11,11 @@ namespace:
 source:
   - Trax.Core/src/Trax.Core/Train/Train.cs
   - Trax.Core/src/Trax.Core/Monad/ChainStep.cs
+  - Trax.Core/src/Trax.Core/Monad/ChainRecorder.cs
+  - Trax.Core/src/Trax.Core/Monad/ChainStepKind.cs
+  - Trax.Core/src/Trax.Core/Monad/ChainTrack.cs
   - Trax.Core/src/Trax.Core/Monad/ChainVerification.cs
+  - Trax.Core/src/Trax.Core/Monad/ChainFault.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 8

@@ -16,10 +16,8 @@ namespace Trax.Api.GraphQL.Testing;
 /// resolvers live in (and route through) the dedicated cross-schema project.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/graphql-testing">SDK reference</seealso>
-public static class CrossSchemaGuards
+public static partial class CrossSchemaGuards
 {
-    private static readonly Regex CamelCase = new("^[a-z][A-Za-z0-9]*$", RegexOptions.Compiled);
-
     /// <summary>
     /// Each edge in the manifest must reference a real integer foreign key on its source, a target
     /// owned (as a <c>DbSet</c>) by the declared target context, and a camelCase field name.
@@ -91,7 +89,8 @@ public static class CrossSchemaGuards
             if (!rel.Contains($"{crossSchemaProjectSuffix}/", StringComparison.Ordinal))
                 continue;
 
-            foreach (var extension in TypeExtensions(file))
+            // A guard runs synchronously, from a test; the file is read and parsed before it goes on.
+            foreach (var extension in TypeExtensionsAsync(file).GetAwaiter().GetResult())
             foreach (var resolver in extension.Members.OfType<MethodDeclarationSyntax>())
             {
                 if (!IsResolver(resolver))
@@ -123,7 +122,7 @@ public static class CrossSchemaGuards
     /// Parses each file's syntax tree and checks each resolver on its own: the reads are the
     /// member accesses on the <c>[Parent]</c> parameter inside that method (<c>p.X</c>,
     /// <c>p?.X</c>, <c>p!.X</c>), method calls excluded, and the declared names come from that
-    /// parameter's <c>requires</c> argument, a <c>nameof</c> or a string, compared ignoring case
+    /// parameter's <c>requires</c> argument, a <see langword="nameof"/> or a string, compared ignoring case
     /// since a string names the GraphQL field. Source-scanning, so the key it recognises is the
     /// <c>Id</c> convention: an entity whose key is declared with <c>[Key]</c> under another name
     /// still needs an explicit <c>requires:</c> here.
@@ -141,7 +140,8 @@ public static class CrossSchemaGuards
         {
             var rel = Path.GetRelativePath(root, file).Replace('\\', '/');
 
-            foreach (var extension in TypeExtensions(file))
+            // A guard runs synchronously, from a test; the file is read and parsed before it goes on.
+            foreach (var extension in TypeExtensionsAsync(file).GetAwaiter().GetResult())
             foreach (var method in extension.Members.OfType<MethodDeclarationSyntax>())
             foreach (var parameter in method.ParameterList.Parameters)
             {
@@ -182,16 +182,14 @@ public static class CrossSchemaGuards
     /// <c>[ObjectType&lt;T&gt;]</c>. A quick text check skips files that cannot hold one before
     /// parsing.
     /// </summary>
-    private static IEnumerable<ClassDeclarationSyntax> TypeExtensions(string file)
+    private static async Task<IEnumerable<ClassDeclarationSyntax>> TypeExtensionsAsync(string file)
     {
-        var text = File.ReadAllText(file);
+        var text = await File.ReadAllTextAsync(file).ConfigureAwait(false);
         if (!text.Contains("ObjectType", StringComparison.Ordinal))
             return [];
 
-        return CSharpSyntaxTree
-            .ParseText(text)
-            .GetRoot()
-            .DescendantNodes()
+        var root = await CSharpSyntaxTree.ParseText(text).GetRootAsync().ConfigureAwait(false);
+        return root.DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
             .Where(c => Attributes(c.AttributeLists).Any(IsTypeExtensionAttribute));
     }
@@ -212,7 +210,8 @@ public static class CrossSchemaGuards
     private static bool NameIs(NameSyntax attributeName, string name)
     {
         var simple = Unqualified(attributeName).Identifier.Text;
-        return simple == name || simple == name + "Attribute";
+        return string.Equals(simple, name, StringComparison.Ordinal)
+            || string.Equals(simple, name + "Attribute", StringComparison.Ordinal);
     }
 
     private static SimpleNameSyntax Unqualified(NameSyntax name) =>
@@ -235,19 +234,26 @@ public static class CrossSchemaGuards
         method
             .DescendantNodes()
             .OfType<GenericNameSyntax>()
-            .Any(g => g.Identifier.Text == "CrossSchemaLoader");
+            .Any(g =>
+                string.Equals(g.Identifier.Text, "CrossSchemaLoader", StringComparison.Ordinal)
+            );
 
     /// <summary>
     /// The names a <c>[Parent]</c> attribute's <c>requires</c> argument declares (named or first
-    /// positional): the last identifier of a <c>nameof</c>, or each identifier in a string.
+    /// positional): the last identifier of a <see langword="nameof"/>, or each identifier in a string.
     /// </summary>
     private static HashSet<string> RequiredNames(AttributeSyntax parent)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var arguments = parent.ArgumentList?.Arguments ?? default;
         var requires =
-            arguments.FirstOrDefault(a => a.NameColon?.Name.Identifier.Text == "requires")
-            ?? arguments.FirstOrDefault(a => a.NameColon is null && a.NameEquals is null);
+            arguments.FirstOrDefault(a =>
+                string.Equals(
+                    a.NameColon?.Name.Identifier.Text,
+                    "requires",
+                    StringComparison.Ordinal
+                )
+            ) ?? arguments.FirstOrDefault(a => a.NameColon is null && a.NameEquals is null);
         if (requires is null)
             return names;
 
@@ -257,7 +263,7 @@ public static class CrossSchemaGuards
             {
                 case InvocationExpressionSyntax
                 {
-                    Expression: IdentifierNameSyntax { Identifier.Text: "nameof" }
+                    Expression: IdentifierNameSyntax { Identifier.Text: "nameof" },
                 } nameOf when nameOf.ArgumentList.Arguments.Count == 1:
                     names.Add(LastIdentifier(nameOf.ArgumentList.Arguments[0].Expression));
                     break;
@@ -271,8 +277,6 @@ public static class CrossSchemaGuards
 
         return names;
     }
-
-    private static readonly Regex Identifier = new(@"[A-Za-z_]\w*", RegexOptions.Compiled);
 
     private static string LastIdentifier(ExpressionSyntax expression) =>
         (expression as MemberAccessExpressionSyntax)?.Name.Identifier.Text ?? expression.ToString();
@@ -321,10 +325,14 @@ public static class CrossSchemaGuards
     private static bool IsParameter(ExpressionSyntax expression, string parameterName) =>
         expression switch
         {
-            IdentifierNameSyntax identifier => identifier.Identifier.Text == parameterName,
+            IdentifierNameSyntax identifier => string.Equals(
+                identifier.Identifier.Text,
+                parameterName,
+                StringComparison.Ordinal
+            ),
             PostfixUnaryExpressionSyntax
             {
-                RawKind: (int)SyntaxKind.SuppressNullableWarningExpression
+                RawKind: (int)SyntaxKind.SuppressNullableWarningExpression,
             } suppressed => IsParameter(suppressed.Operand, parameterName),
             ParenthesizedExpressionSyntax parenthesized => IsParameter(
                 parenthesized.Expression,
@@ -332,4 +340,10 @@ public static class CrossSchemaGuards
             ),
             _ => false,
         };
+
+    [GeneratedRegex("^[a-z][A-Za-z0-9]*$", RegexOptions.Compiled, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex CamelCase { get; }
+
+    [GeneratedRegex(@"[A-Za-z_]\w*", RegexOptions.Compiled, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Identifier { get; }
 }

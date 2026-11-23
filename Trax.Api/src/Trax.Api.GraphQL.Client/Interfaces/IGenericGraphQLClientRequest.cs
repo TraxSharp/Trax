@@ -14,6 +14,6 @@ public interface IGenericGraphQLClientRequest
     /// </summary>
     string Query { get; }
 
-    /// <summary>The operation's variables, serialized as the <c>variables</c> object; <c>null</c> (the default) for none.</summary>
+    /// <summary>The operation's variables, serialized as the <c>variables</c> object; <see langword="null"/> (the default) for none.</summary>
     object? Variables => null;
 }

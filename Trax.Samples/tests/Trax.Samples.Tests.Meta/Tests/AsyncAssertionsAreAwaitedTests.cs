@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -14,18 +16,8 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// alternatives.</para>
 /// </summary>
 [TestFixture]
-public class AsyncAssertionsAreAwaitedTests
+public partial class AsyncAssertionsAreAwaitedTests
 {
-    private static readonly Regex AsyncAssertion = new(
-        @"\.Should\(\)\s*\.\s*(ThrowAsync|ThrowExactlyAsync|NotThrowAsync|NotThrowAfterAsync|CompleteWithinAsync|NotCompleteWithinAsync)\b",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex AwaitedOrReturned = new(
-        @"\b(await|return)\b",
-        RegexOptions.Compiled
-    );
-
     [Test]
     public void Every_async_assertion_in_the_tests_is_awaited()
     {
@@ -37,7 +29,9 @@ public class AsyncAssertionsAreAwaitedTests
                 continue;
 
             foreach (var line in UnawaitedLines(File.ReadAllText(file)))
-                offenders.Add($"{RepoRoot.Relative(file)}:{line}");
+                offenders.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"{RepoRoot.Relative(file)}:{line}")
+                );
         }
 
         offenders
@@ -84,7 +78,9 @@ public class AsyncAssertionsAreAwaitedTests
     /// </summary>
     private static IEnumerable<int> UnawaitedLines(string source)
     {
-        var stripped = SourceText.StripCommentsAndStrings(source.Replace("\r\n", "\n"));
+        var stripped = SourceText.StripCommentsAndStrings(
+            source.Replace("\r\n", "\n", StringComparison.Ordinal)
+        );
         foreach (Match match in AsyncAssertion.Matches(stripped))
         {
             var start = stripped.LastIndexOfAny([';', '{', '}'], match.Index) + 1;
@@ -93,4 +89,18 @@ public class AsyncAssertionsAreAwaitedTests
                 yield return stripped[..match.Index].Count(c => c == '\n') + 1;
         }
     }
+
+    [GeneratedRegex(
+        @"\b(await|return)\b",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AwaitedOrReturned { get; }
+
+    [GeneratedRegex(
+        @"\.Should\(\)\s*\.\s*(ThrowAsync|ThrowExactlyAsync|NotThrowAsync|NotThrowAfterAsync|CompleteWithinAsync|NotCompleteWithinAsync)\b",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AsyncAssertion { get; }
 }

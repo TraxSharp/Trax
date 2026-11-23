@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -16,7 +18,7 @@ namespace Trax.StateMachine.Persistence;
 /// writes of a <see cref="SnapshotDraft"/> with the context in a real <c>jsonb</c> column (<c>TEXT</c> on
 /// SQLite) and optimistic concurrency via its concurrency token. Only EXPECTED races (an optimistic conflict,
 /// or a concurrent create the <paramref name="dialect"/> recognises as a unique violation) are returned as
-/// <c>false</c>; any other database error propagates, so it cannot masquerade as a benign conflict.
+/// <see langword="false"/>; any other database error propagates, so it cannot masquerade as a benign conflict.
 ///
 /// <para>Every <see cref="ISnapshotStore"/> member filters on <c>owner_kind = user</c> as well as the user's key,
 /// so no user path reads, writes, lists or expires a system-owned instance, even one under the same id. System
@@ -41,6 +43,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         IRowReportingSnapshotStore,
         IConditionalDraftDelete
 {
+    // The clock rows are stamped on: the container's, through the constructor that takes one.
+    private readonly TimeProvider _time = TimeProvider.System;
+
+    /// <summary>A store over <paramref name="db"/> whose rows are stamped on <paramref name="timeProvider"/>.</summary>
+    /// <param name="db">The data context the drafts are kept in.</param>
+    /// <param name="dialect">How the provider reports a unique violation, or null to treat none as one.</param>
+    /// <param name="timeProvider">The clock updated_at is read from, and the InMemory provider's database clock.</param>
+    public EfSnapshotStore(IDataContext db, ISqlDialect? dialect, TimeProvider timeProvider)
+        : this(db, dialect) => _time = timeProvider;
+
     /// <summary>
     /// The IR hash of a machine's current definition by its name, written to <c>ir_hash</c> with every snapshot.
     /// Null, or a machine it answers null for, writes none.
@@ -127,17 +139,19 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var record = await query.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        var record = await query
+            .AsNoTracking()
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (record is null)
             return null;
         var stored = ToStored(record);
         return record.SpawnedBy is { } parentToken
             ? stored with
             {
-                ParentWaits = await db.SnapshotDrafts.AnyAsync(
-                    p => p.InvokeToken == parentToken,
-                    cancellationToken
-                ),
+                ParentWaits = await db
+                    .SnapshotDrafts.AnyAsync(p => p.InvokeToken == parentToken, cancellationToken)
+                    .ConfigureAwait(false),
             }
             : stored;
     }
@@ -183,7 +197,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         var deleted = await Owned(DraftOwner.User(userKey))
             .Where(x => x.Id == id)
-            .ExecuteDeleteAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
         Wrote(deleted, deleted > 0);
     }
 
@@ -197,7 +212,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         var deleted = await Owned(DraftOwner.User(userKey))
             .Where(x => x.Id == id && x.Machine == machine)
-            .ExecuteDeleteAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
         Wrote(deleted, deleted > 0);
     }
 
@@ -217,17 +233,18 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             );
         var token = read.InvokeToken;
         return await DeleteThen(
-            Owned(DraftOwner.User(userKey))
-                .Where(x =>
-                    x.Id == id
-                    && x.Machine == machine
-                    && x.RowId == rowId
-                    && x.Revision == revision
-                    && x.InvokeToken == token
-                    && x.EffectToken == null
-                ),
-            afterDelete
-        );
+                Owned(DraftOwner.User(userKey))
+                    .Where(x =>
+                        x.Id == id
+                        && x.Machine == machine
+                        && x.RowId == rowId
+                        && x.Revision == revision
+                        && x.InvokeToken == token
+                        && x.EffectToken == null
+                    ),
+                afterDelete
+            )
+            .ConfigureAwait(false);
     }
 
     // Deletes the row the query names and runs the follow-up writes in one transaction, joining the context's own
@@ -236,32 +253,39 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     private async Task<bool> DeleteThen(IQueryable<SnapshotDraft> target, Func<Task> afterDelete)
     {
         var ambient = ((DbContext)db).Database.CurrentTransaction is not null;
-        using var transaction = ambient ? null : await db.BeginTransaction(CancellationToken.None);
+        using var transaction = ambient
+            ? null
+            : await db.BeginTransaction(CancellationToken.None).ConfigureAwait(false);
         bool deleted;
         if (((DbContext)db).Database.IsRelational())
-            deleted = await target.ExecuteDeleteAsync(CancellationToken.None) > 0;
+            deleted =
+                await target.ExecuteDeleteAsync(CancellationToken.None).ConfigureAwait(false) > 0;
         else
         {
             // The InMemory provider has no set-based delete: the row is read and removed.
             // It runs no trigger either, so the row's history is removed with it here.
-            var record = await target.FirstOrDefaultAsync(CancellationToken.None);
+            var record = await target
+                .FirstOrDefaultAsync(CancellationToken.None)
+                .ConfigureAwait(false);
             if (record is not null)
             {
                 db.SnapshotDrafts.Remove(record);
-                await RemoveHistory(record.RowId);
+                await RemoveHistory(record.RowId).ConfigureAwait(false);
             }
-            deleted = record is not null && await Save(record, CancellationToken.None);
+            deleted =
+                record is not null
+                && await Save(record, CancellationToken.None).ConfigureAwait(false);
         }
         if (!deleted)
         {
             if (transaction is not null)
-                await transaction.Rollback();
+                await transaction.Rollback().ConfigureAwait(false);
             return false;
         }
-        await afterDelete();
+        await afterDelete().ConfigureAwait(false);
         if (transaction is not null)
         {
-            await transaction.Commit();
+            await transaction.Commit().ConfigureAwait(false);
             Writes?.Written();
         }
         return true;
@@ -271,7 +295,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// Inserts the draft of <paramref name="snapshot"/>'s machine, or overwrites its version, state and context,
     /// with a fresh concurrency token and <c>updated_at</c>. It leaves the last-request columns and the invoke
     /// token untouched, and never touches another machine's draft, or a system instance, under the same id.
-    /// Returns <c>false</c> when the row changed between this call's read and its write, or a concurrent insert
+    /// Returns <see langword="false"/> when the row changed between this call's read and its write, or a concurrent insert
     /// of the same <c>(user_key, machine, id)</c> won; any other database error propagates.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
@@ -284,7 +308,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Snapshot snapshot,
         CancellationToken cancellationToken = default
     ) =>
-        await ((IRowReportingSnapshotStore)this).Upsert(userKey, id, snapshot, cancellationToken)
+        await ((IRowReportingSnapshotStore)this)
+            .Upsert(userKey, id, snapshot, cancellationToken)
+            .ConfigureAwait(false)
             is not null;
 
     async Task<WrittenRow?> IRowReportingSnapshotStore.Upsert(
@@ -296,9 +322,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         var machine = snapshot.Machine;
         var record = await Owned(DraftOwner.User(userKey))
-            .FirstOrDefaultAsync(x => x.Id == id && x.Machine == machine, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && x.Machine == machine, cancellationToken)
+            .ConfigureAwait(false);
         if (record is null)
-            return await InsertOwned(DraftOwner.User(userKey), id, snapshot, cancellationToken);
+            return await InsertOwned(DraftOwner.User(userKey), id, snapshot, cancellationToken)
+                .ConfigureAwait(false);
 
         // A row with a pending effect is written by that effect only.
         if (record.EffectToken is not null)
@@ -316,7 +344,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             record.State,
             record.DueAt,
             snapshot.State,
-            await DueValue(due, cancellationToken)
+            await DueValue(due, cancellationToken).ConfigureAwait(false)
         );
         Apply(record, snapshot);
         // One save writes the row and its history, in the transaction it opens or the caller's.
@@ -330,11 +358,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             invokeToken: null
         );
         db.SnapshotTransitions.Add(transition);
-        return await Save(record, cancellationToken, transition) ? Written(record) : null;
+        return await Save(record, cancellationToken, transition).ConfigureAwait(false)
+            ? Written(record)
+            : null;
     }
 
     /// <summary>
-    /// Inserts a new draft row in one statement. Returns <c>false</c> when a row with the same
+    /// Inserts a new draft row in one statement. Returns <see langword="false"/> when a row with the same
     /// <c>(user_key, machine, id)</c> already exists, which is how a writer that lost the race to create a draft
     /// finds out; any other database error propagates. A system instance under the same id is not a conflict:
     /// the user's draft is a row of its own.
@@ -348,7 +378,10 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Guid id,
         Snapshot snapshot,
         CancellationToken cancellationToken = default
-    ) => await InsertOwned(DraftOwner.User(userKey), id, snapshot, cancellationToken) is not null;
+    ) =>
+        await InsertOwned(DraftOwner.User(userKey), id, snapshot, cancellationToken)
+            .ConfigureAwait(false)
+            is not null;
 
     Task<WrittenRow?> IRowReportingSnapshotStore.Insert(
         string userKey,
@@ -363,7 +396,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Snapshot snapshot,
         string? invokeToken,
         CancellationToken cancellationToken
-    ) => await InsertOwned(owner, id, snapshot, cancellationToken, invokeToken) is not null;
+    ) =>
+        await InsertOwned(owner, id, snapshot, cancellationToken, invokeToken).ConfigureAwait(false)
+            is not null;
 
     async Task<bool> IMachineInstanceStore.DeleteHolding(
         DraftOwner owner,
@@ -380,6 +415,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 && x.EffectToken == null
             )
             .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false)
             is var n
         && Wrote(n > 0, n > 0);
 
@@ -395,13 +431,14 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     ) =>
         await InsertOwned(
-            owner,
-            id,
-            snapshot,
-            cancellationToken,
-            spawnedBy: spawnedBy,
-            note: TransitionNote.Spawned
-        )
+                owner,
+                id,
+                snapshot,
+                cancellationToken,
+                spawnedBy: spawnedBy,
+                note: TransitionNote.Spawned
+            )
+            .ConfigureAwait(false)
             is not null;
 
     private async Task<WrittenRow?> InsertOwned(
@@ -423,9 +460,63 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             dialect is null
             && await Owned(owner)
                 .AnyAsync(x => x.Id == id && x.Machine == machine, cancellationToken)
+                .ConfigureAwait(false)
         )
             return null;
 
+        var record = await NewDraft(
+                owner,
+                id,
+                snapshot,
+                invokeToken,
+                start,
+                spawnedBy,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        // The row and the first row of its history commit together. The history needs the row id the insert reads
+        // back, so they are two saves, in the caller's transaction or one of the store's own.
+        var context = (DbContext)db;
+        using var transaction =
+            context.Database.IsRelational() && context.Database.CurrentTransaction is null
+                ? await db.BeginTransaction(cancellationToken).ConfigureAwait(false)
+                : null;
+        db.SnapshotDrafts.Add(record);
+        // A new row starts at revision 1; its row id is the database's, read back by the insert.
+        if (!await Save(record, cancellationToken).ConfigureAwait(false))
+            return null;
+        await Log(
+                History(
+                    record.RowId,
+                    record.Revision,
+                    fromState: null,
+                    record.State,
+                    record.UpdatedAt,
+                    note ?? TransitionNote.Start(owner),
+                    invokeToken
+                ),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (transaction is not null)
+        {
+            await transaction.Commit().ConfigureAwait(false);
+            Writes?.Written();
+        }
+        return Written(record);
+    }
+
+    private async Task<SnapshotDraft> NewDraft(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        string? invokeToken,
+        StartRequest? start,
+        string? spawnedBy,
+        CancellationToken cancellationToken
+    )
+    {
         // A created row enters its state, so a timed state's timer starts now.
         var due = DueFor(snapshot);
         var record = new SnapshotDraft
@@ -437,40 +528,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             SpawnedBy = spawnedBy,
             StartRequestId = start?.RequestId,
             StartFingerprint = start?.Fingerprint,
-            DueAt = due.Resolve(null, null, snapshot.State, await DueValue(due, cancellationToken)),
+            DueAt = due.Resolve(
+                beforeState: null,
+                beforeDue: null,
+                snapshot.State,
+                await DueValue(due, cancellationToken).ConfigureAwait(false)
+            ),
         };
         Apply(record, snapshot);
         record.CreatedAt = record.UpdatedAt;
-
-        // The row and the first row of its history commit together. The history needs the row id the insert reads
-        // back, so they are two saves, in the caller's transaction or one of the store's own.
-        var context = (DbContext)db;
-        using var transaction =
-            context.Database.IsRelational() && context.Database.CurrentTransaction is null
-                ? await db.BeginTransaction(cancellationToken)
-                : null;
-        db.SnapshotDrafts.Add(record);
-        // A new row starts at revision 1; its row id is the database's, read back by the insert.
-        if (!await Save(record, cancellationToken))
-            return null;
-        await Log(
-            History(
-                record.RowId,
-                record.Revision,
-                fromState: null,
-                record.State,
-                record.UpdatedAt,
-                note ?? TransitionNote.Start(owner),
-                invokeToken
-            ),
-            cancellationToken
-        );
-        if (transaction is not null)
-        {
-            await transaction.Commit();
-            Writes?.Written();
-        }
-        return Written(record);
+        return record;
     }
 
     private static WrittenRow Written(SnapshotDraft record) =>
@@ -479,7 +546,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     private void Apply(SnapshotDraft record, Snapshot snapshot)
     {
         // A stranded instance that moves to another state is no longer stranded.
-        if (record.State != snapshot.State)
+        if (!string.Equals(record.State, snapshot.State, StringComparison.Ordinal))
             record.InvokeStrandedState = null;
         record.Machine = snapshot.Machine;
         record.Version = snapshot.Version;
@@ -490,7 +557,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         // and stated nothing, which leaves the row judged by its state.
         record.ServerRecord = snapshot.ServerRecord;
         record.ConcurrencyToken = Guid.NewGuid();
-        record.UpdatedAt = DateTimeOffset.UtcNow;
+        record.UpdatedAt = _time.GetUtcNow();
     }
 
     private async Task<bool> Save(
@@ -501,8 +568,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         try
         {
-            await ((DbContext)db).SaveChangesAsync(cancellationToken);
-            return Wrote(true, true);
+            await ((DbContext)db).SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return Wrote(written: true, changed: true);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -543,9 +610,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 is not {
                     Kind: SnapshotTransitionKind.Command
                         or SnapshotTransitionKind.Timer
-                        or SnapshotTransitionKind.Outcome
+                        or SnapshotTransitionKind.Outcome,
                 }
-            || row.State == snapshot.State
+            || string.Equals(row.State, snapshot.State, StringComparison.Ordinal)
             || policies(snapshot.Machine, snapshot.State) is not { Count: > 0 } owed
         )
             return;
@@ -553,7 +620,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             .SnapshotDrafts.AsNoTracking()
             .Where(x => x.RowId == row.RowId)
             .Select(x => x.Id)
-            .FirstAsync(cancellationToken);
+            .FirstAsync(cancellationToken)
+            .ConfigureAwait(false);
         var fires = owed.Select(policy => new Trax.Effect.Models.MachinePolicyFire.MachinePolicyFire
             {
                 Policy = policy,
@@ -566,7 +634,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         db.MachinePolicyFires.AddRange(fires);
         try
         {
-            await ((DbContext)db).SaveChangesAsync(cancellationToken);
+            await ((DbContext)db).SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -604,7 +672,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         db.SnapshotTransitions.Add(transition);
         try
         {
-            await ((DbContext)db).SaveChangesAsync(cancellationToken);
+            await ((DbContext)db).SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -618,12 +686,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             await db
                 .SnapshotTransitions.Where(t => t.DraftRowId == rowId)
                 .ToListAsync(CancellationToken.None)
+                .ConfigureAwait(false)
         );
 
     /// <summary>
     /// Conditional update that records <paramref name="requestId"/> alone and clears the stored trigger and
     /// from-state, so a retry of that request is refused as a reused id rather than replayed. The draft service
-    /// writes through <see cref="UpdateWithRequest"/> instead. Returns <c>false</c> when the row no longer carries
+    /// writes through <see cref="UpdateWithRequest"/> instead. Returns <see langword="false"/> when the row no longer carries
     /// <paramref name="expectedToken"/> or does not exist.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
@@ -645,7 +714,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             id,
             snapshot,
             expectedToken,
-            requestId is null ? null : new AppliedRequest(requestId, null, null),
+            requestId is null
+                ? null
+                : new AppliedRequest(requestId, Trigger: null, FromState: null),
             cancellationToken
         );
 
@@ -654,7 +725,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// <paramref name="snapshot"/>'s machine that bypasses the change tracker. It writes the snapshot, the
     /// request's id, trigger and from-state (all null when <paramref name="request"/> is
     /// null), a fresh token and <c>updated_at</c>. A write that lost the race, or targets a missing row, updates
-    /// nothing and returns <c>false</c> rather than throwing.
+    /// nothing and returns <see langword="false"/> rather than throwing.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
     /// <param name="id">The client-minted draft id.</param>
@@ -757,10 +828,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         };
         if (
             !await Write(
-                Updated(DraftOwner.User(userKey), id, snapshot, read.Token),
-                write,
-                cancellationToken
-            )
+                    Updated(DraftOwner.User(userKey), id, snapshot, read.Token),
+                    write,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         )
             return null;
 
@@ -826,6 +898,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     ) =>
         new RowWrite
         {
+            Now = _time.GetUtcNow(),
             Snapshot = snapshot,
             Note = note,
             IrHash = IrHashOf(snapshot.Machine),
@@ -855,6 +928,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 InvokeToken = invokeToken,
                 Stranded = invokeToken.Value is not null ? StrandedWrite.Clear : StrandedWrite.Keep,
             },
@@ -868,7 +942,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         var record = await db
             .SnapshotDrafts.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.InvokeToken == invokeToken, cancellationToken);
+            .FirstOrDefaultAsync(x => x.InvokeToken == invokeToken, cancellationToken)
+            .ConfigureAwait(false);
         return record is null
             ? null
             : new StoredInstance(
@@ -919,6 +994,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             target,
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Snapshot = snapshot,
                 IrHash = IrHashOf(snapshot.Machine),
                 Due = DueFor(snapshot),
@@ -948,12 +1024,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Snapshot = snapshot,
                 IrHash = IrHashOf(snapshot.Machine),
                 Due = DueFor(snapshot),
                 // No outcome could be applied: the instance stays where it is, with no run.
-                Note = TransitionNote.Outcome(null),
-                InvokeToken = new InvokeTokenWrite(null),
+                Note = TransitionNote.Outcome(trigger: null),
+                InvokeToken = new InvokeTokenWrite(Value: null),
                 Stranded = StrandedWrite.Mark,
             },
             cancellationToken
@@ -984,7 +1061,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         public Guid NewToken { get; } = Guid.NewGuid();
 
-        public DateTimeOffset Now { get; } = DateTimeOffset.UtcNow;
+        public required DateTimeOffset Now { get; init; }
 
         // The snapshot to write, or null to leave version, state, context and the IR hash alone.
         public Snapshot? Snapshot { get; init; }
@@ -1055,7 +1132,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         string? RequestId = null
     )
     {
-        public static readonly EffectWrite Cleared = new(null, null);
+        public static readonly EffectWrite Cleared = new(Token: null, LeaseUntil: null);
     }
 
     // What one write does to due_at.
@@ -1074,6 +1151,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         ClearUnlessSameState,
     }
 
+    [StructLayout(LayoutKind.Auto)]
     internal readonly record struct DueWrite(DueMode Mode, TimeSpan Duration)
     {
         public bool Arms => Mode is DueMode.Arm or DueMode.ArmUnlessHeld;
@@ -1089,10 +1167,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             {
                 DueMode.Clear => null,
                 DueMode.Arm => armed,
-                DueMode.ArmUnlessHeld => beforeState == state && beforeDue is not null
+                DueMode.ArmUnlessHeld => string.Equals(beforeState, state, StringComparison.Ordinal)
+                && beforeDue is not null
                     ? beforeDue
                     : armed,
-                _ => beforeState == state ? beforeDue : null,
+                _ => string.Equals(beforeState, state, StringComparison.Ordinal) ? beforeDue : null,
             };
     }
 
@@ -1116,7 +1195,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     private async Task<DateTimeOffset?> DueValue(
         DueWrite due,
         CancellationToken cancellationToken
-    ) => due.Arms ? await DatabaseNow(cancellationToken) + due.Duration : null;
+    ) =>
+        due.Arms ? await DatabaseNow(cancellationToken).ConfigureAwait(false) + due.Duration : null;
 
     /// <summary>
     /// The database's clock, in UTC: Postgres's <c>clock_timestamp()</c>, the time of the call rather than the start of
@@ -1128,13 +1208,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     {
         var database = ((DbContext)db).Database;
         if (!database.IsRelational())
-            return DateTimeOffset.UtcNow;
+            return _time.GetUtcNow();
         var sql =
             database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true
                 ? "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US') AS \"Value\""
                 : "SELECT strftime('%Y-%m-%dT%H:%M:%f', 'now') AS \"Value\"";
         var text = (
-            await database.SqlQueryRaw<string>(sql).ToListAsync(cancellationToken)
+            await database
+                .SqlQueryRaw<string>(sql)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false)
         ).Single();
         return DateTimeOffset.Parse(
             text,
@@ -1158,7 +1241,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     )
     {
         if (write.Due is { Arms: true } arming)
-            write.DueValue = await DueValue(arming, cancellationToken);
+            write.DueValue = await DueValue(arming, cancellationToken).ConfigureAwait(false);
 
         // A row with a pending effect is written only by that effect; every other write matches a row with none.
         var owner = write.EffectOwner;
@@ -1167,18 +1250,17 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             : target.Where(x => x.EffectToken == owner);
 
         if (!((DbContext)db).Database.IsRelational())
-            return await WriteTracked(target, write, cancellationToken);
+            return await WriteTracked(target, write, cancellationToken).ConfigureAwait(false);
 
         if (write.Snapshot is not null)
-            return await WriteWithHistory(target, write, cancellationToken);
+            return await WriteWithHistory(target, write, cancellationToken).ConfigureAwait(false);
 
         try
         {
             var updated =
-                await target.ExecuteUpdateAsync(
-                    setters => Setters(setters, write),
-                    cancellationToken
-                ) == 1;
+                await target
+                    .ExecuteUpdateAsync(setters => Setters(setters, write), cancellationToken)
+                    .ConfigureAwait(false) == 1;
             return Wrote(updated, updated);
         }
         catch (Exception ex) when (IsUniqueViolation(ex))
@@ -1198,37 +1280,14 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var snapshot = write.Snapshot!;
+        var snapshot = write.Snapshot.NotNull();
         var context = (DbContext)db;
         using var transaction = context.Database.CurrentTransaction is null
-            ? await db.BeginTransaction(cancellationToken)
+            ? await db.BeginTransaction(cancellationToken).ConfigureAwait(false)
             : null;
 
         var row =
-            write.Known
-            ?? (
-                await target
-                    .AsNoTracking()
-                    .Select(x => new
-                    {
-                        x.RowId,
-                        x.Revision,
-                        x.State,
-                        x.OwnerKind,
-                        x.UserKey,
-                    })
-                    .Take(2)
-                    .ToListAsync(cancellationToken)
-            ) switch
-            {
-                [var only] => new KnownRow(
-                    only.RowId,
-                    only.Revision,
-                    only.State,
-                    new DraftOwner(only.OwnerKind, only.UserKey)
-                ),
-                _ => null,
-            };
+            write.Known ?? await ReadKnownRow(target, cancellationToken).ConfigureAwait(false);
         if (row is null)
             return false;
 
@@ -1238,7 +1297,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             updated =
                 await target
                     .Where(x => x.RowId == row.RowId && x.Revision == row.Revision)
-                    .ExecuteUpdateAsync(setters => Setters(setters, write), cancellationToken) == 1;
+                    .ExecuteUpdateAsync(setters => Setters(setters, write), cancellationToken)
+                    .ConfigureAwait(false) == 1;
         }
         catch (Exception ex) when (IsUniqueViolation(ex))
         {
@@ -1248,25 +1308,57 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             return false;
 
         await Log(
-            History(
-                row.RowId,
-                row.Revision + 1,
-                row.State,
-                snapshot.State,
-                write.Now,
-                write.Note ?? TransitionNote.Save(row.Owner),
-                write.InvokeToken?.Value
-            ),
-            cancellationToken
-        );
-        await QueuePolicies(row, snapshot, write, cancellationToken);
+                History(
+                    row.RowId,
+                    row.Revision + 1,
+                    row.State,
+                    snapshot.State,
+                    write.Now,
+                    write.Note ?? TransitionNote.Save(row.Owner),
+                    write.InvokeToken?.Value
+                ),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        await QueuePolicies(row, snapshot, write, cancellationToken).ConfigureAwait(false);
         if (transaction is not null)
         {
-            await transaction.Commit();
+            await transaction.Commit().ConfigureAwait(false);
             Writes?.Written();
         }
         return true;
     }
+
+    // The row a write is about to change, for the state it leaves and the revision it is at; null unless exactly one
+    // row matches.
+    private static async Task<KnownRow?> ReadKnownRow(
+        IQueryable<SnapshotDraft> target,
+        CancellationToken cancellationToken
+    ) =>
+        (
+            await target
+                .AsNoTracking()
+                .Select(x => new
+                {
+                    x.RowId,
+                    x.Revision,
+                    x.State,
+                    x.OwnerKind,
+                    x.UserKey,
+                })
+                .Take(2)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false)
+        ) switch
+        {
+            [var only] => new KnownRow(
+                only.RowId,
+                only.Revision,
+                only.State,
+                new DraftOwner(only.OwnerKind, only.UserKey)
+            ),
+            _ => null,
+        };
 
     private static void Setters(UpdateSettersBuilder<SnapshotDraft> setters, RowWrite write)
     {
@@ -1292,31 +1384,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         }
 
         if (write.Due is { } due)
-        {
-            // The comparisons read the row as it was before this statement.
-            var dueValue = write.DueValue;
-            switch (due.Mode)
-            {
-                case DueMode.Clear:
-                    setters.SetProperty(x => x.DueAt, (DateTimeOffset?)null);
-                    break;
-                case DueMode.Arm:
-                    setters.SetProperty(x => x.DueAt, dueValue);
-                    break;
-                case DueMode.ArmUnlessHeld:
-                    setters.SetProperty(
-                        x => x.DueAt,
-                        x => x.State == state && x.DueAt != null ? x.DueAt : dueValue
-                    );
-                    break;
-                default:
-                    setters.SetProperty(
-                        x => x.DueAt,
-                        x => x.State == state ? x.DueAt : (DateTimeOffset?)null
-                    );
-                    break;
-            }
-        }
+            SetDue(setters, due, write.DueValue, state);
 
         if (write.WritesRequest)
         {
@@ -1341,25 +1409,18 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             setters.SetProperty(x => x.ServerRecord, (bool?)null);
 
         if (write.Effect is { } effect)
-        {
-            var effectToken = effect.Token;
-            var leaseUntil = effect.LeaseUntil;
-            setters
-                .SetProperty(x => x.EffectToken, effectToken)
-                .SetProperty(x => x.EffectLeaseUntil, leaseUntil);
-            if (!effect.KeepsEvent)
-            {
-                var effectKey = effect.Key;
-                var effectTrigger = effect.Trigger;
-                var effectRequest = effect.RequestId;
-                setters
-                    .SetProperty(x => x.EffectKey, effectKey)
-                    .SetProperty(x => x.EffectTrigger, effectTrigger)
-                    .SetProperty(x => x.EffectRequestId, effectRequest);
-            }
-        }
+            SetEffect(setters, effect);
 
-        switch (write.Stranded)
+        SetStranded(setters, write.Stranded, state);
+    }
+
+    private static void SetStranded(
+        UpdateSettersBuilder<SnapshotDraft> setters,
+        StrandedWrite stranded,
+        string? state
+    )
+    {
+        switch (stranded)
         {
             case StrandedWrite.Clear:
                 setters.SetProperty(x => x.InvokeStrandedState, (string?)null);
@@ -1377,13 +1438,63 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         }
     }
 
+    private static void SetDue(
+        UpdateSettersBuilder<SnapshotDraft> setters,
+        DueWrite due,
+        DateTimeOffset? dueValue,
+        string? state
+    )
+    {
+        // The comparisons read the row as it was before this statement.
+        switch (due.Mode)
+        {
+            case DueMode.Clear:
+                setters.SetProperty(x => x.DueAt, (DateTimeOffset?)null);
+                break;
+            case DueMode.Arm:
+                setters.SetProperty(x => x.DueAt, dueValue);
+                break;
+            case DueMode.ArmUnlessHeld:
+                setters.SetProperty(
+                    x => x.DueAt,
+                    x => x.State == state && x.DueAt != null ? x.DueAt : dueValue
+                );
+                break;
+            default:
+                setters.SetProperty(
+                    x => x.DueAt,
+                    x => x.State == state ? x.DueAt : (DateTimeOffset?)null
+                );
+                break;
+        }
+    }
+
+    private static void SetEffect(UpdateSettersBuilder<SnapshotDraft> setters, EffectWrite effect)
+    {
+        var effectToken = effect.Token;
+        var leaseUntil = effect.LeaseUntil;
+        setters
+            .SetProperty(x => x.EffectToken, effectToken)
+            .SetProperty(x => x.EffectLeaseUntil, leaseUntil);
+        if (!effect.KeepsEvent)
+        {
+            var effectKey = effect.Key;
+            var effectTrigger = effect.Trigger;
+            var effectRequest = effect.RequestId;
+            setters
+                .SetProperty(x => x.EffectKey, effectKey)
+                .SetProperty(x => x.EffectTrigger, effectTrigger)
+                .SetProperty(x => x.EffectRequestId, effectRequest);
+        }
+    }
+
     private async Task<bool> WriteTracked(
         IQueryable<SnapshotDraft> target,
         RowWrite write,
         CancellationToken cancellationToken
     )
     {
-        var rows = await target.Take(2).ToListAsync(cancellationToken);
+        var rows = await target.Take(2).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (rows.Count != 1)
         {
             foreach (var row in rows)
@@ -1400,6 +1511,27 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 write.Snapshot?.State ?? before,
                 write.DueValue
             );
+        ApplyTracked(record, write, before);
+        SnapshotTransition? transition = null;
+        if (write.Snapshot is { } written)
+        {
+            transition = History(
+                record.RowId,
+                record.Revision,
+                before,
+                written.State,
+                write.Now,
+                write.Note ?? TransitionNote.Save(new DraftOwner(record.OwnerKind, record.UserKey)),
+                write.InvokeToken?.Value
+            );
+            db.SnapshotTransitions.Add(transition);
+        }
+        return await Save(record, cancellationToken, transition).ConfigureAwait(false);
+    }
+
+    // The tracked write's changes to the row, as Setters makes them in one statement.
+    private static void ApplyTracked(SnapshotDraft record, RowWrite write, string before)
+    {
         record.Revision += 1;
         record.ConcurrencyToken = write.NewToken;
         record.UpdatedAt = write.Now;
@@ -1439,24 +1571,10 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         {
             StrandedWrite.Clear => null,
             StrandedWrite.Mark => write.Snapshot?.State,
-            StrandedWrite.ClearUnlessSameState when before != record.State => null,
+            StrandedWrite.ClearUnlessSameState
+                when !string.Equals(before, record.State, StringComparison.Ordinal) => null,
             _ => record.InvokeStrandedState,
         };
-        SnapshotTransition? transition = null;
-        if (write.Snapshot is { } written)
-        {
-            transition = History(
-                record.RowId,
-                record.Revision,
-                before,
-                written.State,
-                write.Now,
-                write.Note ?? TransitionNote.Save(new DraftOwner(record.OwnerKind, record.UserKey)),
-                write.InvokeToken?.Value
-            );
-            db.SnapshotTransitions.Add(transition);
-        }
-        return await Save(record, cancellationToken, transition);
     }
 
     /// <summary>
@@ -1475,7 +1593,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             .FirstOrDefaultAsync(
                 x => x.Machine == machine && x.StartRequestId == requestId,
                 cancellationToken
-            );
+            )
+            .ConfigureAwait(false);
         return record is null
             ? null
             : new StartedRow(record.Id, record.StartFingerprint, ToStored(record));
@@ -1540,7 +1659,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 .Where(x =>
                     x.Id == id && x.Machine == machine && x.ConcurrencyToken == expectedToken
                 ),
-            new RowWrite { Stranded = StrandedWrite.Keep },
+            new RowWrite { Now = _time.GetUtcNow(), Stranded = StrandedWrite.Keep },
             cancellationToken
         );
 
@@ -1561,7 +1680,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             .Take(limit)
             .Select(x => new ExpiredDraft(
                 x.RowId,
-                x.UserKey!,
+                x.UserKey.NotNull(),
                 x.Machine,
                 x.Id,
                 x.Revision,
@@ -1569,7 +1688,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 x.State,
                 x.Context
             ))
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     // A user's draft has expired when it has been idle past the TTL with no timer armed and no invoked run, or has
     // lived past the maximum lifetime whatever its timers or its run say. Neither applies to a row the server put in its
@@ -1637,7 +1757,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var now = await DatabaseNow(cancellationToken);
+        var now = await DatabaseNow(cancellationToken).ConfigureAwait(false);
         var machineList = machines.ToList();
         var skipList = skip.ToList();
         return await db
@@ -1664,7 +1784,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 x.Revision,
                 x.InvokeToken
             ))
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1688,12 +1809,14 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                             due.RowId
                         )
                         .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false)
                 )
                     is [var locked]
                 && locked == due.Revision;
         return await db
             .SnapshotDrafts.AsNoTracking()
-            .AnyAsync(x => x.RowId == due.RowId && x.Revision == due.Revision, cancellationToken);
+            .AnyAsync(x => x.RowId == due.RowId && x.Revision == due.Revision, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1720,12 +1843,14 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                             rowId
                         )
                         .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false)
                 )
                     is [var current]
                 && current == revision;
         return await db
             .SnapshotDrafts.AsNoTracking()
-            .AnyAsync(x => x.RowId == rowId && x.Revision == revision, cancellationToken);
+            .AnyAsync(x => x.RowId == rowId && x.Revision == revision, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static bool IsPostgres(
@@ -1755,10 +1880,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             )
             .OrderBy(x => x.DueAt)
             .Select(x => x.DueAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (next is not { } due)
             return null;
-        var until = due - await DatabaseNow(cancellationToken);
+        var until = due - await DatabaseNow(cancellationToken).ConfigureAwait(false);
         return until > TimeSpan.Zero ? until : TimeSpan.Zero;
     }
 
@@ -1782,6 +1908,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Snapshot = next,
                 Note = note ?? TransitionNote.Timer(trigger),
                 IrHash = IrHashOf(next.Machine),
@@ -1804,6 +1931,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Due = new DueWrite(DueMode.Clear, TimeSpan.Zero),
                 Stranded = StrandedWrite.Keep,
             },
@@ -1831,25 +1959,27 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var leaseUntil = await DatabaseNow(cancellationToken) + lease;
+        var leaseUntil = await DatabaseNow(cancellationToken).ConfigureAwait(false) + lease;
         return await Write(
-            Owned(owner)
-                .Where(x =>
-                    x.Id == id && x.Machine == machine && x.ConcurrencyToken == expectedToken
-                ),
-            new RowWrite
-            {
-                Stranded = StrandedWrite.Keep,
-                Effect = new EffectWrite(
-                    token,
-                    leaseUntil,
-                    Key: key,
-                    Trigger: trigger,
-                    RequestId: requestId
-                ),
-            },
-            cancellationToken
-        );
+                Owned(owner)
+                    .Where(x =>
+                        x.Id == id && x.Machine == machine && x.ConcurrencyToken == expectedToken
+                    ),
+                new RowWrite
+                {
+                    Now = _time.GetUtcNow(),
+                    Stranded = StrandedWrite.Keep,
+                    Effect = new EffectWrite(
+                        token,
+                        leaseUntil,
+                        Key: key,
+                        Trigger: trigger,
+                        RequestId: requestId
+                    ),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1868,23 +1998,25 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var now = await DatabaseNow(cancellationToken);
+        var now = await DatabaseNow(cancellationToken).ConfigureAwait(false);
         return await Write(
-            Owned(owner)
-                .Where(x =>
-                    x.Id == id
-                    && x.Machine == machine
-                    && x.EffectLeaseUntil != null
-                    && x.EffectLeaseUntil < now
-                ),
-            new RowWrite
-            {
-                Stranded = StrandedWrite.Keep,
-                EffectOwner = from,
-                Effect = new EffectWrite(token, now + lease, KeepsEvent: true),
-            },
-            cancellationToken
-        );
+                Owned(owner)
+                    .Where(x =>
+                        x.Id == id
+                        && x.Machine == machine
+                        && x.EffectLeaseUntil != null
+                        && x.EffectLeaseUntil < now
+                    ),
+                new RowWrite
+                {
+                    Now = _time.GetUtcNow(),
+                    Stranded = StrandedWrite.Keep,
+                    EffectOwner = from,
+                    Effect = new EffectWrite(token, now + lease, KeepsEvent: true),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1902,6 +2034,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             Owned(owner).Where(x => x.Id == id && x.Machine == machine),
             new RowWrite
             {
+                Now = _time.GetUtcNow(),
                 Stranded = StrandedWrite.Keep,
                 EffectOwner = token,
                 Effect = EffectWrite.Cleared,
@@ -1942,10 +2075,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         };
         if (
             !await Write(
-                Owned(owner).Where(x => x.Id == id && x.Machine == machineId),
-                write,
-                cancellationToken
-            )
+                    Owned(owner).Where(x => x.Id == id && x.Machine == machineId),
+                    write,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         )
             return null;
         var due = write.Due is { } written
@@ -1964,7 +2098,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     )
     {
-        var now = await DatabaseNow(cancellationToken);
+        var now = await DatabaseNow(cancellationToken).ConfigureAwait(false);
         var machineList = machines.ToList();
         return await db
             .SnapshotDrafts.AsNoTracking()
@@ -1979,8 +2113,15 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             .OrderBy(x => x.EffectLeaseUntil)
             .ThenBy(x => x.RowId)
             .Take(limit)
-            .Select(x => new AbandonedEffect(x.RowId, x.UserKey!, x.Machine, x.Id, x.EffectTrigger))
-            .ToListAsync(cancellationToken);
+            .Select(x => new AbandonedEffect(
+                x.RowId,
+                x.UserKey.NotNull(),
+                x.Machine,
+                x.Id,
+                x.EffectTrigger
+            ))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -2005,10 +2146,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 c.ContentFingerprint,
                 c.LeaseExpiresAt,
             })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (claims.Count == 0)
             return [];
-        var now = await DatabaseNow(cancellationToken);
+        var now = await DatabaseNow(cancellationToken).ConfigureAwait(false);
         return claims
             .Select(c => new LedgerClaim(
                 c.EffectKey,
@@ -2029,14 +2171,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         {
             await db
                 .EffectClaims.Where(c => keyList.Contains(c.EffectKey))
-                .ExecuteDeleteAsync(CancellationToken.None);
+                .ExecuteDeleteAsync(CancellationToken.None)
+                .ConfigureAwait(false);
             return;
         }
         var rows = await db
             .EffectClaims.Where(c => keyList.Contains(c.EffectKey))
-            .ToListAsync(CancellationToken.None);
+            .ToListAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         db.EffectClaims.RemoveRange(rows);
-        await ((DbContext)db).SaveChangesAsync(CancellationToken.None);
+        await ((DbContext)db).SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         foreach (var row in rows)
             ((DbContext)db).Entry(row).State = EntityState.Detached;
     }
@@ -2046,100 +2190,4 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         && dialect.IsUniqueViolation(
             exception as DbUpdateException ?? new DbUpdateException(exception.Message, exception)
         );
-}
-
-/// <summary>The request id and input fingerprint of the <c>start</c> that creates a row.</summary>
-/// <param name="RequestId">The client's request id.</param>
-/// <param name="Fingerprint">The fingerprint of the start's input.</param>
-internal sealed record StartRequest(string RequestId, string Fingerprint);
-
-/// <summary>A row a <c>start</c> created: its id, the fingerprint of the input it was started with, and the row as stored.</summary>
-internal sealed record StartedRow(Guid Id, string? Fingerprint, StoredSnapshot Stored);
-
-/// <summary>When a user's draft has expired, as one pass of the draft sweep reads it.</summary>
-/// <param name="IdleBefore">
-/// A draft last written before this, with no timer armed and no invoked run, has expired, unless its state is
-/// <paramref name="Kept"/>; null for no TTL.
-/// </param>
-/// <param name="BornBefore">
-/// A draft created before this (or, with no creation time recorded, last written before it) has expired whatever its
-/// timers or its run say, unless its state is <paramref name="Kept"/>; null for no bound.
-/// </param>
-/// <param name="Kept">
-/// For a row that does not record whether the server put it in its state, the states both
-/// <paramref name="IdleBefore"/> and <paramref name="BornBefore"/> leave alone, each as <see cref="Key"/> writes it; null
-/// keeps none. A row that records it is kept when the server put it there, whatever its state.
-/// </param>
-internal readonly record struct DraftExpiry(
-    DateTimeOffset? IdleBefore,
-    DateTimeOffset? BornBefore,
-    IReadOnlyCollection<string>? Kept = null
-)
-{
-    /// <summary>Between a machine's name and a state's in <see cref="Key"/>; in neither, being a control character.</summary>
-    internal const string Separator = "\u001f";
-
-    /// <summary>One machine's state, as <see cref="Kept"/> lists it.</summary>
-    internal static string Key(string machine, string state) => machine + Separator + state;
-}
-
-/// <summary>
-/// A user's draft the sweep read as expired: which row, whose, of which machine, at which revision, the run it holds,
-/// its state, and its context, which the sweep reads the receipts it recorded from.
-/// </summary>
-internal sealed record ExpiredDraft(
-    long RowId,
-    string UserKey,
-    string Machine,
-    Guid Id,
-    long Revision,
-    string? InvokeToken,
-    string State,
-    string Context
-);
-
-/// <summary>A user's row whose pending effect's lease has passed, as the reconciler read it.</summary>
-internal sealed record AbandonedEffect(
-    long RowId,
-    string UserKey,
-    string Machine,
-    Guid Id,
-    string? Trigger
-);
-
-/// <summary>A claim of the earlier effect-claim ledger, as a row's effect key names it.</summary>
-/// <param name="Key">The effect key.</param>
-/// <param name="Receipt">The recorded receipt, or null while the claim is in flight.</param>
-/// <param name="ContentFingerprint">The fingerprint of the content the effect ran on, or null when none was recorded.</param>
-/// <param name="LeaseLive">Whether the claim's lease has not passed yet, on the database's clock.</param>
-internal sealed record LedgerClaim(
-    string Key,
-    string? Receipt,
-    string? ContentFingerprint,
-    bool LeaseLive
-);
-
-/// <summary>A row whose timer is due, as the sweep read it.</summary>
-internal sealed record DueRow(
-    long RowId,
-    Guid Id,
-    string Machine,
-    SnapshotOwnerKind OwnerKind,
-    string? UserKey,
-    int Version,
-    string State,
-    string Context,
-    long Revision,
-    string? InvokeToken
-)
-{
-    /// <summary>The row's snapshot as stored, which the machine rehydrates (and migrates) before the timer fires.</summary>
-    public string Json =>
-        new JsonObject
-        {
-            ["machine"] = Machine,
-            ["version"] = Version,
-            ["state"] = State,
-            ["context"] = JsonNode.Parse(Context),
-        }.ToJsonString();
 }

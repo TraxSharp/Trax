@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -200,7 +201,11 @@ public class AddTraxPrincipalAccessorTests
             "alice",
             "Alice",
             ["Admin"],
-            Claims: new Dictionary<string, string> { ["tenant"] = "acme", ["tier"] = "enterprise" },
+            Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tenant"] = "acme",
+                ["tier"] = "enterprise",
+            },
             PrincipalType: "apikey"
         );
 
@@ -220,8 +225,8 @@ public class AddTraxPrincipalAccessorTests
         resolved.Roles.Should().BeEquivalentTo(["Admin"]);
         resolved.PrincipalType.Should().Be("apikey");
         resolved.Claims.Should().NotBeNull();
-        resolved.Claims!["tenant"].Should().Be("acme");
-        resolved.Claims!["tier"].Should().Be("enterprise");
+        resolved.Claims.NotNull()["tenant"].Should().Be("acme");
+        resolved.Claims.NotNull()["tier"].Should().Be("enterprise");
     }
 
     [Test]

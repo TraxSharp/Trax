@@ -28,7 +28,8 @@ public static class SchemaDetector
                 "graphql" => "graphql",
                 "openapi" => "openapi",
                 _ => throw new ArgumentException(
-                    $"Unknown schema type '{explicitType}'. Supported types: graphql, openapi."
+                    $"Unknown schema type '{explicitType}'. Supported types: graphql, openapi.",
+                    nameof(explicitType)
                 ),
             };
         }
@@ -43,7 +44,8 @@ public static class SchemaDetector
 
         throw new ArgumentException(
             $"Cannot detect schema type from extension '{extension}'. "
-                + "Use --type to specify explicitly. Supported types: graphql, openapi."
+                + "Use --type to specify explicitly. Supported types: graphql, openapi.",
+            nameof(filePath)
         );
     }
 }

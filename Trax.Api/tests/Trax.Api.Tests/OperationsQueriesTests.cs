@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -9,8 +10,10 @@ using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Fakes;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -49,12 +52,15 @@ public class OperationsQueriesTests
     // contention. Pool Size=8 across the four test fixtures in this assembly
     // stays well under Postgres's default max_connections=100.
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     // No train is registered, so a stored input can't be read as its type and shows masked.
     private static ITrainDiscoveryService Discovery => Substitute.For<ITrainDiscoveryService>();
@@ -62,7 +68,7 @@ public class OperationsQueriesTests
     private IOperationsService Operations =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );
@@ -71,7 +77,7 @@ public class OperationsQueriesTests
     private IOperationsService OperationsWith(RecordingChangeSignal signal) =>
         new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _factory,
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>(),
             changeSignal: signal
@@ -84,13 +90,14 @@ public class OperationsQueriesTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -98,7 +105,7 @@ public class OperationsQueriesTests
     public async Task SetUp()
     {
         // Clean the tables this fixture touches so each test starts fresh.
-        await using var db = await _factory.CreateDbContextAsync(default);
+        await using var db = await _factory.NotNull().CreateDbContextAsync(default);
         var ctx = (Microsoft.EntityFrameworkCore.DbContext)db;
         await ctx.Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group, trax.host_heartbeat RESTART IDENTITY CASCADE"
@@ -107,58 +114,71 @@ public class OperationsQueriesTests
 
     private async Task SeedManifests(int count, long? groupId = null)
     {
-        groupId ??= await SeedManifestGroup("default-group");
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        groupId ??= await SeedManifestGroup("default-group").ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-            m.IsEnabled = i % 2 == 0;
-            m.ManifestGroupId = groupId.Value;
-            await db.Track(m);
+            for (var i = 0; i < count; i++)
+            {
+                var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+                m.IsEnabled = i % 2 == 0;
+                m.ManifestGroupId = groupId.Value;
+                await db.Track(m).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     private async Task<long> SeedManifestGroup(string name = "test-group")
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var grp = new ManifestGroup
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            Name = name,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        await db.Track(grp);
-        await db.SaveChanges(default);
-        return grp.Id;
+            var grp = new ManifestGroup
+            {
+                Name = name,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            };
+            await db.Track(grp).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return grp.Id;
+        }
     }
 
     private async Task SeedExecutions(int count)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var meta = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = $"Trax.X.Train{i}",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            await db.Track(meta);
+            for (var i = 0; i < count; i++)
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"Trax.X.Train{i}"),
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    },
+                    TimeProvider.System
+                );
+                await db.Track(meta).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     private async Task<long> SeedManifestInGroup(long groupId)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-        m.ManifestGroupId = groupId;
-        await db.Track(m);
-        await db.SaveChanges(default);
-        return m.Id;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            m.ManifestGroupId = groupId;
+            await db.Track(m).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return m.Id;
+        }
     }
 
     private async Task SeedExecutionsForManifest(
@@ -167,54 +187,65 @@ public class OperationsQueriesTests
         TrainState state = TrainState.Completed
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var meta = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = "Trax.X.Run",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            meta.ManifestId = manifestId;
-            meta.TrainState = state;
-            // Terminal runs carry an end time so last-successful-run aggregation has data.
-            if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
-                meta.EndTime = DateTime.UtcNow;
-            await db.Track(meta);
+            for (var i = 0; i < count; i++)
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = "Trax.X.Run",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    },
+                    TimeProvider.System
+                );
+                meta.ManifestId = manifestId;
+                meta.TrainState = state;
+                // Terminal runs carry an end time so last-successful-run aggregation has data.
+                if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+                    meta.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
+                await db.Track(meta).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     private async Task<Manifest> SeedManifestForDeadLetter()
     {
-        var groupId = await SeedManifestGroup();
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-        m.ManifestGroupId = groupId;
-        await db.Track(m);
-        await db.SaveChanges(default);
-        return m;
+        var groupId = await SeedManifestGroup().ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            m.ManifestGroupId = groupId;
+            await db.Track(m).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return m;
+        }
     }
 
     private async Task SeedDeadLetters(int count, Manifest manifest)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        for (var i = 0; i < count; i++)
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var dl = DeadLetter.Create(
-                new CreateDeadLetter
-                {
-                    Manifest = manifest,
-                    Reason = $"failure-{i}",
-                    RetryCount = 3,
-                }
-            );
-            await db.Track(dl);
+            for (var i = 0; i < count; i++)
+            {
+                var dl = DeadLetter.Create(
+                    new CreateDeadLetter
+                    {
+                        Manifest = manifest,
+                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
+                        RetryCount = 3,
+                    },
+                    TimeProvider.System
+                );
+                await db.Track(dl).ConfigureAwait(false);
+            }
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-        await db.SaveChanges(default);
     }
 
     [Test]
@@ -222,7 +253,7 @@ public class OperationsQueriesTests
     {
         var queries = new OperationsQueries();
 
-        var result = await queries.GetManifests(_factory, default);
+        var result = await queries.GetManifests(_factory.NotNull(), default);
 
         result.Items.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
@@ -235,7 +266,7 @@ public class OperationsQueriesTests
         await SeedManifests(5);
         var queries = new OperationsQueries();
 
-        var result = await queries.GetManifests(_factory, default, take: 2);
+        var result = await queries.GetManifests(_factory.NotNull(), default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
@@ -246,10 +277,10 @@ public class OperationsQueriesTests
     {
         await SeedManifests(5);
         var queries = new OperationsQueries();
-        var first = await queries.GetManifests(_factory, default, take: 2);
+        var first = await queries.GetManifests(_factory.NotNull(), default, take: 2);
 
         var page2 = await queries.GetManifests(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 2,
             afterId: first.NextCursor
@@ -259,7 +290,7 @@ public class OperationsQueriesTests
         page2
             .Items.Select(m => m.Id)
             .Should()
-            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor!.Value));
+            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor.NotNull().Value));
         page2.IsEstimatedCount.Should().BeFalse();
     }
 
@@ -269,7 +300,7 @@ public class OperationsQueriesTests
         await SeedManifests(5);
         var queries = new OperationsQueries();
 
-        var result = await queries.GetManifests(_factory, default, skip: 2, take: 2);
+        var result = await queries.GetManifests(_factory.NotNull(), default, skip: 2, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.Skip.Should().Be(2);
@@ -280,19 +311,24 @@ public class OperationsQueriesTests
     {
         await SeedManifests(2);
         var queries = new OperationsQueries();
-        var first = (await queries.GetManifests(_factory, default)).Items.First();
+        var first = (await queries.GetManifests(_factory.NotNull(), default)).Items[0];
 
-        var fetched = await queries.GetManifestDetail(first.Id, _factory, Discovery, default);
+        var fetched = await queries.GetManifestDetail(
+            first.Id,
+            _factory.NotNull(),
+            Discovery,
+            default
+        );
 
         fetched.Should().NotBeNull();
-        fetched!.Id.Should().Be(first.Id);
+        fetched.NotNull().Id.Should().Be(first.Id);
     }
 
     [Test]
     public async Task GetExecutionDetail_ReturnsInputOutputAndStackTrace()
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var meta = Metadata.Create(
                 new CreateMetadata
@@ -300,7 +336,8 @@ public class OperationsQueriesTests
                     Name = "Trax.X.DetailTrain",
                     ExternalId = "detail-ext",
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             meta.Input = "{\"value\": 42}";
             meta.Output = "{\"result\": \"ok\"}";
@@ -311,10 +348,14 @@ public class OperationsQueriesTests
             id = meta.Id;
         }
 
-        var detail = await new OperationsQueries().GetExecutionDetail(id, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            id,
+            _factory.NotNull(),
+            default
+        );
 
         detail.Should().NotBeNull();
-        detail!.Id.Should().Be(id);
+        detail.NotNull().Id.Should().Be(id);
         detail.ExternalId.Should().StartWith("detail-ext"); // external_id is CHAR(32), space-padded
         detail.Input.Should().Be("{\"value\": 42}");
         detail.Output.Should().Be("{\"result\": \"ok\"}");
@@ -326,11 +367,36 @@ public class OperationsQueriesTests
     public async Task GetExecutionDetail_LinksItsWorkQueueEntry_AndTheDeadLetterItRetries()
     {
         var manifest = await SeedManifestForDeadLetter();
-        long retry,
+        var (retry, plain, entryId, deadLetterId) = await SeedRetryRunWithItsEntry(manifest);
+
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            retry,
+            _factory.NotNull(),
+            default
+        );
+        detail.NotNull().WorkQueueEntryId.Should().Be(entryId);
+        detail.DeadLetterId.Should().Be(deadLetterId);
+        detail.InvokedBy.Should().BeNull();
+
+        var unlinked = await new OperationsQueries().GetExecutionDetail(
             plain,
-            entryId,
-            deadLetterId;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+            _factory.NotNull(),
+            default
+        );
+        unlinked.NotNull().WorkQueueEntryId.Should().BeNull();
+        unlinked.DeadLetterId.Should().BeNull();
+        unlinked.ChildCount.Should().Be(0);
+    }
+
+    private async Task<(
+        long Retry,
+        long Plain,
+        long EntryId,
+        long DeadLetterId
+    )> SeedRetryRunWithItsEntry(Manifest manifest)
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var deadLetter = DeadLetter.Create(
                 new CreateDeadLetter
@@ -338,16 +404,18 @@ public class OperationsQueriesTests
                     Manifest = manifest,
                     Reason = "retries used up",
                     RetryCount = 3,
-                }
+                },
+                TimeProvider.System
             );
-            await db.Track(deadLetter);
+            await db.Track(deadLetter).ConfigureAwait(false);
             var run = Metadata.Create(
                 new CreateMetadata
                 {
                     Name = "Trax.X.RetryTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             var other = Metadata.Create(
                 new CreateMetadata
@@ -355,37 +423,29 @@ public class OperationsQueriesTests
                     Name = "Trax.X.RetryTrain",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
-            await db.Track(run);
-            await db.Track(other);
-            await db.SaveChanges(default);
+            await db.Track(run).ConfigureAwait(false);
+            await db.Track(other).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
             // The requeue's entry, dispatched as the retry run; the dead letter names that run.
             var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
                 new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
                 {
                     TrainName = "Trax.X.RetryTrain",
-                }
+                },
+                TimeProvider.System
             );
             entry.MetadataId = run.Id;
             entry.Status = WorkQueueStatus.Dispatched;
-            await db.Track(entry);
+            await db.Track(entry).ConfigureAwait(false);
             deadLetter.RetryMetadataId = run.Id;
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-            (retry, plain, entryId, deadLetterId) = (run.Id, other.Id, entry.Id, deadLetter.Id);
+            return (run.Id, other.Id, entry.Id, deadLetter.Id);
         }
-
-        var detail = await new OperationsQueries().GetExecutionDetail(retry, _factory, default);
-        detail!.WorkQueueEntryId.Should().Be(entryId);
-        detail.DeadLetterId.Should().Be(deadLetterId);
-        detail.InvokedBy.Should().BeNull();
-
-        var unlinked = await new OperationsQueries().GetExecutionDetail(plain, _factory, default);
-        unlinked!.WorkQueueEntryId.Should().BeNull();
-        unlinked.DeadLetterId.Should().BeNull();
-        unlinked.ChildCount.Should().Be(0);
     }
 
     [Test]
@@ -393,7 +453,7 @@ public class OperationsQueriesTests
     {
         var externalId = Guid.NewGuid().ToString("N");
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var run = Metadata.Create(
                 new CreateMetadata
@@ -401,7 +461,8 @@ public class OperationsQueriesTests
                     Name = "Trax.X.LookupTrain",
                     ExternalId = externalId,
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(run);
             await db.SaveChanges(default);
@@ -421,7 +482,7 @@ public class OperationsQueriesTests
             .BeEquivalentTo(
                 new LookupMatch(
                     LookupKind.Run,
-                    id.ToString(),
+                    id.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "Trax.X.LookupTrain · Pending",
                     "externalId"
                 )
@@ -436,39 +497,7 @@ public class OperationsQueriesTests
     {
         var manifest = await SeedManifestForDeadLetter();
         var subject = "customer-" + Guid.NewGuid().ToString("N");
-        long entryId;
-        await using (var db = await _factory.CreateDbContextAsync(default))
-        {
-            var run = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = "Trax.X.LookupTrain",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            await db.Track(run);
-            await db.Track(
-                DeadLetter.Create(
-                    new CreateDeadLetter
-                    {
-                        Manifest = manifest,
-                        Reason = "retries used up",
-                        RetryCount = 3,
-                    }
-                )
-            );
-            var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
-                {
-                    TrainName = "Trax.X.LookupTrain",
-                    SubjectKey = subject,
-                }
-            );
-            await db.Track(entry);
-            await db.SaveChanges(default);
-            entryId = entry.Id;
-        }
+        var entryId = await SeedOneOfEachKindForLookup(manifest, subject);
 
         // Every table was emptied, so id 1 is the first row of each.
         var byId = await new OperationsQueries().GetLookup("1", Operations, default);
@@ -491,12 +520,53 @@ public class OperationsQueriesTests
             .Which.Should()
             .Match<LookupMatch>(m =>
                 m.Kind == LookupKind.WorkQueueEntry
-                && m.Id == entryId.ToString()
+                && m.Id == entryId.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 && m.MatchedOn == "subjectKey"
             );
 
         var byName = await new OperationsQueries().GetLookup(manifest.Name, Operations, default);
         byName.Should().Contain(m => m.Kind == LookupKind.Manifest && m.MatchedOn == "name");
+    }
+
+    private async Task<long> SeedOneOfEachKindForLookup(Manifest manifest, string subject)
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.LookupTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
+            );
+            await db.Track(run).ConfigureAwait(false);
+            await db.Track(
+                    DeadLetter.Create(
+                        new CreateDeadLetter
+                        {
+                            Manifest = manifest,
+                            Reason = "retries used up",
+                            RetryCount = 3,
+                        },
+                        TimeProvider.System
+                    )
+                )
+                .ConfigureAwait(false);
+            var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
+                {
+                    TrainName = "Trax.X.LookupTrain",
+                    SubjectKey = subject,
+                },
+                TimeProvider.System
+            );
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return entry.Id;
+        }
     }
 
     [Test]
@@ -506,7 +576,7 @@ public class OperationsQueriesTests
         var secret = "secret-" + Guid.NewGuid().ToString("N");
         var userKey = "user-" + Guid.NewGuid().ToString("N");
         long rowId;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var draft = new Trax.Effect.Models.SnapshotDraft.SnapshotDraft
             {
@@ -518,8 +588,8 @@ public class OperationsQueriesTests
                 State = "Building",
                 Context = JsonSerializer.Serialize(new { apiKey = secret }),
                 ConcurrencyToken = Guid.NewGuid(),
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow(),
+                UpdatedAt = TimeProvider.System.GetUtcNow(),
             };
             db.SnapshotDrafts.Add(draft);
             await db.SaveChanges(default);
@@ -551,7 +621,11 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetExecutionDetail_MissingId_ReturnsNull()
     {
-        var detail = await new OperationsQueries().GetExecutionDetail(999999, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            999999,
+            _factory.NotNull(),
+            default
+        );
 
         detail.Should().BeNull();
     }
@@ -559,7 +633,7 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetExecutions_FilterByState_ReturnsOnlyMatchingWithExactCount()
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             foreach (
                 var state in new[] { TrainState.Completed, TrainState.Failed, TrainState.Failed }
@@ -571,7 +645,8 @@ public class OperationsQueriesTests
                         Name = "Trax.X.FilterTrain",
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 meta.TrainState = state;
                 await db.Track(meta);
@@ -580,7 +655,7 @@ public class OperationsQueriesTests
         }
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             trainState: TrainState.Failed
         );
@@ -594,7 +669,42 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetExecutions_ReportsHowARunFailed_AndFiltersOnIt()
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await SeedClassifiedFailures();
+
+        await SeedRunsTheClassFilterLeavesOut();
+
+        var all = await new OperationsQueries().GetExecutions(_factory.NotNull(), default);
+        all.Items.Select(e => e.FailureClass)
+            .Should()
+            .BeEquivalentTo(
+                [
+                    FailureClass.Conflict,
+                    FailureClass.Transient,
+                    FailureClass.Unclassified,
+                    FailureClass.Unclassified,
+                ],
+                "the stored class is what the dashboard and API consumers read"
+            );
+
+        var conflicts = await new OperationsQueries().GetExecutions(
+            _factory.NotNull(),
+            default,
+            failureClass: FailureClass.Conflict
+        );
+
+        conflicts
+            .Items.Should()
+            .ContainSingle()
+            .Which.FailureClass.Should()
+            .Be(FailureClass.Conflict);
+        conflicts.TotalCount.Should().Be(1, "the count covers the filter, not the table");
+        conflicts.IsEstimatedCount.Should().BeFalse("a filtered page is counted exactly");
+    }
+
+    private async Task SeedClassifiedFailures()
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             foreach (var failureClass in new[] { FailureClass.Conflict, FailureClass.Transient })
             {
@@ -604,7 +714,8 @@ public class OperationsQueriesTests
                         Name = "Trax.X.Classified",
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 meta.TrainState = TrainState.Failed;
                 meta.AddException(
@@ -622,13 +733,17 @@ public class OperationsQueriesTests
                         )
                     )
                 );
-                await db.Track(meta);
+                await db.Track(meta).ConfigureAwait(false);
             }
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
+    }
 
-        // Rows the filter must leave out: a completed run and an unclassified failure.
-        await using (var db = await _factory.CreateDbContextAsync(default))
+    // Rows the filter must leave out: a completed run and an unclassified failure.
+    private async Task SeedRunsTheClassFilterLeavesOut()
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var completed = Metadata.Create(
                 new CreateMetadata
@@ -636,7 +751,8 @@ public class OperationsQueriesTests
                     Name = "Trax.X.Classified",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             completed.TrainState = TrainState.Completed;
             var unclassified = Metadata.Create(
@@ -645,40 +761,14 @@ public class OperationsQueriesTests
                     Name = "Trax.X.Classified",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             unclassified.TrainState = TrainState.Failed;
-            await db.Track(completed);
-            await db.Track(unclassified);
-            await db.SaveChanges(default);
+            await db.Track(completed).ConfigureAwait(false);
+            await db.Track(unclassified).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-
-        var all = await new OperationsQueries().GetExecutions(_factory, default);
-        all.Items.Select(e => e.FailureClass)
-            .Should()
-            .BeEquivalentTo(
-                [
-                    FailureClass.Conflict,
-                    FailureClass.Transient,
-                    FailureClass.Unclassified,
-                    FailureClass.Unclassified,
-                ],
-                "the stored class is what the dashboard and API consumers read"
-            );
-
-        var conflicts = await new OperationsQueries().GetExecutions(
-            _factory,
-            default,
-            failureClass: FailureClass.Conflict
-        );
-
-        conflicts
-            .Items.Should()
-            .ContainSingle()
-            .Which.FailureClass.Should()
-            .Be(FailureClass.Conflict);
-        conflicts.TotalCount.Should().Be(1, "the count covers the filter, not the table");
-        conflicts.IsEstimatedCount.Should().BeFalse("a filtered page is counted exactly");
     }
 
     [Test]
@@ -686,7 +776,11 @@ public class OperationsQueriesTests
     {
         await SeedManifests(4); // SeedManifests toggles IsEnabled on even indexes -> 2 enabled
 
-        var result = await new OperationsQueries().GetManifests(_factory, default, isEnabled: true);
+        var result = await new OperationsQueries().GetManifests(
+            _factory.NotNull(),
+            default,
+            isEnabled: true
+        );
 
         result.Items.Should().NotBeEmpty();
         result.Items.Should().OnlyContain(m => m.IsEnabled);
@@ -699,15 +793,19 @@ public class OperationsQueriesTests
         await SeedManifests(3); // all default to ScheduleType.None, same fake train name
         var q = new OperationsQueries();
 
-        var bySchedule = await q.GetManifests(_factory, default, scheduleType: ScheduleType.None);
+        var bySchedule = await q.GetManifests(
+            _factory.NotNull(),
+            default,
+            scheduleType: ScheduleType.None
+        );
         var byOtherSchedule = await q.GetManifests(
-            _factory,
+            _factory.NotNull(),
             default,
             scheduleType: ScheduleType.Cron
         );
-        var byName = await q.GetManifests(_factory, default, nameContains: "FakeTrain");
+        var byName = await q.GetManifests(_factory.NotNull(), default, nameContains: "FakeTrain");
         var byMissingName = await q.GetManifests(
-            _factory,
+            _factory.NotNull(),
             default,
             nameContains: "no-such-manifest"
         );
@@ -725,25 +823,25 @@ public class OperationsQueriesTests
         var q = new OperationsQueries();
 
         var included = await q.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
-            startedAfter: DateTime.UtcNow.AddMinutes(-5)
+            startedAfter: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
         var excluded = await q.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
-            startedAfter: DateTime.UtcNow.AddMinutes(5)
+            startedAfter: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5)
         );
         // startedBefore: a window bounded on the upper side includes the just-created rows.
         var beforeIncluded = await q.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
-            startedBefore: DateTime.UtcNow.AddMinutes(5)
+            startedBefore: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5)
         );
         var beforeExcluded = await q.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
-            startedBefore: DateTime.UtcNow.AddMinutes(-5)
+            startedBefore: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
         );
 
         included.Items.Should().HaveCount(3);
@@ -759,7 +857,7 @@ public class OperationsQueriesTests
         await SeedExecutions(3); // Trax.X.Train0, Train1, Train2
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             trainName: "Trax.X.Train1"
         );
@@ -772,8 +870,8 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetExecutions_HideAdminTrains_ExcludesAdminTrainRuns()
     {
-        var adminName = AdminTrains.FullNames.First();
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var adminName = AdminTrains.FullNames[0];
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             foreach (var name in new[] { adminName, adminName, "Trax.X.RegularTrain" })
             {
@@ -783,16 +881,17 @@ public class OperationsQueriesTests
                         Name = name,
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 await db.Track(meta);
             }
             await db.SaveChanges(default);
         }
 
-        var all = await new OperationsQueries().GetExecutions(_factory, default);
+        var all = await new OperationsQueries().GetExecutions(_factory.NotNull(), default);
         var visible = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             hideAdminTrains: true
         );
@@ -824,40 +923,47 @@ public class OperationsQueriesTests
         int? workerSlotsInUse = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        db.HostHeartbeats.Add(
-            new HostHeartbeat
-            {
-                InstanceId = instance,
-                HostName = name,
-                HostEnvironment = "kubernetes",
-                TraxVersion = "1.70.0",
-                StartedAt = (lastBeat - TimeSpan.FromHours(1)).UtcDateTime,
-                LastHeartbeatAt = lastBeat.UtcDateTime,
-                RunsDispatcher = runsDispatcher,
-                RunsManifestManager = runsDispatcher,
-                WorkerSlots = workerSlots,
-                WorkerSlotsInUse = workerSlotsInUse,
-            }
-        );
-        await db.SaveChanges(default);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            db.HostHeartbeats.Add(
+                new HostHeartbeat
+                {
+                    InstanceId = instance,
+                    HostName = name,
+                    HostEnvironment = "kubernetes",
+                    TraxVersion = "1.70.0",
+                    StartedAt = (lastBeat - TimeSpan.FromHours(1)).UtcDateTime,
+                    LastHeartbeatAt = lastBeat.UtcDateTime,
+                    RunsDispatcher = runsDispatcher,
+                    RunsManifestManager = runsDispatcher,
+                    WorkerSlots = workerSlots,
+                    WorkerSlotsInUse = workerSlotsInUse,
+                }
+            );
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     private async Task SeedRun(string? instance, TrainState state)
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = "Trax.X.HostTrain",
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        m.HostInstanceId = instance;
-        m.TrainState = state;
-        await db.Track(m);
-        await db.SaveChanges(default);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.HostTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
+            );
+            m.HostInstanceId = instance;
+            m.TrainState = state;
+            await db.Track(m).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+        }
     }
 
     [Test]
@@ -881,7 +987,7 @@ public class OperationsQueriesTests
         await SeedRun("gone", TrainState.InProgress);
 
         var hosts = await new OperationsQueries().GetHosts(
-            _factory,
+            _factory.NotNull(),
             default,
             new ManualTime(HostsNow)
         );
@@ -914,11 +1020,9 @@ public class OperationsQueriesTests
 
         async Task<bool> OnlineAt(TimeSpan later) =>
             (
-                await new OperationsQueries().GetHosts(
-                    _factory,
-                    default,
-                    new ManualTime(lastBeat + later)
-                )
+                await new OperationsQueries()
+                    .GetHosts(_factory.NotNull(), default, new ManualTime(lastBeat + later))
+                    .ConfigureAwait(false)
             )
                 .Single()
                 .Online;
@@ -936,10 +1040,10 @@ public class OperationsQueriesTests
         // A host that predates the heartbeat, or one that stopped more than a day ago and was
         // pruned, has runs but no row: it is not up, so it is not listed.
         await SeedRun("old-host", TrainState.Completed);
-        await SeedRun(null, TrainState.InProgress);
+        await SeedRun(instance: null, TrainState.InProgress);
 
         var hosts = await new OperationsQueries().GetHosts(
-            _factory,
+            _factory.NotNull(),
             default,
             new ManualTime(HostsNow)
         );
@@ -963,50 +1067,18 @@ public class OperationsQueriesTests
             .BeTrue();
         try
         {
-            var groupId = await SeedManifestGroup("attention-group");
-            async Task<Manifest> SeedManifest()
-            {
-                await using var db = await _factory.CreateDbContextAsync(default);
-                var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
-                m.ManifestGroupId = groupId;
-                await db.Track(m);
-                await db.SaveChanges(default);
-                return m;
-            }
-            var first = await SeedManifest();
-            var second = await SeedManifest();
-            var third = await SeedManifest();
-            await using (var db = await _factory.CreateDbContextAsync(default))
-            {
-                foreach (
-                    var (manifest, reason) in new[]
-                    {
-                        (first, "Max retries exceeded"),
-                        (second, "Max retries exceeded"),
-                        (third, "Timed out"),
-                    }
-                )
-                    await db.Track(
-                        DeadLetter.Create(
-                            new CreateDeadLetter
-                            {
-                                Manifest = manifest,
-                                Reason = reason,
-                                RetryCount = 3,
-                            }
-                        )
-                    );
-                await db.SaveChanges(default);
-            }
+            await SeedThreeDeadLettersInTwoReasons();
 
-            var attention = await new OperationsQueries().GetAttention(ops, default);
+            var attention = await new OperationsQueries()
+                .GetAttention(ops, default)
+                .ConfigureAwait(false);
 
             attention.Scheduler.JobDispatcherEnabled.Should().BeFalse();
             attention.Scheduler.ManifestManagerEnabled.Should().BeTrue();
             attention.Scheduler.Paused.Should().BeTrue();
             attention.Scheduler.Link.Should().Be("/system/scheduler");
 
-            var train = typeof(SomeFakeTrain).FullName!;
+            var train = typeof(SomeFakeTrain).FullName.NotNull();
             attention
                 .DeadLetters.Select(g => (g.TrainName, g.Reason, g.Count))
                 .Should()
@@ -1022,16 +1094,94 @@ public class OperationsQueriesTests
         }
         finally
         {
-            await using var db = await _factory.CreateDbContextAsync(default);
-            await ((DbContext)db).Database.ExecuteSqlRawAsync("DELETE FROM trax.scheduler_config");
+            await DeleteSchedulerConfig().ConfigureAwait(false);
+        }
+    }
+
+    // Two manifests of one train dead-lettered for the same reason, a third for another.
+    private async Task SeedThreeDeadLettersInTwoReasons()
+    {
+        var groupId = await SeedManifestGroup("attention-group").ConfigureAwait(false);
+        async Task<Manifest> SeedManifest()
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+                m.ManifestGroupId = groupId;
+                await db.Track(m).ConfigureAwait(false);
+                await db.SaveChanges(default).ConfigureAwait(false);
+                return m;
+            }
+        }
+        var first = await SeedManifest().ConfigureAwait(false);
+        var second = await SeedManifest().ConfigureAwait(false);
+        var third = await SeedManifest().ConfigureAwait(false);
+        {
+            var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                foreach (
+                    var (manifest, reason) in new[]
+                    {
+                        (first, "Max retries exceeded"),
+                        (second, "Max retries exceeded"),
+                        (third, "Timed out"),
+                    }
+                )
+                    await db.Track(
+                            DeadLetter.Create(
+                                new CreateDeadLetter
+                                {
+                                    Manifest = manifest,
+                                    Reason = reason,
+                                    RetryCount = 3,
+                                },
+                                TimeProvider.System
+                            )
+                        )
+                        .ConfigureAwait(false);
+                await db.SaveChanges(default).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task DeleteSchedulerConfig()
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await ((DbContext)db)
+                .Database.ExecuteSqlRawAsync("DELETE FROM trax.scheduler_config")
+                .ConfigureAwait(false);
         }
     }
 
     [Test]
     public async Task GetAttention_ListsATrainFailingMoreThisHourThanThisWeek_AndNotOneThatAlwaysFails()
     {
-        var now = DateTime.UtcNow;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await SeedFlakyBrokenNewAndOldTrains();
+
+        var attention = await new OperationsQueries().GetAttention(Operations, default);
+
+        attention.Scheduler.Paused.Should().BeFalse();
+        attention
+            .FailingTrains.Select(t => t.TrainName)
+            .Should()
+            .Equal("Trax.X.New", "Trax.X.Flaky");
+        var flaky = attention.FailingTrains[1];
+        flaky.FailedLastHour.Should().Be(1);
+        flaky.FinishedLastHour.Should().Be(3);
+        flaky.LastHourFailureRate.Should().BeApproximately(1.0 / 3, 1e-9);
+        flaky.BaselineFailureRate.Should().Be(0);
+        flaky.Link.Should().Be("/runs?state=FAILED&train=Trax.X.Flaky");
+    }
+
+    private async Task SeedFlakyBrokenNewAndOldTrains()
+    {
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             void Run(string name, TrainState state, DateTime start)
             {
@@ -1041,7 +1191,8 @@ public class OperationsQueriesTests
                         Name = name,
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 m.TrainState = state;
                 m.StartTime = start;
@@ -1063,28 +1214,14 @@ public class OperationsQueriesTests
             // Old: failed this often eight days ago, outside the week.
             Run("Trax.X.Old", TrainState.Completed, now.AddMinutes(-15));
             Run("Trax.X.Old", TrainState.Failed, now.AddDays(-8));
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
-
-        var attention = await new OperationsQueries().GetAttention(Operations, default);
-
-        attention.Scheduler.Paused.Should().BeFalse();
-        attention
-            .FailingTrains.Select(t => t.TrainName)
-            .Should()
-            .Equal("Trax.X.New", "Trax.X.Flaky");
-        var flaky = attention.FailingTrains[1];
-        flaky.FailedLastHour.Should().Be(1);
-        flaky.FinishedLastHour.Should().Be(3);
-        flaky.LastHourFailureRate.Should().BeApproximately(1.0 / 3, 1e-9);
-        flaky.BaselineFailureRate.Should().Be(0);
-        flaky.Link.Should().Be("/runs?state=FAILED&train=Trax.X.Flaky");
     }
 
     [Test]
     public async Task GetAttention_CountsTheDueBacklog_StuckInstancesAndOfflineHosts()
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var ctx = (DbContext)db;
             await ctx.Database.ExecuteSqlRawAsync(
@@ -1092,25 +1229,52 @@ public class OperationsQueriesTests
             );
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         await SeedHeartbeat("pod-up", "host-up", now - TimeSpan.FromSeconds(5));
-        await SeedHeartbeat("pod-gone", "host-gone", now - TimeSpan.FromMinutes(10), true);
+        await SeedHeartbeat(
+            "pod-gone",
+            "host-gone",
+            now - TimeSpan.FromMinutes(10),
+            runsDispatcher: true
+        );
 
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await SeedDueBacklogAndInstances(now);
+
+        var attention = await new OperationsQueries().GetAttention(Operations, default);
+
+        attention.Queue.Queued.Should().Be(2, "the entry scheduled for later is not due");
+        attention.Queue.OldestAgeSeconds.Should().BeInRange(7 * 60 - 5, 7 * 60 + 60);
+        attention.Queue.Link.Should().Be("/runs/queued?status=QUEUED");
+
+        attention
+            .StuckInstances.Select(g => (g.Machine, g.State, g.Count, g.Link))
+            .Should()
+            .Equal(
+                ("order", "Waiting", 2L, "/machines/order?state=Waiting&stuck=true"),
+                ("order", "Charging", 1L, "/machines/order?state=Charging&stuck=true")
+            );
+
+        attention
+            .OfflineHosts.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new
+                {
+                    InstanceId = "pod-gone",
+                    HostName = "host-gone",
+                    RunsDispatcher = true,
+                    Link = "/system/hosts",
+                }
+            );
+    }
+
+    private async Task SeedDueBacklogAndInstances(DateTimeOffset now)
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            var oldest = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" }
-            );
-            oldest.CreatedAt = now.UtcDateTime.AddMinutes(-7);
-            var newer = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" }
-            );
-            var later = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" }
-            );
-            later.ScheduledAt = now.UtcDateTime.AddHours(1);
-            later.CreatedAt = now.UtcDateTime.AddHours(-1);
-            db.WorkQueues.AddRange(oldest, newer, later);
+            AddQueueEntries(db, now);
 
             // Two runs machine instances wait on: one failed ten minutes ago, one completed.
             Metadata Ran(TrainState state)
@@ -1121,7 +1285,8 @@ public class OperationsQueriesTests
                         Name = "Trax.X.Invoked",
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 m.TrainState = state;
                 m.EndTime = now.UtcDateTime.AddMinutes(-10);
@@ -1154,40 +1319,33 @@ public class OperationsQueriesTests
                 Instance("Waiting", now - TimeSpan.FromMinutes(5)),
                 Instance("Waiting", now - TimeSpan.FromMinutes(6)),
                 Instance("Waiting", now + TimeSpan.FromMinutes(5)),
-                Instance("Shipped", null),
-                Instance("Charging", null, failedRun.ExternalId),
-                Instance("Charging", null, completedRun.ExternalId)
+                Instance("Shipped", due: null),
+                Instance("Charging", due: null, failedRun.ExternalId),
+                Instance("Charging", due: null, completedRun.ExternalId)
             );
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
+    }
 
-        var attention = await new OperationsQueries().GetAttention(Operations, default);
-
-        attention.Queue.Queued.Should().Be(2, "the entry scheduled for later is not due");
-        attention.Queue.OldestAgeSeconds.Should().BeInRange(7 * 60 - 5, 7 * 60 + 60);
-        attention.Queue.Link.Should().Be("/runs/queued?status=QUEUED");
-
-        attention
-            .StuckInstances.Select(g => (g.Machine, g.State, g.Count, g.Link))
-            .Should()
-            .Equal(
-                ("order", "Waiting", 2L, "/machines/order?state=Waiting&stuck=true"),
-                ("order", "Charging", 1L, "/machines/order?state=Charging&stuck=true")
-            );
-
-        attention
-            .OfflineHosts.Should()
-            .ContainSingle()
-            .Which.Should()
-            .BeEquivalentTo(
-                new
-                {
-                    InstanceId = "pod-gone",
-                    HostName = "host-gone",
-                    RunsDispatcher = true,
-                    Link = "/system/hosts",
-                }
-            );
+    // Two entries due now, the oldest seven minutes old, and one scheduled for later.
+    private static void AddQueueEntries(IDataContext db, DateTimeOffset now)
+    {
+        var oldest = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" },
+            TimeProvider.System
+        );
+        oldest.CreatedAt = now.UtcDateTime.AddMinutes(-7);
+        var newer = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" },
+            TimeProvider.System
+        );
+        var later = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" },
+            TimeProvider.System
+        );
+        later.ScheduledAt = now.UtcDateTime.AddHours(1);
+        later.CreatedAt = now.UtcDateTime.AddHours(-1);
+        db.WorkQueues.AddRange(oldest, newer, later);
     }
 
     private sealed class ManualTime(DateTimeOffset now) : TimeProvider
@@ -1199,7 +1357,7 @@ public class OperationsQueriesTests
     public async Task GetTrainStats_ScopesToTrainAndAveragesCompletedDurations()
     {
         var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             async Task Seed(string name, TrainState state, DateTime? end)
             {
@@ -1209,25 +1367,26 @@ public class OperationsQueriesTests
                         Name = name,
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null,
-                    }
+                    },
+                    TimeProvider.System
                 );
                 m.StartTime = start;
                 m.TrainState = state;
                 m.EndTime = end;
-                await db.Track(m);
+                await db.Track(m).ConfigureAwait(false);
             }
 
             // Two completed runs (2s and 4s) → avg 3000ms. One failed. Plus another train, ignored.
             await Seed("Trax.X.StatTrain", TrainState.Completed, start.AddSeconds(2));
             await Seed("Trax.X.StatTrain", TrainState.Completed, start.AddSeconds(4));
-            await Seed("Trax.X.StatTrain", TrainState.Failed, null);
+            await Seed("Trax.X.StatTrain", TrainState.Failed, end: null);
             await Seed("Trax.X.OtherTrain", TrainState.Completed, start.AddSeconds(9));
             await db.SaveChanges(default);
         }
 
         var stats = await new OperationsQueries().GetTrainStats(
             "Trax.X.StatTrain",
-            _factory,
+            _factory.NotNull(),
             default
         );
 
@@ -1244,7 +1403,7 @@ public class OperationsQueriesTests
         await SeedExecutions(3);
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             order: SortOrder.Oldest
         );
@@ -1261,7 +1420,11 @@ public class OperationsQueriesTests
         await SeedExecutionsForManifest(m1, 3);
         await SeedExecutionsForManifest(m2, 2);
 
-        var result = await new OperationsQueries().GetExecutions(_factory, default, manifestId: m1);
+        var result = await new OperationsQueries().GetExecutions(
+            _factory.NotNull(),
+            default,
+            manifestId: m1
+        );
 
         result.Items.Should().HaveCount(3);
         result.Items.Should().OnlyContain(e => e.ManifestId == m1);
@@ -1277,7 +1440,7 @@ public class OperationsQueriesTests
         await SeedExecutionsForManifest(m1, 2);
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             manifestId: 999999
         );
@@ -1299,7 +1462,7 @@ public class OperationsQueriesTests
         await SeedExecutionsForManifest(b1, 4);
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             manifestGroupId: groupA
         );
@@ -1319,7 +1482,7 @@ public class OperationsQueriesTests
         await SeedExecutionsForManifest(m1, 1, TrainState.Failed);
 
         var result = await new OperationsQueries().GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             manifestId: m1,
             trainState: TrainState.Failed
@@ -1340,7 +1503,7 @@ public class OperationsQueriesTests
         await SeedManifestInGroup(groupB);
 
         var result = await new OperationsQueries().GetManifests(
-            _factory,
+            _factory.NotNull(),
             default,
             manifestGroupId: groupA
         );
@@ -1460,17 +1623,21 @@ public class OperationsQueriesTests
                     { typeof(FakeOutput), false },
                 }
             );
-        registry.IsToggleable(typeof(FakeInput)).Returns(true);
-        registry.IsToggleable(typeof(FakeOutput)).Returns(false);
+        registry.IsToggleable(typeof(FakeInput)).Returns(returnThis: true);
+        registry.IsToggleable(typeof(FakeOutput)).Returns(returnThis: false);
 
         var result = new OperationsQueries().GetEffects(EffectSettings(registry));
 
         result.Should().HaveCount(2);
-        var enabled = result.Single(e => e.Name == nameof(FakeInput));
+        var enabled = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeInput), StringComparison.Ordinal)
+        );
         enabled.Enabled.Should().BeTrue();
         enabled.Toggleable.Should().BeTrue();
         enabled.FullName.Should().Be(typeof(FakeInput).FullName);
-        var disabled = result.Single(e => e.Name == nameof(FakeOutput));
+        var disabled = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeOutput), StringComparison.Ordinal)
+        );
         disabled.Enabled.Should().BeFalse();
         disabled.Toggleable.Should().BeFalse();
     }
@@ -1489,7 +1656,7 @@ public class OperationsQueriesTests
     {
         var groupId = await SeedManifestGroup("g");
         long manifestId;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
             m.ManifestGroupId = groupId;
@@ -1508,7 +1675,7 @@ public class OperationsQueriesTests
 
         var result = await new OperationsQueries().GetManifestExclusions(
             manifestId,
-            _factory,
+            _factory.NotNull(),
             default
         );
 
@@ -1531,10 +1698,10 @@ public class OperationsQueriesTests
         var groupId = await SeedManifestGroup("g");
         var m1 = await SeedManifestInGroup(groupId);
 
-        (await new OperationsQueries().GetManifestExclusions(m1, _factory, default))
+        (await new OperationsQueries().GetManifestExclusions(m1, _factory.NotNull(), default))
             .Should()
             .BeEmpty();
-        (await new OperationsQueries().GetManifestExclusions(999999, _factory, default))
+        (await new OperationsQueries().GetManifestExclusions(999999, _factory.NotNull(), default))
             .Should()
             .BeEmpty();
     }
@@ -1543,7 +1710,7 @@ public class OperationsQueriesTests
     public async Task GetExecutionChildren_And_ChildCount_ReflectParentId()
     {
         await SeedExecutions(4);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var ctx = (Microsoft.EntityFrameworkCore.DbContext)db;
             await ctx.Database.ExecuteSqlRawAsync(
@@ -1553,24 +1720,24 @@ public class OperationsQueriesTests
         }
 
         long parentId;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             parentId = await db.Metadatas.MinAsync(m => m.Id);
 
         var q = new OperationsQueries();
-        var children = await q.GetExecutionChildren(parentId, _factory, default);
-        var detail = await q.GetExecutionDetail(parentId, _factory, default);
+        var children = await q.GetExecutionChildren(parentId, _factory.NotNull(), default);
+        var detail = await q.GetExecutionDetail(parentId, _factory.NotNull(), default);
 
         children.Items.Should().HaveCount(3);
         children.TotalCount.Should().Be(3);
         children.Items.Should().OnlyContain(c => c.Id > parentId);
-        detail!.ChildCount.Should().Be(3);
+        detail.NotNull().ChildCount.Should().Be(3);
     }
 
     [Test]
     public async Task CancelExecution_FlagsInProgress_AndReturnsCount()
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var meta = Metadata.Create(
                 new CreateMetadata
@@ -1578,7 +1745,8 @@ public class OperationsQueriesTests
                     Name = "Trax.X.CancelMe",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             meta.TrainState = TrainState.InProgress;
             await db.Track(meta);
@@ -1590,7 +1758,7 @@ public class OperationsQueriesTests
 
         resp.Success.Should().BeTrue();
         resp.Count.Should().Be(1);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             (await db.Metadatas.FirstAsync(m => m.Id == id))
                 .CancellationRequested.Should()
                 .BeTrue();
@@ -1610,7 +1778,7 @@ public class OperationsQueriesTests
     {
         await SeedManifests(1);
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             id = await db.Manifests.Select(m => m.Id).FirstAsync();
 
         var signal = new RecordingChangeSignal();
@@ -1629,7 +1797,7 @@ public class OperationsQueriesTests
 
         resp.Success.Should().BeTrue();
         signal.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.Manifest);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync(x => x.Id == id);
             m.IsEnabled.Should().BeFalse();
@@ -1642,38 +1810,44 @@ public class OperationsQueriesTests
 
     private async Task<long> SeedIntervalManifest()
     {
-        await SeedManifests(1);
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var seeded = await db.Manifests.FirstAsync();
-        seeded.ScheduleType = ScheduleType.Interval;
-        seeded.IntervalSeconds = 60;
-        seeded.CronExpression = null;
-        seeded.TimeoutSeconds = 30;
-        seeded.MaxRetries = 2;
-        await db.SaveChanges(default);
-        return seeded.Id;
+        await SeedManifests(1).ConfigureAwait(false);
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var seeded = await db.Manifests.FirstAsync().ConfigureAwait(false);
+            seeded.ScheduleType = ScheduleType.Interval;
+            seeded.IntervalSeconds = 60;
+            seeded.CronExpression = null;
+            seeded.TimeoutSeconds = 30;
+            seeded.MaxRetries = 2;
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return seeded.Id;
+        }
     }
 
     private async Task<OperationResponse> RefusedUpdate(long id, UpdateManifestInput input)
     {
         var signal = new RecordingChangeSignal();
-        var resp = await new OperationsMutations().UpdateManifest(
-            id,
-            input,
-            OperationsWith(signal),
-            default
-        );
+        var resp = await new OperationsMutations()
+            .UpdateManifest(id, input, OperationsWith(signal), default)
+            .ConfigureAwait(false);
 
         resp.Success.Should().BeFalse(resp.Message);
         signal.Domains.Should().BeEmpty("a refused update changes nothing");
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var m = await db.Manifests.AsNoTracking().FirstAsync(x => x.Id == id);
-        m.ScheduleType.Should().Be(ScheduleType.Interval, "nothing is saved");
-        m.IntervalSeconds.Should().Be(60, "nothing is saved");
-        m.CronExpression.Should().BeNull("nothing is saved");
-        m.TimeoutSeconds.Should().Be(30, "nothing is saved");
-        m.MaxRetries.Should().Be(2, "nothing is saved");
-        return resp;
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var m = await db
+                .Manifests.AsNoTracking()
+                .FirstAsync(x => x.Id == id)
+                .ConfigureAwait(false);
+            m.ScheduleType.Should().Be(ScheduleType.Interval, "nothing is saved");
+            m.IntervalSeconds.Should().Be(60, "nothing is saved");
+            m.CronExpression.Should().BeNull("nothing is saved");
+            m.TimeoutSeconds.Should().Be(30, "nothing is saved");
+            m.MaxRetries.Should().Be(2, "nothing is saved");
+            return resp;
+        }
     }
 
     [Test]
@@ -1742,7 +1916,7 @@ public class OperationsQueriesTests
     public async Task UpdateManifest_SwitchToIntervalWithoutAnInterval_IsRefused()
     {
         var id = await SeedIntervalManifest();
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync(x => x.Id == id);
             m.ScheduleType = ScheduleType.Cron;
@@ -1802,7 +1976,7 @@ public class OperationsQueriesTests
     {
         await SeedManifests(1);
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync();
             m.ScheduleType = ScheduleType.Once;
@@ -1827,7 +2001,7 @@ public class OperationsQueriesTests
         // disable a manifest whose stored schedule the scheduler cannot run.
         await SeedManifests(1);
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync();
             m.ScheduleType = ScheduleType.Cron;
@@ -1866,7 +2040,7 @@ public class OperationsQueriesTests
     {
         await SeedManifests(1);
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             id = await db.Manifests.Select(m => m.Id).FirstAsync();
 
         // First patch exercises the TimeoutSeconds (else-if) and IntervalSeconds branches.
@@ -1883,7 +2057,7 @@ public class OperationsQueriesTests
             default
         );
         set.Success.Should().BeTrue();
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync(x => x.Id == id);
             m.ScheduleType.Should().Be(ScheduleType.Interval);
@@ -1899,7 +2073,7 @@ public class OperationsQueriesTests
             default
         );
         cleared.Success.Should().BeTrue();
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync(x => x.Id == id);
             m.TimeoutSeconds.Should().BeNull();
@@ -1913,40 +2087,44 @@ public class OperationsQueriesTests
         long? replayDecisionsOf = null
     )
     {
-        await using var db = await _factory.CreateDbContextAsync(default);
-        var meta = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = trainName ?? typeof(IRequeueProbeTrain).FullName!,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-                ReplayDecisionsOf = replayDecisionsOf,
-            }
-        );
-        meta.Input = input;
-        await db.Track(meta);
-        await db.SaveChanges(default);
-
-        if (recordDecision)
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
-            db.RecordedDecisions.Add(
-                new RecordedDecision
+            var meta = Metadata.Create(
+                new CreateMetadata
                 {
-                    MetadataId = meta.Id,
-                    QuestionKey = "Route",
-                    Occurrence = 0,
-                    Fingerprint = new string('0', 64),
-                    Kind = "choice",
-                    Question = "{}",
-                    Answer = "\"Express\"",
-                    Routes = """[{"track": "Express", "fallback_reason": null}]""",
-                    DecidedAt = DateTime.UtcNow,
-                }
+                    Name = trainName ?? typeof(IRequeueProbeTrain).FullName.NotNull(),
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                    ReplayDecisionsOf = replayDecisionsOf,
+                },
+                TimeProvider.System
             );
-            await db.SaveChanges(default);
-        }
+            meta.Input = input;
+            await db.Track(meta).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-        return meta.Id;
+            if (recordDecision)
+            {
+                db.RecordedDecisions.Add(
+                    new RecordedDecision
+                    {
+                        MetadataId = meta.Id,
+                        QuestionKey = "Route",
+                        Occurrence = 0,
+                        Fingerprint = new string('0', 64),
+                        Kind = "choice",
+                        Question = "{}",
+                        Answer = "\"Express\"",
+                        Routes = """[{"track": "Express", "fallback_reason": null}]""",
+                        DecidedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                    }
+                );
+                await db.SaveChanges(default).ConfigureAwait(false);
+            }
+
+            return meta.Id;
+        }
     }
 
     /// <summary>
@@ -1966,10 +2144,10 @@ public class OperationsQueriesTests
                     InputType = typeof(object),
                     OutputType = typeof(object),
                     Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = typeof(IRequeueProbeTrain).FullName!,
-                    ImplementationTypeName = typeof(IRequeueProbeTrain).FullName!,
-                    InputTypeName = typeof(object).FullName!,
-                    OutputTypeName = typeof(object).FullName!,
+                    ServiceTypeName = typeof(IRequeueProbeTrain).FullName.NotNull(),
+                    ImplementationTypeName = typeof(IRequeueProbeTrain).FullName.NotNull(),
+                    InputTypeName = typeof(object).FullName.NotNull(),
+                    OutputTypeName = typeof(object).FullName.NotNull(),
                     RequiredPolicies = [],
                     RequiredRoles = [],
                     IsQuery = false,
@@ -1999,7 +2177,12 @@ public class OperationsQueriesTests
             )
             .Returns(new QueueTrainResult(12, "ext-12"));
 
-        return new OperationsService(discovery, _factory, new SchedulerConfiguration(), execution);
+        return new OperationsService(
+            discovery,
+            _factory.NotNull(),
+            new SchedulerConfiguration(),
+            execution
+        );
     }
 
     [Test]
@@ -2007,7 +2190,7 @@ public class OperationsQueriesTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.RequeueExecutionAsync(42, Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Id: 7, Count: 1, Message: "queued"));
+            .Returns(new OperationResult(Success: true, Id: 7, Count: 1, Message: "queued"));
 
         var resp = await new OperationsMutations().RequeueExecution(42, ops, default);
 
@@ -2032,9 +2215,9 @@ public class OperationsQueriesTests
         await execution
             .Received(1)
             .QueueAsync(
-                typeof(IRequeueProbeTrain).FullName!,
+                typeof(IRequeueProbeTrain).FullName.NotNull(),
                 "{\"v\":1}",
-                Arg.Is<QueueTrainOptions>(o => o!.ReplayDecisionsOf == id),
+                Arg.Is<QueueTrainOptions>(o => o.NotNull().ReplayDecisionsOf == id),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -2070,14 +2253,15 @@ public class OperationsQueriesTests
     {
         var ops = Substitute.For<IOperationsService>();
         ops.RequeueExecutionAsync(42, Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
         ops.RequeueExecutionAsync(42, Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(new OperationResult(true, Count: 1));
+            .Returns(new OperationResult(Success: true, Count: 1));
 
         await new OperationsMutations().RequeueExecution(42, ops, default, askAfresh);
 
         if (askAfresh)
-            await ops.Received(1).RequeueExecutionAsync(42, true, Arg.Any<CancellationToken>());
+            await ops.Received(1)
+                .RequeueExecutionAsync(42, askAfresh: true, Arg.Any<CancellationToken>());
         else
         {
             await ops.Received(1).RequeueExecutionAsync(42, Arg.Any<CancellationToken>());
@@ -2103,10 +2287,10 @@ public class OperationsQueriesTests
         await execution
             .Received(1)
             .QueueAsync(
-                typeof(IRequeueProbeTrain).FullName!,
+                typeof(IRequeueProbeTrain).FullName.NotNull(),
                 "{\"v\":1}",
                 0,
-                null,
+                scheduledAt: null,
                 Arg.Any<CancellationToken>()
             );
         await execution
@@ -2132,9 +2316,9 @@ public class OperationsQueriesTests
         await execution
             .Received(1)
             .QueueAsync(
-                typeof(IRequeueProbeTrain).FullName!,
+                typeof(IRequeueProbeTrain).FullName.NotNull(),
                 "{\"v\":1}",
-                Arg.Is<QueueTrainOptions>(o => o!.ReplayDecisionsOf == second),
+                Arg.Is<QueueTrainOptions>(o => o.NotNull().ReplayDecisionsOf == second),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -2150,8 +2334,10 @@ public class OperationsQueriesTests
         resp.Success.Should().BeFalse();
         resp.Message.Should()
             .Be(
-                $"Train Some.Retired.ITrain is no longer registered, so execution {id} cannot be "
-                    + "re-queued."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Train Some.Retired.ITrain is no longer registered, so execution {id} cannot be "
+                ) + "re-queued."
             );
         execution.ReceivedCalls().Should().BeEmpty();
     }
@@ -2175,13 +2361,18 @@ public class OperationsQueriesTests
 
         resp.Success.Should().BeFalse();
         resp.Message.Should()
-            .Be($"The saved input of run {id} no longer reads as System.Object: v is not a member");
+            .Be(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The saved input of run {id} no longer reads as System.Object: v is not a member"
+                )
+            );
     }
 
     [Test]
     public async Task RequeueExecution_WithNoSavedInput_ReturnsFalseWithoutQueuing()
     {
-        var id = await SeedRequeueSourceAsync(null);
+        var id = await SeedRequeueSourceAsync(input: null);
         var ops = RequeueOperations(out var execution);
 
         var resp = await new OperationsMutations().RequeueExecution(id, ops, default);
@@ -2258,7 +2449,7 @@ public class OperationsQueriesTests
         await SeedManifestGroup("g3");
         var queries = new ManifestGroupQueries();
 
-        var result = await queries.GetGroups(_factory, default, take: 2);
+        var result = await queries.GetGroups(_factory.NotNull(), default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
@@ -2271,9 +2462,14 @@ public class OperationsQueriesTests
         await SeedManifestGroup("g2");
         await SeedManifestGroup("g3");
         var queries = new ManifestGroupQueries();
-        var first = await queries.GetGroups(_factory, default, take: 1);
+        var first = await queries.GetGroups(_factory.NotNull(), default, take: 1);
 
-        var page2 = await queries.GetGroups(_factory, default, take: 2, afterId: first.NextCursor);
+        var page2 = await queries.GetGroups(
+            _factory.NotNull(),
+            default,
+            take: 2,
+            afterId: first.NextCursor
+        );
 
         page2.Items.Should().HaveCount(2);
     }
@@ -2284,10 +2480,10 @@ public class OperationsQueriesTests
         var seededId = await SeedManifestGroup("only");
         var queries = new ManifestGroupQueries();
 
-        var fetched = await queries.GetGroup(seededId, _factory, default);
+        var fetched = await queries.GetGroup(seededId, _factory.NotNull(), default);
 
         fetched.Should().NotBeNull();
-        fetched!.Name.Should().Be("only");
+        fetched.NotNull().Name.Should().Be("only");
     }
 
     [Test]
@@ -2295,7 +2491,7 @@ public class OperationsQueriesTests
     {
         var queries = new ManifestGroupQueries();
 
-        var fetched = await queries.GetGroup(999_999, _factory, default);
+        var fetched = await queries.GetGroup(999_999, _factory.NotNull(), default);
 
         fetched.Should().BeNull();
     }
@@ -2306,7 +2502,7 @@ public class OperationsQueriesTests
         await SeedExecutions(3);
         var queries = new OperationsQueries();
 
-        var result = await queries.GetExecutions(_factory, default, take: 2);
+        var result = await queries.GetExecutions(_factory.NotNull(), default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
@@ -2317,10 +2513,10 @@ public class OperationsQueriesTests
     {
         await SeedExecutions(4);
         var queries = new OperationsQueries();
-        var first = await queries.GetExecutions(_factory, default, take: 1);
+        var first = await queries.GetExecutions(_factory.NotNull(), default, take: 1);
 
         var page2 = await queries.GetExecutions(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 5,
             afterId: first.NextCursor
@@ -2329,7 +2525,7 @@ public class OperationsQueriesTests
         page2
             .Items.Select(e => e.Id)
             .Should()
-            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor!.Value));
+            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor.NotNull().Value));
     }
 
     [Test]
@@ -2338,7 +2534,7 @@ public class OperationsQueriesTests
         await SeedExecutions(5);
         var queries = new OperationsQueries();
 
-        var result = await queries.GetExecutions(_factory, default, skip: 2, take: 2);
+        var result = await queries.GetExecutions(_factory.NotNull(), default, skip: 2, take: 2);
 
         result.Items.Should().HaveCount(2);
     }
@@ -2348,12 +2544,12 @@ public class OperationsQueriesTests
     {
         await SeedExecutions(1);
         var queries = new OperationsQueries();
-        var first = (await queries.GetExecutions(_factory, default)).Items.First();
+        var first = (await queries.GetExecutions(_factory.NotNull(), default)).Items[0];
 
-        var fetched = await queries.GetExecutionDetail(first.Id, _factory, default);
+        var fetched = await queries.GetExecutionDetail(first.Id, _factory.NotNull(), default);
 
         fetched.Should().NotBeNull();
-        fetched!.Id.Should().Be(first.Id);
+        fetched.NotNull().Id.Should().Be(first.Id);
     }
 
     [Test]
@@ -2425,8 +2621,8 @@ public class OperationsQueriesTests
             Lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped,
             ServiceTypeName = serviceType.Name,
             ImplementationTypeName = serviceType.Name,
-            InputTypeName = typeof(FakeInput).FullName!,
-            OutputTypeName = typeof(FakeOutput).FullName!,
+            InputTypeName = typeof(FakeInput).FullName.NotNull(),
+            OutputTypeName = typeof(FakeOutput).FullName.NotNull(),
             RequiredPolicies = Array.Empty<string>(),
             RequiredRoles = Array.Empty<string>(),
             IsQuery = false,
@@ -2440,7 +2636,7 @@ public class OperationsQueriesTests
     }
 
     private interface IUserTrain
-        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput> { }
+        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput>;
 
     [Test]
     public void DeadLettersNamespace_ReturnsNewInstance()
@@ -2457,7 +2653,7 @@ public class OperationsQueriesTests
     {
         var queries = new DeadLetterQueries();
 
-        var result = await queries.GetDeadLetters(_factory, default);
+        var result = await queries.GetDeadLetters(_factory.NotNull(), default);
 
         result.Items.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
@@ -2471,7 +2667,7 @@ public class OperationsQueriesTests
         var queries = new DeadLetterQueries();
 
         var result = await queries.GetDeadLetters(
-            _factory,
+            _factory.NotNull(),
             default,
             status: DeadLetterStatus.AwaitingIntervention
         );
@@ -2485,10 +2681,10 @@ public class OperationsQueriesTests
         var manifest = await SeedManifestForDeadLetter();
         await SeedDeadLetters(4, manifest);
         var queries = new DeadLetterQueries();
-        var first = await queries.GetDeadLetters(_factory, default, take: 2);
+        var first = await queries.GetDeadLetters(_factory.NotNull(), default, take: 2);
 
         var page2 = await queries.GetDeadLetters(
-            _factory,
+            _factory.NotNull(),
             default,
             take: 2,
             afterId: first.NextCursor
@@ -2498,7 +2694,7 @@ public class OperationsQueriesTests
         page2
             .Items.Select(dl => dl.Id)
             .Should()
-            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor!.Value));
+            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor.NotNull().Value));
     }
 
     [Test]
@@ -2507,10 +2703,10 @@ public class OperationsQueriesTests
         var manifest = await SeedManifestForDeadLetter();
         await SeedDeadLetters(5, manifest);
         var queries = new DeadLetterQueries();
-        var first = await queries.GetDeadLetters(_factory, default, take: 2);
+        var first = await queries.GetDeadLetters(_factory.NotNull(), default, take: 2);
 
         var page2 = await queries.GetDeadLetters(
-            _factory,
+            _factory.NotNull(),
             default,
             skip: 3,
             take: 2,
@@ -2531,7 +2727,7 @@ public class OperationsQueriesTests
         await SeedDeadLetters(5, manifest);
         var queries = new DeadLetterQueries();
 
-        var result = await queries.GetDeadLetters(_factory, default, skip: 2, take: 2);
+        var result = await queries.GetDeadLetters(_factory.NotNull(), default, skip: 2, take: 2);
 
         result.Items.Should().HaveCount(2);
     }
@@ -2542,12 +2738,12 @@ public class OperationsQueriesTests
         var manifest = await SeedManifestForDeadLetter();
         await SeedDeadLetters(1, manifest);
         var queries = new DeadLetterQueries();
-        var first = (await queries.GetDeadLetters(_factory, default)).Items.First();
+        var first = (await queries.GetDeadLetters(_factory.NotNull(), default)).Items[0];
 
-        var fetched = await queries.GetDeadLetter(first.Id, _factory, default);
+        var fetched = await queries.GetDeadLetter(first.Id, _factory.NotNull(), default);
 
         fetched.Should().NotBeNull();
-        fetched!.Id.Should().Be(first.Id);
+        fetched.NotNull().Id.Should().Be(first.Id);
     }
 
     [Test]
@@ -2559,12 +2755,12 @@ public class OperationsQueriesTests
         await SeedDeadLetters(1, manifest);
         var queries = new DeadLetterQueries();
 
-        var listed = (await queries.GetDeadLetters(_factory, default)).Items.Single();
-        var read = await queries.GetDeadLetter(listed.Id, _factory, default);
+        var listed = (await queries.GetDeadLetters(_factory.NotNull(), default)).Items.Single();
+        var read = await queries.GetDeadLetter(listed.Id, _factory.NotNull(), default);
 
         listed.ManifestExternalId.Should().Be(manifest.ExternalId);
         listed.ManifestName.Should().Be(manifest.Name);
-        read!.ManifestExternalId.Should().Be(manifest.ExternalId);
+        read.NotNull().ManifestExternalId.Should().Be(manifest.ExternalId);
     }
 
     [Test]
@@ -2572,7 +2768,7 @@ public class OperationsQueriesTests
     {
         var queries = new DeadLetterQueries();
 
-        (await queries.GetDeadLetter(99999, _factory, default)).Should().BeNull();
+        (await queries.GetDeadLetter(99999, _factory.NotNull(), default)).Should().BeNull();
     }
 
     #region Read fields an API-only frontend needs
@@ -2597,7 +2793,7 @@ public class OperationsQueriesTests
         long parentId;
         long childId;
         var due = new DateTime(2026, 9, 27, 8, 0, 0, DateTimeKind.Utc);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var parent = Metadata.Create(
                 new CreateMetadata
@@ -2605,7 +2801,8 @@ public class OperationsQueriesTests
                     Name = "Trax.X.Parent",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(parent);
             await db.SaveChanges(default);
@@ -2618,7 +2815,8 @@ public class OperationsQueriesTests
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
                     ParentId = parentId,
-                }
+                },
+                TimeProvider.System
             );
             child.ScheduledTime = due;
             child.HostLabels = "{\"region\": \"eu-west-1\"}";
@@ -2628,17 +2826,21 @@ public class OperationsQueriesTests
         }
 
         string? executor;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
             executor = await db
                 .Metadatas.AsNoTracking()
                 .Where(m => m.Id == childId)
                 .Select(m => m.Executor)
                 .SingleAsync();
 
-        var detail = await new OperationsQueries().GetExecutionDetail(childId, _factory, default);
+        var detail = await new OperationsQueries().GetExecutionDetail(
+            childId,
+            _factory.NotNull(),
+            default
+        );
 
         detail.Should().NotBeNull();
-        detail!.ParentId.Should().Be(parentId);
+        detail.NotNull().ParentId.Should().Be(parentId);
         detail.ScheduledTime.Should().Be(due);
         detail.Executor.Should().Be(executor);
         detail.HostLabels.Should().Be("{\"region\": \"eu-west-1\"}");
@@ -2651,13 +2853,14 @@ public class OperationsQueriesTests
         var requeued = await SeedRequeueSourceAsync("{\"v\": 1}", replayDecisionsOf: source);
 
         var queries = new OperationsQueries();
-        var replaying = await queries.GetExecutionDetail(requeued, _factory, default);
-        var original = await queries.GetExecutionDetail(source, _factory, default);
+        var replaying = await queries.GetExecutionDetail(requeued, _factory.NotNull(), default);
+        var original = await queries.GetExecutionDetail(source, _factory.NotNull(), default);
 
-        replaying!
+        replaying
+            .NotNull()
             .ReplayDecisionsOf.Should()
             .Be(source, "the dashboard's Replays Decisions Of reads the same column");
-        original!.ReplayDecisionsOf.Should().BeNull();
+        original.NotNull().ReplayDecisionsOf.Should().BeNull();
     }
 
     [Test]
@@ -2667,11 +2870,16 @@ public class OperationsQueriesTests
         var manifestId = await SeedManifestInGroup(groupId);
 
         var queries = new OperationsQueries();
-        var page = await queries.GetManifests(_factory, default);
-        var single = await queries.GetManifestDetail(manifestId, _factory, Discovery, default);
+        var page = await queries.GetManifests(_factory.NotNull(), default);
+        var single = await queries.GetManifestDetail(
+            manifestId,
+            _factory.NotNull(),
+            Discovery,
+            default
+        );
 
         page.Items.Should().ContainSingle().Which.ManifestGroupName.Should().Be("nightly-billing");
-        single!.ManifestGroupName.Should().Be("nightly-billing");
+        single.NotNull().ManifestGroupName.Should().Be("nightly-billing");
     }
 
     [Test]
@@ -2680,7 +2888,7 @@ public class OperationsQueriesTests
         var groupId = await SeedManifestGroup("detail-group");
         long id;
         var next = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var m = Manifest.Create(
                 new CreateManifest
@@ -2702,13 +2910,13 @@ public class OperationsQueriesTests
 
         var detail = await new OperationsQueries().GetManifestDetail(
             id,
-            _factory,
+            _factory.NotNull(),
             Discovery,
             default
         );
 
         detail.Should().NotBeNull();
-        detail!.Id.Should().Be(id);
+        detail.NotNull().Id.Should().Be(id);
         detail.ManifestGroupId.Should().Be(groupId);
         detail.ManifestGroupName.Should().Be("detail-group");
         detail.PropertyTypeName.Should().Be("Trax.X.BillingInput");
@@ -2727,7 +2935,7 @@ public class OperationsQueriesTests
         var groupId = await SeedManifestGroup("replay-group");
         long optedOut;
         long byDefault;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var off = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
             off.ManifestGroupId = groupId;
@@ -2743,13 +2951,15 @@ public class OperationsQueriesTests
 
         var queries = new OperationsQueries();
 
-        (await queries.GetManifestDetail(byDefault, _factory, Discovery, default))!
+        (await queries.GetManifestDetail(byDefault, _factory.NotNull(), Discovery, default))
+            .NotNull()
             .ReplayDecisionsOnRetry.Should()
             .BeTrue();
-        (await queries.GetManifestDetail(optedOut, _factory, Discovery, default))!
+        (await queries.GetManifestDetail(optedOut, _factory.NotNull(), Discovery, default))
+            .NotNull()
             .ReplayDecisionsOnRetry.Should()
             .BeFalse();
-        (await queries.GetManifests(_factory, default, manifestGroupId: groupId))
+        (await queries.GetManifests(_factory.NotNull(), default, manifestGroupId: groupId))
             .Items.Should()
             .Contain(m => m.Id == optedOut && !m.ReplayDecisionsOnRetry)
             .And.Contain(m => m.Id == byDefault && m.ReplayDecisionsOnRetry);
@@ -2758,7 +2968,14 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetManifestDetail_MissingId_ReturnsNull()
     {
-        (await new OperationsQueries().GetManifestDetail(99999, _factory, Discovery, default))
+        (
+            await new OperationsQueries().GetManifestDetail(
+                99999,
+                _factory.NotNull(),
+                Discovery,
+                default
+            )
+        )
             .Should()
             .BeNull();
     }
@@ -2781,11 +2998,15 @@ public class OperationsQueriesTests
 
         var result = new OperationsQueries().GetEffects(EffectSettings(registry, services));
 
-        var configurable = result.Single(e => e.Name == nameof(FakeConfigurableFactory));
+        var configurable = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeConfigurableFactory), StringComparison.Ordinal)
+        );
         configurable.IsConfigurable.Should().BeTrue();
         configurable.ConfigurationTypeName.Should().Be(typeof(FakeEffectSettings).FullName);
         configurable.Configuration.Should().Contain("\"batchSize\"").And.Contain("50");
-        var plain = result.Single(e => e.Name == nameof(FakeInput));
+        var plain = result.Single(e =>
+            string.Equals(e.Name, nameof(FakeInput), StringComparison.Ordinal)
+        );
         plain.IsConfigurable.Should().BeFalse();
         plain.ConfigurationTypeName.Should().BeNull();
         plain.Configuration.Should().BeNull();
@@ -2824,7 +3045,7 @@ public class OperationsQueriesTests
             .Single()
             .Configuration;
 
-        using var json = System.Text.Json.JsonDocument.Parse(configuration!);
+        using var json = System.Text.Json.JsonDocument.Parse(configuration.NotNull());
         var root = json.RootElement;
         root.GetProperty("endpoint").GetString().Should().Be("https://sink.example");
         root.GetProperty("apiKey").GetProperty("_redacted").GetBoolean().Should().BeTrue();
@@ -2852,18 +3073,32 @@ public class OperationsQueriesTests
             .Single()
             .Fields;
 
-        var endpoint = fields.Single(f => f.Name == nameof(FakeCredentialedSettings.Endpoint));
+        var endpoint = fields.Single(f =>
+            string.Equals(
+                f.Name,
+                nameof(FakeCredentialedSettings.Endpoint),
+                StringComparison.Ordinal
+            )
+        );
         endpoint.Kind.Should().Be(Trax.Scheduler.Services.Effects.EffectFieldKind.Text);
         endpoint.Value.Should().Be("https://sink.example");
         endpoint.Sensitive.Should().BeFalse();
 
-        var apiKey = fields.Single(f => f.Name == nameof(FakeCredentialedSettings.ApiKey));
+        var apiKey = fields.Single(f =>
+            string.Equals(f.Name, nameof(FakeCredentialedSettings.ApiKey), StringComparison.Ordinal)
+        );
         apiKey.Sensitive.Should().BeTrue();
         apiKey.HasValue.Should().BeTrue();
         apiKey.Value.Should().BeNull("a [TraxSensitive] setting is never read back");
 
         fields
-            .Single(f => f.Name == nameof(FakeCredentialedSettings.Nested))
+            .Single(f =>
+                string.Equals(
+                    f.Name,
+                    nameof(FakeCredentialedSettings.Nested),
+                    StringComparison.Ordinal
+                )
+            )
             .Kind.Should()
             .Be(Trax.Scheduler.Services.Effects.EffectFieldKind.SetInCode);
         fields.Should().NotContain(f => f.Value != null && f.Value.Contains("sk-live-123"));
@@ -2926,12 +3161,18 @@ public class OperationsQueriesTests
             .Select(p => p.Name)
             .Should()
             .BeEquivalentTo(["playerId", "tier", "maybeTier", "custom_name"]);
-        schema.Single(p => p.Name == "tier").EnumValues.Should().Equal("Bronze", "Silver", "Gold");
         schema
-            .Single(p => p.Name == "maybeTier")
+            .Single(p => string.Equals(p.Name, "tier", StringComparison.Ordinal))
             .EnumValues.Should()
             .Equal("Bronze", "Silver", "Gold");
-        schema.Single(p => p.Name == "playerId").EnumValues.Should().BeNull();
+        schema
+            .Single(p => string.Equals(p.Name, "maybeTier", StringComparison.Ordinal))
+            .EnumValues.Should()
+            .Equal("Bronze", "Silver", "Gold");
+        schema
+            .Single(p => string.Equals(p.Name, "playerId", StringComparison.Ordinal))
+            .EnumValues.Should()
+            .BeNull();
     }
 
     [Test]
@@ -2984,7 +3225,7 @@ public class OperationsQueriesTests
         await SeedManifestGroup("search");
 
         var result = await new ManifestGroupQueries().GetGroups(
-            _factory,
+            _factory.NotNull(),
             default,
             nameContains: "billing"
         );
@@ -3002,7 +3243,7 @@ public class OperationsQueriesTests
                 Arg.Any<IReadOnlyCollection<long>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(false, Count: 0, Message: "refused"));
+            .Returns(new OperationResult(Success: false, Count: 0, Message: "refused"));
 
         var resp = await new OperationsMutations().CancelExecution(7, ops, default);
 
@@ -3051,10 +3292,7 @@ public class OperationsQueriesTests
 
     public interface IRequeueProbeTrain;
 
-    private interface ISomeFakeTrain
-        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput> { }
-
-    private class SomeFakeTrain { }
+    private static class SomeFakeTrain;
 
     public record FakeInput;
 

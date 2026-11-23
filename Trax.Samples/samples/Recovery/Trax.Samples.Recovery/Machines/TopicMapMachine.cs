@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Trains.Topics;
@@ -8,104 +9,6 @@ using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.Samples.Recovery.Machines;
-
-public enum TopicMapState
-{
-    /// <summary>The wizard's first step: which fields of the corpus to map.</summary>
-    ChoosingFields,
-
-    /// <summary>The second step: which years.</summary>
-    ChoosingRange,
-
-    /// <summary>The map is being built: <see cref="IBuildTopicMapTrain"/> runs.</summary>
-    Building,
-
-    /// <summary>The build finished; the context points at the pairs it wrote.</summary>
-    Built,
-
-    /// <summary>The build failed, or its run was reaped after its host died.</summary>
-    BuildFailed,
-
-    /// <summary>
-    /// The build's run was cancelled while the draft stayed in Building: it timed out. An operator cannot
-    /// cancel it, because a user's draft is read-only to operators.
-    /// </summary>
-    BuildCancelled,
-
-    /// <summary>
-    /// The built map was not reviewed within <see cref="TopicMapMachine.ReviewWindow"/>: the server moved it here by
-    /// the review timer. It can be rebuilt, or its range edited.
-    /// </summary>
-    Expired,
-}
-
-public enum TopicMapTrigger
-{
-    /// <summary>Choose the fields to map and go to the range.</summary>
-    ChooseFields,
-
-    /// <summary>Back from the range to the fields.</summary>
-    Back,
-
-    /// <summary>Choose the years and build the map.</summary>
-    Build,
-
-    /// <summary>Stop the build that is running and go back to the range.</summary>
-    CancelBuild,
-
-    /// <summary>Build again with the same choices: a new run.</summary>
-    Rebuild,
-
-    /// <summary>Change the choices after a build.</summary>
-    Edit,
-
-    /// <summary>
-    /// Start a new map on this draft: back to the first step with nothing chosen. From Building it cancels the run,
-    /// and from a finished build it leaves the build's state, so its review timer is cancelled.
-    /// </summary>
-    StartOver,
-}
-
-/// <summary>
-/// The wizard's draft, one shape in every state: what the user chose, and once a build finished, a pointer
-/// to what it wrote and a summary of it. Never the pairs themselves: those are in
-/// <c>topic_map.topic_pairs</c> under <see cref="MapId"/>.
-/// </summary>
-public sealed record TopicMapContext
-{
-    public List<string>? Fields { get; init; }
-
-    public int? FromYear { get; init; }
-
-    public int? ToYear { get; init; }
-
-    /// <summary>The run id the build wrote its pairs under.</summary>
-    public string? MapId { get; init; }
-
-    public int? Papers { get; init; }
-
-    public int? TopicPairs { get; init; }
-
-    public string? CoCitationTrack { get; init; }
-}
-
-/// <summary>The input of <see cref="TopicMapTrigger.ChooseFields"/>.</summary>
-public sealed record FieldsChoice
-{
-    [MinLength(1)]
-    public List<string> Fields { get; init; } = [];
-}
-
-/// <summary>What a user starts a topic map with: nothing, the wizard starts empty.</summary>
-public sealed record TopicMapStart;
-
-/// <summary>The input of <see cref="TopicMapTrigger.Build"/>.</summary>
-public sealed record RangeChoice
-{
-    public int FromYear { get; init; }
-
-    public int ToYear { get; init; }
-}
 
 /// <summary>
 /// "Build my topic map": a wizard each user drives from the page, choose the fields, choose the years,
@@ -179,6 +82,14 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
             .Watch(r => r.OwnerOnly())
             .Discard(r => r.OwnerOnly());
 
+        ChoosingStates(m);
+        BuildStates(m);
+        DifferentialSamples(m);
+    }
+
+    // Choosing the fields, then the years.
+    private static void ChoosingStates(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
+    {
         m.In(TopicMapState.ChoosingFields)
             .Context<TopicMapContext>()
             .On(TopicMapTrigger.ChooseFields)
@@ -212,7 +123,11 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
                 )
             )
             .To(TopicMapState.Building);
+    }
 
+    // Building the map, and every state a build ends in.
+    private static void BuildStates(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
+    {
         m.In(TopicMapState.Building)
             .Context<TopicMapContext>()
             .Requires(HasRange)
@@ -268,7 +183,11 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
                 .AnyAuthenticated()
                 .Reduce(Reset())
                 .To(TopicMapState.ChoosingFields);
+    }
 
+    // The inputs and outcomes the differential corpus is generated from.
+    private static void DifferentialSamples(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
+    {
         m.Differential(d =>
             d.Sample(TopicMapTrigger.ChooseFields, new FieldsChoice { Fields = ["Hydrology"] })
                 .Sample(TopicMapTrigger.Build, new RangeChoice { FromYear = 2016, ToYear = 2025 })
@@ -292,8 +211,12 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
         new()
         {
             RunId = $"map-{Guid.NewGuid():N}",
-            Fields = ctx["fields"]!.AsArray().Select(f => f!.GetValue<string>()).ToList(),
-            FromYear = ctx["fromYear"]!.GetValue<int>(),
-            ToYear = ctx["toYear"]!.GetValue<int>(),
+            Fields = ctx["fields"]
+                .NotNull()
+                .AsArray()
+                .Select(f => f.NotNull().GetValue<string>())
+                .ToList(),
+            FromYear = ctx["fromYear"].NotNull().GetValue<int>(),
+            ToYear = ctx["toYear"].NotNull().GetValue<int>(),
         };
 }

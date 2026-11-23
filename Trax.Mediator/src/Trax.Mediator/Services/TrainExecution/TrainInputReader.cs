@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Utils;
 using Trax.Mediator.Exceptions;
@@ -51,12 +52,12 @@ public static class TrainInputReader
     /// (Trax.Docs/adr/0023); JSON reference metadata (<c>$id</c>, <c>$ref</c>, <c>$values</c>)
     /// is not honoured, so an input is exactly the tree the caller wrote (a saved input, which
     /// carries it, goes through <see cref="ResolveSavedInput"/> first); and a JSON
-    /// <c>null</c> is refused. Call it after authorization, so a caller who may not use the
+    /// <see langword="null"/> is refused. Call it after authorization, so a caller who may not use the
     /// train learns nothing about its input from a parse error.
     /// </remarks>
     /// <exception cref="TrainInputValidationException">The JSON is larger than the cap.</exception>
     /// <exception cref="JsonException">
-    /// The JSON cannot be read as the input type, is <c>null</c>, or is missing and the input
+    /// The JSON cannot be read as the input type, is <see langword="null"/>, or is missing and the input
     /// type cannot be built from <c>{}</c>.
     /// </exception>
     public static object Read(
@@ -66,7 +67,7 @@ public static class TrainInputReader
     )
     {
         var missing = string.IsNullOrWhiteSpace(inputJson);
-        var json = missing ? EmptyInput : inputJson!;
+        var json = missing ? EmptyInput : inputJson.NotNull();
 
         // Before deserialization, so oversized JSON never reaches the deserializer. Byte length
         // (UTF-8) is the bounded resource: char length would miscount surrogate pairs and
@@ -162,14 +163,22 @@ public static class TrainInputReader
         ArgumentNullException.ThrowIfNull(savedInputJson);
         ArgumentNullException.ThrowIfNull(registration);
 
+        // The public call is synchronous. The rewrite writes to memory only, so its tasks have
+        // completed by the time they are returned and the wait never blocks.
         if (SavedInputReferences.Present(savedInputJson))
-            return SavedInputReferences.Resolve(savedInputJson, registration, maxInputJsonBytes);
+            return SavedInputReferences
+                .ResolveAsync(savedInputJson, registration, maxInputJsonBytes)
+                .GetAwaiter()
+                .GetResult();
 
         try
         {
             // Rewritten even without metadata: read back from jsonb, the saved input carries
             // whitespace it was not saved with, which can put an input saved at the cap over it.
-            return SavedInputReferences.Compact(savedInputJson, registration, maxInputJsonBytes);
+            return SavedInputReferences
+                .CompactAsync(savedInputJson, registration, maxInputJsonBytes)
+                .GetAwaiter()
+                .GetResult();
         }
         catch (JsonException)
         {
@@ -194,7 +203,7 @@ public static class TrainInputReader
     /// deeper than storage writes (a host whose train parameter options read deeper than
     /// <c>TraxJsonSerializationOptions.StoredDepth</c>); both counts are then 0.
     /// </exception>
-    internal static string WriteForStorage(
+    internal static async Task<string> WriteForStorageAsync(
         object input,
         TrainRegistration registration,
         int maxInputJsonBytes
@@ -208,12 +217,15 @@ public static class TrainInputReader
         try
         {
             using var ceiling = new ByteCeilingStream(buffer, storedCap);
-            JsonSerializer.Serialize(
-                ceiling,
-                input,
-                registration.InputType,
-                TraxJsonSerializationOptions.ManifestProperties
-            );
+            await JsonSerializer
+                .SerializeAsync(
+                    ceiling,
+                    input,
+                    registration.InputType,
+                    TraxJsonSerializationOptions.ManifestProperties,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
         }
         catch (StoredInputTooLargeException tooLarge)
         {
@@ -298,60 +310,9 @@ public static class TrainInputReader
         bool missing
     )
     {
-        object? input;
-
-        if (missing)
-        {
-            // A missing input stands in for an input with no values, which is only honest for a
-            // type that needs none. System.Text.Json builds a positional record from {} with every
-            // constructor parameter at its default, so without this a train taking
-            // record RenamePlayer(string Id, string NewName) would be queued with a null Id.
-            // Respecting required constructor parameters refuses exactly that, and leaves Unit,
-            // an input with only settable properties, and parameters with defaults unaffected.
-            try
-            {
-                input = JsonSerializer.Deserialize(
-                    inputJson,
-                    registration.InputType,
-                    InputOptions().Missing
-                );
-            }
-            catch (JsonException refused)
-            {
-                throw new JsonException(
-                    $"No input was given, and {registration.InputTypeName} cannot be built "
-                        + $"without one: {refused.Message}",
-                    refused
-                );
-            }
-        }
-        else
-        {
-            try
-            {
-                input = JsonSerializer.Deserialize(
-                    inputJson,
-                    registration.InputType,
-                    InputOptions().Given
-                );
-            }
-            catch (JsonException refused) when (SavedInputReferences.Present(inputJson))
-            {
-                // A list written with reference metadata fails as "could not be converted",
-                // which names neither the metadata nor the way out. Checked only once the
-                // input has been refused, so an input that reads costs nothing extra.
-                throw new JsonException(
-                    $"{refused.Message} The input carries JSON reference metadata ($id, "
-                        + "$values, $ref), which a train input does not accept. Write it "
-                        + "without, as TrainInputReader.Write does; a run's saved input is "
-                        + "turned into a plain one by TrainInputReader.ResolveSavedInput.",
-                    refused.Path,
-                    refused.LineNumber,
-                    refused.BytePositionInLine,
-                    refused
-                );
-            }
-        }
+        var input = missing
+            ? DeserializeMissing(inputJson, registration)
+            : DeserializeGiven(inputJson, registration);
 
         // A JSON null is well-formed but is not an input, so it is reported the way any other
         // input the train cannot use is: as a JSON problem the caller can fix.
@@ -361,6 +322,60 @@ public static class TrainInputReader
             );
 
         return input;
+    }
+
+    private static object? DeserializeMissing(string inputJson, TrainRegistration registration)
+    {
+        // A missing input stands in for an input with no values, which is only honest for a
+        // type that needs none. System.Text.Json builds a positional record from {} with every
+        // constructor parameter at its default, so without this a train taking
+        // record RenamePlayer(string Id, string NewName) would be queued with a null Id.
+        // Respecting required constructor parameters refuses exactly that, and leaves Unit,
+        // an input with only settable properties, and parameters with defaults unaffected.
+        try
+        {
+            return JsonSerializer.Deserialize(
+                inputJson,
+                registration.InputType,
+                InputOptions().Missing
+            );
+        }
+        catch (JsonException refused)
+        {
+            throw new JsonException(
+                $"No input was given, and {registration.InputTypeName} cannot be built "
+                    + $"without one: {refused.Message}",
+                refused
+            );
+        }
+    }
+
+    private static object? DeserializeGiven(string inputJson, TrainRegistration registration)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize(
+                inputJson,
+                registration.InputType,
+                InputOptions().Given
+            );
+        }
+        catch (JsonException refused) when (SavedInputReferences.Present(inputJson))
+        {
+            // A list written with reference metadata fails as "could not be converted",
+            // which names neither the metadata nor the way out. Checked only once the
+            // input has been refused, so an input that reads costs nothing extra.
+            throw new JsonException(
+                $"{refused.Message} The input carries JSON reference metadata ($id, "
+                    + "$values, $ref), which a train input does not accept. Write it "
+                    + "without, as TrainInputReader.Write does; a run's saved input is "
+                    + "turned into a plain one by TrainInputReader.ResolveSavedInput.",
+                refused.Path,
+                refused.LineNumber,
+                refused.BytePositionInLine,
+                refused
+            );
+        }
     }
 
     /// <summary>

@@ -47,7 +47,8 @@ public class DispatchAndLoadCoverageTests
                 Manifest = manifest,
                 Reason = "test",
                 RetryCount = 1,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(deadLetter);
         await fx.DataContext.SaveChanges(default);
@@ -82,7 +83,7 @@ public class DispatchAndLoadCoverageTests
     {
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
         {
-            s.MaxQueuedJobsPerCycle(null);
+            s.MaxQueuedJobsPerCycle(limit: null);
             s.Schedule<ISchedulerTestTrain>(
                 "load-all-1",
                 new SchedulerTestInput(),

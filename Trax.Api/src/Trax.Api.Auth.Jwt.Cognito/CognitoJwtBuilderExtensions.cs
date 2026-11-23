@@ -40,9 +40,30 @@ public static class CognitoJwtBuilderExtensions
         string userPoolId,
         string clientId,
         CognitoTokenUse tokenUse = CognitoTokenUse.IdAndAccess
+    ) => builder.UseCognito(region, userPoolId, clientId, tokenUse, TimeProvider.System);
+
+    /// <summary>
+    /// Configures the JWT builder for an Amazon Cognito user pool, as
+    /// <see cref="UseCognito(JwtBuilder, string, string, string, CognitoTokenUse)"/> does, with the
+    /// token lifetime checked against <paramref name="clock"/>.
+    /// </summary>
+    /// <param name="builder">The JWT builder.</param>
+    /// <param name="region">AWS region of the user pool, e.g. <c>us-east-1</c>.</param>
+    /// <param name="userPoolId">User pool identifier, e.g. <c>us-east-1_AbCdEfGhI</c>.</param>
+    /// <param name="clientId">App client id registered on the pool.</param>
+    /// <param name="tokenUse">Which token shapes to accept.</param>
+    /// <param name="clock">The clock a token's <c>nbf</c> and <c>exp</c> are compared with.</param>
+    public static JwtBuilder UseCognito(
+        this JwtBuilder builder,
+        string region,
+        string userPoolId,
+        string clientId,
+        CognitoTokenUse tokenUse,
+        TimeProvider clock
     )
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentException.ThrowIfNullOrWhiteSpace(region);
         ArgumentException.ThrowIfNullOrWhiteSpace(userPoolId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
@@ -53,24 +74,7 @@ public static class CognitoJwtBuilderExtensions
         builder.CustomizeTokenValidation(tvp =>
         {
             tvp.AudienceValidator = (audiences, token, _) =>
-            {
-                var acceptId =
-                    tokenUse == CognitoTokenUse.Id || tokenUse == CognitoTokenUse.IdAndAccess;
-                var acceptAccess =
-                    tokenUse == CognitoTokenUse.Access || tokenUse == CognitoTokenUse.IdAndAccess;
-
-                if (acceptId && audiences.Any(a => a == clientId))
-                    return true;
-
-                if (acceptAccess && token is JsonWebToken jwt)
-                {
-                    var claim = jwt.Claims.FirstOrDefault(c => c.Type == CognitoDefaults.ClientId);
-                    if (claim is not null && claim.Value == clientId)
-                        return true;
-                }
-
-                return false;
-            };
+                AcceptsAudience(audiences, token, clientId, tokenUse);
 
             // Enforce token_use to match the configured selection. The
             // signature/issuer/audience checks above don't otherwise
@@ -84,52 +88,13 @@ public static class CognitoJwtBuilderExtensions
                 )
                     return false;
 
-                if (token is JsonWebToken jwt)
-                {
-                    var use = jwt
-                        .Claims.FirstOrDefault(c => c.Type == CognitoDefaults.TokenUse)
-                        ?.Value;
-
-                    if (
-                        tokenUse == CognitoTokenUse.Id
-                        && use is not null
-                        && use != CognitoDefaults.TokenUseId
-                    )
-                        return false;
-
-                    if (
-                        tokenUse == CognitoTokenUse.Access
-                        && use is not null
-                        && use != CognitoDefaults.TokenUseAccess
-                    )
-                        return false;
-
-                    // A client_id claim is what makes a token the access shape, and Cognito always
-                    // stamps token_use on one. Its absence therefore means the token is not
-                    // something Cognito issued in that shape, so admitting it on the strength of
-                    // client_id alone — which is exactly what the AudienceValidator's access branch
-                    // above does — would accept a token nothing has vouched for. Fail closed.
-                    //
-                    // Scoped to client_id on purpose: a token carrying neither claim is not being
-                    // presented as an access token at all, and the internal HS256 issuer mints
-                    // precisely that, so requiring token_use of it would break a path that has
-                    // nothing to do with Cognito.
-                    var acceptsAccessShape =
-                        tokenUse == CognitoTokenUse.Access
-                        || tokenUse == CognitoTokenUse.IdAndAccess;
-
-                    if (
-                        acceptsAccessShape
-                        && use is null
-                        && jwt.Claims.Any(c => c.Type == CognitoDefaults.ClientId)
-                    )
-                        return false;
-                }
+                if (token is JsonWebToken jwt && !TokenUseAdmits(jwt, tokenUse))
+                    return false;
 
                 // Fall back to the default lifetime validator (exp/nbf check).
                 if (expires is null)
                     return false;
-                var now = DateTime.UtcNow;
+                var now = clock.GetUtcNow().UtcDateTime;
                 var skew = parameters.ClockSkew;
                 if (notBefore is { } nbf && nbf > now + skew)
                     return false;
@@ -138,5 +103,79 @@ public static class CognitoJwtBuilderExtensions
         });
 
         return builder;
+    }
+
+    // The id shape names the client in aud, the access shape in client_id; each is accepted when tokenUse admits it.
+    private static bool AcceptsAudience(
+        IEnumerable<string> audiences,
+        Microsoft.IdentityModel.Tokens.SecurityToken token,
+        string clientId,
+        CognitoTokenUse tokenUse
+    )
+    {
+        var acceptId = tokenUse == CognitoTokenUse.Id || tokenUse == CognitoTokenUse.IdAndAccess;
+        var acceptAccess =
+            tokenUse == CognitoTokenUse.Access || tokenUse == CognitoTokenUse.IdAndAccess;
+
+        if (acceptId && audiences.Any(a => string.Equals(a, clientId, StringComparison.Ordinal)))
+            return true;
+
+        if (acceptAccess && token is JsonWebToken jwt)
+        {
+            var claim = jwt.Claims.FirstOrDefault(c =>
+                string.Equals(c.Type, CognitoDefaults.ClientId, StringComparison.Ordinal)
+            );
+            if (claim is not null && string.Equals(claim.Value, clientId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    // Whether the token's token_use claim fits the configured selection; false fails the token closed.
+    private static bool TokenUseAdmits(JsonWebToken jwt, CognitoTokenUse tokenUse)
+    {
+        var use = jwt
+            .Claims.FirstOrDefault(c =>
+                string.Equals(c.Type, CognitoDefaults.TokenUse, StringComparison.Ordinal)
+            )
+            ?.Value;
+
+        if (
+            tokenUse == CognitoTokenUse.Id
+            && use is not null
+            && !string.Equals(use, CognitoDefaults.TokenUseId, StringComparison.Ordinal)
+        )
+            return false;
+
+        if (
+            tokenUse == CognitoTokenUse.Access
+            && use is not null
+            && !string.Equals(use, CognitoDefaults.TokenUseAccess, StringComparison.Ordinal)
+        )
+            return false;
+
+        // A client_id claim is what makes a token the access shape, and Cognito always
+        // stamps token_use on one. Its absence therefore means the token is not
+        // something Cognito issued in that shape, so admitting it on the strength of
+        // client_id alone — which is exactly what the AudienceValidator's access branch
+        // above does — would accept a token nothing has vouched for. Fail closed.
+        //
+        // Scoped to client_id on purpose: a token carrying neither claim is not being
+        // presented as an access token at all, and the internal HS256 issuer mints
+        // precisely that, so requiring token_use of it would break a path that has
+        // nothing to do with Cognito.
+        var acceptsAccessShape =
+            tokenUse == CognitoTokenUse.Access || tokenUse == CognitoTokenUse.IdAndAccess;
+
+        if (
+            acceptsAccessShape
+            && use is null
+            && jwt.Claims.Any(c =>
+                string.Equals(c.Type, CognitoDefaults.ClientId, StringComparison.Ordinal)
+            )
+        )
+            return false;
+        return true;
     }
 }

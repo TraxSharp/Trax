@@ -12,7 +12,9 @@ internal static class RepoRoot
     public static string Path => Cached.Value;
 
     /// <summary>The repository root: the folder holding Trax.Docs and every Trax.* folder.</summary>
-    public static string Monorepo => Directory.GetParent(Path)!.FullName;
+    public static string Monorepo =>
+        Directory.GetParent(Path)?.FullName
+        ?? throw new InvalidOperationException($"The docs root '{Path}' has no parent folder.");
 
     public static string Combine(params string[] segments) =>
         System.IO.Path.Combine(new[] { Path }.Concat(segments).ToArray());
@@ -39,7 +41,7 @@ internal static class RepoRoot
     /// <c>scripts/sync-docs.sh</c>, as the same method in Trax.Docs.Tests does.
     /// </summary>
     public static bool IsPublished(string relative) =>
-        System.IO.Path.GetFileName(relative) != "README.md"
+        !string.Equals(System.IO.Path.GetFileName(relative), "README.md", StringComparison.Ordinal)
         && !relative.StartsWith("adr/", StringComparison.Ordinal)
         && !relative.StartsWith(".claude/", StringComparison.Ordinal)
         && !relative.StartsWith("skills/", StringComparison.Ordinal)

@@ -3,7 +3,7 @@ using System.ComponentModel;
 namespace Trax.Effect.Models.DeadLetter.DTOs;
 
 /// <summary>
-/// The values <see cref="DeadLetter.Create"/> needs to dead-letter a manifest. Infrastructure used
+/// The values <see cref="DeadLetter.Create(CreateDeadLetter)"/> needs to dead-letter a manifest. Infrastructure used
 /// by the scheduler's manifest manager when a manifest's failed runs reach its <c>MaxRetries</c>;
 /// not intended to be used directly.
 /// </summary>

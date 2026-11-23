@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -42,10 +44,10 @@ public class ManifestGroupMaxActiveJobsTests
 {
     private const int GlobalMaxActiveJobs = 10;
 
-    private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
-    private IJobDispatcherTrain _train = null!;
-    private IDataContext _dataContext = null!;
+    private ServiceProvider? _serviceProvider;
+    private AsyncServiceScope _scope;
+    private IJobDispatcherTrain? _train;
+    private IDataContext? _dataContext;
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -82,16 +84,20 @@ public class ManifestGroupMaxActiveJobsTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
@@ -103,7 +109,7 @@ public class ManifestGroupMaxActiveJobsTests
         if (_dataContext is IDisposable dataContextDisposable)
             dataContextDisposable.Dispose();
 
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     #region Per-Group MaxActiveJobs Tests
@@ -117,7 +123,10 @@ public class ManifestGroupMaxActiveJobsTests
         // Create 2 active jobs for group A
         for (var i = 0; i < 2; i++)
         {
-            var activeManifest = await CreateAndSaveManifest(groupA, inputValue: $"Active_A_{i}");
+            var activeManifest = await CreateAndSaveManifest(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_A_{i}")
+            );
             await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
         }
 
@@ -126,11 +135,13 @@ public class ManifestGroupMaxActiveJobsTests
         var queuedEntry = await CreateAndSaveWorkQueueEntry(queuedManifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should remain queued since group is at capacity
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == queuedEntry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == queuedEntry.Id);
         updated
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "group A is at its MaxActiveJobs limit of 2");
@@ -147,7 +158,10 @@ public class ManifestGroupMaxActiveJobsTests
         // Fill group A to capacity
         for (var i = 0; i < 2; i++)
         {
-            var activeManifest = await CreateAndSaveManifest(groupA, inputValue: $"Active_A_{i}");
+            var activeManifest = await CreateAndSaveManifest(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_A_{i}")
+            );
             await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
         }
 
@@ -159,15 +173,19 @@ public class ManifestGroupMaxActiveJobsTests
         var groupBEntry = await CreateAndSaveWorkQueueEntry(groupBManifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Group A entry stays queued, Group B entry gets dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var updatedA = await _dataContext.WorkQueues.FirstAsync(q => q.Id == groupAEntry.Id);
+        var updatedA = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == groupAEntry.Id);
         updatedA.Status.Should().Be(WorkQueueStatus.Queued, "group A is at its per-group limit");
 
-        var updatedB = await _dataContext.WorkQueues.FirstAsync(q => q.Id == groupBEntry.Id);
+        var updatedB = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == groupBEntry.Id);
         updatedB
             .Status.Should()
             .Be(WorkQueueStatus.Dispatched, "group B has no per-group limit and should dispatch");
@@ -182,7 +200,10 @@ public class ManifestGroupMaxActiveJobsTests
         // Create many active jobs for this group
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(group, inputValue: $"Active_{i}");
+            var manifest = await CreateAndSaveManifest(
+                group,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
@@ -191,11 +212,13 @@ public class ManifestGroupMaxActiveJobsTests
         var queuedEntry = await CreateAndSaveWorkQueueEntry(queuedManifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should be dispatched since no per-group limit
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == queuedEntry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == queuedEntry.Id);
         updated
             .Status.Should()
             .Be(WorkQueueStatus.Dispatched, "null MaxActiveJobs means no per-group limit");
@@ -212,19 +235,22 @@ public class ManifestGroupMaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(groupA, inputValue: $"Queued_{i}");
+            var manifest = await CreateAndSaveManifest(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Queued_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Exactly 3 dispatched (per-group limit)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -243,27 +269,33 @@ public class ManifestGroupMaxActiveJobsTests
         var groupAEntries = new List<WorkQueue>();
         for (var i = 0; i < 4; i++)
         {
-            var manifest = await CreateAndSaveManifest(groupA, inputValue: $"A_{i}");
+            var manifest = await CreateAndSaveManifest(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"A_{i}")
+            );
             groupAEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
         var groupBEntries = new List<WorkQueue>();
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(groupB, inputValue: $"B_{i}");
+            var manifest = await CreateAndSaveManifest(
+                groupB,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"B_{i}")
+            );
             groupBEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Group A: 2 dispatched, Group B: 3 dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
         var groupADispatched = 0;
         foreach (var entry in groupAEntries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 groupADispatched++;
         }
@@ -272,7 +304,7 @@ public class ManifestGroupMaxActiveJobsTests
         var groupBDispatched = 0;
         foreach (var entry in groupBEntries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 groupBDispatched++;
         }
@@ -288,7 +320,10 @@ public class ManifestGroupMaxActiveJobsTests
         // Fill to capacity
         for (var i = 0; i < 2; i++)
         {
-            var activeManifest = await CreateAndSaveManifest(group, inputValue: $"Active_{i}");
+            var activeManifest = await CreateAndSaveManifest(
+                group,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Active_{i}")
+            );
             await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
         }
 
@@ -297,11 +332,11 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = await CreateAndSaveWorkQueueEntry(manifest, priority: 31);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Should remain queued despite high priority
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
         updated
             .Status.Should()
             .Be(
@@ -326,7 +361,10 @@ public class ManifestGroupMaxActiveJobsTests
         var fillerGroup = await CreateAndSaveManifestGroup("filler-group");
         for (var i = 0; i < GlobalMaxActiveJobs - 1; i++)
         {
-            var filler = await CreateAndSaveManifest(fillerGroup, inputValue: $"Filler_{i}");
+            var filler = await CreateAndSaveManifest(
+                fillerGroup,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Filler_{i}")
+            );
             await CreateAndSaveMetadata(filler, TrainState.Pending);
         }
 
@@ -340,17 +378,21 @@ public class ManifestGroupMaxActiveJobsTests
         var highEntry = await CreateAndSaveWorkQueueEntry(highManifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - High priority group's entry should be dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var updatedHigh = await _dataContext.WorkQueues.FirstAsync(q => q.Id == highEntry.Id);
+        var updatedHigh = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == highEntry.Id);
         updatedHigh
             .Status.Should()
             .Be(WorkQueueStatus.Dispatched, "higher group priority should be dispatched first");
 
-        var updatedLow = await _dataContext.WorkQueues.FirstAsync(q => q.Id == lowEntry.Id);
+        var updatedLow = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == lowEntry.Id);
         updatedLow
             .Status.Should()
             .Be(
@@ -373,11 +415,11 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Entry should remain queued (LoadQueuedJobsJunction filters disabled groups)
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
         updated
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "entries from disabled groups should not be dispatched");
@@ -405,17 +447,19 @@ public class ManifestGroupMaxActiveJobsTests
         var enabledEntry = await CreateAndSaveWorkQueueEntry(enabledManifest);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Disabled group's entry stays queued, enabled group's entry dispatches
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var updatedDisabled = await _dataContext.WorkQueues.FirstAsync(q =>
-            q.Id == disabledEntry.Id
-        );
+        var updatedDisabled = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == disabledEntry.Id);
         updatedDisabled.Status.Should().Be(WorkQueueStatus.Queued);
 
-        var updatedEnabled = await _dataContext.WorkQueues.FirstAsync(q => q.Id == enabledEntry.Id);
+        var updatedEnabled = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == enabledEntry.Id);
         updatedEnabled.Status.Should().Be(WorkQueueStatus.Dispatched);
     }
 
@@ -430,18 +474,23 @@ public class ManifestGroupMaxActiveJobsTests
         var fillerGroup = await CreateAndSaveManifestGroup("filler-group");
         for (var i = 0; i < GlobalMaxActiveJobs; i++)
         {
-            var filler = await CreateAndSaveManifest(fillerGroup, inputValue: $"Filler_{i}");
+            var filler = await CreateAndSaveManifest(
+                fillerGroup,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Filler_{i}")
+            );
             await CreateAndSaveMetadata(filler, TrainState.Pending);
         }
 
         var manualEntry = await CreateAndSaveManualWorkQueueEntry();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Manual entry should remain queued (global limit reached)
-        _dataContext.Reset();
-        var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == manualEntry.Id);
+        _dataContext.NotNull().Reset();
+        var updated = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == manualEntry.Id);
         updated
             .Status.Should()
             .Be(
@@ -466,17 +515,21 @@ public class ManifestGroupMaxActiveJobsTests
         var manualEntry = await CreateAndSaveManualWorkQueueEntry();
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var updatedGroup = await _dataContext.WorkQueues.FirstAsync(q => q.Id == groupEntry.Id);
+        var updatedGroup = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == groupEntry.Id);
         updatedGroup
             .Status.Should()
             .Be(WorkQueueStatus.Queued, "group entry should be blocked by per-group limit");
 
-        var updatedManual = await _dataContext.WorkQueues.FirstAsync(q => q.Id == manualEntry.Id);
+        var updatedManual = await _dataContext
+            .NotNull()
+            .WorkQueues.FirstAsync(q => q.Id == manualEntry.Id);
         updatedManual
             .Status.Should()
             .Be(
@@ -507,44 +560,25 @@ public class ManifestGroupMaxActiveJobsTests
         );
 
         // Queue 150 entries for high-priority group A
-        for (var i = 0; i < 150; i++)
-        {
-            var manifest = await CreateAndSaveManifest(groupA, inputValue: $"A_{i}");
-            await CreateAndSaveWorkQueueEntry(manifest);
-        }
+        await QueueEntriesInGroup(groupA, "A", 150);
 
         // Queue 5 entries for lower-priority group B
-        var groupBEntries = new List<WorkQueue>();
-        for (var i = 0; i < 5; i++)
-        {
-            var manifest = await CreateAndSaveManifest(groupB, inputValue: $"B_{i}");
-            groupBEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
-        }
+        var groupBEntries = await QueueEntriesInGroup(groupB, "B", 5);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Group B entries should be dispatched (up to cap), not starved by Group A
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var groupBDispatched = 0;
-        foreach (var entry in groupBEntries)
-        {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
-            if (updated.Status == WorkQueueStatus.Dispatched)
-                groupBDispatched++;
-        }
+        var groupBDispatched = await CountDispatched(groupBEntries);
 
         groupBDispatched
             .Should()
             .Be(5, "group B should not be starved by group A flooding the queue");
 
         // Group A should also dispatch up to its cap
-        var groupADispatchedCount = await _dataContext.WorkQueues.CountAsync(q =>
-            q.Manifest != null
-            && q.Manifest.ManifestGroupId == groupA.Id
-            && q.Status == WorkQueueStatus.Dispatched
-        );
+        var groupADispatchedCount = await CountDispatchedInGroup(groupA.Id);
 
         groupADispatchedCount
             .Should()
@@ -574,35 +608,32 @@ public class ManifestGroupMaxActiveJobsTests
 
         for (var i = 0; i < 120; i++)
         {
-            var mA = await CreateAndSaveManifest(groupA, inputValue: $"A_{i}");
+            var mA = await CreateAndSaveManifest(
+                groupA,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"A_{i}")
+            );
             await CreateAndSaveWorkQueueEntry(mA);
-            var mB = await CreateAndSaveManifest(groupB, inputValue: $"B_{i}");
+            var mB = await CreateAndSaveManifest(
+                groupB,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"B_{i}")
+            );
             await CreateAndSaveWorkQueueEntry(mB);
-            var mC = await CreateAndSaveManifest(groupC, inputValue: $"C_{i}");
+            var mC = await CreateAndSaveManifest(
+                groupC,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"C_{i}")
+            );
             await CreateAndSaveWorkQueueEntry(mC);
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - All 3 groups dispatch up to their caps
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var aDispatched = await _dataContext.WorkQueues.CountAsync(q =>
-            q.Manifest != null
-            && q.Manifest.ManifestGroupId == groupA.Id
-            && q.Status == WorkQueueStatus.Dispatched
-        );
-        var bDispatched = await _dataContext.WorkQueues.CountAsync(q =>
-            q.Manifest != null
-            && q.Manifest.ManifestGroupId == groupB.Id
-            && q.Status == WorkQueueStatus.Dispatched
-        );
-        var cDispatched = await _dataContext.WorkQueues.CountAsync(q =>
-            q.Manifest != null
-            && q.Manifest.ManifestGroupId == groupC.Id
-            && q.Status == WorkQueueStatus.Dispatched
-        );
+        var aDispatched = await CountDispatchedInGroup(groupA.Id);
+        var bDispatched = await CountDispatchedInGroup(groupB.Id);
+        var cDispatched = await CountDispatchedInGroup(groupC.Id);
 
         aDispatched.Should().Be(2, "group A should dispatch up to its cap");
         bDispatched.Should().Be(2, "group B should dispatch up to its cap");
@@ -622,22 +653,29 @@ public class ManifestGroupMaxActiveJobsTests
 
         for (var i = 0; i < 150; i++)
         {
-            var manifest = await CreateAndSaveManifest(floodGroup, inputValue: $"Flood_{i}");
+            var manifest = await CreateAndSaveManifest(
+                floodGroup,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Flood_{i}")
+            );
             await CreateAndSaveWorkQueueEntry(manifest);
         }
 
         var manualEntries = new List<WorkQueue>();
         for (var i = 0; i < 3; i++)
-            manualEntries.Add(await CreateAndSaveManualWorkQueueEntry($"Manual_{i}"));
+            manualEntries.Add(
+                await CreateAndSaveManualWorkQueueEntry(
+                    string.Create(CultureInfo.InvariantCulture, $"Manual_{i}")
+                )
+            );
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Manual entries should be dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in manualEntries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated
                 .Status.Should()
                 .Be(
@@ -660,19 +698,22 @@ public class ManifestGroupMaxActiveJobsTests
         var entries = new List<WorkQueue>();
         for (var i = 0; i < 10; i++)
         {
-            var manifest = await CreateAndSaveManifest(group, inputValue: $"Single_{i}");
+            var manifest = await CreateAndSaveManifest(
+                group,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Single_{i}")
+            );
             entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - 5 dispatched (per-group limit)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var dispatchedCount = 0;
         foreach (var entry in entries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             if (updated.Status == WorkQueueStatus.Dispatched)
                 dispatchedCount++;
         }
@@ -688,13 +729,13 @@ public class ManifestGroupMaxActiveJobsTests
         // Arrange - No entries in work_queue. Raw SQL path should handle this gracefully.
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - No errors, no dispatches
-        _dataContext.Reset();
-        var dispatched = await _dataContext.WorkQueues.CountAsync(q =>
-            q.Status == WorkQueueStatus.Dispatched
-        );
+        _dataContext.NotNull().Reset();
+        var dispatched = await _dataContext
+            .NotNull()
+            .WorkQueues.CountAsync(q => q.Status == WorkQueueStatus.Dispatched);
         dispatched.Should().Be(0, "empty queue should produce no dispatches");
     }
 
@@ -711,44 +752,43 @@ public class ManifestGroupMaxActiveJobsTests
         // 5 entries with future ScheduledAt
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(group, inputValue: $"Future_{i}");
+            var manifest = await CreateAndSaveManifest(
+                group,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Future_{i}")
+            );
             var entry = await CreateAndSaveWorkQueueEntry(manifest);
             await _dataContext
+                .NotNull()
                 .WorkQueues.Where(q => q.Id == entry.Id)
                 .ExecuteUpdateAsync(s =>
-                    s.SetProperty(q => q.ScheduledAt, DateTime.UtcNow.AddHours(1))
+                    s.SetProperty(
+                        q => q.ScheduledAt,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1)
+                    )
                 );
-            _dataContext.Reset();
+            _dataContext.NotNull().Reset();
         }
 
         // 5 entries with null ScheduledAt (immediate)
-        var immediateEntries = new List<WorkQueue>();
-        for (var i = 0; i < 5; i++)
-        {
-            var manifest = await CreateAndSaveManifest(group, inputValue: $"Immediate_{i}");
-            immediateEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
-        }
+        var immediateEntries = await QueueEntriesInGroup(group, "Immediate", 5);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Only the 5 immediate entries should be dispatched
-        _dataContext.Reset();
-        var dispatchedCount = 0;
-        foreach (var entry in immediateEntries)
-        {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
-            if (updated.Status == WorkQueueStatus.Dispatched)
-                dispatchedCount++;
-        }
+        _dataContext.NotNull().Reset();
+        var dispatchedCount = await CountDispatched(immediateEntries);
 
         dispatchedCount
             .Should()
             .Be(5, "only entries without future ScheduledAt should be dispatched");
 
-        var futureDispatched = await _dataContext.WorkQueues.CountAsync(q =>
-            q.ScheduledAt > DateTime.UtcNow && q.Status == WorkQueueStatus.Dispatched
-        );
+        var futureDispatched = await _dataContext
+            .NotNull()
+            .WorkQueues.CountAsync(q =>
+                q.ScheduledAt > TimeProvider.System.GetUtcNow().UtcDateTime
+                && q.Status == WorkQueueStatus.Dispatched
+            );
         futureDispatched.Should().Be(0, "future-scheduled entries should not be dispatched");
     }
 
@@ -770,33 +810,41 @@ public class ManifestGroupMaxActiveJobsTests
 
         for (var i = 0; i < 50; i++)
         {
-            var manifest = await CreateAndSaveManifest(disabledGroup, inputValue: $"Disabled_{i}");
+            var manifest = await CreateAndSaveManifest(
+                disabledGroup,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Disabled_{i}")
+            );
             await CreateAndSaveWorkQueueEntry(manifest);
         }
 
         var enabledEntries = new List<WorkQueue>();
         for (var i = 0; i < 5; i++)
         {
-            var manifest = await CreateAndSaveManifest(enabledGroup, inputValue: $"Enabled_{i}");
+            var manifest = await CreateAndSaveManifest(
+                enabledGroup,
+                inputValue: string.Create(CultureInfo.InvariantCulture, $"Enabled_{i}")
+            );
             enabledEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
         }
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - Disabled group entries stay queued, enabled group dispatched
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         foreach (var entry in enabledEntries)
         {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            var updated = await _dataContext.NotNull().WorkQueues.FirstAsync(q => q.Id == entry.Id);
             updated.Status.Should().Be(WorkQueueStatus.Dispatched);
         }
 
-        var disabledDispatched = await _dataContext.WorkQueues.CountAsync(q =>
-            q.Manifest != null
-            && q.Manifest.ManifestGroupId == disabledGroup.Id
-            && q.Status == WorkQueueStatus.Dispatched
-        );
+        var disabledDispatched = await _dataContext
+            .NotNull()
+            .WorkQueues.CountAsync(q =>
+                q.Manifest != null
+                && q.Manifest.ManifestGroupId == disabledGroup.Id
+                && q.Status == WorkQueueStatus.Dispatched
+            );
         disabledDispatched
             .Should()
             .Be(0, "disabled group entries should not be loaded by the group-fair query");
@@ -813,50 +861,27 @@ public class ManifestGroupMaxActiveJobsTests
             priority: 10
         );
 
-        var lowPriorityEntries = new List<WorkQueue>();
-        var highPriorityEntries = new List<WorkQueue>();
-
         // Create low-priority entries first (earlier CreatedAt)
-        for (var i = 0; i < 5; i++)
-        {
-            var manifest = await CreateAndSaveManifest(group, inputValue: $"Low_{i}");
-            lowPriorityEntries.Add(await CreateAndSaveWorkQueueEntry(manifest, priority: 0));
-        }
+        var lowPriorityEntries = await QueueEntriesInGroup(group, "Low", 5, priority: 0);
 
         await Task.Delay(50);
 
         // Create high-priority entries second (later CreatedAt, but higher priority)
-        for (var i = 0; i < 5; i++)
-        {
-            var manifest = await CreateAndSaveManifest(group, inputValue: $"High_{i}");
-            highPriorityEntries.Add(await CreateAndSaveWorkQueueEntry(manifest, priority: 31));
-        }
+        var highPriorityEntries = await QueueEntriesInGroup(group, "High", 5, priority: 31);
 
         // Act
-        await _train.Run(Unit.Default);
+        await _train.NotNull().Run(Unit.Default);
 
         // Assert - The 3 dispatched should be the high-priority ones (priority trumps FIFO)
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
 
-        var highDispatched = 0;
-        foreach (var entry in highPriorityEntries)
-        {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
-            if (updated.Status == WorkQueueStatus.Dispatched)
-                highDispatched++;
-        }
+        var highDispatched = await CountDispatched(highPriorityEntries);
 
         highDispatched
             .Should()
             .Be(3, "the 3 dispatched entries should be high-priority ones (priority > FIFO)");
 
-        var lowDispatched = 0;
-        foreach (var entry in lowPriorityEntries)
-        {
-            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
-            if (updated.Status == WorkQueueStatus.Dispatched)
-                lowDispatched++;
-        }
+        var lowDispatched = await CountDispatched(lowPriorityEntries);
 
         lowDispatched
             .Should()
@@ -870,6 +895,52 @@ public class ManifestGroupMaxActiveJobsTests
 
     #region Helper Methods
 
+    private async Task<List<WorkQueue>> QueueEntriesInGroup(
+        ManifestGroup group,
+        string prefix,
+        int count,
+        int priority = 0
+    )
+    {
+        var entries = new List<WorkQueue>();
+        for (var i = 0; i < count; i++)
+        {
+            var manifest = await CreateAndSaveManifest(
+                    group,
+                    inputValue: string.Create(CultureInfo.InvariantCulture, $"{prefix}_{i}")
+                )
+                .ConfigureAwait(false);
+            entries.Add(
+                await CreateAndSaveWorkQueueEntry(manifest, priority).ConfigureAwait(false)
+            );
+        }
+        return entries;
+    }
+
+    private async Task<int> CountDispatched(List<WorkQueue> entries)
+    {
+        var dispatched = 0;
+        foreach (var entry in entries)
+        {
+            var updated = await _dataContext
+                .NotNull()
+                .WorkQueues.FirstAsync(q => q.Id == entry.Id)
+                .ConfigureAwait(false);
+            if (updated.Status == WorkQueueStatus.Dispatched)
+                dispatched++;
+        }
+        return dispatched;
+    }
+
+    private Task<int> CountDispatchedInGroup(long groupId) =>
+        _dataContext
+            .NotNull()
+            .WorkQueues.CountAsync(q =>
+                q.Manifest != null
+                && q.Manifest.ManifestGroupId == groupId
+                && q.Status == WorkQueueStatus.Dispatched
+            );
+
     private async Task<ManifestGroup> CreateAndSaveManifestGroup(
         string name,
         int? maxActiveJobs = null,
@@ -877,13 +948,15 @@ public class ManifestGroupMaxActiveJobsTests
         bool isEnabled = true
     )
     {
-        return await TestSetup.CreateAndSaveManifestGroup(
-            _dataContext,
-            name: name,
-            maxActiveJobs: maxActiveJobs,
-            priority: priority,
-            isEnabled: isEnabled
-        );
+        return await TestSetup
+            .CreateAndSaveManifestGroup(
+                _dataContext.NotNull(),
+                name: name,
+                maxActiveJobs: maxActiveJobs,
+                priority: priority,
+                isEnabled: isEnabled
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<Manifest> CreateAndSaveManifest(
@@ -903,9 +976,9 @@ public class ManifestGroupMaxActiveJobsTests
         );
         manifest.ManifestGroupId = group.Id;
 
-        await _dataContext.Track(manifest);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return manifest;
     }
@@ -915,18 +988,19 @@ public class ManifestGroupMaxActiveJobsTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
 
-        await _dataContext.Track(metadata);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(metadata).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return metadata;
     }
@@ -936,17 +1010,18 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return entry;
     }
@@ -964,16 +1039,17 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = serializedInput,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 Priority = priority,
-            }
+            },
+            TimeProvider.System
         );
 
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
 
         return entry;
     }

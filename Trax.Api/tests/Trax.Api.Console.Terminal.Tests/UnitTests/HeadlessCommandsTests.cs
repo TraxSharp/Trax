@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Headless;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Tests.Fakes;
@@ -21,8 +23,11 @@ public class HeadlessCommandsTests
 
         exit.Should().Be(0, error);
         var lines = Lines(output);
-        lines.Select(l => l["kind"]!.GetValue<string>()).Should().Equal("step", "step", "log");
-        lines[0]["text"]!.GetValue<string>().Should().Contain("junction Step0");
+        lines
+            .Select(l => l["kind"].NotNull().GetValue<string>())
+            .Should()
+            .Equal("step", "step", "log");
+        lines[0]["text"].NotNull().GetValue<string>().Should().Contain("junction Step0");
         error.Should().BeEmpty("nothing was left out");
     }
 
@@ -37,9 +42,14 @@ public class HeadlessCommandsTests
 
         exit.Should().Be(0, error);
         Lines(output).Should().HaveCount(RunTrace.Take + 1);
-        var marker = JsonNode.Parse(error)!;
-        marker["truncated"]!.AsArray().Select(k => k!.GetValue<string>()).Should().Equal("step");
-        marker["limit"]!.GetValue<int>().Should().Be(RunTrace.Take);
+        var marker = JsonNode.Parse(error).NotNull();
+        marker["truncated"]
+            .NotNull()
+            .AsArray()
+            .Select(k => k.NotNull().GetValue<string>())
+            .Should()
+            .Equal("step");
+        marker["limit"].NotNull().GetValue<int>().Should().Be(RunTrace.Take);
     }
 
     [Test]
@@ -55,7 +65,13 @@ public class HeadlessCommandsTests
 
         exit.Should().Be(1);
         output.Should().BeEmpty();
-        JsonNode.Parse(error)!["code"]!.GetValue<string>().Should().Be("NOT_FOUND");
+        JsonNode
+            .Parse(error)
+            .NotNull()["code"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("NOT_FOUND");
     }
 
     private const string Operation = "0f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
@@ -88,9 +104,14 @@ public class HeadlessCommandsTests
         );
 
         exit.Should().Be(0);
-        var line = JsonNode.Parse(output)!;
-        line["dryRun"]!.GetValue<bool>().Should().BeTrue();
-        line["ids"]!.AsArray().Select(i => i!.GetValue<long>()).Should().Equal(7, 9);
+        var line = JsonNode.Parse(output).NotNull();
+        line["dryRun"].NotNull().GetValue<bool>().Should().BeTrue();
+        line["ids"]
+            .NotNull()
+            .AsArray()
+            .Select(i => i.NotNull().GetValue<long>())
+            .Should()
+            .Equal(7, 9);
         host.Sent("RequeueDeadLetters").Should().BeEmpty();
     }
 
@@ -115,12 +136,17 @@ public class HeadlessCommandsTests
         );
 
         exit.Should().Be(0, error);
-        var line = JsonNode.Parse(output)!;
-        line["succeeded"]!.GetValue<bool>().Should().BeTrue();
-        line["message"]!.GetValue<string>().Should().Be("Requeued 2.");
+        var line = JsonNode.Parse(output).NotNull();
+        line["succeeded"].NotNull().GetValue<bool>().Should().BeTrue();
+        line["message"].NotNull().GetValue<string>().Should().Be("Requeued 2.");
         var sent = host.Sent("RequeueDeadLetters").Single();
-        sent["ids"]!.AsArray().Select(i => i!.GetValue<long>()).Should().Equal(7, 9);
-        sent["askAfresh"]!.GetValue<bool>().Should().BeTrue();
+        sent["ids"]
+            .NotNull()
+            .AsArray()
+            .Select(i => i.NotNull().GetValue<long>())
+            .Should()
+            .Equal(7, 9);
+        sent["askAfresh"].NotNull().GetValue<bool>().Should().BeTrue();
     }
 
     [Test]
@@ -135,9 +161,9 @@ public class HeadlessCommandsTests
         var (exit, output, _) = await Hosts.RunAsync(host, "do", "dead-letters", "requeue", "7");
 
         exit.Should().Be(1);
-        var line = JsonNode.Parse(output)!;
-        line["succeeded"]!.GetValue<bool>().Should().BeFalse();
-        line["code"]!.GetValue<string>().Should().Be("AUTH_NOT_AUTHORIZED");
+        var line = JsonNode.Parse(output).NotNull();
+        line["succeeded"].NotNull().GetValue<bool>().Should().BeFalse();
+        line["code"].NotNull().GetValue<string>().Should().Be("AUTH_NOT_AUTHORIZED");
     }
 
     [Test]
@@ -158,9 +184,12 @@ public class HeadlessCommandsTests
         );
 
         exit.Should().Be(0);
-        var line = JsonNode.Parse(output)!;
-        line["dryRun"]!.GetValue<bool>().Should().BeTrue();
-        line["filter"]!["deadLetters"]!["status"]!
+        var line = JsonNode.Parse(output).NotNull();
+        line["dryRun"].NotNull().GetValue<bool>().Should().BeTrue();
+        line["filter"]
+            .NotNull()["deadLetters"]
+            .NotNull()["status"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("AWAITING_INTERVENTION");
@@ -186,16 +215,16 @@ public class HeadlessCommandsTests
 
         exit.Should().Be(exitCode, error);
         var lines = Lines(output);
-        lines[0]["operation"]!.GetValue<string>().Should().Be(Operation);
+        lines[0]["operation"].NotNull().GetValue<string>().Should().Be(Operation);
         lines
             .Skip(1)
-            .Select(l => l["status"]!.GetValue<string>())
+            .Select(l => l["status"].NotNull().GetValue<string>())
             .Should()
             .Equal("RUNNING", "FINISHED");
-        lines[^1]["failed"]!.GetValue<int>().Should().Be(failed);
+        lines[^1]["failed"].NotNull().GetValue<int>().Should().Be(failed);
         var sent = host.Sent("StartBulkOperation").Single();
-        sent["expectedCount"]!.GetValue<int>().Should().Be(3);
-        sent["kind"]!.GetValue<string>().Should().Be("REQUEUE");
+        sent["expectedCount"].NotNull().GetValue<int>().Should().Be(3);
+        sent["kind"].NotNull().GetValue<string>().Should().Be("REQUEUE");
     }
 
     [Test]
@@ -213,7 +242,7 @@ public class HeadlessCommandsTests
         );
 
         exit.Should().Be(1);
-        JsonNode.Parse(output)!["succeeded"]!.GetValue<bool>().Should().BeFalse();
+        JsonNode.Parse(output).NotNull()["succeeded"].NotNull().GetValue<bool>().Should().BeFalse();
         host.Sent("BulkOperation").Should().BeEmpty();
     }
 
@@ -230,7 +259,7 @@ public class HeadlessCommandsTests
         var (exit, output, error) = await run;
 
         exit.Should().Be(0, error);
-        Lines(output).Single()["domain"]!.GetValue<string>().Should().Be("DEAD_LETTER");
+        Lines(output).Single()["domain"].NotNull().GetValue<string>().Should().Be("DEAD_LETTER");
     }
 
     [Test]
@@ -252,7 +281,13 @@ public class HeadlessCommandsTests
         var (exit, _, error) = await run;
 
         exit.Should().Be(1);
-        JsonNode.Parse(error)!["code"]!.GetValue<string>().Should().Be("AUTH_NOT_AUTHORIZED");
+        JsonNode
+            .Parse(error)
+            .NotNull()["code"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("AUTH_NOT_AUTHORIZED");
     }
 
     [Test]
@@ -264,8 +299,13 @@ public class HeadlessCommandsTests
 
         (await host.StreamAsync("OnDataChanged")).Error(new IOException("Connection reset."));
         await WaitAsync(() => run.IsCompleted || Interrupted(host));
-        stop.Cancel();
-        var (exit, _, error) = await run.WaitAsync(TimeSpan.FromSeconds(10));
+        await stop.CancelAsync().ConfigureAwait(false);
+        var (exit, _, error) = await run.WaitAsync(
+                TimeSpan.FromSeconds(10),
+                TimeProvider.System,
+                cancellationToken: CancellationToken.None
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         Lines(error)
@@ -303,7 +343,7 @@ public class HeadlessCommandsTests
             var host = new FakeHost();
             await list.LoadAsync(
                 new TraxClient(host),
-                new ListQuery(25, null, filters),
+                new ListQuery(25, After: null, filters),
                 CancellationToken.None
             );
             var query = host.Requests.Single().Variables;
@@ -312,8 +352,8 @@ public class HeadlessCommandsTests
 
             foreach (var bulk in list.BulkActions)
             {
-                var filter = (JsonObject)Wire.Json(bulk.Filter(filters))!;
-                var set = (JsonObject)filter.Single(p => p.Value is not null).Value!;
+                var filter = (JsonObject)Wire.Json(bulk.Filter(filters)).NotNull();
+                var set = (JsonObject)filter.Single(p => p.Value is not null).Value.NotNull();
 
                 set.Select(p => p.Key)
                     .Should()
@@ -339,13 +379,13 @@ public class HeadlessCommandsTests
 
     private static async Task WaitAsync(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(10);
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline)
+            if (TimeProvider.System.GetUtcNow().UtcDateTime > deadline)
                 throw new TimeoutException("The condition never held.");
             // allowed-delay: the polling interval of a wait with a deadline.
-            await Task.Delay(10);
+            await Task.Delay(10).ConfigureAwait(false);
         }
     }
 
@@ -368,7 +408,7 @@ public class HeadlessCommandsTests
                 {"operations":{"startBulkOperation":{"success":true,"message":"Started.","matched":3,"operation":
                   {"id":"OPERATION","kind":"REQUEUE","status":"RUNNING","actor":"op","startedAt":"2026-10-22T10:00:00Z",
                    "total":3,"done":0,"failed":0,"message":"Running."}}}}
-                """.Replace("OPERATION", Operation)
+                """.Replace("OPERATION", Operation, StringComparison.Ordinal)
             : """{"operations":{"startBulkOperation":{"success":false,"message":"The filter now matches 4.","matched":4,"operation":null}}}""";
 
     // A host that starts a bulk operation and reports it through the states given, (status, done, failed) each.
@@ -385,20 +425,28 @@ public class HeadlessCommandsTests
                     var at =
                         Math.Min(Interlocked.Increment(ref read) - 1, states.Length / 3 - 1) * 3;
                     return (JsonObject)
-                        JsonNode.Parse(
-                            """
-                            {"operations":{"bulkOperation":{"id":"OPERATION","kind":"REQUEUE","status":"STATUS",
-                              "actor":"op","askAfresh":false,"startedAt":"2026-10-22T10:00:00Z","finishedAt":null,
-                              "total":3,"done":DONE,"failed":FAILED,"message":"Done so far.",
-                              "filter":{"executions":null,"deadLetters":null,"manifests":null},"failureReasons":[],"failures":[]}}}
-                            """.Replace("OPERATION", Operation).Replace(
-                                "DONE",
-                                $"{states[at + 1]}"
-                            ).Replace("FAILED", $"{states[at + 2]}").Replace(
-                                "STATUS",
-                                $"{states[at]}"
+                        JsonNode
+                            .Parse(
+                                """
+                                {"operations":{"bulkOperation":{"id":"OPERATION","kind":"REQUEUE","status":"STATUS",
+                                  "actor":"op","askAfresh":false,"startedAt":"2026-10-22T10:00:00Z","finishedAt":null,
+                                  "total":3,"done":DONE,"failed":FAILED,"message":"Done so far.",
+                                  "filter":{"executions":null,"deadLetters":null,"manifests":null},"failureReasons":[],"failures":[]}}}
+                                """.Replace(
+                                    "OPERATION",
+                                    Operation,
+                                    StringComparison.Ordinal
+                                ).Replace(
+                                    "DONE",
+                                    $"{states[at + 1]}",
+                                    StringComparison.Ordinal
+                                ).Replace(
+                                    "FAILED",
+                                    $"{states[at + 2]}",
+                                    StringComparison.Ordinal
+                                ).Replace("STATUS", $"{states[at]}", StringComparison.Ordinal)
                             )
-                        )!;
+                            .NotNull();
                 }
             );
     }
@@ -421,10 +469,19 @@ public class HeadlessCommandsTests
                                         {
                                             ["position"] = i,
                                             ["kind"] = "JUNCTION",
-                                            ["name"] = $"Step{i}",
+                                            ["name"] = string.Create(
+                                                CultureInfo.InvariantCulture,
+                                                $"Step{i}"
+                                            ),
                                             ["state"] = "COMPLETED",
                                             ["startedAt"] = DateTimeOffset
-                                                .Parse("2026-10-22T10:00:00Z")
+                                                .Parse(
+                                                    "2026-10-22T10:00:00Z",
+                                                    System
+                                                        .Globalization
+                                                        .CultureInfo
+                                                        .InvariantCulture
+                                                )
                                                 .AddSeconds(i)
                                                 .ToString("O"),
                                             ["replayed"] = false,
@@ -453,6 +510,6 @@ public class HeadlessCommandsTests
     private static List<JsonNode> Lines(string output) =>
         output
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(l => JsonNode.Parse(l)!)
+            .Select(l => JsonNode.Parse(l).NotNull())
             .ToList();
 }

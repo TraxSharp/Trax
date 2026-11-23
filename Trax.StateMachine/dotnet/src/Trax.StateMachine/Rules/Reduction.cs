@@ -2,21 +2,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine;
 
-/// <summary>Where a <see cref="SetStep"/> takes its value from.</summary>
-public abstract record ValueSource
-{
-    /// <summary>Copy a field out of the trigger input.</summary>
-    public sealed record FromInput(string Field) : ValueSource;
-
-    /// <summary>A literal JSON value.</summary>
-    public sealed record Constant(JsonNode? Value) : ValueSource;
-
-    private ValueSource() { }
-}
-
-/// <summary>One field assignment in a <see cref="Reduction.Set"/>.</summary>
-public sealed record SetStep(string Field, ValueSource Source);
-
 /// <summary>
 /// A declarative reducer: how a transition produces the destination context. Data, like <see cref="Rule"/>,
 /// so the same reduction drives the runtime, the IR, and the generated per-language code. Reducers must be

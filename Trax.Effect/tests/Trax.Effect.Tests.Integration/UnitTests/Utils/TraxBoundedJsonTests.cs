@@ -6,7 +6,11 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Utils;
 
 public class TraxBoundedJsonTests
 {
-    private static readonly JsonSerializerOptions Options = new();
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     [Test]
     public void Under_the_ceiling_the_value_is_serialized()
@@ -28,7 +32,7 @@ public class TraxBoundedJsonTests
     public void Without_a_ceiling_the_value_is_serialized_whole()
     {
         TraxBoundedJson
-            .Serialize(Enumerable.Range(0, 1_000).ToArray(), Options, null)
+            .Serialize(Enumerable.Range(0, 1_000).ToArray(), Options, maxBytes: null)
             .Should()
             .StartWith("[0,1,2");
     }

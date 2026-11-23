@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using CsCheck;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using static Trax.Core.Tests.Unit.UnitTests.Train.CheckpointFixtures;
 
@@ -46,7 +47,9 @@ public class CheckpointStatePropertyTests : TestSetup
         ARich.Sample(
             state =>
             {
-                var read = JsonSerializer.Deserialize<Rich>(JsonSerializer.Serialize(state))!;
+                var read = JsonSerializer
+                    .Deserialize<Rich>(JsonSerializer.Serialize(state))
+                    .NotNull();
 
                 StateDigest
                     .Of(read)
@@ -65,9 +68,9 @@ public class CheckpointStatePropertyTests : TestSetup
     {
         // The reason for the refusal, shown: a field is not written, so it reads back empty.
         var state = new CheckpointDeclarationTests.WithField { Count = 3, Name = "a" };
-        var read = JsonSerializer.Deserialize<CheckpointDeclarationTests.WithField>(
-            JsonSerializer.Serialize(state)
-        )!;
+        var read = JsonSerializer
+            .Deserialize<CheckpointDeclarationTests.WithField>(JsonSerializer.Serialize(state))
+            .NotNull();
 
         CheckpointState
             .Problems(typeof(CheckpointDeclarationTests.WithField))

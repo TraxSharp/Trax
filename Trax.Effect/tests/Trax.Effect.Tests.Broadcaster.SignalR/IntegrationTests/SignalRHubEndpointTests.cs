@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Models;
 using Trax.Effect.Broadcaster.SignalR.Services;
@@ -43,10 +44,12 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task ClientConnects_AtCustomPath()
     {
-        await using var server = await SignalRTestServer.StartAsync(hubPath: "/hubs/custom");
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(hubPath: "/hubs/custom");
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         connection.State.Should().Be(HubConnectionState.Connected);
     }
@@ -54,13 +57,15 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task Hub_DeliversTraxClientEventToConnectedClient_ViaIHubContext()
     {
-        await using var server = await SignalRTestServer.StartAsync();
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync();
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var hub = server.GetService<IHubContext<TraxTrainEventHub, ITraxTrainEventClient>>();
         var payload = new TraxClientEvent(
@@ -68,12 +73,12 @@ public class SignalRHubEndpointTests
             "ext-7",
             "T.IDoThing",
             "Completed",
-            DateTime.UtcNow,
-            null
+            TestTime.UtcDateTime,
+            FailureReason: null
         );
         await hub.Clients.All.TrainEvent(payload);
 
-        var received = await tcs.Task.WaitAsync(Timeout);
+        var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
         received.ExternalId.Should().Be("ext-7");
         received.MetadataId.Should().Be(7);
         received.TrainName.Should().Be("T.IDoThing");
@@ -82,33 +87,35 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task Dispatcher_DeliversToConnectedClient_EndToEnd()
     {
-        await using var server = await SignalRTestServer.StartAsync();
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync();
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
         await dispatcher.HandleAsync(Message(externalId: "end-to-end"), CancellationToken.None);
 
-        var received = await tcs.Task.WaitAsync(Timeout);
+        var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
         received.ExternalId.Should().Be("end-to-end");
     }
 
     [Test]
     public async Task Dispatcher_FilterExclusion_ExcludedEventIsNotDelivered_IncludedIs()
     {
-        await using var server = await SignalRTestServer.StartAsync(opts =>
-            opts.OnlyForEvents("Completed")
-        );
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(opts => opts.OnlyForEvents("Completed"));
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<TraxClientEvent>();
         connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
 
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         var dispatcher = server.GetService<SignalRTrainEventDispatcher>();
 
@@ -124,7 +131,7 @@ public class SignalRHubEndpointTests
             CancellationToken.None
         );
 
-        var received = await tcs.Task.WaitAsync(Timeout);
+        var received = await tcs.Task.WaitAsync(Timeout, TimeProvider.System);
 
         // Positive proof: received the *included* event, not the excluded one.
         received.ExternalId.Should().Be("included");
@@ -151,7 +158,7 @@ public class SignalRHubEndpointTests
                 })
         );
 
-        Func<Task> act = async () => await hostBuilder.StartAsync();
+        Func<Task> act = async () => await hostBuilder.StartAsync().ConfigureAwait(false);
 
         act.Should().ThrowAsync<InvalidOperationException>().Result.WithMessage("*AddSignalR()*");
     }
@@ -163,13 +170,15 @@ public class SignalRHubEndpointTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddSignalR();
-        await using var app = builder.Build();
+        var app = builder.Build();
+        await using var appDisposal = app.ConfigureAwait(false);
         map(app);
 
         return ((IEndpointRouteBuilder)app)
             .DataSources.SelectMany(ds => ds.Endpoints)
             .Select(e => e.Metadata.GetMetadata<HttpConnectionDispatcherOptions>())
-            .First(o => o is not null)!;
+            .First(o => o is not null)
+            .NotNull();
     }
 
     [Test]

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -28,8 +29,14 @@ public class QueueInputTests : TestSetup
     private async Task<WorkQueue> EntryAsync(long id)
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id);
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.Id == id)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -39,8 +46,8 @@ public class QueueInputTests : TestSetup
         // carries the original's id to the run's metadata at dispatch, where decision replay
         // reads it.
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
-            null,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
+            inputJson: null,
             new QueueTrainOptions { Priority = 3, ReplayDecisionsOf = 4242 }
         );
 
@@ -55,13 +62,18 @@ public class QueueInputTests : TestSetup
         ITrainExecutionService old = new PredatesReplay();
 
         var act = async () =>
-            await old.QueueAsync("Any", null, new QueueTrainOptions { ReplayDecisionsOf = 1 });
+            await old.QueueAsync(
+                    "Any",
+                    inputJson: null,
+                    new QueueTrainOptions { ReplayDecisionsOf = 1 }
+                )
+                .ConfigureAwait(false);
 
         // A host misconfiguration, typed so the operations service can report it as one rather
         // than as a refusal, and named so the operator knows which registration to fix.
         var thrown = await act.Should().ThrowAsync<DecisionReplayNotSupportedException>();
         thrown.Which.ImplementationType.Should().Be(typeof(PredatesReplay));
-        thrown.Which.Message.Should().Contain(typeof(PredatesReplay).FullName!);
+        thrown.Which.Message.Should().Contain(typeof(PredatesReplay).FullName.NotNull());
     }
 
     /// <summary>An implementation written before the options overload existed.</summary>
@@ -91,21 +103,30 @@ public class QueueInputTests : TestSetup
     [Test]
     public async Task No_input_is_stored_as_an_empty_object_the_runner_can_use()
     {
-        var result = await Execution.QueueAsync(typeof(IOptionalInputTrain).FullName!, null);
+        var result = await Execution.QueueAsync(
+            typeof(IOptionalInputTrain).FullName.NotNull(),
+            inputJson: null
+        );
 
         var stored = (await EntryAsync(result.WorkQueueId)).Input;
 
         stored
             .Should()
             .NotBeNull("the runner refuses an entry with no input, so null could only fail later");
-        JsonSerializer.Deserialize<OptionalInput>(stored!)!.Label.Should().Be("default");
+        JsonSerializer
+            .Deserialize<OptionalInput>(stored.NotNull())
+            .NotNull()
+            .Label.Should()
+            .Be("default");
     }
 
     [Test]
     public async Task An_input_that_cannot_be_built_from_nothing_is_refused_at_enqueue()
     {
         var act = async () =>
-            await Execution.QueueAsync(typeof(IRequiredInputTrain).FullName!, null);
+            await Execution
+                .QueueAsync(typeof(IRequiredInputTrain).FullName.NotNull(), inputJson: null)
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<JsonException>(
@@ -121,7 +142,9 @@ public class QueueInputTests : TestSetup
         var before = await WorkQueueCountAsync();
 
         var act = async () =>
-            await Execution.QueueAsync(typeof(IPositionalInputTrain).FullName!, null);
+            await Execution
+                .QueueAsync(typeof(IPositionalInputTrain).FullName.NotNull(), inputJson: null)
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<JsonException>()).WithMessage(
             "No input was given*PositionalInput*",
@@ -134,19 +157,26 @@ public class QueueInputTests : TestSetup
     public async Task A_positional_record_whose_parameters_have_defaults_can_be_queued_without_input()
     {
         var result = await Execution.QueueAsync(
-            typeof(IDefaultedPositionalInputTrain).FullName!,
+            typeof(IDefaultedPositionalInputTrain).FullName.NotNull(),
             ""
         );
 
         var stored = (await EntryAsync(result.WorkQueueId)).Input;
 
-        JsonSerializer.Deserialize<DefaultedPositionalInput>(stored!)!.Label.Should().Be("default");
+        JsonSerializer
+            .Deserialize<DefaultedPositionalInput>(stored.NotNull())
+            .NotNull()
+            .Label.Should()
+            .Be("default");
     }
 
     [Test]
     public async Task A_train_taking_Unit_can_be_queued_without_input()
     {
-        var act = async () => await Execution.QueueAsync(typeof(IUnitInputTrain).FullName!, null);
+        var act = async () =>
+            await Execution
+                .QueueAsync(typeof(IUnitInputTrain).FullName.NotNull(), inputJson: null)
+                .ConfigureAwait(false);
 
         await act.Should()
             .NotThrowAsync("Unit needs no values, so a missing input stands in for it");
@@ -157,7 +187,10 @@ public class QueueInputTests : TestSetup
     {
         // Only a missing input is held to the stricter reading. An explicit {} is the caller's
         // own input, and is deserialized the way any other input is.
-        var result = await Execution.QueueAsync(typeof(IPositionalInputTrain).FullName!, "{}");
+        var result = await Execution.QueueAsync(
+            typeof(IPositionalInputTrain).FullName.NotNull(),
+            "{}"
+        );
 
         (await EntryAsync(result.WorkQueueId)).Input.Should().NotBeNull();
     }
@@ -166,8 +199,13 @@ public class QueueInputTests : TestSetup
     public async Task RunAsync_reads_a_missing_input_the_way_QueueAsync_does()
     {
         var refused = async () =>
-            await Execution.RunAsync(typeof(IPositionalInputTrain).FullName!, "");
-        var accepted = async () => await Execution.RunAsync(typeof(IUnitInputTrain).FullName!, " ");
+            await Execution
+                .RunAsync(typeof(IPositionalInputTrain).FullName.NotNull(), "")
+                .ConfigureAwait(false);
+        var accepted = async () =>
+            await Execution
+                .RunAsync(typeof(IUnitInputTrain).FullName.NotNull(), " ")
+                .ConfigureAwait(false);
 
         (await refused.Should().ThrowAsync<JsonException>()).WithMessage("No input was given*");
         await accepted.Should().NotThrowAsync();
@@ -176,8 +214,11 @@ public class QueueInputTests : TestSetup
     private async Task<int> WorkQueueCountAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.CountAsync();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context.WorkQueues.CountAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -185,7 +226,7 @@ public class QueueInputTests : TestSetup
     {
         HookProbe.Seen.Clear();
 
-        await Execution.QueueAsync(typeof(IHookedOptionalInputTrain).FullName!, "");
+        await Execution.QueueAsync(typeof(IHookedOptionalInputTrain).FullName.NotNull(), "");
 
         HookProbe.Seen.Should().ContainSingle().Which.Should().NotBeNull();
     }
@@ -193,21 +234,28 @@ public class QueueInputTests : TestSetup
     [Test]
     public async Task Whitespace_input_is_read_as_an_empty_object()
     {
-        var result = await Execution.QueueAsync(typeof(IOptionalInputTrain).FullName!, " \t\r\n ");
+        var result = await Execution.QueueAsync(
+            typeof(IOptionalInputTrain).FullName.NotNull(),
+            " \t\r\n "
+        );
 
         var stored = (await EntryAsync(result.WorkQueueId)).Input;
 
         stored.Should().NotBeNull("blank input is documented to be read as {}, the same as null");
-        JsonSerializer.Deserialize<OptionalInput>(stored!)!.Label.Should().Be("default");
+        JsonSerializer
+            .Deserialize<OptionalInput>(stored.NotNull())
+            .NotNull()
+            .Label.Should()
+            .Be("default");
     }
 
     [Test]
     public async Task A_scheduled_time_in_the_past_is_stored_as_given_and_is_already_due()
     {
-        var past = DateTime.UtcNow.AddHours(-3);
+        var past = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3);
 
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
             "{}",
             scheduledAt: past
         );
@@ -220,7 +268,7 @@ public class QueueInputTests : TestSetup
         entry
             .ScheduledAt.Should()
             .BeOnOrBefore(
-                DateTime.UtcNow,
+                TimeProvider.System.GetUtcNow().UtcDateTime,
                 "it is the earliest dispatch time, so a past one is due as soon as a worker is free"
             );
         entry.ConfirmedAt.Should().NotBeNull("nothing stages it, so dispatch can claim it now");
@@ -245,7 +293,7 @@ public class QueueInputTests : TestSetup
             var local = DateTime.SpecifyKind(instant + offset, DateTimeKind.Local);
 
             var result = await Execution.QueueAsync(
-                typeof(IOptionalInputTrain).FullName!,
+                typeof(IOptionalInputTrain).FullName.NotNull(),
                 "{}",
                 scheduledAt: local
             );
@@ -269,12 +317,12 @@ public class QueueInputTests : TestSetup
     public async Task An_unspecified_scheduled_time_is_taken_as_utc()
     {
         var unspecified = DateTime.SpecifyKind(
-            DateTime.UtcNow.AddHours(2),
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(2),
             DateTimeKind.Unspecified
         );
 
         var result = await Execution.QueueAsync(
-            typeof(IOptionalInputTrain).FullName!,
+            typeof(IOptionalInputTrain).FullName.NotNull(),
             "{}",
             scheduledAt: unspecified
         );
@@ -300,12 +348,14 @@ public class QueueInputTests : TestSetup
                 .Range(0, enqueues)
                 .Select(_ =>
                     Task.Run(() =>
-                        execution.QueueAsync(typeof(IConcurrentHookTrain).FullName!, "{}")
+                        execution.QueueAsync(typeof(IConcurrentHookTrain).FullName.NotNull(), "{}")
                     )
                 )
         );
 
-        var act = async () => await all.WaitAsync(TimeSpan.FromSeconds(30));
+        var act = async () =>
+            await all.WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+                .ConfigureAwait(false);
         await act.Should()
             .NotThrowAsync("a Blazor circuit shares one scope across every enqueue it makes");
 
@@ -328,8 +378,13 @@ public class QueueInputTests : TestSetup
             .Be(enqueues, "each enqueue commits on its own context");
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("ConcurrentHookTrain")))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("ConcurrentHookTrain")
+            )
+        )
             .Should()
             .Be(enqueues, "every enqueue committed its own row");
     }
@@ -337,11 +392,19 @@ public class QueueInputTests : TestSetup
     [Test]
     public async Task A_hook_can_enqueue_another_train()
     {
-        var result = await Execution.QueueAsync(typeof(IChainingHookTrain).FullName!, "{}");
+        var result = await Execution.QueueAsync(
+            typeof(IChainingHookTrain).FullName.NotNull(),
+            "{}"
+        );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("OptionalInputTrain")))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        (
+            await context.WorkQueues.CountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("OptionalInputTrain")
+            )
+        )
             .Should()
             .Be(1, "the hook's enqueue joins the outer one rather than refusing to nest");
         (await EntryAsync(result.WorkQueueId)).Should().NotBeNull();
@@ -384,7 +447,7 @@ public class QueueInputTests : TestSetup
             if (Interlocked.Increment(ref _arrived) == _expected)
                 _allArrived.TrySetResult();
 
-            return _allArrived.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
+            return _allArrived.Task.WaitAsync(TimeSpan.FromSeconds(15), TimeProvider.System, ct);
         }
     }
 
@@ -402,7 +465,7 @@ public class QueueInputTests : TestSetup
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
             var before = accessor.Current;
-            await ConcurrentHookProbe.ArriveAsync(ct);
+            await ConcurrentHookProbe.ArriveAsync(ct).ConfigureAwait(false);
             ConcurrentHookProbe.Seen.Add((before, accessor.Current));
         }
 
@@ -492,7 +555,7 @@ public class QueueInputTests : TestSetup
             IChainingHookTrain
     {
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
-            execution.QueueAsync(typeof(IOptionalInputTrain).FullName!, "{}", ct: ct);
+            execution.QueueAsync(typeof(IOptionalInputTrain).FullName.NotNull(), "{}", ct: ct);
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }

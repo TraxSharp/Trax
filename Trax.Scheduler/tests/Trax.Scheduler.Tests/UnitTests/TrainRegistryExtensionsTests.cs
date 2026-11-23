@@ -10,8 +10,10 @@ public class TrainRegistryExtensionsTests
     [Test]
     public void ValidateTrainRegistration_TypeRegistered_DoesNotThrow()
     {
-        var registry = new StubRegistry();
-        registry.InputTypeToTrain[typeof(MyInput)] = typeof(MyTrain);
+        var registry = new StubRegistry
+        {
+            InputTypeToTrain = new Dictionary<Type, Type> { [typeof(MyInput)] = typeof(MyTrain) },
+        };
 
         var act = () => registry.ValidateTrainRegistration<MyInput>();
 
@@ -33,8 +35,10 @@ public class TrainRegistryExtensionsTests
     [Test]
     public void ValidateTrainRegistration_DifferentInputType_StillThrows()
     {
-        var registry = new StubRegistry();
-        registry.InputTypeToTrain[typeof(MyInput)] = typeof(MyTrain);
+        var registry = new StubRegistry
+        {
+            InputTypeToTrain = new Dictionary<Type, Type> { [typeof(MyInput)] = typeof(MyTrain) },
+        };
 
         var act = () => registry.ValidateTrainRegistration<OtherInput>();
 
@@ -43,12 +47,13 @@ public class TrainRegistryExtensionsTests
 
     private sealed class StubRegistry : ITrainRegistry
     {
-        public Dictionary<Type, Type> InputTypeToTrain { get; set; } = new();
+        public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; } =
+            new Dictionary<Type, Type>();
     }
 
     private sealed class MyInput;
 
     private sealed class OtherInput;
 
-    private sealed class MyTrain;
+    private static class MyTrain;
 }

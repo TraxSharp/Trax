@@ -16,6 +16,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -67,7 +68,7 @@ public class JwtMultiSchemeTests
         var policy = policyProvider.GetPolicyAsync("alpha-JwtPolicy").GetAwaiter().GetResult();
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain("alpha");
+        policy.NotNull().AuthenticationSchemes.Should().Contain("alpha");
     }
 
     [Test]
@@ -82,7 +83,7 @@ public class JwtMultiSchemeTests
         var policy = policyProvider.GetPolicyAsync(JwtDefaults.PolicyName).GetAwaiter().GetResult();
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
     }
 
     [Test]
@@ -106,7 +107,7 @@ public class JwtMultiSchemeTests
             .GetResult();
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(new[] { "alpha", "beta" });
+        policy.NotNull().AuthenticationSchemes.Should().Contain(new[] { "alpha", "beta" });
     }
 
     [Test]
@@ -172,7 +173,7 @@ public class JwtMultiSchemeTests
 
         Action act = () =>
             services.AddTraxJwtAuth(
-                (string)null!,
+                (string)Null.Of<object>(),
                 jwt => jwt.UseSymmetricKey(IssuerAlpha, AudienceAlpha, KeyAlpha)
             );
 
@@ -184,7 +185,7 @@ public class JwtMultiSchemeTests
     {
         var services = NewServices();
 
-        Action act = () => services.AddTraxJwtAuth("alpha", (Action<JwtBuilder>)null!);
+        Action act = () => services.AddTraxJwtAuth("alpha", (Action<JwtBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -209,7 +210,7 @@ public class JwtMultiSchemeTests
         var services = NewServices();
 
         Action act = () =>
-            services.AddTraxJwtAuth<AlphaResolver>("alpha", (Action<JwtBuilder>)null!);
+            services.AddTraxJwtAuth<AlphaResolver>("alpha", (Action<JwtBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -225,7 +226,7 @@ public class JwtMultiSchemeTests
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/protected-alpha");
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("alpha:alice");
+        response.NotNull().PrincipalId.Should().Be("alpha:alice");
     }
 
     [Test]
@@ -257,8 +258,8 @@ public class JwtMultiSchemeTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", beta);
         var bResp = await client.GetFromJsonAsync<EndpointResponse>("/protected-beta");
 
-        aResp!.PrincipalType.Should().Be("alpha");
-        bResp!.PrincipalType.Should().Be("beta");
+        aResp.NotNull().PrincipalType.Should().Be("alpha");
+        bResp.NotNull().PrincipalType.Should().Be("beta");
     }
 
     [Test]
@@ -315,7 +316,7 @@ public class JwtMultiSchemeTests
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/protected-alpha");
 
-        response!.PrincipalId.Should().Be("alpha:alice");
+        response.NotNull().PrincipalId.Should().Be("alpha:alice");
         response.PrincipalType.Should().Be(JwtDefaults.PrincipalType);
     }
 
@@ -384,7 +385,7 @@ public class JwtMultiSchemeTests
             issuer: issuer,
             audience: audience,
             claims: new[] { new Claim("sub", sub) },
-            expires: DateTime.UtcNow.AddMinutes(5),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -432,38 +433,34 @@ public class JwtMultiSchemeTests
                             );
                         }
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected-alpha",
-                                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
-                                )
-                                .RequireAuthorization("alpha-JwtPolicy");
-                            endpoints
-                                .MapGet(
-                                    "/protected-beta",
-                                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
-                                )
-                                .RequireAuthorization("beta-JwtPolicy");
-                            endpoints
-                                .MapGet(
-                                    "/trax-policy",
-                                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
-                                )
-                                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected-alpha",
+                    (ClaimsPrincipal user) => Results.Ok(MakeResponse(user))
+                )
+                .RequireAuthorization("alpha-JwtPolicy");
+            endpoints
+                .MapGet("/protected-beta", (ClaimsPrincipal user) => Results.Ok(MakeResponse(user)))
+                .RequireAuthorization("beta-JwtPolicy");
+            endpoints
+                .MapGet("/trax-policy", (ClaimsPrincipal user) => Results.Ok(MakeResponse(user)))
+                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+        });
     }
 
     private static EndpointResponse MakeResponse(ClaimsPrincipal user) =>
@@ -499,7 +496,7 @@ public class JwtMultiSchemeTests
             ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (sub is null)
             return null;
-        return new TraxPrincipal(sub, sub, [], null, PrincipalType: discriminator);
+        return new TraxPrincipal(sub, sub, [], Claims: null, PrincipalType: discriminator);
     }
 
     private sealed class TestHostEnvironment : IHostEnvironment

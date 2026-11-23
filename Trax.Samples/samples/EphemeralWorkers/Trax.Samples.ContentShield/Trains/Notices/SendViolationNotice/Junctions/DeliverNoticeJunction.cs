@@ -6,7 +6,7 @@ namespace Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice.Junction
 /// <summary>
 /// Delivers the composed violation notice via email and push notification.
 /// </summary>
-public class DeliverNoticeJunction(ILogger<DeliverNoticeJunction> logger)
+public class DeliverNoticeJunction(ILogger<DeliverNoticeJunction> logger, TimeProvider clock)
     : Junction<SendViolationNoticeInput, SendViolationNoticeOutput>
 {
     public override async Task<SendViolationNoticeOutput> Run(SendViolationNoticeInput input)
@@ -17,7 +17,7 @@ public class DeliverNoticeJunction(ILogger<DeliverNoticeJunction> logger)
             input.ContentId
         );
 
-        await Task.Delay(150);
+        await Task.Delay(150, CancellationToken).ConfigureAwait(false);
 
         var noticeId = $"notice-{Guid.NewGuid():N}";
         logger.LogInformation("Notice {NoticeId} delivered successfully", noticeId);
@@ -25,7 +25,7 @@ public class DeliverNoticeJunction(ILogger<DeliverNoticeJunction> logger)
         return new SendViolationNoticeOutput
         {
             NoticeId = noticeId,
-            DeliveredAt = DateTimeOffset.UtcNow,
+            DeliveredAt = clock.GetUtcNow(),
         };
     }
 }

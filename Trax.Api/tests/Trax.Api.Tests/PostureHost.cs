@@ -10,6 +10,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -90,9 +91,25 @@ internal static class PostureHost
             return;
 
         var options = new DbContextOptionsBuilder<TContext>().UseInMemoryDatabase(name).Options;
-        using var context = (TContext)Activator.CreateInstance(typeof(TContext), options)!;
-        seed(context);
-        context.SaveChanges();
+        // Seeded when the host starts, before it serves a request.
+        services.AddHostedService(_ => new Seeding<TContext>(options, seed));
+    }
+
+    private sealed class Seeding<TContext>(
+        DbContextOptions<TContext> options,
+        Action<TContext> seed
+    ) : IHostedService
+        where TContext : DbContext
+    {
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            var context = (TContext)Activator.CreateInstance(typeof(TContext), options).NotNull();
+            await using var contextDisposal = context.ConfigureAwait(false);
+            seed(context);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     public static async Task<string> PostAsync(this IHost host, string query, string? apiKey = null)
@@ -108,7 +125,7 @@ internal static class PostureHost
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await host.GetTestClient().SendAsync(request);
-        return await response.Content.ReadAsStringAsync();
+        var response = await host.GetTestClient().SendAsync(request).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
 }

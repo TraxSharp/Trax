@@ -10,8 +10,11 @@ namespace:
   - Trax.Core.Exceptions
 source:
   - Trax.Core/src/Trax.Core/Monad/Monad.Parallel.cs
+  - Trax.Core/src/Trax.Core/Monad/IBranchScopeInitializer.cs
   - Trax.Core/src/Trax.Core/Monad/Branches.cs
+  - Trax.Core/src/Trax.Core/Monad/BranchFailurePolicy.cs
   - Trax.Core/src/Trax.Core/Exceptions/BranchesFailedException.cs
+  - Trax.Core/src/Trax.Core/Exceptions/FailedBranch.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 15

@@ -23,6 +23,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shopfront.Auth;
+using Trax.Core.Extensions;
 
 namespace Shopfront.Tests.IntegrationTests;
 
@@ -32,7 +33,7 @@ public class ConsoleTests
     private const string Executions =
         "{ operations { executions(take: 10) { items { name trainState } } } }";
 
-    private WebApplicationFactory<Program> _app = null!;
+    private WebApplicationFactory<Program>? _app;
 
     [SetUp]
     public async Task StartTheApplication()
@@ -45,14 +46,18 @@ public class ConsoleTests
     }
 
     [TearDown]
-    public ValueTask StopTheApplication() => _app.DisposeAsync();
+    public async ValueTask StopTheApplication()
+    {
+        if (_app is not null)
+            await _app.DisposeAsync().ConfigureAwait(false);
+    }
 
     private HttpClient SignedIn(string user, string role)
     {
-        var client = _app.CreateClient();
+        var client = _app.NotNull().CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            DevJwt.Mint(user, role)
+            DevJwt.Mint(user, role, TimeProvider.System)
         );
         return client;
     }
@@ -60,7 +65,7 @@ public class ConsoleTests
     [Test]
     public async Task Console_IsServed()
     {
-        var response = await _app.CreateClient().GetAsync("/trax/dashboard/");
+        var response = await _app.NotNull().CreateClient().GetAsync("/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -106,7 +111,7 @@ public class ConsoleTests
     [Test]
     public async Task Executions_Anonymous_IsNotAuthorized()
     {
-        var response = await _app.CreateClient().Post(Executions);
+        var response = await _app.NotNull().CreateClient().Post(Executions);
 
         response.ErrorCodes().Should().Contain("TRAX_AUTHORIZATION");
     }

@@ -1,0 +1,31 @@
+using Trax.Core.Functional;
+using Trax.Core.Junction;
+using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Samples.Recovery.Auth;
+using Trax.Samples.Recovery.Faults;
+using Trax.StateMachine.Persistence;
+
+namespace Trax.Samples.Recovery.Trains.OrderDemo;
+
+public class ArmOrderTrouble(FaultInjector faults, ISnapshotPrincipal caller)
+    : Junction<OrderTroubleInput, OrderTroubleOutput>
+{
+    public override Task<OrderTroubleOutput> Run(OrderTroubleInput input)
+    {
+        // Keyed by the key the caller's orders are stored under, so only their own order claims it.
+        var owner =
+            caller.CurrentUserKey
+            ?? throw new InvalidOperationException("Only a signed-in user has orders.");
+        faults.ArmNextOrder(
+            owner,
+            input.Trouble switch
+            {
+                OrderTrouble.TabletTimesOut => CrashPoint.TabletTimesOut,
+                OrderTrouble.RestaurantClosed => CrashPoint.RestaurantClosed,
+                _ => CrashPoint.None,
+            }
+        );
+        return Task.FromResult(new OrderTroubleOutput { Trouble = input.Trouble });
+    }
+}

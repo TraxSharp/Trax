@@ -6,6 +6,7 @@ using Trax.Cli.Generator;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.IntegrationTests;
 
@@ -24,8 +25,8 @@ public class SchemaNameValidationTests
     private const string Adr =
         "see cli/0002 (docs/adr/0002-generated-code-refuses-a-schema-name-it-cannot-emit.md)";
 
-    private string _root = null!;
-    private string _outputDir = null!;
+    private string _root = "";
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp()
@@ -49,42 +50,57 @@ public class SchemaNameValidationTests
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "InvalidSchemas", name);
 
     [Test]
-    public void An_OpenApi_property_name_that_is_not_an_identifier_is_refused()
+    public async Task An_OpenApi_property_name_that_is_not_an_identifier_is_refused()
     {
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("invalid-property-name.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("invalid-property-name.json"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*has to match*property of 'CreatePlayerInput'*Emitted*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*has to match*property of 'CreatePlayerInput'*Emitted*", Adr);
         Directory.Exists(_root).Should().BeFalse("nothing is written for a refused schema; " + Adr);
     }
 
     [Test]
-    public void An_OpenApi_tag_that_is_not_an_identifier_is_refused_before_anything_is_written()
+    public async Task An_OpenApi_tag_that_is_not_an_identifier_is_refused_before_anything_is_written()
     {
-        var schema = new OpenApiSchemaParser().Parse(InvalidFixturePath("invalid-tag.json"));
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("invalid-tag.json"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*group*outside*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*group*outside*", Adr);
         Directory.Exists(_root).Should().BeFalse(Adr);
     }
 
     [Test]
-    public void Generate_refuses_the_schema_before_touching_an_existing_output_directory()
+    public async Task Generate_refuses_the_schema_before_touching_an_existing_output_directory()
     {
         Directory.CreateDirectory(_outputDir);
         var marker = Path.Combine(_outputDir, "keep.txt");
-        File.WriteAllText(marker, "");
-        var schema = new OpenApiSchemaParser().Parse(InvalidFixturePath("invalid-tag.json"));
+        await File.WriteAllTextAsync(marker, "");
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("invalid-tag.json"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().Generate(schema, _outputDir, "Api", force: true);
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateAsync(schema, _outputDir, "Api", force: true)
+                .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
         File.Exists(marker)
             .Should()
             .BeTrue("--force must not delete anything for a refused schema");
@@ -147,26 +163,29 @@ public class SchemaNameValidationTests
     }
 
     [Test]
-    public void OpenApi_properties_that_become_one_name_after_PascalCase_are_refused()
+    public async Task OpenApi_properties_that_become_one_name_after_PascalCase_are_refused()
     {
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("duplicate-property-names.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("duplicate-property-names.json"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*property of 'Person' 'FirstName'*more than once*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*property of 'Person' 'FirstName'*more than once*", Adr);
         Directory.Exists(_root).Should().BeFalse("nothing is written for a refused schema; " + Adr);
     }
 
     [Test]
-    public void OpenApi_enum_values_that_become_one_name_after_PascalCase_are_refused()
+    public async Task OpenApi_enum_values_that_become_one_name_after_PascalCase_are_refused()
     {
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("duplicate-property-names.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("duplicate-property-names.json"))
+            .ConfigureAwait(false);
 
         var act = () => SchemaNames.Validate(schema, "Api");
 
@@ -176,41 +195,47 @@ public class SchemaNameValidationTests
     }
 
     [Test]
-    public void GraphQL_fields_that_become_one_name_after_PascalCase_are_refused()
+    public async Task GraphQL_fields_that_become_one_name_after_PascalCase_are_refused()
     {
-        var schema = new GraphQLSchemaParser().Parse(
-            InvalidFixturePath("duplicate-field-names.graphql")
-        );
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(InvalidFixturePath("duplicate-field-names.graphql"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*property of 'Player' 'FirstName'*more than once*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*property of 'Player' 'FirstName'*more than once*", Adr);
         Directory.Exists(_root).Should().BeFalse(Adr);
     }
 
     [Test]
-    public void OpenApi_component_schemas_that_become_one_type_are_refused_naming_both()
+    public async Task OpenApi_component_schemas_that_become_one_type_are_refused_naming_both()
     {
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("colliding-component-names.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("colliding-component-names.json"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*'Dto'*'Billing.Dto'*'Shipping.Dto'*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*'Dto'*'Billing.Dto'*'Shipping.Dto'*", Adr);
         Directory.Exists(_root).Should().BeFalse("nothing is written for a refused schema; " + Adr);
     }
 
     [Test]
-    public void An_OpenApi_type_and_enum_of_one_name_are_refused_naming_both()
+    public async Task An_OpenApi_type_and_enum_of_one_name_are_refused_naming_both()
     {
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("type-and-enum-names.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("type-and-enum-names.json"))
+            .ConfigureAwait(false);
 
         var act = () => SchemaNames.Validate(schema, "Api");
 
@@ -220,27 +245,30 @@ public class SchemaNameValidationTests
     }
 
     [Test]
-    public void GraphQL_operations_that_become_one_name_are_refused_naming_both()
+    public async Task GraphQL_operations_that_become_one_name_are_refused_naming_both()
     {
-        var schema = new GraphQLSchemaParser().Parse(
-            InvalidFixturePath("colliding-operation-names.graphql")
-        );
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(InvalidFixturePath("colliding-operation-names.graphql"))
+            .ConfigureAwait(false);
 
-        var act = () => new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var act = async () =>
+            await new TraxProjectGenerator()
+                .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*operation 'UserCount'*'Query.user_count'*'Query.userCount'*", Adr);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*operation 'UserCount'*'Query.user_count'*'Query.userCount'*", Adr);
         Directory.Exists(_root).Should().BeFalse(Adr);
     }
 
     [Test]
-    public void GraphQL_types_that_differ_only_in_case_are_refused()
+    public async Task GraphQL_types_that_differ_only_in_case_are_refused()
     {
         // Models/PlayerStats.cs and Models/Playerstats.cs are one file on macOS and Windows.
-        var schema = new GraphQLSchemaParser().Parse(
-            InvalidFixturePath("case-only-type-names.graphql")
-        );
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(InvalidFixturePath("case-only-type-names.graphql"))
+            .ConfigureAwait(false);
 
         var act = () => SchemaNames.Validate(schema, "Api");
 
@@ -276,32 +304,40 @@ public class SchemaNameValidationTests
     }
 
     [Test]
-    public void An_OpenApi_inline_object_named_like_a_component_gets_its_own_type()
+    public async Task An_OpenApi_inline_object_named_like_a_component_gets_its_own_type()
     {
-        var schema = new OpenApiSchemaParser().Parse(FixturePath("inline-name-reuse.json"));
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(FixturePath("inline-name-reuse.json"))
+            .ConfigureAwait(false);
 
-        var address = schema.Types.Single(t => t.Name == "Address");
+        var address = schema.Types.Single(t =>
+            string.Equals(t.Name, "Address", StringComparison.Ordinal)
+        );
         address
             .Fields.Select(f => f.Name)
             .Should()
             .BeEquivalentTo(["Street", "City"], "the component keeps its own fields");
         var customerAddress = schema
-            .Types.Single(t => t.Name == "Customer")
-            .Fields.Single(f => f.Name == "Address");
+            .Types.Single(t => string.Equals(t.Name, "Customer", StringComparison.Ordinal))
+            .Fields.Single(f => string.Equals(f.Name, "Address", StringComparison.Ordinal));
         customerAddress
             .TypeName.Should()
             .NotBe("Address", "the inline object is not the component");
         schema
-            .Types.Single(t => t.Name == customerAddress.TypeName)
+            .Types.Single(t =>
+                string.Equals(t.Name, customerAddress.TypeName, StringComparison.Ordinal)
+            )
             .Fields.Select(f => f.Name)
             .Should()
             .BeEquivalentTo(["Line1"]);
     }
 
     [Test]
-    public void OpenApi_inline_enums_of_one_name_with_different_values_are_not_merged()
+    public async Task OpenApi_inline_enums_of_one_name_with_different_values_are_not_merged()
     {
-        var schema = new OpenApiSchemaParser().Parse(FixturePath("inline-name-reuse.json"));
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(FixturePath("inline-name-reuse.json"))
+            .ConfigureAwait(false);
 
         var customerStatus = FieldType(schema, "Customer", "Status");
         var ticketStatus = FieldType(schema, "Ticket", "Status");
@@ -310,23 +346,29 @@ public class SchemaNameValidationTests
             .Should()
             .NotBe(ticketStatus, "two enums with different values are two enums; " + Adr);
         schema
-            .Enums.Single(e => e.Name == customerStatus)
+            .Enums.Single(e => string.Equals(e.Name, customerStatus, StringComparison.Ordinal))
             .Values.Should()
             .Equal("Active", "Suspended");
-        schema.Enums.Single(e => e.Name == ticketStatus).Values.Should().Equal("Open", "Closed");
+        schema
+            .Enums.Single(e => string.Equals(e.Name, ticketStatus, StringComparison.Ordinal))
+            .Values.Should()
+            .Equal("Open", "Closed");
     }
 
     private static string FieldType(ApiSchema schema, string type, string field) =>
-        schema.Types.Single(t => t.Name == type).Fields.Single(f => f.Name == field).TypeName;
+        schema
+            .Types.Single(t => string.Equals(t.Name, type, StringComparison.Ordinal))
+            .Fields.Single(f => string.Equals(f.Name, field, StringComparison.Ordinal))
+            .TypeName;
 
     [Test]
-    public void OpenApi_parameters_that_become_one_input_property_are_refused()
+    public async Task OpenApi_parameters_that_become_one_input_property_are_refused()
     {
         // update_value (path) and updateValue (query) both become UpdateValue. The parser used to
         // keep the first and drop the second without a word.
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("converging-input-names.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("converging-input-names.json"))
+            .ConfigureAwait(false);
 
         var act = () => SchemaNames.Validate(schema, "Api");
 
@@ -336,14 +378,18 @@ public class SchemaNameValidationTests
     }
 
     [Test]
-    public void An_OpenApi_path_parameter_repeated_in_the_body_is_one_input_property()
+    public async Task An_OpenApi_path_parameter_repeated_in_the_body_is_one_input_property()
     {
         // PUT /players/{id} with a body that also carries id: the same name for the same value.
-        var schema = new OpenApiSchemaParser().Parse(
-            InvalidFixturePath("converging-input-names.json")
-        );
+        var schema = await new OpenApiSchemaParser()
+            .ParseAsync(InvalidFixturePath("converging-input-names.json"))
+            .ConfigureAwait(false);
 
-        var input = schema.Operations.Single(o => o.Name == "ReplacePlayer").InputType;
+        var input = schema
+            .Operations.Single(o =>
+                string.Equals(o.Name, "ReplacePlayer", StringComparison.Ordinal)
+            )
+            .InputType;
 
         input.Fields.Select(f => f.Name).Should().Equal(["Id", "Name"], Adr);
     }
@@ -375,14 +421,16 @@ public class SchemaNameValidationTests
     /// for.
     /// </summary>
     [Test]
-    public void A_schema_whose_text_contains_code_generates_a_library_that_compiles_as_data()
+    public async Task A_schema_whose_text_contains_code_generates_a_library_that_compiles_as_data()
     {
-        var schema = new GraphQLSchemaParser().Parse(FixturePath("description-text.graphql"));
-        new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Api");
+        var schema = await new GraphQLSchemaParser()
+            .ParseAsync(FixturePath("description-text.graphql"))
+            .ConfigureAwait(false);
+        await new TraxProjectGenerator()
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "Api")
+            .ConfigureAwait(false);
 
-        var trees = Directory
-            .EnumerateFiles(_outputDir, "*.cs", SearchOption.AllDirectories)
-            .Select(f => CSharpSyntaxTree.ParseText(File.ReadAllText(f), path: f))
+        var trees = (await GeneratedSources.ReadAsync(_outputDir).ConfigureAwait(false))
             .Append(
                 CSharpSyntaxTree.ParseText(
                     """
@@ -395,29 +443,18 @@ public class SchemaNameValidationTests
             )
             .ToList();
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator)
-            .Select(path => MetadataReference.CreateFromFile(path));
-        var errors = CSharpCompilation
-            .Create(
-                "Generated",
-                trees,
-                references,
-                new CSharpCompilationOptions(
-                    OutputKind.DynamicallyLinkedLibrary,
-                    nullableContextOptions: NullableContextOptions.Enable
-                )
-            )
-            .GetDiagnostics()
-            .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .Select(d => d.ToString());
+        var errors = CompileErrors(trees);
 
         errors.Should().BeEmpty("schema text is rendered as data; " + Adr);
 
-        var declared = trees
-            .SelectMany(t => t.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
-            .Select(t => t.Identifier.Text)
-            .ToList();
+        var declared = new List<string>();
+        foreach (var tree in trees)
+            declared.AddRange(
+                (await tree.GetRootAsync().ConfigureAwait(false))
+                    .DescendantNodes()
+                    .OfType<BaseTypeDeclarationSyntax>()
+                    .Select(t => t.Identifier.Text)
+            );
         declared
             .Should()
             .BeEquivalentTo(
@@ -431,6 +468,27 @@ public class SchemaNameValidationTests
                 "GetPlayerJunction"
             );
         declared.Should().NotContain(n => n.StartsWith("Emitted"), Adr);
+    }
+
+    // The errors the generated sources compile with, as a library against the platform's assemblies.
+    private static IEnumerable<string> CompileErrors(List<SyntaxTree> trees)
+    {
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
+            .Split(Path.PathSeparator)
+            .Select(path => MetadataReference.CreateFromFile(path));
+        return CSharpCompilation
+            .Create(
+                "Generated",
+                trees,
+                references,
+                new CSharpCompilationOptions(
+                    OutputKind.DynamicallyLinkedLibrary,
+                    nullableContextOptions: NullableContextOptions.Enable
+                )
+            )
+            .GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.ToString());
     }
 
     private static ApiSchema EmptySchema() => new() { SourceFile = "test", SchemaType = "openapi" };

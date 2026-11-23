@@ -39,31 +39,3 @@ public class TypedQueryGeneratorCycleTests
         query.Should().Contain("home {").And.Contain("away {");
     }
 }
-
-[GraphQLType("Category")]
-public sealed record SelfRefCategory(string Id, string Name, SelfRefCategory? Parent);
-
-[GraphQLOperation(OperationType.Query, RootField = "category")]
-public sealed class GetCategoryRequest : TypedRequest<SelfRefCategory>
-{
-    [GraphQLArgument("String!", VariableName = "id")]
-    public required string Id { get; init; }
-}
-
-[GraphQLType("Folder")]
-public sealed record CycleFolder(string Id, IReadOnlyList<CycleFile> Files);
-
-[GraphQLType("File")]
-public sealed record CycleFile(string Id, CycleFolder Folder);
-
-[GraphQLOperation(OperationType.Query, RootField = "folder")]
-public sealed class GetFolderRequest : TypedRequest<CycleFolder>;
-
-[GraphQLType("Team")]
-public sealed record MatchTeam(string Id, string Name);
-
-[GraphQLType("Match")]
-public sealed record SiblingMatch(string Id, MatchTeam Home, MatchTeam Away);
-
-[GraphQLOperation(OperationType.Query, RootField = "match")]
-public sealed class GetMatchRequest : TypedRequest<SiblingMatch>;

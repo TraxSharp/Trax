@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.UnitTests;
 
@@ -27,7 +28,7 @@ public class DeclarativeAuthoringDefectTests
 
     public sealed record UnsignedContext(uint Quantity);
 
-    public sealed record MapContext(Dictionary<string, int> Counts);
+    internal sealed record MapContext(Dictionary<string, int> Counts);
 
     public sealed record CountInput(int N);
 
@@ -35,6 +36,8 @@ public class DeclarativeAuthoringDefectTests
     // the schema's duration format describes.
     private static readonly JsonSerializerOptions CamelCase = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter(), new IsoDurationJsonConverter() },
     };
@@ -42,7 +45,7 @@ public class DeclarativeAuthoringDefectTests
     private static string? ValidateOwnJson<TContext>(TContext value) =>
         SchemaValidator.Validate(
             SchemaReflection.For<TContext>(),
-            (JsonObject)JsonSerializer.SerializeToNode(value, CamelCase)!
+            (JsonObject)JsonSerializer.SerializeToNode(value, CamelCase).NotNull()
         );
 
     [Test]
@@ -59,13 +62,13 @@ public class DeclarativeAuthoringDefectTests
                 .BeNull("DateTimeOffset");
             ValidateOwnJson(new EnumContext(Kind.Express)).Should().BeNull("enum");
             ValidateOwnJson(new UnsignedContext(3)).Should().BeNull("uint");
-            ValidateOwnJson(new MapContext(new() { ["a"] = 1 }))
+            ValidateOwnJson(new MapContext(new(StringComparer.Ordinal) { ["a"] = 1 }))
                 .Should()
                 .BeNull("Dictionary<string,int>");
         }
     }
 
-    public sealed record WideContext(
+    internal sealed record WideContext(
         Guid? MaybeId,
         DateOnly Day,
         TimeSpan Wait,
@@ -82,7 +85,7 @@ public class DeclarativeAuthoringDefectTests
     public void The_reflected_types_match_what_System_Text_Json_writes()
     {
         var value = new WideContext(
-            null,
+            MaybeId: null,
             new DateOnly(2026, 9, 28),
             TimeSpan.FromMinutes(5),
             // The largest ulong both engines can tell from one past ulong.MaxValue; see below.
@@ -91,7 +94,7 @@ public class DeclarativeAuthoringDefectTests
             'x',
             [Guid.NewGuid()],
             [Kind.Standard, Kind.Express],
-            new Dictionary<string, string> { ["a"] = "b" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["a"] = "b" },
             new Dictionary<int, bool> { [1] = true }
         );
 
@@ -102,7 +105,9 @@ public class DeclarativeAuthoringDefectTests
             .Should()
             .Be("'big' is out of range.");
 
-        var fields = SchemaReflection.For<WideContext>().Fields.ToDictionary(f => f.Name);
+        var fields = SchemaReflection
+            .For<WideContext>()
+            .Fields.ToDictionary(f => f.Name, StringComparer.Ordinal);
         fields["labels"].Type.Should().Be(JsonFieldType.Object);
         fields["labels"]
             .Constraints.Should()
@@ -221,7 +226,11 @@ public class DeclarativeAuthoringDefectTests
             new JsonObject { ["n"] = 7 }
         );
 
-        result.Should().BeOfType<AdvanceResult.Transitioned>().Which.Snapshot.Context["n"]!
+        result
+            .Should()
+            .BeOfType<AdvanceResult.Transitioned>()
+            .Which.Snapshot.Context["n"]
+            .NotNull()
             .GetValue<int>()
             .Should()
             .Be(7);

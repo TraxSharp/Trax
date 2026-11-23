@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -55,7 +56,7 @@ public class TraxHttpAuthenticationInterceptorTests
         );
 
         await schemeProvider.DidNotReceive().GetAllSchemesAsync();
-        httpContext.User.Identity!.Name.Should().Be("alice");
+        httpContext.User.Identity.NotNull().Name.Should().Be("alice");
         httpContext.User.Identity.AuthenticationType.Should().Be("preauth");
     }
 
@@ -94,7 +95,8 @@ public class TraxHttpAuthenticationInterceptorTests
         );
 
         httpContext
-            .User.Identity!.IsAuthenticated.Should()
+            .User.Identity.NotNull()
+            .IsAuthenticated.Should()
             .BeFalse(
                 "a request no scheme authenticates stays anonymous, per docs/adr/0010-a-scheme-policy-requires-its-scheme.md"
             );
@@ -142,7 +144,7 @@ public class TraxHttpAuthenticationInterceptorTests
             CancellationToken.None
         );
 
-        httpContext.User.Identity!.Name.Should().Be("winner");
+        httpContext.User.Identity.NotNull().Name.Should().Be("winner");
         httpContext.User.Identity.AuthenticationType.Should().Be("schemeA");
     }
 
@@ -171,7 +173,7 @@ public class TraxHttpAuthenticationInterceptorTests
             CancellationToken.None
         );
 
-        httpContext.User.Identity!.Name.Should().Be("bob");
+        httpContext.User.Identity.NotNull().Name.Should().Be("bob");
     }
 
     [Test]
@@ -203,7 +205,8 @@ public class TraxHttpAuthenticationInterceptorTests
         );
 
         httpContext
-            .User.Identity!.Name.Should()
+            .User.Identity.NotNull()
+            .Name.Should()
             .Be("carol", "per docs/adr/0010-a-scheme-policy-requires-its-scheme.md");
     }
 
@@ -275,7 +278,10 @@ public class TraxHttpAuthenticationInterceptorTests
             .AuthenticateAsync(ctx, Arg.Any<string>())
             .Returns(callInfo =>
             {
-                if (successPrincipalForScheme is { } m && callInfo.ArgAt<string>(1) == m.Scheme)
+                if (
+                    successPrincipalForScheme is { } m
+                    && string.Equals(callInfo.ArgAt<string>(1), m.Scheme, StringComparison.Ordinal)
+                )
                     return Task.FromResult(
                         AuthenticateResult.Success(new AuthenticationTicket(m.Principal, m.Scheme))
                     );
@@ -310,7 +316,7 @@ public class TraxHttpAuthenticationInterceptorTests
             Task.CompletedTask;
     }
 
-    private sealed class SuccessAuthenticationHandler : NoResultAuthenticationHandler { }
+    private sealed class SuccessAuthenticationHandler : NoResultAuthenticationHandler;
 
-    private sealed class ThrowingAuthenticationHandler : NoResultAuthenticationHandler { }
+    private sealed class ThrowingAuthenticationHandler : NoResultAuthenticationHandler;
 }

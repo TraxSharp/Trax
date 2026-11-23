@@ -5,9 +5,27 @@ type: reference
 area: machines
 nav_order: 22
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/GenericContracts.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/GenericTrains.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/SaveSnapshotInput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/SaveSnapshotOutput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/AdvanceSnapshotInput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/AdvanceSnapshotOutput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/LoadSnapshotInput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/LoadSnapshotOutput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/SendSnapshotInput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/StartSnapshotInput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/StartSnapshotOutput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/DiscardSnapshotInput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/DiscardSnapshotOutput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/SendSnapshotOutput.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/SaveSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/AdvanceSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/LoadSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/SendSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/StartSnapshot.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/DiscardSnapshot.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineChangeFeed.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/GenericStateMachineMutationOptions.cs
 ---
 
 # Generic state-machine mutations

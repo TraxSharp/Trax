@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.Checkpoints;
@@ -11,6 +12,9 @@ namespace Trax.Effect.Data.Checkpoints;
 /// provider, InMemory included.
 /// </summary>
 /// <remarks>See Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.</remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICheckpointRows
 {
     /// <summary>
@@ -24,9 +28,10 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
         CancellationToken cancellationToken
     )
     {
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         context.Checkpoints.Add(row);
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ResumedRun>> Lineage(
@@ -34,7 +39,8 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
         CancellationToken cancellationToken
     )
     {
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var lineage = new List<ResumedRun>();
         var seen = new HashSet<long>();
         long? next = runId;
@@ -50,7 +56,8 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
                     m.ResumeFrom,
                     m.ResumeAt,
                 })
-                .SingleOrDefaultAsync(cancellationToken);
+                .SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             if (run is null)
                 break;
@@ -59,20 +66,22 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
             var rows = await context
                 .Checkpoints.AsNoTracking()
                 .Where(c => c.MetadataId == id)
-                .Select(c => new Trax.Effect.Models.Checkpoint.Checkpoint
+                .Select(c => new Effect.Models.Checkpoint.Checkpoint
                 {
                     Id = c.Id,
                     MetadataId = c.MetadataId,
                     NodeId = c.NodeId,
                     BranchPath = c.BranchPath,
                     StateType = c.StateType,
-                    State = null!,
+                    // Not read here; the states are read by id once a resume picks its node.
+                    State = string.Empty,
                     Tracks = c.Tracks,
                     ChainHash = c.ChainHash,
                     StateFingerprint = c.StateFingerprint,
                     CreatedAt = c.CreatedAt,
                 })
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             lineage.Add(new ResumedRun(run.Id, run.ResumeFrom, run.ResumeAt, rows));
             next = run.ResumeFrom;
@@ -89,18 +98,21 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
         if (rowIds.Count == 0)
             return new Dictionary<long, string>();
 
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var ids = rowIds.ToList();
 
         return await context
             .Checkpoints.AsNoTracking()
             .Where(c => ids.Contains(c.Id))
-            .ToDictionaryAsync(c => c.Id, c => c.State, cancellationToken);
+            .ToDictionaryAsync(c => c.Id, c => c.State, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<ResumeSource?> Source(long runId, CancellationToken cancellationToken)
     {
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         return await context
             .Metadatas.AsNoTracking()
@@ -110,27 +122,30 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
                 m.Input,
                 m.TrainState,
                 context.Metadatas.Any(r =>
-                    r.ResumeFrom == runId && r.TrainState == Trax.Effect.Enums.TrainState.Completed
+                    r.ResumeFrom == runId && r.TrainState == Enums.TrainState.Completed
                 )
             ))
-            .SingleOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task DeleteFor(long runId, CancellationToken cancellationToken)
     {
-        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         // Read and removed rather than deleted in bulk: the InMemory provider has no bulk delete,
         // and a completed run has a handful of rows at most.
         var rows = await context
             .Checkpoints.Where(c => c.MetadataId == runId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         if (rows.Count == 0)
             return;
 
         context.Checkpoints.RemoveRange(rows);
-        await context.SaveChanges(cancellationToken);
+        await context.SaveChanges(cancellationToken).ConfigureAwait(false);
     }
 
     public bool HasUncommittedWork(IServiceProvider scope) =>

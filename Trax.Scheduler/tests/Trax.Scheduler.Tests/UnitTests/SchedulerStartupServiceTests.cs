@@ -11,6 +11,10 @@ namespace Trax.Scheduler.Tests.UnitTests;
 [TestFixture]
 public class SchedulerStartupServiceTests
 {
+    // An ArgumentException as a caller's code would throw it; the parameter it names is not this test's.
+    private static ArgumentException ArgumentFailure(string message, string paramName = "input") =>
+        new(message, paramName);
+
     #region Helpers
 
     private static SchedulerStartupService CreateService(ISqlDialect? dialect = null)
@@ -72,7 +76,7 @@ public class SchedulerStartupServiceTests
     [Test]
     public void IsTransient_ANonTransientFailureTheDialectRejects_ReturnsFalse()
     {
-        CreateService().IsTransient(new ArgumentException("bad argument")).Should().BeFalse();
+        CreateService().IsTransient(ArgumentFailure("bad argument")).Should().BeFalse();
     }
 
     [Test]
@@ -238,14 +242,14 @@ public class SchedulerStartupServiceTests
                 _ =>
                 {
                     callCount++;
-                    throw new ArgumentException("bad config");
+                    throw ArgumentFailure("bad config");
                 },
                 "fatal-test",
                 CancellationToken.None,
                 baseDelay: TimeSpan.Zero
             );
 
-        await act.Should().ThrowAsync<ArgumentException>().WithMessage("bad config");
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("bad config*");
         callCount.Should().Be(1, "non-transient errors should not be retried");
     }
 
@@ -287,11 +291,11 @@ public class SchedulerStartupServiceTests
 
         var act = () =>
             service.SeedWithRetryAsync(
-                _ =>
+                async _ =>
                 {
                     callCount++;
                     // Cancel after the first transient failure, so the Task.Delay throws
-                    cts.Cancel();
+                    await cts.CancelAsync().ConfigureAwait(false);
                     throw new TimeoutException("timed out");
                 },
                 "cancel-test",
@@ -308,7 +312,7 @@ public class SchedulerStartupServiceTests
     {
         var callCount = 0;
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
         var service = CreateService();
 
         var act = () =>
@@ -324,7 +328,7 @@ public class SchedulerStartupServiceTests
                 baseDelay: TimeSpan.Zero
             );
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         callCount.Should().Be(0, "action should check the token and never increment");
     }
 
@@ -345,14 +349,14 @@ public class SchedulerStartupServiceTests
                     callCount++;
                     if (callCount == 1)
                         throw new TimeoutException("transient");
-                    throw new ArgumentException("fatal on second attempt");
+                    throw ArgumentFailure("fatal on second attempt");
                 },
                 "mixed-test",
                 CancellationToken.None,
                 baseDelay: TimeSpan.Zero
             );
 
-        await act.Should().ThrowAsync<ArgumentException>().WithMessage("fatal on second attempt");
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("fatal on second attempt*");
         callCount.Should().Be(2, "should retry the transient, then stop on non-transient");
     }
 

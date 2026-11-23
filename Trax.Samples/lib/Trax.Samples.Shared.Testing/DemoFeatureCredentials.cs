@@ -27,9 +27,11 @@ public static class DemoFeatureCredentials
                         $"{actor.Name} has no role, so a demo token cannot be minted for {person}."
                     );
             return new FeatureCredential(
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    ["Authorization"] = "Bearer " + issuer.Mint(Subject(person, scenario), role),
+                    ["Authorization"] =
+                        "Bearer "
+                        + issuer.Mint(Subject(person, scenario), role, TimeProvider.System),
                 }
             );
         };

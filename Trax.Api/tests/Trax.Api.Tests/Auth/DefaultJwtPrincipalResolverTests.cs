@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -37,7 +38,7 @@ public class DefaultJwtPrincipalResolverTests
         );
 
         result.Should().NotBeNull();
-        result!.Id.Should().Be("user-42");
+        result.NotNull().Id.Should().Be("user-42");
     }
 
     [Test]
@@ -50,7 +51,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Id.Should().Be("user-77");
+        result.NotNull().Id.Should().Be("user-77");
     }
 
     [Test]
@@ -67,7 +68,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("Alice Liddell");
+        result.NotNull().DisplayName.Should().Be("Alice Liddell");
     }
 
     [Test]
@@ -80,7 +81,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("alice.liddell");
+        result.NotNull().DisplayName.Should().Be("alice.liddell");
     }
 
     [Test]
@@ -93,7 +94,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.DisplayName.Should().Be("user-99");
+        result.NotNull().DisplayName.Should().Be("user-99");
     }
 
     [Test]
@@ -111,7 +112,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().BeEquivalentTo("Admin", "Editor", "Viewer");
+        result.NotNull().Roles.Should().BeEquivalentTo("Admin", "Editor", "Viewer");
     }
 
     [Test]
@@ -128,7 +129,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().ContainSingle().Which.Should().Be("Admin");
+        result.NotNull().Roles.Should().ContainSingle().Which.Should().Be("Admin");
     }
 
     [Test]
@@ -141,7 +142,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims.Should().ContainKey("tenant").WhoseValue.Should().Be("acme");
+        result.NotNull().Claims.Should().ContainKey("tenant").WhoseValue.Should().Be("acme");
     }
 
     [Test]
@@ -154,7 +155,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.PrincipalType.Should().Be(JwtDefaults.PrincipalType);
+        result.NotNull().PrincipalType.Should().Be(JwtDefaults.PrincipalType);
     }
 
     [Test]
@@ -174,7 +175,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Claims.Should().BeNull();
+        result.NotNull().Claims.Should().BeNull();
     }
 
     [Test]
@@ -191,7 +192,7 @@ public class DefaultJwtPrincipalResolverTests
             CancellationToken.None
         );
 
-        result!.Roles.Should().BeEquivalentTo("Admin");
+        result.NotNull().Roles.Should().BeEquivalentTo("Admin");
     }
 
     [Test]
@@ -199,18 +200,23 @@ public class DefaultJwtPrincipalResolverTests
     {
         var resolver = new DefaultJwtPrincipalResolver();
 
-        var act = async () => await resolver.ResolveAsync(null!, CancellationToken.None);
+        var act = async () =>
+            await resolver
+                .ResolveAsync(Null.Of<Trax.Api.Auth.Jwt.JwtTokenInput>(), CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
     private sealed class FakeSecurityToken : SecurityToken
     {
+        private static readonly DateTime Issued = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
         public override string Id { get; } = Guid.NewGuid().ToString();
         public override string Issuer => "fake";
-        public override SecurityKey SecurityKey => null!;
-        public override SecurityKey SigningKey { get; set; } = null!;
-        public override DateTime ValidFrom => DateTime.UtcNow;
-        public override DateTime ValidTo => DateTime.UtcNow.AddHours(1);
+        public override SecurityKey SecurityKey => Null.Of<SecurityKey>();
+        public override SecurityKey SigningKey { get; set; } = Null.Of<SecurityKey>();
+        public override DateTime ValidFrom => Issued;
+        public override DateTime ValidTo => Issued.AddHours(1);
     }
 }

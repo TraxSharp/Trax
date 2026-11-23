@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Recovery.Browser.Fixtures;
 
@@ -47,7 +49,7 @@ public static class RecoveryClientBuild
         foreach (var arg in new[] { vite, "build", "--outDir", output, "--emptyOutDir" })
             start.ArgumentList.Add(arg);
 
-        using var process = Process.Start(start)!;
+        using var process = Process.Start(start).NotNull();
         var log = new StringBuilder();
         var reading = Task.WhenAll(
             Drain(process.StandardOutput, log),
@@ -56,25 +58,31 @@ public static class RecoveryClientBuild
         using var timeout = new CancellationTokenSource(BuildTimeout);
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"vite build did not finish in {BuildTimeout}:\n{log}");
+            throw new TimeoutException(
+                $"vite build did not finish in {BuildTimeout}:\n{log}",
+                inner
+            );
         }
-        await reading;
+        await reading.ConfigureAwait(false);
 
         if (process.ExitCode != 0 || !File.Exists(Path.Combine(output, "index.html")))
             throw new InvalidOperationException(
-                $"vite build failed with exit code {process.ExitCode}:\n{log}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"vite build failed with exit code {process.ExitCode}:\n{log}"
+                )
             );
         return output;
     }
 
     private static async Task Drain(StreamReader reader, StringBuilder log)
     {
-        while (await reader.ReadLineAsync() is { } line)
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
             lock (log)
                 log.AppendLine(line);
     }

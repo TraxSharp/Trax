@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -21,7 +22,7 @@ public class GenericSaveTimerTests(StoreProvider provider)
 
     private const string User = "save-user";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() =>
@@ -31,7 +32,7 @@ public class GenericSaveTimerTests(StoreProvider provider)
         );
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task The_generic_save_is_refused_for_a_machine_with_a_timer()
@@ -39,7 +40,7 @@ public class GenericSaveTimerTests(StoreProvider provider)
         var id = Guid.NewGuid();
 
         SaveSnapshotOutput output;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             output = await new SaveSnapshotJunction(
                 scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>(),
                 new FakePrincipal(User)
@@ -60,26 +61,26 @@ public class GenericSaveTimerTests(StoreProvider provider)
                 new { Code = RefusalCode.SaveNotAllowed },
                 $"a machine with a timer is reached through its declared events only. See {Adr}"
             );
-        (await _host.Rows(id)).Should().BeEmpty("nothing is written");
+        (await _host.NotNull().Rows(id)).Should().BeEmpty("nothing is written");
     }
 
     [Test]
     public async Task Autosave_cannot_leave_or_rewrite_a_timed_state()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
-        using (var scope = _host.Scope())
+        await _host.NotNull().SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, ReminderMachine.Id);
+            var service = _host.NotNull().Service(scope, ReminderMachine.Id);
             (await service.Advance(new Actor.Client(User, "Editor"), id, "Open"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
         }
-        var before = await RawSql.Timer(_host, id);
+        var before = await RawSql.Timer(_host.NotNull(), id);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var service = _host.Service(scope, ReminderMachine.Id);
+            var service = _host.NotNull().Service(scope, ReminderMachine.Id);
             (await service.Autosave(User, id, ReminderMachine.Json("Idle")))
                 .Should()
                 .BeOfType<AutosaveResult.Rejected>(
@@ -90,7 +91,7 @@ public class GenericSaveTimerTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>("nor skip past it to where an event leads");
         }
 
-        (await RawSql.Timer(_host, id))
+        (await RawSql.Timer(_host.NotNull(), id))
             .Should()
             .Be(before, "due_at and the revision are unchanged");
     }

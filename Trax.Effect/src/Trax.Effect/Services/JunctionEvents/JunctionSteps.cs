@@ -17,17 +17,18 @@ internal static class JunctionSteps
         var position = run.NextPosition();
 
         await run.Publish(
-            TrainLifecycleEventMessage.JunctionStartedEventType,
-            run.OnTrack(
-                new JunctionEventPayload(
-                    position,
-                    JunctionRunKind.Junction,
-                    name,
-                    JunctionRunState.InProgress,
-                    startedAt
+                TrainLifecycleEventMessage.JunctionStartedEventType,
+                run.OnTrack(
+                    new JunctionEventPayload(
+                        position,
+                        JunctionRunKind.Junction,
+                        name,
+                        JunctionRunState.InProgress,
+                        startedAt
+                    )
                 )
             )
-        );
+            .ConfigureAwait(false);
 
         return position;
     }

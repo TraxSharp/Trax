@@ -21,7 +21,7 @@ public class WorkQueueExplicitTriggerTests
     public void A_scheduled_entry_is_not_an_explicit_trigger()
     {
         WorkQueue
-            .Create(new CreateWorkQueue { TrainName = "T", ManifestId = 1 })
+            .Create(new CreateWorkQueue { TrainName = "T", ManifestId = 1 }, TimeProvider.System)
             .IsExplicitTrigger.Should()
             .BeFalse();
     }
@@ -36,7 +36,8 @@ public class WorkQueueExplicitTriggerTests
                     TrainName = "T",
                     ManifestId = 1,
                     ExplicitTrigger = true,
-                }
+                },
+                TimeProvider.System
             )
             .IsExplicitTrigger.Should()
             .BeTrue();
@@ -52,7 +53,8 @@ public class WorkQueueExplicitTriggerTests
                     TrainName = "T",
                     ManifestId = 1,
                     DeadLetterId = 7,
-                }
+                },
+                TimeProvider.System
             )
             .IsExplicitTrigger.Should()
             .BeTrue(

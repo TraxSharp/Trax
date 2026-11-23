@@ -1,4 +1,6 @@
+using System.Globalization;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
@@ -21,10 +23,11 @@ public class QueueHookInputTests
         Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(OrderTrain).FullName!,
+                Name = typeof(OrderTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
-            }
+            },
+            TestTime.Clock
         );
 
     [Test]
@@ -88,9 +91,9 @@ public class QueueHookInputTests
         using (train.EnterQueueHooks(Queued(new Order(1))))
         {
             using (train.EnterQueueHooks(Queued(new Order(2))))
-                train.Input!.Id.Should().Be(2);
+                train.Input.NotNull().Id.Should().Be(2);
 
-            train.Input!.Id.Should().Be(1);
+            train.Input.NotNull().Id.Should().Be(1);
         }
     }
 
@@ -120,7 +123,13 @@ public class QueueHookInputTests
                 if (Interlocked.Increment(ref entered) == 2)
                     bothEntered.SetResult();
 
-                await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await bothEntered
+                    .Task.WaitAsync(
+                        TimeSpan.FromSeconds(5),
+                        TimeProvider.System,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
                 return train.Input?.Id;
             }
         }
@@ -135,7 +144,8 @@ public class QueueHookInputTests
     {
         var train = new OrderTrain();
         typeof(ServiceTrain<Order, string>)
-            .GetProperty(nameof(OrderTrain.Metadata))!
+            .GetProperty(nameof(OrderTrain.Metadata))
+            .NotNull()
             .SetValue(train, Queued(new Order(1)));
 
         var act = () => train.EnterQueueHooks(Queued(new Order(2)));
@@ -166,7 +176,7 @@ public class QueueHookInputTests
 
     public record Order(int Id);
 
-    private class OrderTrain : ServiceTrain<Order, string>
+    private sealed class OrderTrain : ServiceTrain<Order, string>
     {
         public int? QueuedOrderId { get; private set; }
 
@@ -176,11 +186,12 @@ public class QueueHookInputTests
 
         internal Task OnQueueFor(Metadata metadata) => OnQueue(metadata, CancellationToken.None);
 
-        protected override string? QueueSubjectKey(Metadata metadata) => $"order:{TrainInput.Id}";
+        protected override string? QueueSubjectKey(Metadata metadata) =>
+            string.Create(CultureInfo.InvariantCulture, $"order:{TrainInput.NotNull().Id}");
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            QueuedOrderId = TrainInput.Id;
+            QueuedOrderId = TrainInput.NotNull().Id;
             return Task.CompletedTask;
         }
 

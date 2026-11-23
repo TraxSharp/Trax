@@ -3,6 +3,7 @@ using HotChocolate;
 using Trax.Api.Exceptions;
 using Trax.Api.GraphQL.Errors;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Exceptions;
 using Trax.Mediator.Exceptions;
 using Trax.Scheduler.Services.RunExecutor;
@@ -22,7 +23,7 @@ public class TraxErrorFilterTests
     private const string Adr =
         "docs/adr/0014-only-a-train-exceptions-own-message-reaches-the-client.md";
 
-    private TraxErrorFilter _filter = null!;
+    private TraxErrorFilter? _filter;
 
     [SetUp]
     public void SetUp()
@@ -38,7 +39,7 @@ public class TraxErrorFilterTests
         var ex = new TrainException("Junction failed: input was invalid");
         var error = CreateError(ex);
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("Junction failed: input was invalid");
         result.Code.Should().Be("TRAX_TRAIN_ERROR");
@@ -51,7 +52,7 @@ public class TraxErrorFilterTests
             """{"trainName":"My.Train","trainExternalId":"ext-1","type":"ArgumentException","junction":"Validate","message":"Bad input"}""";
         var error = CreateError(new TrainException(json));
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result
             .Message.Should()
@@ -73,7 +74,7 @@ public class TraxErrorFilterTests
             FailureJunction: "LoadOrdersJunction"
         ).ToTrainException();
 
-        var result = _filter.OnError(CreateError(remote));
+        var result = _filter.NotNull().OnError(CreateError(remote));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
         result.Message.Should().NotContain("10.0.3.7").And.NotContain("db-primary");
@@ -96,7 +97,7 @@ public class TraxErrorFilterTests
             PublicMessage = "Order 42 is already closed.",
         }.ToTrainException();
 
-        var result = _filter.OnError(CreateError(remote));
+        var result = _filter.NotNull().OnError(CreateError(remote));
 
         result
             .Message.Should()
@@ -116,7 +117,7 @@ public class TraxErrorFilterTests
             ErrorMessage: "worker at 10.0.3.9 could not resolve the train"
         ).ToTrainException();
 
-        var result = _filter.OnError(CreateError(remote));
+        var result = _filter.NotNull().OnError(CreateError(remote));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
     }
@@ -130,7 +131,7 @@ public class TraxErrorFilterTests
             "Remote run endpoint returned HTTP 502: <html>upstream 10.0.3.7:8080 refused</html>"
         );
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
         result.Code.Should().Be("TRAX_TRAIN_ERROR");
@@ -146,7 +147,7 @@ public class TraxErrorFilterTests
                 + """{"errorType":"NpgsqlException","errorMessage":"Failed to connect to 10.0.3.7:5432"}"""
         );
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
         result.Message.Should().NotContain("10.0.3.7").And.NotContain("trax-runner");
@@ -164,7 +165,7 @@ public class TraxErrorFilterTests
             ExceptionType: nameof(TrainException)
         ).ToTrainException();
 
-        var result = _filter.OnError(CreateError(remote));
+        var result = _filter.NotNull().OnError(CreateError(remote));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
     }
@@ -176,7 +177,7 @@ public class TraxErrorFilterTests
         // remote failure, so an author's message is never masked for what it happens to say.
         var ex = new TrainException("Remote run endpoint returned nothing for order 42.");
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Message.Should().Be("Remote run endpoint returned nothing for order 42.");
     }
@@ -192,7 +193,7 @@ public class TraxErrorFilterTests
     {
         // Only a message that parses as carried exception data with a type is read as one; any
         // other message is the author's, whatever its first character.
-        var result = _filter.OnError(CreateError(new TrainException(message)));
+        var result = _filter.NotNull().OnError(CreateError(new TrainException(message)));
 
         result.Message.Should().Be(message);
     }
@@ -203,7 +204,7 @@ public class TraxErrorFilterTests
         var json =
             """{"trainName":"My.Train","trainExternalId":"ext-1","type":"TrainException","junction":"Close","message":""}""";
 
-        var result = _filter.OnError(CreateError(new TrainException(json)));
+        var result = _filter.NotNull().OnError(CreateError(new TrainException(json)));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
     }
@@ -215,7 +216,7 @@ public class TraxErrorFilterTests
         // operations queueTrain and runTrain refusals apply.
         var ex = new ConsumerTrainException("Ledger 7 is locked by batch 0x2f on db-primary.");
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
         result.Code.Should().Be("TRAX_TRAIN_ERROR");
@@ -226,7 +227,7 @@ public class TraxErrorFilterTests
     {
         var ex = new TrainAlreadyStartedException(4242, "Contoso.Billing.ICloseLedgerTrain");
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
         result.Message.Should().NotContain("4242").And.NotContain("Contoso");
@@ -267,7 +268,7 @@ public class TraxErrorFilterTests
     [TestCaseSource(nameof(MappedExceptions))]
     public void OnError_MappedException_IsDetachedFromTheError(Exception ex)
     {
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result
             .Exception.Should()
@@ -282,7 +283,7 @@ public class TraxErrorFilterTests
     {
         var ex = new InvalidOperationException("internal");
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Exception.Should().BeSameAs(ex);
     }
@@ -300,7 +301,7 @@ public class TraxErrorFilterTests
         var ex = new TrainAuthorizationException("My.Internal.AdminTrain", "Missing role: Admin");
         var error = CreateError(ex);
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("Not authorized.");
         result.Code.Should().Be("TRAX_AUTHORIZATION");
@@ -318,7 +319,7 @@ public class TraxErrorFilterTests
         );
         var error = CreateError(ex);
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("Not authorized.");
         result.Message.Should().NotContain("TopSecretPolicy");
@@ -338,7 +339,7 @@ public class TraxErrorFilterTests
         var ex = new TrainNotFoundException("Probed.Secret.InternalTrain");
         var error = CreateError(ex);
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("The requested train was not found.");
         result.Code.Should().Be("TRAX_TRAIN_NOT_FOUND");
@@ -359,7 +360,7 @@ public class TraxErrorFilterTests
         var ex = new AmbiguousTrainNameException("IMyTrain", ["Ns.A.IMyTrain", "Ns.B.IMyTrain"]);
         var error = CreateError(ex);
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Contain("ambiguous");
         result.Message.Should().Contain("Ns.A.IMyTrain");
@@ -376,7 +377,7 @@ public class TraxErrorFilterTests
     {
         var ex = new NoTrainForInputException(typeof(TraxErrorFilterTests), ["Contoso.Trains"]);
 
-        var result = _filter.OnError(CreateError(ex));
+        var result = _filter.NotNull().OnError(CreateError(ex));
 
         result.Message.Should().Be(TraxErrorFilter.TrainNotRunMessage);
         result.Message.Should().NotContain("Contoso").And.NotContain(nameof(TraxErrorFilterTests));
@@ -401,7 +402,7 @@ public class TraxErrorFilterTests
         var ex = new InvalidOperationException("Connection string 'Server=internal;' was bad");
         var error = CreateError(ex, "Unexpected Execution Error");
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("Unexpected Execution Error");
         result.Message.Should().NotContain("internal");
@@ -413,7 +414,7 @@ public class TraxErrorFilterTests
         var ex = new NullReferenceException("Object reference not set");
         var error = CreateError(ex, "Unexpected Execution Error");
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("Unexpected Execution Error");
     }
@@ -423,7 +424,7 @@ public class TraxErrorFilterTests
     {
         var error = ErrorBuilder.New().SetMessage("Some GraphQL validation error").Build();
 
-        var result = _filter.OnError(error);
+        var result = _filter.NotNull().OnError(error);
 
         result.Message.Should().Be("Some GraphQL validation error");
     }

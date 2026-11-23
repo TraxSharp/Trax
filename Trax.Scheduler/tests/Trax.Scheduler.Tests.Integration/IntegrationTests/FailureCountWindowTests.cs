@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -28,25 +29,33 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 )]
 public class FailureCountWindowTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousWindow;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousWindow = _config.FailureCountWindow;
+        _previousWindow = _config.NotNull().FailureCountWindow;
     }
 
     [TearDown]
-    public void RestoreWindow() => _config.FailureCountWindow = _previousWindow;
+    public void RestoreWindow() => _config.NotNull().FailureCountWindow = _previousWindow;
 
     [Test]
     public async Task A_failure_thirty_days_ago_does_not_delay_the_next_run()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddDays(-30));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddDays(-29));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-30)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-29)
+        );
 
         await RunManifestManager();
 
@@ -67,8 +76,16 @@ public class FailureCountWindowTests : TestSetup
         var manifest = await CreateDueManifest(maxRetries: 2);
         foreach (var daysAgo in new[] { 85, 55, 25 })
         {
-            await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddDays(-daysAgo));
-            await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddDays(-daysAgo + 1));
+            await CreateRun(
+                manifest,
+                TrainState.Failed,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-daysAgo)
+            );
+            await CreateRun(
+                manifest,
+                TrainState.Completed,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-daysAgo + 1)
+            );
         }
 
         await RunManifestManager();
@@ -89,10 +106,26 @@ public class FailureCountWindowTests : TestSetup
     public async Task Failures_inside_the_window_beyond_max_retries_dead_letter_the_manifest()
     {
         var manifest = await CreateDueManifest(maxRetries: 2);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-20));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-15));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-10));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-20)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-15)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-10)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -110,7 +143,11 @@ public class FailureCountWindowTests : TestSetup
     public async Task A_failure_inside_the_window_still_backs_off_the_next_run()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -123,9 +160,13 @@ public class FailureCountWindowTests : TestSetup
     [Test]
     public async Task The_configured_window_decides_which_failures_count()
     {
-        _config.FailureCountWindow = TimeSpan.FromHours(1);
+        _config.NotNull().FailureCountWindow = TimeSpan.FromHours(1);
         var manifest = await CreateDueManifest(maxRetries: 0);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -139,7 +180,11 @@ public class FailureCountWindowTests : TestSetup
     {
         // The scheduler counts a day of failures; this manifest counts only its last hour.
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromHours(1));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -155,9 +200,13 @@ public class FailureCountWindowTests : TestSetup
     [Test]
     public async Task A_manifests_own_window_can_count_further_back_than_the_scheduler_window()
     {
-        _config.FailureCountWindow = TimeSpan.FromHours(1);
+        _config.NotNull().FailureCountWindow = TimeSpan.FromHours(1);
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromDays(2));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-30));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-30)
+        );
 
         await RunManifestManager();
 
@@ -170,10 +219,26 @@ public class FailureCountWindowTests : TestSetup
     public async Task A_success_after_failures_in_the_window_does_not_delay_the_next_run()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-4));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-3));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-4)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -193,9 +258,21 @@ public class FailureCountWindowTests : TestSetup
     public async Task A_failure_after_a_success_backs_off_by_every_failure_in_the_window()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-3));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-2));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -207,17 +284,18 @@ public class FailureCountWindowTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
     /// <summary>An interval manifest whose next run is due now.</summary>
     private async Task<Manifest> CreateDueManifest(int maxRetries, TimeSpan? failureWindow = null)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -230,10 +308,10 @@ public class FailureCountWindowTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         manifest.FailureWindowSeconds = (int?)failureWindow?.TotalSeconds;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -243,17 +321,18 @@ public class FailureCountWindowTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "window" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = state;
         run.StartTime = startTime;
         run.EndTime = startTime.AddMinutes(1);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

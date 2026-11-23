@@ -47,14 +47,15 @@ public sealed class HubClient : IAsyncDisposable
         TimeSpan? timeout = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(15));
-        while (DateTime.UtcNow < deadline)
+        var deadline =
+            TimeProvider.System.GetUtcNow().UtcDateTime + (timeout ?? TimeSpan.FromSeconds(15));
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             var hit = _received.FirstOrDefault(match);
             if (hit is not null)
                 return hit;
             // determinism: polling interval while waiting, bounded by the deadline above.
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
@@ -75,7 +76,7 @@ public sealed class HubClient : IAsyncDisposable
                 HandleCookies = false,
             }
         );
-        var response = await client.PostAsync("/demo/sign-in", content: null);
+        var response = await client.PostAsync("/demo/sign-in", content: null).ConfigureAwait(false);
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
 
         return string.Join(

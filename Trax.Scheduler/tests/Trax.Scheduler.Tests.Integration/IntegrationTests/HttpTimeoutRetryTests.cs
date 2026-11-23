@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -37,7 +38,7 @@ public class HttpTimeoutRetryTests
 
         var run = await fx
             .DataContext.Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Manifest!.ExternalId == "http-timeout");
+            .SingleAsync(m => m.Manifest != null && m.Manifest.ExternalId == "http-timeout");
 
         run.TrainState.Should()
             .Be(TrainState.Failed, "an HttpClient timeout is not a cancellation anyone asked for");
@@ -67,14 +68,18 @@ public class HttpTimeoutRetryTests
         var queuedAgain = await fx
             .DataContext.WorkQueues.AsNoTracking()
             .CountAsync(w =>
-                w.Manifest!.ExternalId == "http-timeout-retry" && w.Status == WorkQueueStatus.Queued
+                w.Manifest != null
+                && w.Manifest.ExternalId == "http-timeout-retry"
+                && w.Status == WorkQueueStatus.Queued
             );
         queuedAgain.Should().Be(1, "a timed-out run is a failure, and a failure is retried");
 
         // The retry is queued behind the retry delay; stand in for that time passing.
         await fx
             .DataContext.WorkQueues.Where(w =>
-                w.Manifest!.ExternalId == "http-timeout-retry" && w.Status == WorkQueueStatus.Queued
+                w.Manifest != null
+                && w.Manifest.ExternalId == "http-timeout-retry"
+                && w.Status == WorkQueueStatus.Queued
             )
             .ExecuteUpdateAsync(u => u.SetProperty(w => w.ScheduledAt, (DateTime?)null));
 
@@ -84,7 +89,7 @@ public class HttpTimeoutRetryTests
 
         var runs = await fx
             .DataContext.Metadatas.AsNoTracking()
-            .Where(m => m.Manifest!.ExternalId == "http-timeout-retry")
+            .Where(m => m.Manifest != null && m.Manifest.ExternalId == "http-timeout-retry")
             .ToListAsync();
         runs.Should().HaveCount(2);
         runs.Should()
@@ -94,7 +99,7 @@ public class HttpTimeoutRetryTests
 
         var deadLetters = await fx
             .DataContext.DeadLetters.AsNoTracking()
-            .Where(d => d.Manifest!.ExternalId == "http-timeout-retry")
+            .Where(d => d.Manifest != null && d.Manifest.ExternalId == "http-timeout-retry")
             .ToListAsync();
         deadLetters.Should().ContainSingle().Which.Reason.Should().Contain("Max retries exceeded");
     }

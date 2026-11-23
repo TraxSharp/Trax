@@ -10,7 +10,7 @@ package: Trax.Api.GraphQL.Client.Trax
 namespace: Trax.Api.GraphQL.Client.Trax
 source:
   - Trax.Api/src/Trax.Api.GraphQL.Client.Trax/TraxBuilderExtensions.cs
-  - Trax.Api/src/Trax.Api.GraphQL.Client.Trax/StartupValidator.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client.Trax/GraphQLClientStartupValidator.cs
 ---
 
 # UseStartupValidation

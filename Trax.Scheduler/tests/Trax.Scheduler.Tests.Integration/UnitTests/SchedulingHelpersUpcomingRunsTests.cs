@@ -19,7 +19,10 @@ public class SchedulingHelpersUpcomingRunsTests
     private static readonly DateTime Now = new(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
     private readonly SchedulerConfiguration _config = new();
 
-    private static IEnumerable<TestCaseData> AgreementCases()
+    private static IEnumerable<TestCaseData> AgreementCases() =>
+        CronAgreementCases().Concat(IntervalAndOverdueAgreementCases());
+
+    private static IEnumerable<TestCaseData> CronAgreementCases()
     {
         yield return Case(
             "daily cron, a date excluded, catches up",
@@ -63,6 +66,10 @@ public class SchedulingHelpersUpcomingRunsTests
                 e: Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday)
             )
         );
+    }
+
+    private static IEnumerable<TestCaseData> IntervalAndOverdueAgreementCases()
+    {
         yield return Case(
             "interval, a range excluded",
             Interval(

@@ -47,10 +47,10 @@ public class MoqExtensionsTests : TestSetup
     public async Task GetMockedTypeFromObject_WithNull_ThrowsArgumentNullException()
     {
         // Arrange
-        object? nullObject = null;
+        var nullObject = Null.Of<object>();
 
         // Act & Assert
-        var act = () => nullObject!.GetMockedTypeFromObject();
+        var act = () => nullObject.GetMockedTypeFromObject();
         act.Should().Throw<ArgumentNullException>();
     }
 }

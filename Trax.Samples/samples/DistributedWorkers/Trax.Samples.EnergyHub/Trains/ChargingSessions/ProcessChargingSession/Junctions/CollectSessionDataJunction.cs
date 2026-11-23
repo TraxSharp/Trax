@@ -14,7 +14,7 @@ public class CollectSessionDataJunction(ILogger<CollectSessionDataJunction> logg
             input.SessionType
         );
 
-        await Task.Delay(200);
+        await Task.Delay(200, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{StationId}] Found 12 completed sessions since last collection",

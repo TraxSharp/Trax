@@ -1,5 +1,7 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Services.TrainBus;
@@ -17,7 +19,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class MetadataDisposalTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -54,7 +56,8 @@ public class MetadataDisposalTests
                 Name = "TestTrain",
                 Input = new { LargeData = new string('X', 10000) },
                 ExternalId = Guid.NewGuid().ToString("N"),
-            }
+            },
+            TimeProvider.System
         );
 
         // Simulate setting Output JsonDocument (this would normally happen during train execution)
@@ -81,7 +84,8 @@ public class MetadataDisposalTests
                     Name = "TestTrain",
                     Input = new { LargeData = new string('X', 50000) }, // 50KB of data
                     ExternalId = Guid.NewGuid().ToString("N"),
-                }
+                },
+                TimeProvider.System
             );
 
         // Act & Assert
@@ -104,7 +108,7 @@ public class MetadataDisposalTests
             {
                 for (int i = 0; i < 20; i++)
                 {
-                    var serviceProviderScope = _serviceProvider.CreateScope();
+                    var serviceProviderScope = _serviceProvider.NotNull().CreateAsyncScope();
 
                     try
                     {
@@ -112,24 +116,24 @@ public class MetadataDisposalTests
                             serviceProviderScope.ServiceProvider.GetRequiredService<IMemoryTestTrain>();
 
                         var testInput = MemoryTestModelFactory.CreateInput(
-                            $"success_test_{i}",
+                            string.Create(CultureInfo.InvariantCulture, $"success_test_{i}"),
                             dataSizeBytes: 100_000,
                             processingDelayMs: 0
                         ); // 100KB each
 
-                        await train.Run(testInput);
+                        await train.Run(testInput).ConfigureAwait(false);
                     }
                     finally
                     {
                         // Scope disposal triggers EffectTrain.Dispose() which should clear Memory
-                        serviceProviderScope.Dispose();
+                        await serviceProviderScope.DisposeAsync().ConfigureAwait(false);
                     }
                 }
             },
             "SuccessfulEffectTrains_ShouldNotLeakMemory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Successful trains should clean up Memory dictionary contents on disposal
         result
@@ -159,7 +163,7 @@ public class MetadataDisposalTests
 
         for (int i = 0; i < 30; i++)
         {
-            var serviceProviderScope = _serviceProvider.CreateScope();
+            var serviceProviderScope = _serviceProvider.NotNull().CreateAsyncScope();
 
             try
             {
@@ -169,7 +173,7 @@ public class MetadataDisposalTests
                 weakReferences.Add(new WeakReference(train));
 
                 var testInput = MemoryTestModelFactory.CreateInput(
-                    $"gc_test_{i}",
+                    string.Create(CultureInfo.InvariantCulture, $"gc_test_{i}"),
                     dataSizeBytes: 50_000,
                     processingDelayMs: 0
                 ); // 50KB each
@@ -178,7 +182,7 @@ public class MetadataDisposalTests
             }
             finally
             {
-                serviceProviderScope.Dispose();
+                await serviceProviderScope.DisposeAsync().ConfigureAwait(false);
             }
         }
 
@@ -190,9 +194,14 @@ public class MetadataDisposalTests
         await Task.Delay(100);
 
         var aliveCount = weakReferences.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
+                )
+            )
+            .ConfigureAwait(false);
 
         aliveCount
             .Should()
@@ -213,7 +222,7 @@ public class MetadataDisposalTests
             {
                 for (int i = 0; i < 15; i++)
                 {
-                    var serviceProviderScope = _serviceProvider.CreateScope();
+                    var serviceProviderScope = _serviceProvider.NotNull().CreateAsyncScope();
 
                     try
                     {
@@ -221,11 +230,11 @@ public class MetadataDisposalTests
                             serviceProviderScope.ServiceProvider.GetRequiredService<IFailingTestTrain>();
 
                         var testInput = MemoryTestModelFactory.CreateFailingInput(
-                            $"failing_test_{i}",
+                            string.Create(CultureInfo.InvariantCulture, $"failing_test_{i}"),
                             dataSizeBytes: 100000
                         ); // 100KB each
 
-                        await failingTrain.Run(testInput);
+                        await failingTrain.Run(testInput).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {
@@ -234,14 +243,14 @@ public class MetadataDisposalTests
                     finally
                     {
                         // Always dispose the scope, even when train fails
-                        serviceProviderScope.Dispose();
+                        await serviceProviderScope.DisposeAsync().ConfigureAwait(false);
                     }
                 }
             },
             "FailingTrains_ShouldNotLeakMemory"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Even with failing trains, memory should be cleaned up properly
         // Note: Failing trains retain more memory due to exception handling and error metadata

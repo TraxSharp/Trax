@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
@@ -27,7 +29,7 @@ public class SubmitterRouting
     public SubmitterRouting ForTrain<TTrain>()
         where TTrain : class
     {
-        TrainNames.Add(typeof(TTrain).FullName!);
+        TrainNames.Add(typeof(TTrain).FullName.NotNull());
         return this;
     }
 }

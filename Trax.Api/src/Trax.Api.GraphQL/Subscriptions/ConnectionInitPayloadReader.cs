@@ -14,16 +14,20 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// PascalCase spellings some hand-rolled clients emit.
 /// <para>
 /// A payload that is absent, null, or not valid JSON for the target shape yields
-/// <c>null</c> rather than throwing — the interceptors treat a missing payload and a
+/// <see langword="null"/> rather than throwing — the interceptors treat a missing payload and a
 /// malformed one identically, rejecting the connection with the same message.
 /// </para>
 /// </remarks>
 internal static class ConnectionInitPayloadReader
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     /// <summary>
-    /// Reads the payload as <typeparamref name="T"/>, or returns <c>null</c> when the
+    /// Reads the payload as <typeparamref name="T"/>, or returns <see langword="null"/> when the
     /// frame carries no payload or the payload does not deserialize.
     /// </summary>
     public static T? TryRead<T>(IOperationMessagePayload payload)

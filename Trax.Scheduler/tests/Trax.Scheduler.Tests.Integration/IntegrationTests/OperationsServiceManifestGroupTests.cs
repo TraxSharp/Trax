@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Scheduler.Services.Operations;
@@ -18,7 +19,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsServiceManifestGroupTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     [SetUp]
     public void GetService()
@@ -31,8 +32,8 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var m = Manifest.Create(new CreateManifest { Name = typeof(ISchedulerTestTrain) });
         m.ManifestGroupId = groupId;
         m.DependsOnManifestId = dependsOn;
-        await DataContext.Track(m);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(m).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return m;
     }
@@ -50,11 +51,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
             isEnabled: true
         );
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(MaxActiveJobs: 5, Priority: 7, IsEnabled: false),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(MaxActiveJobs: 5, Priority: 7, IsEnabled: false),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(3);
@@ -78,11 +81,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
             isEnabled: true
         );
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(Priority: 9),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(Priority: 9),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(1);
@@ -99,11 +104,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
     {
         var group = await CreateAndSaveManifestGroup(DataContext, "g", maxActiveJobs: 4);
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(ClearMaxActiveJobs: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(ClearMaxActiveJobs: true),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(1);
@@ -120,11 +127,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, "g", maxActiveJobs: null);
         var initialUpdated = group.UpdatedAt;
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(ClearMaxActiveJobs: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(ClearMaxActiveJobs: true),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(0);
@@ -142,11 +151,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
         // If both are passed, Clear wins — defensive against client bugs that set both.
         var group = await CreateAndSaveManifestGroup(DataContext, "g", maxActiveJobs: 4);
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(MaxActiveJobs: 10, ClearMaxActiveJobs: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(MaxActiveJobs: 10, ClearMaxActiveJobs: true),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
 
@@ -166,11 +177,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
         );
         var initialUpdated = group.UpdatedAt;
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(MaxActiveJobs: 5, Priority: 2, IsEnabled: true),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(MaxActiveJobs: 5, Priority: 2, IsEnabled: true),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(0);
@@ -188,11 +201,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var group = await CreateAndSaveManifestGroup(DataContext, "g");
         var initialUpdated = group.UpdatedAt;
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue();
         result.Count.Should().Be(0);
@@ -206,11 +221,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
     [Test]
     public async Task UpdateManifestGroupAsync_MissingId_ReturnsFailure()
     {
-        var result = await _operations.UpdateManifestGroupAsync(
-            99999,
-            new UpdateManifestGroupInput(Priority: 5),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                99999,
+                new UpdateManifestGroupInput(Priority: 5),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("not found");
@@ -244,15 +261,17 @@ public class OperationsServiceManifestGroupTests : TestSetup
             isEnabled: true
         );
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(
-                MaxActiveJobs: maxActiveJobs,
-                Priority: priority,
-                IsEnabled: false
-            ),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(
+                    MaxActiveJobs: maxActiveJobs,
+                    Priority: priority,
+                    IsEnabled: false
+                ),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeFalse("the service validates, not only the dashboard's form");
         result.Message.Should().Contain(field);
@@ -270,11 +289,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
     {
         var group = await CreateAndSaveManifestGroup(DataContext, "g", priority: 3);
 
-        var result = await _operations.UpdateManifestGroupAsync(
-            group.Id,
-            new UpdateManifestGroupInput(MaxActiveJobs: 1, Priority: 31),
-            CancellationToken.None
-        );
+        var result = await _operations
+            .NotNull()
+            .UpdateManifestGroupAsync(
+                group.Id,
+                new UpdateManifestGroupInput(MaxActiveJobs: 1, Priority: 31),
+                CancellationToken.None
+            );
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(2);
@@ -287,10 +308,9 @@ public class OperationsServiceManifestGroupTests : TestSetup
     [Test]
     public async Task GetGraph_MissingGroup_ReturnsNull()
     {
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            99999,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(99999, CancellationToken.None);
 
         graph.Should().BeNull();
     }
@@ -300,13 +320,12 @@ public class OperationsServiceManifestGroupTests : TestSetup
     {
         var group = await CreateAndSaveManifestGroup(DataContext, "lonely");
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            group.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(group.Id, CancellationToken.None);
 
         graph.Should().NotBeNull();
-        graph!.Nodes.Should().ContainSingle(n => n.IsHighlighted && n.Id == group.Id);
+        graph.NotNull().Nodes.Should().ContainSingle(n => n.IsHighlighted && n.Id == group.Id);
         graph.Edges.Should().BeEmpty();
     }
 
@@ -318,13 +337,12 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var parent = await SeedManifest(group.Id);
         await SeedManifest(group.Id, dependsOn: parent.Id);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            group.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(group.Id, CancellationToken.None);
 
         graph.Should().NotBeNull();
-        graph!.Nodes.Should().ContainSingle(n => n.Id == group.Id && n.IsHighlighted);
+        graph.NotNull().Nodes.Should().ContainSingle(n => n.Id == group.Id && n.IsHighlighted);
         graph.Edges.Should().BeEmpty();
     }
 
@@ -336,13 +354,12 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var upstreamManifest = await SeedManifest(upstream.Id);
         await SeedManifest(focal.Id, dependsOn: upstreamManifest.Id);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            focal.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(focal.Id, CancellationToken.None);
 
         graph.Should().NotBeNull();
-        graph!.Nodes.Should().HaveCount(2);
+        graph.NotNull().Nodes.Should().HaveCount(2);
         graph.Nodes.Should().ContainSingle(n => n.Id == focal.Id && n.IsHighlighted);
         graph.Nodes.Should().ContainSingle(n => n.Id == upstream.Id && !n.IsHighlighted);
         graph.Edges.Should().ContainSingle(e => e.FromId == upstream.Id && e.ToId == focal.Id);
@@ -356,13 +373,12 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var focalManifest = await SeedManifest(focal.Id);
         await SeedManifest(downstream.Id, dependsOn: focalManifest.Id);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            focal.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(focal.Id, CancellationToken.None);
 
         graph.Should().NotBeNull();
-        graph!.Nodes.Should().HaveCount(2);
+        graph.NotNull().Nodes.Should().HaveCount(2);
         graph.Edges.Should().ContainSingle(e => e.FromId == focal.Id && e.ToId == downstream.Id);
     }
 
@@ -377,13 +393,13 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var focalM = await SeedManifest(focal.Id, dependsOn: upM.Id);
         await SeedManifest(downstream.Id, dependsOn: focalM.Id);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            focal.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(focal.Id, CancellationToken.None);
 
         graph.Should().NotBeNull();
-        graph!
+        graph
+            .NotNull()
             .Nodes.Select(n => n.Id)
             .Should()
             .BeEquivalentTo(new[] { upstream.Id, focal.Id, downstream.Id });
@@ -404,13 +420,12 @@ public class OperationsServiceManifestGroupTests : TestSetup
         await SeedManifest(focal.Id, dependsOn: u1.Id);
         await SeedManifest(focal.Id, dependsOn: u2.Id);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            focal.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(focal.Id, CancellationToken.None);
 
         graph.Should().NotBeNull();
-        graph!.Edges.Should().HaveCount(1);
+        graph.NotNull().Edges.Should().HaveCount(1);
     }
 
     [Test]
@@ -421,12 +436,11 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var upM = await SeedManifest(upstream.Id);
         await SeedManifest(focal.Id, dependsOn: upM.Id);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            focal.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(focal.Id, CancellationToken.None);
 
-        graph!.Nodes.Should().ContainSingle(n => n.Id == upstream.Id && !n.IsEnabled);
+        graph.NotNull().Nodes.Should().ContainSingle(n => n.Id == upstream.Id && !n.IsEnabled);
         graph.Nodes.Should().ContainSingle(n => n.Id == focal.Id && n.IsEnabled);
     }
 
@@ -435,12 +449,11 @@ public class OperationsServiceManifestGroupTests : TestSetup
     {
         var group = await CreateAndSaveManifestGroup(DataContext, "off", isEnabled: false);
 
-        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
-            group.Id,
-            CancellationToken.None
-        );
+        var graph = await _operations
+            .NotNull()
+            .GetManifestGroupDependencyGraphAsync(group.Id, CancellationToken.None);
 
-        graph!.Nodes.Should().ContainSingle(n => n.Id == group.Id && !n.IsEnabled);
+        graph.NotNull().Nodes.Should().ContainSingle(n => n.Id == group.Id && !n.IsEnabled);
     }
 
     #endregion
@@ -457,7 +470,9 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var bM = await SeedManifest(b.Id, dependsOn: aM.Id); // a → b
         await SeedManifest(c.Id, dependsOn: bM.Id); // b → c
 
-        var graph = await _operations.GetGlobalManifestGroupGraphAsync(CancellationToken.None);
+        var graph = await _operations
+            .NotNull()
+            .GetGlobalManifestGroupGraphAsync(CancellationToken.None);
 
         graph.Nodes.Select(n => n.Id).Should().BeEquivalentTo(new[] { a.Id, b.Id, c.Id });
         graph.Nodes.Should().OnlyContain(n => !n.IsHighlighted);
@@ -473,7 +488,9 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var first = await SeedManifest(g.Id);
         await SeedManifest(g.Id, dependsOn: first.Id); // same-group dependency
 
-        var graph = await _operations.GetGlobalManifestGroupGraphAsync(CancellationToken.None);
+        var graph = await _operations
+            .NotNull()
+            .GetGlobalManifestGroupGraphAsync(CancellationToken.None);
 
         graph.Nodes.Should().ContainSingle(n => n.Id == g.Id);
         graph.Edges.Should().BeEmpty("a dependency within one group is not a cross-group edge");
@@ -485,7 +502,9 @@ public class OperationsServiceManifestGroupTests : TestSetup
         var on = await CreateAndSaveManifestGroup(DataContext, "on");
         var off = await CreateAndSaveManifestGroup(DataContext, "off", isEnabled: false);
 
-        var graph = await _operations.GetGlobalManifestGroupGraphAsync(CancellationToken.None);
+        var graph = await _operations
+            .NotNull()
+            .GetGlobalManifestGroupGraphAsync(CancellationToken.None);
 
         graph.Nodes.Should().ContainSingle(n => n.Id == on.Id && n.IsEnabled);
         graph.Nodes.Should().ContainSingle(n => n.Id == off.Id && !n.IsEnabled);

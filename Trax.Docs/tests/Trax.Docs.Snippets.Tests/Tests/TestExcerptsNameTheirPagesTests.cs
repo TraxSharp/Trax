@@ -24,26 +24,30 @@ namespace Trax.Docs.Snippets.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class TestExcerptsNameTheirPagesTests
+public partial class TestExcerptsNameTheirPagesTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
 
-    private static readonly Regex ShownOn = new(
+    [GeneratedRegex(
         @"^\s*//\s*Shown on https://traxsharp\.net(?<page>/docs(?:/[A-Za-z0-9_\-]+)*)/?\s*$",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ShownOn { get; }
 
     [Test]
-    public void Every_ExcerptOfALibraryTest_IsNamedByTheTest()
+    public async Task Every_ExcerptOfALibraryTest_IsNamedByTheTest()
     {
-        var offenders = Excerpted()
-            .Where(e => !PagesNamedBy(e.File).Contains(e.Page))
-            .Select(e =>
-                $"{e.Location}: {e.File} has no `// Shown on https://traxsharp.net{e.Page}`"
-            )
-            .Distinct()
-            .ToList();
+        var offenders = new List<string>();
+        foreach (var e in await ExcerptedAsync().ConfigureAwait(false))
+        {
+            if (!(await PagesNamedByAsync(e.File).ConfigureAwait(false)).Contains(e.Page))
+                offenders.Add(
+                    $"{e.Location}: {e.File} has no `// Shown on https://traxsharp.net{e.Page}`"
+                );
+        }
+        offenders = offenders.Distinct(StringComparer.Ordinal).ToList();
 
         offenders
             .Should()
@@ -57,13 +61,19 @@ public class TestExcerptsNameTheirPagesTests
     }
 
     [Test]
-    public void Every_ShownOnLine_NamesAPageThatShowsTheFile()
+    public async Task Every_ShownOnLine_NamesAPageThatShowsTheFile()
     {
-        var shown = Excerpted().Select(e => (e.File, e.Page)).ToHashSet();
+        var shown = (await ExcerptedAsync().ConfigureAwait(false))
+            .Select(e => (e.File, e.Page))
+            .ToHashSet();
 
-        var claims = LibraryTestFiles()
-            .SelectMany(file => PagesNamedBy(file).Select(page => (File: file, Page: page)))
-            .ToList();
+        var claims = new List<(string File, string Page)>();
+        foreach (var file in LibraryTestFiles())
+            claims.AddRange(
+                (await PagesNamedByAsync(file).ConfigureAwait(false)).Select(page =>
+                    (File: file, Page: page)
+                )
+            );
 
         claims
             .Should()
@@ -107,11 +117,18 @@ public class TestExcerptsNameTheirPagesTests
     /// Each fence on a published page that excerpts a file under a library folder's <c>tests/</c>,
     /// with the page as its URL path.
     /// </summary>
-    private static IEnumerable<(string Location, string File, string Page)> Excerpted() =>
-        Fences
-            .OnPublishedPages()
-            .Where(f => f.From is not null && IsLibraryTest(f.From))
-            .Select(f => (f.Location, f.From!, UrlPath(f.Page)));
+    private static async Task<
+        IReadOnlyList<(string Location, string File, string Page)>
+    > ExcerptedAsync()
+    {
+        var excerpted = new List<(string Location, string File, string Page)>();
+        foreach (var f in await Fences.OnPublishedPagesAsync().ConfigureAwait(false))
+        {
+            if (f.From is { } from && IsLibraryTest(from))
+                excerpted.Add((f.Location, from, UrlPath(f.Page)));
+        }
+        return excerpted;
+    }
 
     private static bool IsLibraryTest(string repoRelative)
     {
@@ -119,27 +136,27 @@ public class TestExcerptsNameTheirPagesTests
         return segments.Length > 2
             && segments[0].StartsWith("Trax.", StringComparison.Ordinal)
             && segments[0] is not ("Trax.Samples" or "Trax.Docs")
-            && segments[1] == "tests";
+            && string.Equals(segments[1], "tests", StringComparison.Ordinal);
     }
 
     private static string UrlPath(string page)
     {
         var path = page.Replace('\\', '/');
         path = path.EndsWith(".md", StringComparison.Ordinal) ? path[..^3] : path;
-        return path == "index" ? "/docs" : "/docs/" + path;
+        return string.Equals(path, "index", StringComparison.Ordinal) ? "/docs" : "/docs/" + path;
     }
 
-    private static IReadOnlySet<string> PagesNamedBy(string repoRelative)
+    private static async Task<IReadOnlySet<string>> PagesNamedByAsync(string repoRelative)
     {
         var file = Path.Combine(
             new[] { RepoRoot.Monorepo }.Concat(repoRelative.Split('/')).ToArray()
         );
         return File.Exists(file)
             ? ShownOn
-                .Matches(File.ReadAllText(file))
+                .Matches(await File.ReadAllTextAsync(file).ConfigureAwait(false))
                 .Select(m => m.Groups["page"].Value)
-                .ToHashSet()
-            : new HashSet<string>();
+                .ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
     }
 
     /// <summary>The C# files under each library folder's <c>tests/</c>, repository-relative.</summary>

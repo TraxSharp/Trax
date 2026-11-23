@@ -55,7 +55,8 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        var act = async () => await validator.StartingAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartingAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>(
@@ -150,7 +151,8 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        var act = async () => await validator.StartingAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartingAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -170,7 +172,8 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        var act = async () => await validator.StartingAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartingAsync(CancellationToken.None).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()

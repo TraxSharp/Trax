@@ -12,6 +12,7 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL/Subscriptions/LifecycleSubscriptions.cs
   - Trax.Api/src/Trax.Api.GraphQL/Subscriptions/TraxCompositeSocketInterceptor.cs
   - Trax.Api/src/Trax.Api.GraphQL/Types/TrainLifecycleEventType.cs
+  - Trax.Api/src/Trax.Api.GraphQL/Types/JsonElementConverter.cs
 ---
 
 # Subscriptions

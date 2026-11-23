@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests;
 
@@ -64,8 +65,8 @@ public class CrossSchemaLoaderTests
             loader.LoadAsync(99)
         );
 
-        results[0]!.Name.Should().Be("one");
-        results[1]!.Name.Should().Be("three");
+        results[0].NotNull().Name.Should().Be("one");
+        results[1].NotNull().Name.Should().Be("three");
         results[2].Should().BeNull("key 99 does not exist in the owning context");
     }
 }

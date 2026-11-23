@@ -111,8 +111,8 @@ public class AuthenticationTests : AuthTestFixture
         );
         var token = issuer.Mint(b =>
             b.WithSubject("alice")
-                .WithNotBefore(DateTime.UtcNow.AddHours(-2))
-                .WithExpires(DateTime.UtcNow.AddHours(-1))
+                .WithNotBefore(TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2))
+                .WithExpires(TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1))
         );
 
         var result = await GraphQL.SendAsync(WhoAmI, Caller.WithToken("expired", token));

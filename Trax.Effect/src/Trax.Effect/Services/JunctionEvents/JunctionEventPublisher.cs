@@ -31,6 +31,9 @@ internal sealed class JunctionEventPublisher
     private readonly Lazy<IJunctionRunSink?> _sink;
     private readonly Lazy<string> _instanceId;
 
+    // The container's clock (AddTrax registers the system's), or the system's without one.
+    private readonly Lazy<TimeProvider> _clock;
+
     public JunctionEventPublisher(
         IServiceProvider root,
         ILogger<JunctionEventPublisher>? logger = null
@@ -40,6 +43,7 @@ internal sealed class JunctionEventPublisher
         _logger = logger;
         _broadcaster = new(() => _root.GetService<ITrainEventBroadcaster>());
         _sink = new(() => _root.GetService<IJunctionRunSink>());
+        _clock = new(() => _root.GetService<TimeProvider>() ?? TimeProvider.System);
         _instanceId = new(() =>
             (_root.GetService<BroadcastInstance>() ?? BroadcastInstance.Unregistered).Id
         );
@@ -81,13 +85,15 @@ internal sealed class JunctionEventPublisher
                 {
                     // The run waits on this, so it is bounded: a busy pool or a slow database
                     // costs the run at most AttemptTimeout, and its events carry no attempt.
+                    using var timeout = new CancellationTokenSource(AttemptTimeout, _clock.Value);
                     using var bound = CancellationTokenSource.CreateLinkedTokenSource(
-                        cancellationToken
+                        cancellationToken,
+                        timeout.Token
                     );
-                    bound.CancelAfter(AttemptTimeout);
                     attempt = await attempts
                         .AttemptOf(metadata, bound.Token)
-                        .WaitAsync(AttemptTimeout, cancellationToken);
+                        .WaitAsync(AttemptTimeout, _clock.Value, cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
             catch (Exception e)
@@ -111,27 +117,14 @@ internal sealed class JunctionEventPublisher
         step = step with { Attempt = run.Attempt };
         var metadata = run.Metadata;
 
-        try
-        {
-            _sink.Value?.Write(metadata.Id, step);
-        }
-        catch (Exception e)
-        {
-            _logger?.LogWarning(
-                e,
-                "Could not store step {Position} ({Name}) of run {ExternalId}; the run carries on.",
-                step.Position,
-                step.Name,
-                run.ExternalId
-            );
-        }
+        Store(run, step);
 
         var message = new TrainLifecycleEventMessage(
             MetadataId: metadata.Id,
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
-            TrainState: TrainState.InProgress.ToString(),
-            Timestamp: DateTime.UtcNow,
+            TrainState: nameof(TrainState.InProgress),
+            Timestamp: _clock.Value.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -145,10 +138,41 @@ internal sealed class JunctionEventPublisher
             Junction = step,
         };
 
+        await Broadcast(run, eventType, step, message).ConfigureAwait(false);
+        await NotifyHandlers(run, eventType, message).ConfigureAwait(false);
+    }
+
+    private void Store(JunctionEventRun run, JunctionEventPayload step)
+    {
+        try
+        {
+            _sink.Value?.Write(run.Metadata.Id, step);
+        }
+        catch (Exception e)
+        {
+            _logger?.LogWarning(
+                e,
+                "Could not store step {Position} ({Name}) of run {ExternalId}; the run carries on.",
+                step.Position,
+                step.Name,
+                run.ExternalId
+            );
+        }
+    }
+
+    private async Task Broadcast(
+        JunctionEventRun run,
+        string eventType,
+        JunctionEventPayload step,
+        TrainLifecycleEventMessage message
+    )
+    {
         try
         {
             if (_broadcaster.Value is { } broadcaster)
-                await broadcaster.PublishAsync(message, CancellationToken.None);
+                await broadcaster
+                    .PublishAsync(message, CancellationToken.None)
+                    .ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -161,7 +185,14 @@ internal sealed class JunctionEventPublisher
                 run.ExternalId
             );
         }
+    }
 
+    private async Task NotifyHandlers(
+        JunctionEventRun run,
+        string eventType,
+        TrainLifecycleEventMessage message
+    )
+    {
         IEnumerable<IJunctionEventHandler> handlers;
         try
         {
@@ -181,7 +212,7 @@ internal sealed class JunctionEventPublisher
         {
             try
             {
-                await handler.HandleAsync(message, CancellationToken.None);
+                await handler.HandleAsync(message, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception e)
             {

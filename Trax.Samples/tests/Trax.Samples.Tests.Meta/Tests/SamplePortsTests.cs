@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -13,7 +15,7 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// alternatives.</para>
 /// </summary>
 [TestFixture]
-public class SamplePortsTests
+public partial class SamplePortsTests
 {
     /// <summary>
     /// Vite's dev server, where the React clients run; the hosts name it as an allowed origin.
@@ -21,57 +23,13 @@ public class SamplePortsTests
     /// </summary>
     private const int ViteDevServer = 5173;
 
-    private static readonly Regex LocalUrl = new(
-        @"https?://(localhost|127\.0\.0\.1):(?<port>\d+)",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>
-    /// A port held in a variable and spliced into the URL later, as in <c>var port = 5099;</c>.
-    /// Lower case only, so a connection string's <c>Port=5432</c> is not read as one.
-    /// </summary>
-    private static readonly Regex PortVariable = new(
-        @"\bport\s*=\s*(?<port>\d{4,5})\b",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>
-    /// A Kestrel endpoint in <c>appsettings*.json</c>, <c>"Url": "http://localhost:5282"</c>: what the host listens
-    /// on, and not an address it calls (a model's endpoint is a localhost URL too).
-    /// </summary>
-    private static readonly Regex KestrelUrl = new(
-        @"""Url""\s*:\s*""https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\*|\+):(?<port>\d+)",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>A Vite config's or a script's <c>port: 5281</c>.</summary>
-    private static readonly Regex PortProperty = new(
-        @"\bport:\s*(?<port>\d{4,5})\b",
-        RegexOptions.Compiled
-    );
-
     private static bool InRange(int port) => port is (>= 5200 and <= 5299) or (>= 5310 and <= 5319);
 
     [Test]
     public void Every_sample_port_is_in_range_and_owned_by_one_sample()
     {
         var samples = Path.Combine(RepoRoot.Path, "samples");
-        var files = Directory
-            .EnumerateFiles(samples, "launchSettings.json", SearchOption.AllDirectories)
-            .Concat(
-                Directory.EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
-            )
-            .Concat(Directory.EnumerateFiles(samples, "*.ts", SearchOption.AllDirectories))
-            .Concat(Directory.EnumerateFiles(samples, "*.tsx", SearchOption.AllDirectories))
-            .Concat(SourceFiles.CSharp("samples"))
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                && !f.Contains(
-                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
-                )
-                && !f.Contains($"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}")
-            );
+        var files = PortFiles(samples);
 
         var offenders = new List<string>();
         var foldersByPort = new Dictionary<int, SortedSet<string>>();
@@ -88,11 +46,19 @@ public class SamplePortsTests
                     .ToList();
             foreach (var match in matches)
             {
-                var port = int.Parse(match.Groups["port"].Value);
+                var port = int.Parse(
+                    match.Groups["port"].Value,
+                    System.Globalization.CultureInfo.InvariantCulture
+                );
                 if (port == ViteDevServer)
                     continue;
                 if (!InRange(port))
-                    offenders.Add($"{RepoRoot.Relative(file)}: port {port} is outside the ranges");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{RepoRoot.Relative(file)}: port {port} is outside the ranges"
+                        )
+                    );
                 if (!foldersByPort.TryGetValue(port, out var folders))
                     foldersByPort[port] = folders = [];
                 folders.Add(folder);
@@ -100,14 +66,85 @@ public class SamplePortsTests
         }
 
         foreach (var (port, folders) in foldersByPort.Where(kv => kv.Value.Count > 1))
-            offenders.Add($"port {port} is used by {string.Join(", ", folders)}");
+            offenders.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"port {port} is used by {string.Join(", ", folders)}"
+                )
+            );
 
         foldersByPort.Should().NotBeEmpty("the samples listen on ports");
         offenders
             .Should()
             .BeEmpty(
                 "every sample listens on a port of its own in 5200-5299 or 5310-5319. Offenders:\n  "
-                    + string.Join("\n  ", offenders.Distinct())
+                    + string.Join("\n  ", offenders.Distinct(StringComparer.Ordinal))
             );
     }
+
+    // The launch profiles, appsettings, TypeScript and C# a sample's ports are read from.
+    private static IEnumerable<string> PortFiles(string samples) =>
+        Directory
+            .EnumerateFiles(samples, "launchSettings.json", SearchOption.AllDirectories)
+            .Concat(
+                Directory.EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
+            )
+            .Concat(Directory.EnumerateFiles(samples, "*.ts", SearchOption.AllDirectories))
+            .Concat(Directory.EnumerateFiles(samples, "*.tsx", SearchOption.AllDirectories))
+            .Concat(SourceFiles.CSharp("samples"))
+            .Where(f =>
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+            );
+
+    /// <summary>A Vite config's or a script's <c>port: 5281</c>.</summary>
+    [GeneratedRegex(
+        @"\bport:\s*(?<port>\d{4,5})\b",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PortProperty { get; }
+
+    /// <summary>
+    /// A Kestrel endpoint in <c>appsettings*.json</c>, <c>"Url": "http://localhost:5282"</c>: what the host listens
+    /// on, and not an address it calls (a model's endpoint is a localhost URL too).
+    /// </summary>
+    [GeneratedRegex(
+        @"""Url""\s*:\s*""https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\*|\+):(?<port>\d+)",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex KestrelUrl { get; }
+
+    /// <summary>
+    /// A port held in a variable and spliced into the URL later, as in <c>var port = 5099;</c>.
+    /// Lower case only, so a connection string's <c>Port=5432</c> is not read as one.
+    /// </summary>
+    [GeneratedRegex(
+        @"\bport\s*=\s*(?<port>\d{4,5})\b",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PortVariable { get; }
+
+    [GeneratedRegex(
+        @"https?://(localhost|127\.0\.0\.1):(?<port>\d+)",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LocalUrl { get; }
 }

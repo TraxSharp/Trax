@@ -10,6 +10,7 @@ package: Trax.Effect.Data
 namespace: Trax.Effect.Data.Extensions
 source:
   - Trax.Effect/src/Trax.Effect/Configuration/Deploy/TraxMigrate.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/MigrateServeGate.cs
   - Trax.Effect/src/Trax.Effect.Data/Extensions/TraxDeployExtensions.cs
 ---
 

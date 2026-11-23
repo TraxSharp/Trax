@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Connection;
 using Trax.Api.Console.Terminal.Headless;
 using Trax.Api.Console.Terminal.Lists;
@@ -20,92 +21,15 @@ internal static class ConsoleCommandLine
         Func<string, string?>? environment = null,
         Func<ConsoleTarget, ConsoleSession>? open = null,
         TextWriter? output = null,
-        TextWriter? error = null
+        TextWriter? error = null,
+        TimeProvider? clock = null
     )
     {
         environment ??= Environment.GetEnvironmentVariable;
+        var time = clock ?? TimeProvider.System;
         open ??= target => ConsoleSession.Open(target);
-        var stdout = output ?? System.Console.Out;
-        var stderr = error ?? System.Console.Error;
-        var host = new Option<string?>("--host")
-        {
-            Description =
-                $"The host serving the operations console, such as https://ops.example.com (or {ConsoleTarget.HostVariable}).",
-            Recursive = true,
-        };
-        var graphQLPath = new Option<string>("--graphql-path")
-        {
-            Description = "The path its Trax GraphQL endpoint is mapped at.",
-            DefaultValueFactory = _ => ConsoleTarget.DefaultGraphQLPath,
-            Recursive = true,
-        };
-        var apiKeyFile = new Option<FileInfo?>("--api-key-file")
-        {
-            Description =
-                $"A file holding the API key the operations gate checks. Or set {ConsoleTarget.ApiKeyVariable}. Never "
-                + "on the command line itself.",
-            Recursive = true,
-        };
-        var tokenFile = new Option<FileInfo?>("--token-file")
-        {
-            Description = $"A file holding a bearer token. Or set {ConsoleTarget.TokenVariable}.",
-            Recursive = true,
-        };
-        var sendText = new Option<bool>("--send-text")
-        {
-            Description =
-                "Send each document's text instead of its id, for a host that runs no persisted operations.",
-            Recursive = true,
-        };
-        var verticalGraphs = new Option<bool>("--vertical-graphs")
-        {
-            Description =
-                "Draw machines top to bottom rather than left to right (r turns them in the console).",
-            Recursive = true,
-        };
-        var anyVersion = new Option<bool>("--any-version")
-        {
-            Description =
-                "Talk to a host of another Trax release anyway. Documents that differ between the two are refused. "
-                + "A host that refuses the credential or cannot be reached is still refused.",
-            Recursive = true,
-        };
-
-        ConsoleTarget Target(ParseResult p) =>
-            ConsoleTarget.Resolve(
-                p.GetValue(host),
-                p.GetValue(graphQLPath) ?? ConsoleTarget.DefaultGraphQLPath,
-                p.GetValue(apiKeyFile),
-                p.GetValue(tokenFile),
-                p.GetValue(sendText),
-                environment
-            );
-
-        var root = new RootCommand(
-            "The Trax .NET operations console in a terminal. With no command it opens the console; with one it "
-                + "answers in JSON lines."
-        )
-        {
-            host,
-            graphQLPath,
-            apiKeyFile,
-            tokenFile,
-            sendText,
-            anyVersion,
-            verticalGraphs,
-        };
-        root.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    async (session, version) =>
-                        await ConsoleApp.RunAsync(session, version, p.GetValue(verticalGraphs), ct),
-                    ct
-                )
-        );
+        var commands = new Commands(environment, open, output, error, time);
+        var root = commands.Root();
 
         var listName = new Argument<string>("list")
         {
@@ -117,52 +41,9 @@ internal static class ConsoleCommandLine
                 "A filter as name=value (state=FAILED). Repeatable. An unknown name is refused with the list's filters.",
             AllowMultipleArgumentsPerToken = false,
         };
-        var take = new Option<int>("--take")
-        {
-            Description = "How many rows to read (at most 500).",
-            DefaultValueFactory = _ => 25,
-        };
-        var after = new Option<long?>("--after")
-        {
-            Description = "The cursor to start after: the nextCursor the previous page printed.",
-        };
-        var list = new Command("list", "Print a page of a list, one row per line.")
-        {
-            listName,
-            where,
-            take,
-            after,
-        };
-        list.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    (session, _) =>
-                        HeadlessCommands.ListAsync(
-                            session,
-                            p.GetValue(listName)!,
-                            Filters(p.GetValue(where)),
-                            p.GetValue(take),
-                            p.GetValue(after),
-                            stdout,
-                            stderr,
-                            ct
-                        ),
-                    ct
-                )
-        );
-
         var action = new Argument<string>("action")
         {
             Description = "The action, such as requeue.",
-        };
-        var ids = new Argument<long[]>("ids")
-        {
-            Description = "The rows' ids.",
-            Arity = ArgumentArity.OneOrMore,
         };
         var note = new Option<string?>("--note")
         {
@@ -177,180 +58,13 @@ internal static class ConsoleCommandLine
         {
             Description = "Print what would be sent, and send nothing.",
         };
-        var doCommand = new Command("do", "Run an action on rows of a list, by id.")
-        {
-            listName,
-            action,
-            ids,
-            note,
-            askAfresh,
-            dryRun,
-        };
-        doCommand.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    (session, _) =>
-                        HeadlessCommands.DoAsync(
-                            session,
-                            p.GetValue(listName)!,
-                            p.GetValue(action)!,
-                            p.GetValue(ids)!,
-                            new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
-                            p.GetValue(dryRun),
-                            stdout,
-                            ct
-                        ),
-                    ct
-                )
-        );
-
-        var expect = new Option<int>("--expect")
-        {
-            Description =
-                "How many rows the filter matches, as `list` counted them. The host refuses when it now matches another.",
-            Required = true,
-        };
-        var bulk = new Command(
-            "bulk",
-            "Run an action on every row a filter matches, as one bulk operation the host runs."
-        )
-        {
-            listName,
-            action,
-            where,
-            expect,
-            note,
-            askAfresh,
-            dryRun,
-        };
-        bulk.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    (session, _) =>
-                        HeadlessCommands.BulkAsync(
-                            session,
-                            p.GetValue(listName)!,
-                            p.GetValue(action)!,
-                            Filters(p.GetValue(where)),
-                            p.GetValue(expect),
-                            new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
-                            p.GetValue(dryRun),
-                            stdout,
-                            ct
-                        ),
-                    ct
-                )
-        );
-
-        var stream = new Argument<string>("stream")
-        {
-            Description =
-                "runs (every run's state), changes (what changed), run (one run's steps), machines.",
-        };
-        var id = new Argument<string?>("id")
-        {
-            Description = "The run's id, for `run`; a machine's name, for `machines`.",
-            Arity = ArgumentArity.ZeroOrOne,
-        };
-        var watch = new Command("watch", "Follow a stream, one event per line, until interrupted.")
-        {
-            stream,
-            id,
-        };
-        watch.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    (session, _) =>
-                        HeadlessCommands.WatchAsync(
-                            session,
-                            p.GetValue(stream)!,
-                            p.GetValue(id),
-                            stdout,
-                            stderr,
-                            ct
-                        ),
-                    ct
-                )
-        );
-
-        var run = new Argument<long>("run") { Description = "The run's id." };
-        var trace = new Command("trace", "Print a run's steps, decisions and log, one per line.")
-        {
-            run,
-        };
-        trace.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    (session, _) =>
-                        HeadlessCommands.TraceAsync(session, p.GetValue(run), stdout, stderr, ct),
-                    ct
-                )
-        );
-
-        var machineName = new Argument<string?>("machine")
-        {
-            Description = "The machine; every machine the host serves when left out.",
-            Arity = ArgumentArity.ZeroOrOne,
-        };
-        var graph = new Command(
-            "graph",
-            "Draw a machine's states and transitions as boxes and arrows."
-        )
-        {
-            machineName,
-        };
-        graph.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    p.GetValue(anyVersion),
-                    (session, _) =>
-                        HeadlessCommands.GraphAsync(
-                            session,
-                            p.GetValue(machineName),
-                            p.GetValue(verticalGraphs),
-                            stdout,
-                            stderr,
-                            ct
-                        ),
-                    ct
-                )
-        );
-
-        var check = new Command(
-            "check",
-            "Say whether the host serves this console: its Trax release, and whether the credential reaches operations."
-        );
-        check.SetAction(
-            (p, ct) =>
-                Run(
-                    open,
-                    stderr,
-                    () => Target(p),
-                    anyVersion: true,
-                    (session, version) => HeadlessCommands.CheckAsync(session, version, stdout),
-                    ct,
-                    reports: true
-                )
-        );
+        var list = commands.List(listName, where);
+        var doCommand = commands.Do(listName, action, note, askAfresh, dryRun);
+        var bulk = commands.Bulk(listName, action, where, note, askAfresh, dryRun);
+        var watch = commands.Watch();
+        var trace = commands.Trace();
+        var graph = commands.Graph();
+        var check = commands.Check();
 
         root.Subcommands.Add(list);
         root.Subcommands.Add(doCommand);
@@ -360,6 +74,382 @@ internal static class ConsoleCommandLine
         root.Subcommands.Add(graph);
         root.Subcommands.Add(check);
         return root;
+    }
+
+    // The command line's options every command takes, and the commands built on them.
+    private sealed class Commands(
+        Func<string, string?> environment,
+        Func<ConsoleTarget, ConsoleSession> open,
+        TextWriter? output,
+        TextWriter? error,
+        TimeProvider time
+    )
+    {
+        private readonly Option<string?> _host = new Option<string?>("--host")
+        {
+            Description =
+                $"The host serving the operations console, such as https://ops.example.com (or {ConsoleTarget.HostVariable}).",
+            Recursive = true,
+        };
+        private readonly Option<string> _graphQLPath = new Option<string>("--graphql-path")
+        {
+            Description = "The path its Trax GraphQL endpoint is mapped at.",
+            DefaultValueFactory = _ => ConsoleTarget.DefaultGraphQLPath,
+            Recursive = true,
+        };
+        private readonly Option<FileInfo?> _apiKeyFile = new Option<FileInfo?>("--api-key-file")
+        {
+            Description =
+                $"A file holding the API key the operations gate checks. Or set {ConsoleTarget.ApiKeyVariable}. Never "
+                + "on the command line itself.",
+            Recursive = true,
+        };
+        private readonly Option<FileInfo?> _tokenFile = new Option<FileInfo?>("--token-file")
+        {
+            Description = $"A file holding a bearer token. Or set {ConsoleTarget.TokenVariable}.",
+            Recursive = true,
+        };
+        private readonly Option<bool> _sendText = new Option<bool>("--send-text")
+        {
+            Description =
+                "Send each document's text instead of its id, for a host that runs no persisted operations.",
+            Recursive = true,
+        };
+        private readonly Option<bool> _verticalGraphs = new Option<bool>("--vertical-graphs")
+        {
+            Description =
+                "Draw machines top to bottom rather than left to right (r turns them in the console).",
+            Recursive = true,
+        };
+        private readonly Option<bool> _anyVersion = new Option<bool>("--any-version")
+        {
+            Description =
+                "Talk to a host of another Trax release anyway. Documents that differ between the two are refused. "
+                + "A host that refuses the credential or cannot be reached is still refused.",
+            Recursive = true,
+        };
+
+        // Standard output and error are System.CommandLine's, which owns the process's console.
+        private TextWriter Stdout(ParseResult p) => output ?? p.InvocationConfiguration.Output;
+
+        private TextWriter Stderr(ParseResult p) => error ?? p.InvocationConfiguration.Error;
+
+        private Task<ConsoleTarget> Target(ParseResult p, CancellationToken cancellationToken) =>
+            ConsoleTarget.ResolveAsync(
+                p.GetValue(_host),
+                p.GetValue(_graphQLPath) ?? ConsoleTarget.DefaultGraphQLPath,
+                p.GetValue(_apiKeyFile),
+                p.GetValue(_tokenFile),
+                p.GetValue(_sendText),
+                environment,
+                cancellationToken
+            );
+
+        public RootCommand Root()
+        {
+            var root = new RootCommand(
+                "The Trax .NET operations console in a terminal. With no command it opens the console; with one it "
+                    + "answers in JSON lines."
+            )
+            {
+                _host,
+                _graphQLPath,
+                _apiKeyFile,
+                _tokenFile,
+                _sendText,
+                _anyVersion,
+                _verticalGraphs,
+            };
+            root.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        async (session, version) =>
+                            await ConsoleApp
+                                .RunAsync(session, version, p.GetValue(_verticalGraphs), time, ct)
+                                .ConfigureAwait(false),
+                        ct
+                    )
+            );
+            return root;
+        }
+
+        public Command List(Argument<string> listName, Option<string[]> where)
+        {
+            var take = new Option<int>("--take")
+            {
+                Description = "How many rows to read (at most 500).",
+                DefaultValueFactory = _ => 25,
+            };
+            var after = new Option<long?>("--after")
+            {
+                Description =
+                    "The cursor to start after: the nextCursor the previous page printed.",
+            };
+            var list = new Command("list", "Print a page of a list, one row per line.")
+            {
+                listName,
+                where,
+                take,
+                after,
+            };
+            list.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        (session, _) =>
+                            HeadlessCommands.ListAsync(
+                                session,
+                                p.GetValue(listName).NotNull(),
+                                Filters(p.GetValue(where)),
+                                p.GetValue(take),
+                                p.GetValue(after),
+                                Stdout(p),
+                                Stderr(p),
+                                ct
+                            ),
+                        ct
+                    )
+            );
+            return list;
+        }
+
+        public Command Do(
+            Argument<string> listName,
+            Argument<string> action,
+            Option<string?> note,
+            Option<bool> askAfresh,
+            Option<bool> dryRun
+        )
+        {
+            var ids = new Argument<long[]>("ids")
+            {
+                Description = "The rows' ids.",
+                Arity = ArgumentArity.OneOrMore,
+            };
+            var doCommand = new Command("do", "Run an action on rows of a list, by id.")
+            {
+                listName,
+                action,
+                ids,
+                note,
+                askAfresh,
+                dryRun,
+            };
+            doCommand.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        (session, _) =>
+                            HeadlessCommands.DoAsync(
+                                session,
+                                p.GetValue(listName).NotNull(),
+                                p.GetValue(action).NotNull(),
+                                p.GetValue(ids).NotNull(),
+                                new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
+                                p.GetValue(dryRun),
+                                Stdout(p),
+                                ct
+                            ),
+                        ct
+                    )
+            );
+            return doCommand;
+        }
+
+        public Command Bulk(
+            Argument<string> listName,
+            Argument<string> action,
+            Option<string[]> where,
+            Option<string?> note,
+            Option<bool> askAfresh,
+            Option<bool> dryRun
+        )
+        {
+            var expect = new Option<int>("--expect")
+            {
+                Description =
+                    "How many rows the filter matches, as `list` counted them. The host refuses when it now matches another.",
+                Required = true,
+            };
+            var bulk = new Command(
+                "bulk",
+                "Run an action on every row a filter matches, as one bulk operation the host runs."
+            )
+            {
+                listName,
+                action,
+                where,
+                expect,
+                note,
+                askAfresh,
+                dryRun,
+            };
+            bulk.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        (session, _) =>
+                            HeadlessCommands.BulkAsync(
+                                session,
+                                p.GetValue(listName).NotNull(),
+                                p.GetValue(action).NotNull(),
+                                Filters(p.GetValue(where)),
+                                p.GetValue(expect),
+                                new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
+                                p.GetValue(dryRun),
+                                Stdout(p),
+                                time,
+                                ct
+                            ),
+                        ct
+                    )
+            );
+            return bulk;
+        }
+
+        public Command Watch()
+        {
+            var stream = new Argument<string>("stream")
+            {
+                Description =
+                    "runs (every run's state), changes (what changed), run (one run's steps), machines.",
+            };
+            var id = new Argument<string?>("id")
+            {
+                Description = "The run's id, for `run`; a machine's name, for `machines`.",
+                Arity = ArgumentArity.ZeroOrOne,
+            };
+            var watch = new Command(
+                "watch",
+                "Follow a stream, one event per line, until interrupted."
+            )
+            {
+                stream,
+                id,
+            };
+            watch.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        (session, _) =>
+                            HeadlessCommands.WatchAsync(
+                                session,
+                                p.GetValue(stream).NotNull(),
+                                p.GetValue(id),
+                                Stdout(p),
+                                Stderr(p),
+                                ct
+                            ),
+                        ct
+                    )
+            );
+            return watch;
+        }
+
+        public Command Trace()
+        {
+            var run = new Argument<long>("run") { Description = "The run's id." };
+            var trace = new Command(
+                "trace",
+                "Print a run's steps, decisions and log, one per line."
+            )
+            {
+                run,
+            };
+            trace.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        (session, _) =>
+                            HeadlessCommands.TraceAsync(
+                                session,
+                                p.GetValue(run),
+                                Stdout(p),
+                                Stderr(p),
+                                ct
+                            ),
+                        ct
+                    )
+            );
+            return trace;
+        }
+
+        public Command Graph()
+        {
+            var machineName = new Argument<string?>("machine")
+            {
+                Description = "The machine; every machine the host serves when left out.",
+                Arity = ArgumentArity.ZeroOrOne,
+            };
+            var graph = new Command(
+                "graph",
+                "Draw a machine's states and transitions as boxes and arrows."
+            )
+            {
+                machineName,
+            };
+            graph.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        p.GetValue(_anyVersion),
+                        (session, _) =>
+                            HeadlessCommands.GraphAsync(
+                                session,
+                                p.GetValue(machineName),
+                                p.GetValue(_verticalGraphs),
+                                Stdout(p),
+                                Stderr(p),
+                                ct
+                            ),
+                        ct
+                    )
+            );
+            return graph;
+        }
+
+        public Command Check()
+        {
+            var check = new Command(
+                "check",
+                "Say whether the host serves this console: its Trax release, and whether the credential reaches operations."
+            );
+            check.SetAction(
+                (p, ct) =>
+                    Run(
+                        open,
+                        Stderr(p),
+                        c => Target(p, c),
+                        anyVersion: true,
+                        (session, version) =>
+                            HeadlessCommands.CheckAsync(session, version, Stdout(p)),
+                        ct,
+                        reports: true
+                    )
+            );
+            return check;
+        }
     }
 
     /// <summary>A refusal: the host refused, could not be reached, or runs another release.</summary>
@@ -377,7 +467,7 @@ internal static class ConsoleCommandLine
     private static async Task<int> Run(
         Func<ConsoleTarget, ConsoleSession> open,
         TextWriter error,
-        Func<ConsoleTarget> target,
+        Func<CancellationToken, Task<ConsoleTarget>> target,
         bool anyVersion,
         Func<ConsoleSession, VersionCheck, Task<int>> command,
         CancellationToken ct,
@@ -387,19 +477,19 @@ internal static class ConsoleCommandLine
         ConsoleSession session;
         try
         {
-            session = open(target());
+            session = open(await target(ct).ConfigureAwait(false));
         }
         catch (InvalidOperationException ex)
         {
-            error.WriteLine(TerminalText.Block(ex.Message));
+            await error.WriteLineAsync(TerminalText.Block(ex.Message)).ConfigureAwait(false);
             return Usage;
         }
-        await using (session)
+        await using (session.ConfigureAwait(false))
         {
             VersionCheck version;
             try
             {
-                version = await session.CheckVersionAsync(ct);
+                version = await session.CheckVersionAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -408,25 +498,29 @@ internal static class ConsoleCommandLine
             switch (version)
             {
                 case VersionCheck.Failed failed when !reports:
-                    error.WriteLine(
-                        TerminalText.Block(
-                            failed.Code is null
-                                ? failed.Message
-                                : $"{failed.Code}: {failed.Message}"
+                    await error
+                        .WriteLineAsync(
+                            TerminalText.Block(
+                                failed.Code is null
+                                    ? failed.Message
+                                    : $"{failed.Code}: {failed.Message}"
+                            )
                         )
-                    );
+                        .ConfigureAwait(false);
                     return Refused;
                 case VersionCheck.Other other when !anyVersion && !reports:
-                    error.WriteLine(TerminalText.Line(other.Message));
+                    await error
+                        .WriteLineAsync(TerminalText.Line(other.Message))
+                        .ConfigureAwait(false);
                     return Refused;
             }
             try
             {
-                return await command(session, version);
+                return await command(session, version).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {
-                error.WriteLine(TerminalText.Block(ex.Message));
+                await error.WriteLineAsync(TerminalText.Block(ex.Message)).ConfigureAwait(false);
                 return Usage;
             }
         }
@@ -437,7 +531,7 @@ internal static class ConsoleCommandLine
         var filters = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var pair in where ?? [])
         {
-            var at = pair.IndexOf('=');
+            var at = pair.IndexOf('=', StringComparison.Ordinal);
             if (at <= 0)
                 throw new InvalidOperationException($"--where '{pair}' is not name=value.");
             filters[pair[..at].Trim()] = pair[(at + 1)..];

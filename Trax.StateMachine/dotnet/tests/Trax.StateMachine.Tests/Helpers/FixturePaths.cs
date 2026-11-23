@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Tests.Helpers;
 
 /// <summary>
@@ -31,10 +33,10 @@ public static class FixturePaths
     /// The engine-neutral conformance kit beside <c>machines/</c>: tables and cases any engine, in any language,
     /// replays.
     /// </summary>
-    public static string ConformanceRoot => Directory.GetParent(MachinesRoot)!.FullName;
+    public static string ConformanceRoot => Directory.GetParent(MachinesRoot).NotNull().FullName;
 
     /// <summary>The folder that holds the conformance kit and every engine, <c>Trax.StateMachine/</c>.</summary>
-    public static string FolderRoot => Directory.GetParent(ConformanceRoot)!.FullName;
+    public static string FolderRoot => Directory.GetParent(ConformanceRoot).NotNull().FullName;
 
     /// <summary>The TypeScript engine, <c>Trax.StateMachine/ts</c>.</summary>
     public static string TypeScriptEngineRoot => Path.Combine(FolderRoot, "ts");

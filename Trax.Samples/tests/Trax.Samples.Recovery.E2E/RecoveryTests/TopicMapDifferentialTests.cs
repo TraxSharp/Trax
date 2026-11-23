@@ -34,7 +34,7 @@ public class TopicMapDifferentialTests
             .BeEmpty(
                 "the server applies every transition the twin predicts, and both engines must agree "
                     + "(Trax.Docs/adr/0048):\n"
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -28,10 +29,20 @@ public class LiveBrowserTests : ConsoleTest
 
         var run = await Seed.GatedRunAsync();
 
-        await Checks.PushedAsync("onTrainStateChanged", $"\"metadataId\":{run.Id}");
+        await Checks.PushedAsync(
+            "onTrainStateChanged",
+            string.Create(CultureInfo.InvariantCulture, $"\"metadataId\":{run.Id}")
+        );
         await Assertions
             .Expect(
-                Page.GetByRole(AriaRole.Link, new() { Name = $"#{run.Id}", Exact = true }).First
+                Page.GetByRole(
+                    AriaRole.Link,
+                    new()
+                    {
+                        Name = string.Create(CultureInfo.InvariantCulture, $"#{run.Id}"),
+                        Exact = true,
+                    }
+                ).First
             )
             .ToBeVisibleAsync(new() { Timeout = Render });
         await Checks.PushedAsync("onDataChanged", "\"WORK_QUEUE\"");

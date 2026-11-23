@@ -16,7 +16,7 @@ public class ChangeSignalCoalescerTests
 
     private sealed class CapturingSink : IChangeSignalSink
     {
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
         public List<ChangeDomain[]> Flushes { get; } = new();
 
         public Func<Task>? OnFlush { get; set; }
@@ -27,7 +27,7 @@ public class ChangeSignalCoalescerTests
         )
         {
             if (OnFlush is not null)
-                await OnFlush();
+                await OnFlush().ConfigureAwait(false);
             lock (_lock)
                 Flushes.Add(domains.ToArray());
         }
@@ -74,14 +74,14 @@ public class ChangeSignalCoalescerTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow() + timeout;
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             if (condition())
                 return true;
             // allowed-delay: poll interval, not a sleep-for-sync. Bounded by the caller's timeout
             // and exits the instant the condition holds.
-            await Task.Delay(15);
+            await Task.Delay(15).ConfigureAwait(false);
         }
         return condition();
     }
@@ -93,7 +93,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         // Buffer the burst before the coalescer starts, so the first drain sees the whole burst.
         signal.Notify(ChangeDomain.WorkQueue);
@@ -118,7 +119,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         signal.Notify(ChangeDomain.WorkQueue);
         signal.Notify(ChangeDomain.DeadLetter);
@@ -147,7 +149,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -173,7 +176,8 @@ public class ChangeSignalCoalescerTests
     {
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -205,7 +209,8 @@ public class ChangeSignalCoalescerTests
         var sinkA = new CapturingSink();
         var sinkB = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), sinkA, sinkB);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         signal.Notify(ChangeDomain.ManifestGroup);
 
@@ -232,7 +237,8 @@ public class ChangeSignalCoalescerTests
         };
         var healthy = new CapturingSink();
         var (signal, coalescer, provider) = Build(FastOptions(), throwing, healthy);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -267,7 +273,8 @@ public class ChangeSignalCoalescerTests
         };
         var sink = new CapturingSink();
         var (signal, coalescer, provider) = Build(options, sink);
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         await coalescer.StartAsync(CancellationToken.None);
         try
@@ -277,25 +284,7 @@ public class ChangeSignalCoalescerTests
             const int total = threads * perThread;
             var domains = Enum.GetValues<ChangeDomain>();
 
-            Exception? writerFailure = null;
-            await Task.WhenAll(
-                Enumerable
-                    .Range(0, threads)
-                    .Select(t =>
-                        Task.Run(() =>
-                        {
-                            try
-                            {
-                                for (var i = 0; i < perThread; i++)
-                                    signal.Notify(domains[(t + i) % domains.Length]);
-                            }
-                            catch (Exception ex)
-                            {
-                                writerFailure = ex;
-                            }
-                        })
-                    )
-            );
+            var writerFailure = await NotifyFromThreadsAsync(signal, domains, threads, perThread);
 
             writerFailure.Should().BeNull("Notify must never throw, even under concurrent load");
 
@@ -319,13 +308,44 @@ public class ChangeSignalCoalescerTests
         }
     }
 
+    // Notifies perThread signals from each of several threads at once; returns the last failure.
+    private static async Task<Exception?> NotifyFromThreadsAsync(
+        TraxChangeSignal signal,
+        ChangeDomain[] domains,
+        int threads,
+        int perThread
+    )
+    {
+        Exception? writerFailure = null;
+        await Task.WhenAll(
+                Enumerable
+                    .Range(0, threads)
+                    .Select(t =>
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                for (var i = 0; i < perThread; i++)
+                                    signal.Notify(domains[(t + i) % domains.Length]);
+                            }
+                            catch (Exception ex)
+                            {
+                                writerFailure = ex;
+                            }
+                        })
+                    )
+            )
+            .ConfigureAwait(false);
+        return writerFailure;
+    }
+
     // Waits until the flush count stops growing (two consecutive stable reads), i.e. the coalescer
     // has drained the backlog. Bounded so a stuck pipeline fails the test rather than hanging.
     private static async Task WaitUntilQuiescentAsync(CapturingSink sink)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(10);
         var last = -1;
-        while (DateTime.UtcNow < deadline)
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             var now = sink.Count;
             if (now == last)
@@ -333,7 +353,7 @@ public class ChangeSignalCoalescerTests
             last = now;
             // allowed-delay: poll interval, not a sleep-for-sync. Bounded by the 10s deadline and
             // returns as soon as two consecutive reads match (the backlog is drained).
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
         }
     }
 
@@ -462,7 +482,8 @@ public class ChangeSignalCoalescerTests
                 ? throw new InvalidOperationException("resolve boom")
                 : realSink
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var options = FastOptions();
         var signal = new TraxChangeSignal(options);
@@ -532,7 +553,8 @@ public class ChangeSignalCoalescerTests
 
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<IChangeSignalSink>(blockingSink);
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var options = FastOptions();
         var signal = new TraxChangeSignal(options);
@@ -550,14 +572,18 @@ public class ChangeSignalCoalescerTests
         // Wait until the sink is actually inside FlushAsync (blocked on the token) before stopping.
         // allowed-delay: fail-safe ceiling, not a fixed wait — WhenAny returns the instant the sink
         // enters its flush; the delay only bounds a hang so a regression fails fast instead of hanging.
-        var entered = await Task.WhenAny(flushEntered.Task, Task.Delay(FlushTimeout));
+        var entered = await Task.WhenAny(
+            flushEntered.Task,
+            // allowed-delay: the fail-safe ceiling named above, not a wait.
+            Task.Delay(FlushTimeout, TimeProvider.System)
+        );
         entered.Should().Be(flushEntered.Task, "the sink should reach its flush before we stop");
 
         // StopAsync cancels the stopping token; the sink's wait throws, the flush rethrows the
         // cancellation, and the loop breaks. This must complete rather than hang or throw.
         var stop = coalescer.StopAsync(CancellationToken.None);
         // allowed-delay: fail-safe ceiling on StopAsync; WhenAny returns the moment it completes.
-        var finished = await Task.WhenAny(stop, Task.Delay(FlushTimeout));
+        var finished = await Task.WhenAny(stop, Task.Delay(FlushTimeout, TimeProvider.System));
         finished
             .Should()
             .Be(stop, "StopAsync must unwind cleanly when a sink is cancelled mid-flush");
@@ -574,7 +600,7 @@ public class ChangeSignalCoalescerTests
             entered.TrySetResult();
             // allowed-delay: blocks until the coalescer's stopping token cancels (the mechanism under
             // test), then throws OperationCanceledException with ct.IsCancellationRequested == true.
-            await Task.Delay(Timeout.Infinite, ct);
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
         }
     }
 

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -17,7 +18,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// </summary>
 public class FailureTrainNameTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -33,7 +34,11 @@ public class FailureTrainNameTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_failure_inside_a_junction_carries_the_canonical_name()
@@ -54,11 +59,14 @@ public class FailureTrainNameTests
     private async Task<TrainExceptionData> FailureData<TTrain>()
         where TTrain : IServiceTrain<Unit, Unit>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
-        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        var thrown = await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .ConfigureAwait(false);
 
         return thrown
             .Which.Data["TrainExceptionData"]

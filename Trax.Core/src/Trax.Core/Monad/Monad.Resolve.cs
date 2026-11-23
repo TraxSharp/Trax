@@ -45,7 +45,7 @@ public partial class Monad<TInput, TReturn>
     {
         if (Recorder is not null)
         {
-            Recorder.Record(ChainStepKind.Resolve, null, null, typeof(TReturn));
+            Recorder.Record(ChainStepKind.Resolve, junction: null, tIn: null, typeof(TReturn));
 
             // A recorded chain produces no value. The Left is a sentinel the reader discards;
             // returning a default Right would put a null on the right track for a reference TReturn.

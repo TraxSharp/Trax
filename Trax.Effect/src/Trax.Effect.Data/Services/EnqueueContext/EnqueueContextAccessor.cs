@@ -3,7 +3,10 @@ using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.Effect.Data.Services.EnqueueContext;
 
-/// <inheritdoc />
+/// <summary>
+/// The <see cref="IEnqueueContextAccessor"/> Trax registers: hands each enqueue the context of the
+/// async call it runs in.
+/// </summary>
 /// <remarks>
 /// The context flows with the async call, not with the instance or its scope. Two enqueues running at once on
 /// one scope each see their own. An enqueue started from inside an <c>OnQueue</c> hook joins the

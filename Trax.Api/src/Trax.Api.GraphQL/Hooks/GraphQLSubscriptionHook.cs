@@ -17,6 +17,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
 {
     private readonly LifecycleEventPublisher _publisher;
     private readonly LifecycleStreamRule _rule;
+    private readonly TimeProvider _clock;
 
     /// <summary>
     /// Creates the hook and captures, once, the set of trains marked <c>[TraxBroadcast]</c>.
@@ -30,9 +31,27 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         ITrainDiscoveryService discoveryService,
         TrainLifecycleStreamOptions options
     )
+        : this(eventSender, discoveryService, options, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates the hook and captures, once, the set of trains marked <c>[TraxBroadcast]</c>.
+    /// Registered by <c>AddTraxGraphQL</c>; not intended to be constructed directly.
+    /// </summary>
+    /// <param name="eventSender">HotChocolate's subscription transport.</param>
+    /// <param name="discoveryService">Supplies the registered trains.</param>
+    /// <param name="options">Decides whether every train is published or only broadcast ones.</param>
+    /// <param name="clock">Stamps an event whose run has not ended.</param>
+    public GraphQLSubscriptionHook(
+        ITopicEventSender eventSender,
+        ITrainDiscoveryService discoveryService,
+        TrainLifecycleStreamOptions options,
+        TimeProvider clock
+    )
     {
+        ArgumentNullException.ThrowIfNull(clock);
         _publisher = LifecycleEventPublisher.For(eventSender);
         _rule = new LifecycleStreamRule(discoveryService, options);
+        _clock = clock;
     }
 
     // Admin observability streams every train; otherwise only [TraxBroadcast] trains.
@@ -46,11 +65,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _publisher.PublishAsync(
-            nameof(LifecycleSubscriptions.OnTrainStarted),
-            MapEvent(metadata),
-            ct
-        );
+        await _publisher
+            .PublishAsync(nameof(LifecycleSubscriptions.OnTrainStarted), MapEvent(metadata), ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Publishes to <c>onTrainCompleted</c> when the train is published at all.</summary>
@@ -61,11 +78,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _publisher.PublishAsync(
-            nameof(LifecycleSubscriptions.OnTrainCompleted),
-            MapEvent(metadata),
-            ct
-        );
+        await _publisher
+            .PublishAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), MapEvent(metadata), ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -80,11 +95,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _publisher.PublishAsync(
-            nameof(LifecycleSubscriptions.OnTrainFailed),
-            MapEvent(metadata),
-            ct
-        );
+        await _publisher
+            .PublishAsync(nameof(LifecycleSubscriptions.OnTrainFailed), MapEvent(metadata), ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Publishes to <c>onTrainCancelled</c> when the train is published at all.</summary>
@@ -95,11 +108,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _publisher.PublishAsync(
-            nameof(LifecycleSubscriptions.OnTrainCancelled),
-            MapEvent(metadata),
-            ct
-        );
+        await _publisher
+            .PublishAsync(nameof(LifecycleSubscriptions.OnTrainCancelled), MapEvent(metadata), ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Publishes to <c>onTrainStateChanged</c> when the train is published at all.</summary>
@@ -110,20 +121,22 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _publisher.PublishAsync(
-            nameof(LifecycleSubscriptions.OnTrainStateChanged),
-            MapEvent(metadata),
-            ct
-        );
+        await _publisher
+            .PublishAsync(
+                nameof(LifecycleSubscriptions.OnTrainStateChanged),
+                MapEvent(metadata),
+                ct
+            )
+            .ConfigureAwait(false);
     }
 
-    private static TrainLifecycleEvent MapEvent(Metadata metadata) =>
+    private TrainLifecycleEvent MapEvent(Metadata metadata) =>
         new(
             MetadataId: metadata.Id,
             ExternalId: metadata.ExternalId,
             TrainName: metadata.Name,
             TrainState: metadata.TrainState,
-            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            Timestamp: metadata.EndTime ?? _clock.GetUtcNow().UtcDateTime,
             FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             Output: metadata.Output

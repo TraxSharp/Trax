@@ -19,14 +19,16 @@ public class QueuedReplayUniquenessTests : TestSetup
 {
     private static WorkQueue Replaying(long source) =>
         WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "Replay.Unique.Train", ReplayDecisionsOf = source }
+            new CreateWorkQueue { TrainName = "Replay.Unique.Train", ReplayDecisionsOf = source },
+            TestTime.Clock
         );
 
     [Test]
     public async Task A_second_queued_replay_of_one_run_is_refused()
     {
-        var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
-        using var context = (IDataContext)DataContextFactory.Create();
+        var source = UnusedRunId();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.Track(Replaying(source));
         await context.SaveChanges(CancellationToken.None);
 
@@ -42,8 +44,9 @@ public class QueuedReplayUniquenessTests : TestSetup
     )]
     public async Task A_dispatched_replay_does_not_count_against_a_queued_one()
     {
-        var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
-        using var context = (IDataContext)DataContextFactory.Create();
+        var source = UnusedRunId();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var dispatched = Replaying(source);
         dispatched.Status = WorkQueueStatus.Dispatched;
         await context.Track(dispatched);
@@ -53,4 +56,11 @@ public class QueuedReplayUniquenessTests : TestSetup
 
         await act.Should().NotThrowAsync();
     }
+
+    // A run id no other test or earlier run of this one used: the database is shared and kept.
+    private static long UnusedRunId() =>
+        (long)(
+            BitConverter.ToUInt64(Guid.NewGuid().ToByteArray())
+            % (ulong)(long.MaxValue - 1_000_000_000)
+        ) + 1_000_000_000;
 }

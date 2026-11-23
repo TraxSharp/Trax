@@ -264,8 +264,10 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         new DataContextTransaction.DataContextTransaction(
             this,
             Database.IsRelational()
-                ? await Database.BeginTransactionAsync(isolationLevel, cancellationToken)
-                : await Database.BeginTransactionAsync(cancellationToken)
+                ? await Database
+                    .BeginTransactionAsync(isolationLevel, cancellationToken)
+                    .ConfigureAwait(false)
+                : await Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)
         );
 
     /// <summary>
@@ -279,7 +281,8 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// If no transaction is active, this method may throw an exception or have no effect,
     /// depending on the database provider.
     /// </remarks>
-    public async Task CommitTransaction() => await Database.CommitTransactionAsync();
+    public async Task CommitTransaction() =>
+        await Database.CommitTransactionAsync().ConfigureAwait(false);
 
     /// <summary>
     /// Rolls back the current transaction.
@@ -315,7 +318,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     {
         try
         {
-            await base.SaveChangesAsync(stoppingToken);
+            await base.SaveChangesAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (IsContentRefusal(ex))
         {
@@ -442,13 +445,20 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         CancellationToken cancellationToken
     )
     {
-        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+        if (
+            string.Equals(
+                Database.ProviderName,
+                "Microsoft.EntityFrameworkCore.InMemory",
+                StringComparison.Ordinal
+            )
+        )
             return !await Metadatas
                 .AsNoTracking()
                 .AnyAsync(
                     m => m.Id == metadata.Id && m.TrainState != TrainState.Pending,
                     cancellationToken
-                );
+                )
+                .ConfigureAwait(false);
 
         // A row that was never saved has no id yet, and nothing to claim.
         if (metadata.Id <= 0)
@@ -459,14 +469,16 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(m => m.TrainState, TrainState.InProgress),
                 cancellationToken
-            );
+            )
+            .ConfigureAwait(false);
 
         if (claimed == 1)
             return true;
 
         return !await Metadatas
             .AsNoTracking()
-            .AnyAsync(m => m.Id == metadata.Id, cancellationToken);
+            .AnyAsync(m => m.Id == metadata.Id, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>

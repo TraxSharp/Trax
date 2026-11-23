@@ -1,43 +1,7 @@
+using System.Globalization;
+using Trax.Core.Extensions;
+
 namespace Trax.Cli.Machines;
-
-/// <summary>What to generate, and where. Each artifact has its own output root because a real consumer splits
-/// them across trees (the IR and corpus in a shared machines dir, the twin next to the frontend).
-/// <see cref="ImportStyle"/> left null is <c>relative</c> with <see cref="EngineSrc"/> and <c>specifier</c>
-/// without it.</summary>
-internal sealed record MachineGenerateOptions(
-    MachineIr Machine,
-    string? IrOut = null,
-    string? TwinOut = null,
-    string? CorpusOut = null,
-    string? EngineSrc = null,
-    string? ImportStyle = null,
-    string? Specifier = null,
-    string? ToolsDir = null,
-    string? Lang = null,
-    string? Namespace = null
-);
-
-/// <summary>An artifact written by <c>generate</c>: its kind and final path.</summary>
-internal sealed record GeneratedArtifact(string Kind, string Path);
-
-/// <summary>The outcome of <c>generate</c>: every file placed on disk.</summary>
-internal sealed record GenerateResult(IReadOnlyList<GeneratedArtifact> Written);
-
-internal enum DriftStatus
-{
-    UpToDate,
-    Drifted,
-    Missing,
-}
-
-/// <summary>The drift verdict for one artifact under <c>check</c>.</summary>
-internal sealed record ArtifactCheck(string Kind, string Path, DriftStatus Status);
-
-/// <summary>The outcome of <c>check</c>: per-artifact drift; clean iff every artifact is up to date.</summary>
-internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
-{
-    public bool IsClean => Checks.All(c => c.Status == DriftStatus.UpToDate);
-}
 
 /// <summary>
 /// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#), or read from a
@@ -75,12 +39,12 @@ internal sealed partial class MachineGenerator
     }
 
     /// <summary>Produce every requested artifact and place it at its output root. Every artifact is replaced or none is.</summary>
-    public GenerateResult Generate(MachineGenerateOptions options)
+    public async Task<GenerateResult> GenerateAsync(MachineGenerateOptions options)
     {
         var staging = CreateStagingDir();
         try
         {
-            var planned = Produce(options, staging);
+            var planned = await ProduceAsync(options, staging).ConfigureAwait(false);
             Place(planned);
             return new GenerateResult(
                 planned.Select(a => new GeneratedArtifact(a.Kind, a.FinalPath)).ToList()
@@ -112,7 +76,7 @@ internal sealed partial class MachineGenerator
             foreach (var artifact in planned)
             {
                 current = artifact.FinalPath;
-                CreateDirectory(Path.GetDirectoryName(artifact.FinalPath)!, createdDirs);
+                CreateDirectory(Path.GetDirectoryName(artifact.FinalPath).NotNull(), createdDirs);
                 var temp = $"{artifact.FinalPath}.{token}.tmp";
                 copies.Add((artifact, temp));
                 _files.Copy(artifact.StagedPath, temp);
@@ -133,22 +97,7 @@ internal sealed partial class MachineGenerator
         }
         catch (Exception ex)
         {
-            var leftBehind = new List<string>();
-            for (var i = swapped.Count - 1; i >= 0; i--)
-            {
-                var (final, backup) = swapped[i];
-                // The new file, if it got there; the original is still at its backup path.
-                var cleared = TryRun(() => _files.Delete(final));
-                if (backup is null)
-                    continue;
-                if (!cleared || !TryRun(() => _files.Move(backup, final)))
-                    leftBehind.Add($"{final} is at {backup}");
-            }
-            foreach (var (_, temp) in copies)
-                if (!TryRun(() => _files.Delete(temp)))
-                    leftBehind.Add($"{temp} could not be removed");
-            for (var i = createdDirs.Count - 1; i >= 0; i--)
-                TryRun(() => _files.DeleteEmptyDirectory(createdDirs[i]));
+            var leftBehind = Rollback(swapped, copies, createdDirs);
 
             throw new InvalidOperationException(
                 $"Could not write {current}: {ex.Message} "
@@ -166,6 +115,33 @@ internal sealed partial class MachineGenerator
         foreach (var (_, backup) in swapped)
             if (backup is not null)
                 TryRun(() => _files.Delete(backup));
+    }
+
+    // Puts back what was swapped, removes the temporary copies and the directories created, and
+    // returns what could not be put back.
+    private List<string> Rollback(
+        List<(string Final, string? Backup)> swapped,
+        List<(PlannedArtifact Artifact, string Temp)> copies,
+        List<string> createdDirs
+    )
+    {
+        var leftBehind = new List<string>();
+        for (var i = swapped.Count - 1; i >= 0; i--)
+        {
+            var (final, backup) = swapped[i];
+            // The new file, if it got there; the original is still at its backup path.
+            var cleared = TryRun(() => _files.Delete(final));
+            if (backup is null)
+                continue;
+            if (!cleared || !TryRun(() => _files.Move(backup, final)))
+                leftBehind.Add($"{final} is at {backup}");
+        }
+        foreach (var (_, temp) in copies)
+            if (!TryRun(() => _files.Delete(temp)))
+                leftBehind.Add($"{temp} could not be removed");
+        for (var i = createdDirs.Count - 1; i >= 0; i--)
+            TryRun(() => _files.DeleteEmptyDirectory(createdDirs[i]));
+        return leftBehind;
     }
 
     /// <summary>Creates <paramref name="dir"/> and records, outermost first, each directory that did not exist.</summary>
@@ -200,22 +176,24 @@ internal sealed partial class MachineGenerator
     }
 
     /// <summary>Regenerate to staging and diff against what is committed; never writes to the output roots.</summary>
-    public CheckResult Check(MachineGenerateOptions options)
+    public async Task<CheckResult> CheckAsync(MachineGenerateOptions options)
     {
         var staging = CreateStagingDir();
         try
         {
-            var checks = Produce(options, staging)
-                .Select(a =>
+            var checks = new List<ArtifactCheck>();
+            foreach (var a in await ProduceAsync(options, staging).ConfigureAwait(false))
+            {
+                if (!File.Exists(a.FinalPath))
                 {
-                    if (!File.Exists(a.FinalPath))
-                        return new ArtifactCheck(a.Kind, a.FinalPath, DriftStatus.Missing);
-                    var status = FilesEqual(a.StagedPath, a.FinalPath)
-                        ? DriftStatus.UpToDate
-                        : DriftStatus.Drifted;
-                    return new ArtifactCheck(a.Kind, a.FinalPath, status);
-                })
-                .ToList();
+                    checks.Add(new ArtifactCheck(a.Kind, a.FinalPath, DriftStatus.Missing));
+                    continue;
+                }
+                var status = await FilesEqualAsync(a.StagedPath, a.FinalPath).ConfigureAwait(false)
+                    ? DriftStatus.UpToDate
+                    : DriftStatus.Drifted;
+                checks.Add(new ArtifactCheck(a.Kind, a.FinalPath, status));
+            }
             return new CheckResult(checks);
         }
         finally
@@ -226,14 +204,53 @@ internal sealed partial class MachineGenerator
 
     // Generate every requested artifact into the staging directory and return each one's staged + final path.
     // The IR is always produced (it feeds the node steps) but only planned for placement when --ir-out is set.
-    private IReadOnlyList<PlannedArtifact> Produce(MachineGenerateOptions o, string staging)
+    private async Task<IReadOnlyList<PlannedArtifact>> ProduceAsync(
+        MachineGenerateOptions o,
+        string staging
+    )
     {
         if (o.IrOut is null && o.TwinOut is null && o.CorpusOut is null)
             throw new InvalidOperationException(
                 "Nothing to generate: pass at least one of --ir-out, --twin-out, --corpus-out."
             );
-        var importStyle = RefuseConflictingOptions(o);
+        var importStyle = await RefuseConflictingOptionsAsync(o).ConfigureAwait(false);
+        var id = MachineIdOf(o);
+        var planned = new List<PlannedArtifact>();
 
+        var stagedIr = Path.Combine(staging, $"{id}.ir.json");
+        await File.WriteAllTextAsync(stagedIr, o.Machine.ExportIr() + "\n").ConfigureAwait(false);
+        if (o.IrOut is not null)
+            planned.Add(new("ir", stagedIr, Path.Combine(o.IrOut, $"{id}.ir.json")));
+
+        if (o.TwinOut is not null)
+            await ProduceTwinAsync(o, o.TwinOut, staging, stagedIr, id, importStyle, planned)
+                .ConfigureAwait(false);
+
+        if (o.CorpusOut is not null)
+        {
+            var corpusStage = Path.Combine(staging, "differential.json");
+            var corpusScript = ToolScript(o, "generate-corpus.mjs", "the corpus");
+            await RunNodeAsync(
+                    corpusScript,
+                    ["--ir", stagedIr, .. EngineSrcArgs(o), "--out", corpusStage],
+                    "the corpus"
+                )
+                .ConfigureAwait(false);
+            PlannedArtifact corpus = new(
+                "corpus",
+                corpusStage,
+                Path.Combine(o.CorpusOut, "differential.json")
+            );
+            RequireProduced([corpus], corpusScript, o);
+            planned.Add(corpus);
+        }
+
+        return planned;
+    }
+
+    // The machine's id, refused before anything is written when it cannot name the generated files.
+    private static string MachineIdOf(MachineGenerateOptions o)
+    {
         string id;
         try
         {
@@ -252,90 +269,74 @@ internal sealed partial class MachineGenerator
                     + "'-', starting with a letter, e.g. 'ship-to-store'). It names the generated files, "
                     + "so change the machine's Id(...)."
             );
-        var planned = new List<PlannedArtifact>();
-
-        var stagedIr = Path.Combine(staging, $"{id}.ir.json");
-        File.WriteAllText(stagedIr, o.Machine.ExportIr() + "\n");
-        if (o.IrOut is not null)
-            planned.Add(new("ir", stagedIr, Path.Combine(o.IrOut, $"{id}.ir.json")));
-
-        if (o.TwinOut is not null)
-        {
-            var twinStage = Path.Combine(staging, "twin");
-            Directory.CreateDirectory(twinStage);
-            var args = new List<string> { "--ir", stagedIr };
-            args.AddRange(EngineSrcArgs(o));
-            args.AddRange(["--out-dir", twinStage]);
-            var twinScript = ToolScript(o, "generate-twin.mjs", "the twin");
-            PlannedArtifact[] twin;
-            if (o.Lang == "csharp")
-            {
-                // The C# view is one file named after the machine's types, and imports no engine module.
-                args.AddRange(["--lang", "csharp"]);
-                if (o.Namespace is not null)
-                    args.AddRange(["--namespace", o.Namespace]);
-                var file = $"{MachineScaffolder.Pascal(id)}.g.cs";
-                RefuseAnotherMachinesView(o.TwinOut, file, id);
-                RunNode(twinScript, args, "the C# view");
-                twin = [new("view", Path.Combine(twinStage, file), Path.Combine(o.TwinOut, file))];
-            }
-            else if (o.Lang is not null and not "typescript")
-            {
-                throw new InvalidOperationException(
-                    $"--lang '{o.Lang}' is listed in twin-languages.json and this trax does not place it yet."
-                );
-            }
-            else
-            {
-                args.AddRange(["--import-style", importStyle]);
-                if (o.Specifier is not null)
-                {
-                    args.Add("--specifier");
-                    args.Add(o.Specifier);
-                }
-                RunNode(twinScript, args, "the twin");
-                twin =
-                [
-                    new(
-                        "contexts",
-                        Path.Combine(twinStage, $"{id}.contexts.g.ts"),
-                        Path.Combine(o.TwinOut, $"{id}.contexts.g.ts")
-                    ),
-                    new(
-                        "machine",
-                        Path.Combine(twinStage, $"{id}.machine.g.ts"),
-                        Path.Combine(o.TwinOut, $"{id}.machine.g.ts")
-                    ),
-                ];
-            }
-            RequireProduced(twin, twinScript, o);
-            planned.AddRange(twin);
-        }
-
-        if (o.CorpusOut is not null)
-        {
-            var corpusStage = Path.Combine(staging, "differential.json");
-            var corpusScript = ToolScript(o, "generate-corpus.mjs", "the corpus");
-            RunNode(
-                corpusScript,
-                ["--ir", stagedIr, .. EngineSrcArgs(o), "--out", corpusStage],
-                "the corpus"
-            );
-            PlannedArtifact corpus = new(
-                "corpus",
-                corpusStage,
-                Path.Combine(o.CorpusOut, "differential.json")
-            );
-            RequireProduced([corpus], corpusScript, o);
-            planned.Add(corpus);
-        }
-
-        return planned;
+        return id;
     }
 
-    private void RunNode(string script, IReadOnlyList<string> args, string what)
+    // Runs the twin generator for the requested language and plans each file it wrote.
+    private async Task ProduceTwinAsync(
+        MachineGenerateOptions o,
+        string twinOut,
+        string staging,
+        string stagedIr,
+        string id,
+        string importStyle,
+        List<PlannedArtifact> planned
+    )
     {
-        if (!_node.IsAvailable())
+        var twinStage = Path.Combine(staging, "twin");
+        Directory.CreateDirectory(twinStage);
+        var args = new List<string> { "--ir", stagedIr };
+        args.AddRange(EngineSrcArgs(o));
+        args.AddRange(["--out-dir", twinStage]);
+        var twinScript = ToolScript(o, "generate-twin.mjs", "the twin");
+        PlannedArtifact[] twin;
+        if (string.Equals(o.Lang, "csharp", StringComparison.Ordinal))
+        {
+            // The C# view is one file named after the machine's types, and imports no engine module.
+            args.AddRange(["--lang", "csharp"]);
+            if (o.Namespace is not null)
+                args.AddRange(["--namespace", o.Namespace]);
+            var file = $"{MachineScaffolder.Pascal(id)}.g.cs";
+            await RefuseAnotherMachinesViewAsync(twinOut, file, id).ConfigureAwait(false);
+            await RunNodeAsync(twinScript, args, "the C# view").ConfigureAwait(false);
+            twin = [new("view", Path.Combine(twinStage, file), Path.Combine(twinOut, file))];
+        }
+        else if (o.Lang is not null and not "typescript")
+        {
+            throw new InvalidOperationException(
+                $"--lang '{o.Lang}' is listed in twin-languages.json and this trax does not place it yet."
+            );
+        }
+        else
+        {
+            args.AddRange(["--import-style", importStyle]);
+            if (o.Specifier is not null)
+            {
+                args.Add("--specifier");
+                args.Add(o.Specifier);
+            }
+            await RunNodeAsync(twinScript, args, "the twin").ConfigureAwait(false);
+            twin =
+            [
+                new(
+                    "contexts",
+                    Path.Combine(twinStage, $"{id}.contexts.g.ts"),
+                    Path.Combine(twinOut, $"{id}.contexts.g.ts")
+                ),
+                new(
+                    "machine",
+                    Path.Combine(twinStage, $"{id}.machine.g.ts"),
+                    Path.Combine(twinOut, $"{id}.machine.g.ts")
+                ),
+            ];
+        }
+        RequireProduced(twin, twinScript, o);
+        planned.AddRange(twin);
+    }
+
+    private async Task RunNodeAsync(string script, IReadOnlyList<string> args, string what)
+    {
+        if (!await _node.IsAvailableAsync().ConfigureAwait(false))
             throw new InvalidOperationException(
                 $"Generating {what} needs Node.js 22 or later, and node was not found on PATH (or --node is not "
                     + "an executable). Install it, pass --node with the absolute path of node, or generate "
@@ -347,10 +348,13 @@ internal sealed partial class MachineGenerator
                     + "is not a sibling of --engine-src."
             );
 
-        var result = _node.Run(script, args);
+        var result = await _node.RunAsync(script, args).ConfigureAwait(false);
         if (result.ExitCode != 0)
             throw new InvalidOperationException(
-                $"node {Path.GetFileName(script)} failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"node {Path.GetFileName(script)} failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+                )
             );
     }
 
@@ -384,18 +388,21 @@ internal sealed partial class MachineGenerator
     /// Refuses a combination of options that would fail inside node, or be silently ignored, and returns the
     /// import style the twin is generated with.
     /// </summary>
-    internal static string RefuseConflictingOptions(MachineGenerateOptions o)
+    internal static async Task<string> RefuseConflictingOptionsAsync(MachineGenerateOptions o)
     {
-        if (o.Lang is not null && !TwinLanguages.Contains(o.Lang))
+        if (o.Lang is not null && !await TwinLanguages.ContainsAsync(o.Lang).ConfigureAwait(false))
             throw new InvalidOperationException(
-                $"--lang must be {TwinLanguages.OneOf([.. TwinLanguages.All.Select(l => l.Lang)])}, got '{o.Lang}'."
+                $"--lang must be {TwinLanguages.OneOf([.. (await TwinLanguages.AllAsync().ConfigureAwait(false)).Select(l => l.Lang)])}, got '{o.Lang}'."
             );
-        if (o.Lang == "csharp" && (o.ImportStyle is not null || o.Specifier is not null))
+        if (
+            string.Equals(o.Lang, "csharp", StringComparison.Ordinal)
+            && (o.ImportStyle is not null || o.Specifier is not null)
+        )
             throw new InvalidOperationException(
                 "--import-style and --specifier are how a TypeScript twin imports its engine; a C# view imports "
                     + "Trax.StateMachine.Client. Drop them, or pass --lang typescript."
             );
-        if (o.Namespace is not null && o.Lang != "csharp")
+        if (o.Namespace is not null && !string.Equals(o.Lang, "csharp", StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "--namespace names the C# view's namespace and needs --lang csharp."
             );
@@ -416,7 +423,7 @@ internal sealed partial class MachineGenerator
             );
 
         var importStyle = o.ImportStyle ?? (o.EngineSrc is null ? "specifier" : "relative");
-        if (importStyle == "relative" && o.EngineSrc is null)
+        if (string.Equals(importStyle, "relative", StringComparison.Ordinal) && o.EngineSrc is null)
             throw new InvalidOperationException(
                 "--import-style relative imports the engine by paths into its own src/ (../../typed), which "
                     + "resolve only for a machine inside an engine checkout, so it needs --engine-src. Leave "
@@ -424,7 +431,7 @@ internal sealed partial class MachineGenerator
             );
         if (o.Specifier is not null)
         {
-            if (importStyle == "relative")
+            if (string.Equals(importStyle, "relative", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     "--specifier applies only to --import-style specifier; with relative imports it would be "
                         + "ignored. Pass --import-style specifier, or drop --specifier."
@@ -446,14 +453,16 @@ internal sealed partial class MachineGenerator
     /// </summary>
     internal static bool IsModuleSpecifier(string specifier)
     {
-        var match = ModuleSpecifier().Match(specifier);
+        var match = ModuleSpecifier.Match(specifier);
         return match.Success && match.Groups["name"].Length <= 214;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"^(?<name>(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*)(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*\z"
+        @"^(?<name>(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*)(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*\z",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex ModuleSpecifier();
+    private static partial System.Text.RegularExpressions.Regex ModuleSpecifier { get; }
 
     // The bundled generators carry their engine and take no --engine-src; an engine checkout's own tools need it.
     private static IEnumerable<string> EngineSrcArgs(MachineGenerateOptions o) =>
@@ -498,16 +507,31 @@ internal sealed partial class MachineGenerator
     /// hyphens, starting with a letter (<c>checkout</c>, <c>ship-to-store</c>). It names every
     /// artifact file, so nothing else may reach a path.
     /// </summary>
-    internal static bool IsMachineId(string id) => MachineId().IsMatch(id);
+    internal static bool IsMachineId(string id) => MachineId.IsMatch(id);
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z")]
-    private static partial System.Text.RegularExpressions.Regex MachineId();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z",
+        System.Text.RegularExpressions.RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex MachineId { get; }
 
     // Line endings aside: a checkout with core.autocrlf holds the committed artifacts with CRLF, and the generators
     // write LF. The client check compares the same way.
-    private static bool FilesEqual(string a, string b) =>
-        File.ReadAllText(a).Replace("\r\n", "\n", StringComparison.Ordinal)
-        == File.ReadAllText(b).Replace("\r\n", "\n", StringComparison.Ordinal);
+    private static async Task<bool> FilesEqualAsync(string a, string b) =>
+        string.Equals(
+            (await File.ReadAllTextAsync(a).ConfigureAwait(false)).Replace(
+                "\r\n",
+                "\n",
+                StringComparison.Ordinal
+            ),
+            (await File.ReadAllTextAsync(b).ConfigureAwait(false)).Replace(
+                "\r\n",
+                "\n",
+                StringComparison.Ordinal
+            ),
+            StringComparison.Ordinal
+        );
 
     /// <summary>
     /// Refuses to write <paramref name="file"/> into <paramref name="twinOut"/> when a file there has the same name
@@ -515,7 +539,7 @@ internal sealed partial class MachineGenerator
     /// <c>topicmap</c> <c>Topicmap.g.cs</c>, which a disk that ignores case holds as one file), or is a file the
     /// generator did not write under a name that differs only in case.
     /// </summary>
-    private static void RefuseAnotherMachinesView(string twinOut, string file, string id)
+    private static async Task RefuseAnotherMachinesViewAsync(string twinOut, string file, string id)
     {
         if (!Directory.Exists(twinOut))
             return;
@@ -524,9 +548,16 @@ internal sealed partial class MachineGenerator
             var name = Path.GetFileName(path);
             if (!name.Equals(file, StringComparison.OrdinalIgnoreCase))
                 continue;
-            var head = string.Join('\n', File.ReadLines(path).Take(3));
-            var other = ViewHeader().Match(head).Groups[1];
-            if (other.Success ? other.Value == id : name == file)
+            var head = string.Join(
+                '\n',
+                await File.ReadLinesAsync(path).Take(3).ToListAsync().ConfigureAwait(false)
+            );
+            var other = ViewHeader.Match(head).Groups["id"];
+            if (
+                other.Success
+                    ? string.Equals(other.Value, id, StringComparison.Ordinal)
+                    : string.Equals(name, file, StringComparison.Ordinal)
+            )
                 continue;
             throw new InvalidOperationException(
                 $"{name} in {twinOut} is "
@@ -542,10 +573,12 @@ internal sealed partial class MachineGenerator
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"^// AUTO-GENERATED from (.+)\.ir\.json by generateCSharpView\.",
+        @"^// AUTO-GENERATED from (?<id>.+)\.ir\.json by generateCSharpView\.",
         System.Text.RegularExpressions.RegexOptions.Multiline
+            | System.Text.RegularExpressions.RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex ViewHeader();
+    private static partial System.Text.RegularExpressions.Regex ViewHeader { get; }
 
     private static string CreateStagingDir()
     {
@@ -568,24 +601,4 @@ internal sealed partial class MachineGenerator
     }
 
     private sealed record PlannedArtifact(string Kind, string StagedPath, string FinalPath);
-}
-
-/// <summary>The file operations <c>generate</c> places artifacts with; a seam so a failure part-way can be tested.</summary>
-internal class PlacementFiles
-{
-    public virtual void Copy(string source, string destination) =>
-        File.Copy(source, destination, overwrite: true);
-
-    public virtual void Move(string source, string destination) => File.Move(source, destination);
-
-    public virtual void Delete(string path) => File.Delete(path);
-
-    public virtual void CreateDirectory(string path) => Directory.CreateDirectory(path);
-
-    /// <summary>Removes <paramref name="path"/> only when it is empty.</summary>
-    public virtual void DeleteEmptyDirectory(string path)
-    {
-        if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
-            Directory.Delete(path);
-    }
 }

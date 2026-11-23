@@ -30,7 +30,8 @@ public class RunnerNonceStorageTests : TestSetup
     [TearDown]
     public async Task DeleteNonces()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.RunnerNonces.Where(n => _nonces.Contains(n.Nonce)).ExecuteDeleteAsync();
         _nonces.Clear();
     }
@@ -44,9 +45,10 @@ public class RunnerNonceStorageTests : TestSetup
 
     private async Task Insert(string nonce, DateTimeOffset expiresAt)
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         context.RunnerNonces.Add(new RunnerNonce { Nonce = nonce, ExpiresAt = expiresAt });
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     [Test]
@@ -57,7 +59,8 @@ public class RunnerNonceStorageTests : TestSetup
 
         await Insert(nonce, expiresAt);
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context.RunnerNonces.AsNoTracking().SingleAsync(n => n.Nonce == nonce);
         stored
             .ExpiresAt.Should()
@@ -70,13 +73,14 @@ public class RunnerNonceStorageTests : TestSetup
     [Test]
     public async Task Expiry_compares_updates_and_deletes_as_seconds()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = TestTime.Instant;
         var expired = NewNonce();
         var live = NewNonce();
         await Insert(expired, now.AddMinutes(-1));
         await Insert(live, now.AddMinutes(5));
 
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var mine = context.RunnerNonces.Where(n => _nonces.Contains(n.Nonce));
 
         (await mine.Where(n => n.ExpiresAt < now).Select(n => n.Nonce).ToListAsync())
@@ -105,9 +109,9 @@ public class RunnerNonceStorageTests : TestSetup
     public async Task A_second_insert_of_one_nonce_is_a_unique_violation()
     {
         var nonce = NewNonce();
-        await Insert(nonce, DateTimeOffset.UtcNow.AddMinutes(5));
+        await Insert(nonce, TestTime.Instant.AddMinutes(5));
 
-        var act = () => Insert(nonce, DateTimeOffset.UtcNow.AddMinutes(5));
+        var act = () => Insert(nonce, TestTime.Instant.AddMinutes(5));
 
         (await act.Should().ThrowAsync<DbUpdateException>())
             .Which.Should()
@@ -121,7 +125,7 @@ public class RunnerNonceStorageTests : TestSetup
     public async Task Two_concurrent_inserts_of_one_nonce_are_one_row_and_one_unique_violation()
     {
         var nonce = NewNonce();
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var expiresAt = TestTime.Instant.AddMinutes(5);
 
         var outcomes = await Task.WhenAll(
             Enumerable
@@ -131,7 +135,7 @@ public class RunnerNonceStorageTests : TestSetup
                     {
                         try
                         {
-                            await Insert(nonce, expiresAt);
+                            await Insert(nonce, expiresAt).ConfigureAwait(false);
                             return "inserted";
                         }
                         catch (DbUpdateException e) when (Dialect.IsUniqueViolation(e))
@@ -142,14 +146,15 @@ public class RunnerNonceStorageTests : TestSetup
                 )
         );
 
-        outcomes.Count(o => o == "inserted").Should().Be(1);
-        outcomes.Count(o => o == "conflict").Should().Be(7);
+        outcomes.Count(o => string.Equals(o, "inserted", StringComparison.Ordinal)).Should().Be(1);
+        outcomes.Count(o => string.Equals(o, "conflict", StringComparison.Ordinal)).Should().Be(7);
     }
 
     [Test]
     public async Task Another_constraint_failure_is_not_a_unique_violation()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         // scheduler_config is a singleton: CHECK (id = 1). Id 2 fails that check, not a key.
         context.SchedulerConfigs.Add(new SchedulerConfig { Id = 2 });
 

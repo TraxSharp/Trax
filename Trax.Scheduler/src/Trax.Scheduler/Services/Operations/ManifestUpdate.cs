@@ -4,8 +4,8 @@ namespace Trax.Scheduler.Services.Operations;
 
 /// <summary>
 /// Patch input for <see cref="IOperationsService.UpdateManifestAsync"/>. Every field is
-/// independent: a <c>null</c> value leaves that field unchanged. Set <see cref="ClearTimeout"/>
-/// to remove the per-execution timeout, since a <c>null</c> <see cref="TimeoutSeconds"/> means
+/// independent: a <see langword="null"/> value leaves that field unchanged. Set <see cref="ClearTimeout"/>
+/// to remove the per-execution timeout, since a <see langword="null"/> <see cref="TimeoutSeconds"/> means
 /// "no change", not "clear".
 /// </summary>
 /// <param name="IsEnabled">Whether the scheduler runs the manifest.</param>

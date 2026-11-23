@@ -6,6 +6,12 @@ area: trains
 nav_order: 5
 source:
   - Trax.Core/src/Trax.Core/Decisions/IDecisionObserver.cs
+  - Trax.Core/src/Trax.Core/Decisions/DecisionMade.cs
+  - Trax.Core/src/Trax.Core/Decisions/DecisionRefused.cs
+  - Trax.Core/src/Trax.Core/Decisions/IDecisionReplay.cs
+  - Trax.Core/src/Trax.Core/Decisions/RecordedAnswer.cs
+  - Trax.Core/src/Trax.Core/Decisions/ShadowAnswer.cs
+  - Trax.Core/src/Trax.Core/Decisions/TrackRouted.cs
   - Trax.Core/src/Trax.Core/Decisions/QuestionFingerprint.cs
   - Trax.Core/src/Trax.Core/Decisions/StateDigest.cs
   - Trax.Core/src/Trax.Core/Decisions/StateHashKey.cs

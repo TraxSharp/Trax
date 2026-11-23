@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -27,7 +29,7 @@ namespace Trax.Docs.Tests.Tests;
     "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md"
 )]
 [TestFixture]
-public class SdkReferenceFrontMatterTests
+public partial class SdkReferenceFrontMatterTests
 {
     private const string Adr =
         "Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md";
@@ -38,52 +40,70 @@ public class SdkReferenceFrontMatterTests
 
     private static readonly string[] Surfaces = ["graphql", "typescript"];
 
-    private static readonly Regex Namespace = new(
+    [GeneratedRegex(
         @"^namespace (?<name>[A-Za-z_][\w.]*)\s*$",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Namespace { get; }
 
-    private static readonly Regex Word = new(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+    [GeneratedRegex(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Word { get; }
 
-    private static readonly Regex FenceOpen = new(
+    [GeneratedRegex(
         @"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})(?<info>.*)$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex FenceOpen { get; }
 
-    private static readonly Regex Heading = new(
+    [GeneratedRegex(
         @"^ {0,3}#{1,2}[ \t]+(?<text>.*?)(?:[ \t]+#+)?[ \t]*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Heading { get; }
 
-    private static readonly Regex TypeDeclaration = new(
+    [GeneratedRegex(
         @"\b(?:class|interface|record(?:[ \t]+(?:struct|class))?|struct|enum)[ \t]+(?<name>[A-Za-z_]\w*)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TypeDeclaration { get; }
 
-    private static readonly Regex DelegateDeclaration = new(
+    [GeneratedRegex(
         @"\bdelegate[ \t]+[^;(]*?(?<name>[A-Za-z_]\w*)[ \t]*(?:<[^()<>]*(?:<[^()<>]*>[^()<>]*)*>)?[ \t]*\(",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DelegateDeclaration { get; }
 
     // A name, its type parameters (one level of nesting), then its parameter list:
     // `Schedule<TTrain>(`. The type parameters hold no `<` or `>` of their own, or
     // `Task<Manifest> ScheduleAsync<T>(` would read as one name, `Task`.
-    private static readonly Regex BeforeParameters = new(
+    [GeneratedRegex(
         @"\b(?<name>[A-Za-z_]\w*)[ \t]*(?:<[^()<>]*(?:<[^()<>]*>[^()<>]*)*>)?[ \t]*\(",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex BeforeParameters { get; }
 
-    private static readonly Regex BeforeAccessors = new(
+    [GeneratedRegex(
         @"(?<name>[A-Za-z_]\w*)[ \t]*\{[ \t]*(?:get|set|init)\b",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex BeforeAccessors { get; }
 
-    private static readonly Regex LastWord = new(@"(?<word>[A-Za-z_]\w*)$", RegexOptions.Compiled);
+    [GeneratedRegex(@"(?<word>[A-Za-z_]\w*)$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex LastWord { get; }
 
-    private static readonly Regex Literal = new(
+    [GeneratedRegex(
         @"""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)'",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Literal { get; }
 
     /// <summary>
     /// Words that are never a declared name, and the words after which a name followed by
@@ -228,16 +248,20 @@ public class SdkReferenceFrontMatterTests
     };
 
     [Test]
-    public void Every_SdkReferencePage_NamesItsPackageNamespaceAndSource()
+    public async Task Every_SdkReferencePage_NamesItsPackageNamespaceAndSource()
     {
-        var npm = Projects.NpmPackages();
+        var npm = await Projects.NpmPackagesAsync().ConfigureAwait(false);
         var errors = new List<string>();
         var incomplete = new HashSet<string>(StringComparer.Ordinal);
         var missingFields = new List<string>();
 
         foreach (var page in LeafPages())
         {
-            var (missing, wrong) = Check(FrontMatter.OfPage(page), npm);
+            var (missing, wrong) = await CheckAsync(
+                    await FrontMatter.OfPageAsync(page).ConfigureAwait(false),
+                    npm
+                )
+                .ConfigureAwait(false);
             errors.AddRange(wrong.Select(w => $"{page}  -> {w}"));
             if (missing.Count > 0)
             {
@@ -246,7 +270,7 @@ public class SdkReferenceFrontMatterTests
             }
         }
 
-        var known = Ratchet.Entries(KnownIncompleteFile);
+        var known = await Ratchet.EntriesAsync(KnownIncompleteFile).ConfigureAwait(false);
         var offenders = missingFields.Where(m => !known.Contains(m.Split("  ")[0])).ToList();
         var stale = Ratchet.Stale(known, incomplete);
 
@@ -281,37 +305,32 @@ public class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Every_SignatureName_IsInThePackagesBaseline()
+    public async Task Every_SignatureName_IsInThePackagesBaseline()
     {
+        var packable = await Projects.PackableAsync().ConfigureAwait(false);
         var mismatched = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var checkedPages = 0;
 
         foreach (var page in LeafPages())
         {
-            var package = FrontMatter.OfPage(page).Scalar("package");
+            var package = (await FrontMatter.OfPageAsync(page).ConfigureAwait(false)).Scalar(
+                "package"
+            );
             if (
                 package is null
-                || !Projects.Packable.TryGetValue(package, out var project)
+                || !packable.TryGetValue(package, out var project)
                 || project.Baseline is null
             )
                 continue;
 
             checkedPages++;
-            var words = Word.Matches(File.ReadAllText(project.Baseline))
-                .Select(m => m.Value)
-                .ToHashSet(StringComparer.Ordinal);
-
-            var missing = SignatureFences(File.ReadAllText(RepoRoot.Combine(page.Split('/'))))
-                .SelectMany(f => DeclaredNames(f.Code).Select(n => (f.Line, Name: n)))
-                .Where(x => !words.Contains(x.Name))
-                .Select(x => $"{x.Name} (line {x.Line})")
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            var missing = await MissingFromBaselineAsync(page, project.Baseline)
+                .ConfigureAwait(false);
             if (missing.Count > 0)
                 mismatched[page] = missing;
         }
 
-        var known = Ratchet.Entries(KnownMismatchFile);
+        var known = await Ratchet.EntriesAsync(KnownMismatchFile).ConfigureAwait(false);
         var offenders = mismatched
             .Where(m => !known.Contains(m.Key))
             .OrderBy(m => m.Key, StringComparer.Ordinal)
@@ -327,7 +346,10 @@ public class SdkReferenceFrontMatterTests
                     + "record, struct, enum, delegate) and every member (the name before its "
                     + "parameter list or its `{ get`) is a name in that package's public API "
                     + "baseline. Fix the signature to match the code, or the `package:` to the one "
-                    + $"that ships it. Checked {checkedPages} pages. See {Adr}. Do not add the page "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"that ships it. Checked {checkedPages} pages. See {Adr}. Do not add the page "
+                    )
                     + $"to {KnownMismatchFile}. Not in the baseline:\n  "
                     + string.Join("\n  ", offenders)
             );
@@ -344,9 +366,9 @@ public class SdkReferenceFrontMatterTests
 
     [TestCase(KnownIncompleteFile)]
     [TestCase(KnownMismatchFile)]
-    public void KnownPages_AreSortedAndUnique(string file) =>
+    public async Task KnownPages_AreSortedAndUnique(string file) =>
         Ratchet
-            .IsSortedAndUnique(Ratchet.Entries(file))
+            .IsSortedAndUnique(await Ratchet.EntriesAsync(file).ConfigureAwait(false))
             .Should()
             .BeTrue($"{file} lists each page once, in ordinal order. See {Adr}.");
 
@@ -434,38 +456,41 @@ public class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Check_ReportsMissingFieldsApart_FromWrongOnes()
+    public async Task Check_ReportsMissingFieldsApart_FromWrongOnes()
     {
         var npm = new HashSet<string>(StringComparer.Ordinal) { "@traxsharp/state-machine" };
 
-        Check(FrontMatter.Of("---\ntitle: X\n---\n"), npm)
+        (await CheckAsync(FrontMatter.Of("---\ntitle: X\n---\n"), npm).ConfigureAwait(false))
             .Missing.Should()
             .Equal("package", "namespace", "source");
 
-        var graphql = Check(
-            FrontMatter.Of(
-                "---\npackage: Trax.Api.GraphQL\nsurface: graphql\nsource: [Trax.Api]\n---\n"
-            ),
-            npm
-        );
+        var graphql = await CheckAsync(
+                FrontMatter.Of(
+                    "---\npackage: Trax.Api.GraphQL\nsurface: graphql\nsource: [Trax.Api]\n---\n"
+                ),
+                npm
+            )
+            .ConfigureAwait(false);
         graphql.Missing.Should().BeEmpty();
         graphql.Wrong.Should().BeEmpty();
 
-        var typescript = Check(
-            FrontMatter.Of(
-                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.StateMachine/ts\n---\n"
-            ),
-            npm
-        );
+        var typescript = await CheckAsync(
+                FrontMatter.Of(
+                    "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.StateMachine/ts\n---\n"
+                ),
+                npm
+            )
+            .ConfigureAwait(false);
         typescript.Missing.Should().BeEmpty();
         typescript.Wrong.Should().BeEmpty();
 
-        var wrong = Check(
-            FrontMatter.Of(
-                "---\npackage: Trax.Nope\nnamespace: Trax.Nope\nsurface: rest\nsource:\n  - Trax.Nope/x.cs\n  - ../etc\n---\n"
-            ),
-            npm
-        );
+        var wrong = await CheckAsync(
+                FrontMatter.Of(
+                    "---\npackage: Trax.Nope\nnamespace: Trax.Nope\nsurface: rest\nsource:\n  - Trax.Nope/x.cs\n  - ../etc\n---\n"
+                ),
+                npm
+            )
+            .ConfigureAwait(false);
         wrong.Missing.Should().BeEmpty();
         wrong
             .Wrong.Should()
@@ -477,24 +502,30 @@ public class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Check_ReadsTheNamespaceFromTheBaseline()
+    public async Task Check_ReadsTheNamespaceFromTheBaseline()
     {
         var npm = new HashSet<string>(StringComparer.Ordinal);
         const string source = "source: [Trax.Scheduler/src/Trax.Scheduler]";
 
-        Check(
-            FrontMatter.Of(
-                $"---\npackage: Trax.Scheduler\nnamespace: Trax.Scheduler.Configuration\n{source}\n---\n"
-            ),
-            npm
+        (
+            await CheckAsync(
+                    FrontMatter.Of(
+                        $"---\npackage: Trax.Scheduler\nnamespace: Trax.Scheduler.Configuration\n{source}\n---\n"
+                    ),
+                    npm
+                )
+                .ConfigureAwait(false)
         )
             .Wrong.Should()
             .BeEmpty();
-        Check(
-            FrontMatter.Of(
-                $"---\npackage: Trax.Scheduler\nnamespace: [Trax.Scheduler.Configuration, Trax.Scheduler.Nope]\n{source}\n---\n"
-            ),
-            npm
+        (
+            await CheckAsync(
+                    FrontMatter.Of(
+                        $"---\npackage: Trax.Scheduler\nnamespace: [Trax.Scheduler.Configuration, Trax.Scheduler.Nope]\n{source}\n---\n"
+                    ),
+                    npm
+                )
+                .ConfigureAwait(false)
         )
             .Wrong.Should()
             .ContainSingle()
@@ -503,19 +534,32 @@ public class SdkReferenceFrontMatterTests
     }
 
     [Test]
-    public void Packable_IsTheShippedProjects()
+    public async Task Packable_IsTheShippedProjects()
     {
-        Projects
-            .Packable.Should()
+        var packable = await Projects.PackableAsync().ConfigureAwait(false);
+        packable
+            .Should()
             .ContainKeys("Trax.Core", "Trax.Scheduler", "Trax.Cli", "Trax.Runner.Lambda");
-        Projects
-            .Packable.Keys.Should()
-            .NotContain(k => k.EndsWith(".Tests", StringComparison.Ordinal));
-        Projects.Packable["Trax.Cli"].Baseline.Should().EndWith("trax.received.txt");
-        Projects
-            .Packable["Trax.Scheduler"]
-            .Baseline.Should()
-            .EndWith("Trax.Scheduler.received.txt");
+        packable.Keys.Should().NotContain(k => k.EndsWith(".Tests", StringComparison.Ordinal));
+        packable["Trax.Cli"].Baseline.Should().EndWith("trax.received.txt");
+        packable["Trax.Scheduler"].Baseline.Should().EndWith("Trax.Scheduler.received.txt");
+    }
+
+    /// <summary>The names the page's signature fences declare that the baseline lacks.</summary>
+    private static async Task<List<string>> MissingFromBaselineAsync(string page, string baseline)
+    {
+        var words = Word.Matches(await File.ReadAllTextAsync(baseline).ConfigureAwait(false))
+            .Select(m => m.Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return SignatureFences(
+                await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/'))).ConfigureAwait(false)
+            )
+            .SelectMany(f => DeclaredNames(f.Code).Select(n => (f.Line, Name: n)))
+            .Where(x => !words.Contains(x.Name))
+            .Select(x => string.Create(CultureInfo.InvariantCulture, $"{x.Name} (line {x.Line})"))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>The published SDK reference pages below the section and folder indexes.</summary>
@@ -526,7 +570,7 @@ public class SdkReferenceFrontMatterTests
     /// The fields the page leaves out (<c>package</c>, <c>namespace</c>, <c>source</c>), and the
     /// ones it states wrongly.
     /// </summary>
-    private static (List<string> Missing, List<string> Wrong) Check(
+    private static async Task<(List<string> Missing, List<string> Wrong)> CheckAsync(
         FrontMatter frontMatter,
         IReadOnlySet<string> npm
     )
@@ -542,11 +586,21 @@ public class SdkReferenceFrontMatterTests
         Projects.Package? project = null;
         if (package is null)
             missing.Add("package");
-        else if (Projects.Packable.TryGetValue(package, out var found))
+        else if (
+            (await Projects.PackableAsync().ConfigureAwait(false)).TryGetValue(
+                package,
+                out var found
+            )
+        )
             project = found;
-        else if (!(surface == "typescript" && npm.Contains(package)))
+        else if (
+            !(
+                string.Equals(surface, "typescript", StringComparison.Ordinal)
+                && npm.Contains(package)
+            )
+        )
             wrong.Add(
-                surface == "typescript"
+                string.Equals(surface, "typescript", StringComparison.Ordinal)
                     ? $"package {package} is neither a packable project nor an npm package in the repository"
                     : $"package {package} is not a packable project (a csproj under a Trax.*/src/ or Trax.*/dotnet/src/ folder)"
             );
@@ -557,7 +611,7 @@ public class SdkReferenceFrontMatterTests
         else if (project?.Baseline is { } baseline && namespaces.Count > 0)
         {
             var declared = Namespace
-                .Matches(File.ReadAllText(baseline))
+                .Matches(await File.ReadAllTextAsync(baseline).ConfigureAwait(false))
                 .Select(m => m.Groups["name"].Value)
                 .ToHashSet(StringComparer.Ordinal);
             wrong.AddRange(
@@ -567,20 +621,34 @@ public class SdkReferenceFrontMatterTests
             );
         }
 
+        CheckSources(frontMatter, missing, wrong);
+
+        return (missing, wrong);
+    }
+
+    /// <summary>Every <c>source</c> is a forward-slash path that exists in the repository.</summary>
+    private static void CheckSources(
+        FrontMatter frontMatter,
+        List<string> missing,
+        List<string> wrong
+    )
+    {
         var sources = frontMatter.List("source");
         if (sources.Count == 0)
             missing.Add("source");
         foreach (var source in sources)
         {
-            if (source.StartsWith('/') || source.Contains('\\') || source.Split('/').Contains(".."))
+            if (
+                source.StartsWith('/')
+                || source.Contains('\\', StringComparison.Ordinal)
+                || source.Split('/').Contains("..")
+            )
                 wrong.Add(
                     $"source {source} is not a forward-slash path relative to the repository root"
                 );
             else if (!RepoRoot.ExistsInMonorepo(source))
                 wrong.Add($"source {source} does not exist");
         }
-
-        return (missing, wrong);
     }
 
     /// <summary>
@@ -590,7 +658,7 @@ public class SdkReferenceFrontMatterTests
     private static List<(int Line, string Code)> SignatureFences(string markdown)
     {
         var fences = new List<(int, string)>();
-        var lines = markdown.Replace("\r\n", "\n").Split('\n');
+        var lines = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var inSignature = false;
 
         for (var i = 0; i < lines.Length; i++)
@@ -605,11 +673,13 @@ public class SdkReferenceFrontMatterTests
 
             var fence = open.Groups["fence"].Value;
             var info = open.Groups["info"].Value.Trim();
-            if (fence[0] == '`' && info.Contains('`'))
+            if (fence[0] == '`' && info.Contains('`', StringComparison.Ordinal))
                 continue;
 
             var closing = new Regex(
-                $@"^[ \t]*{Regex.Escape(fence[0].ToString())}{{{fence.Length},}}[ \t]*$"
+                $@"^[ \t]*{Regex.Escape(fence[0].ToString())}{{{fence.Length},}}[ \t]*$",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(1)
             );
             var body = new List<string>();
             var j = i + 1;
@@ -620,7 +690,7 @@ public class SdkReferenceFrontMatterTests
                 .FirstOrDefault()
                 ?.ToLowerInvariant();
             if (inSignature && language is "csharp" or "cs" or "c#")
-                fences.Add((i + 1, string.Join("\n", body)));
+                fences.Add((i + 1, string.Join('\n', body)));
             i = j;
         }
 
@@ -636,7 +706,7 @@ public class SdkReferenceFrontMatterTests
     /// </summary>
     private static HashSet<string> DeclaredNames(string code)
     {
-        var lines = code.Replace("\r\n", "\n")
+        var lines = code.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split('\n')
             .Select(l => Literal.Replace(l, "\"\""))
             .Select(l =>
@@ -645,7 +715,7 @@ public class SdkReferenceFrontMatterTests
                     : l
             )
             .Where(l => !l.TrimStart().StartsWith('['));
-        var text = string.Join("\n", lines);
+        var text = string.Join('\n', lines);
 
         var names = new HashSet<string>(StringComparer.Ordinal);
 

@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Ingest.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence;
@@ -29,14 +30,16 @@ public class MachineFromIrTests
 
     // The access the hand-written conformance machines declare, as their host entries say it. A timer's rules are
     // computed from it and are in the IR, so an entry that disagrees exports a different IR.
-    private static readonly Dictionary<string, Func<JsonObject, HostMachine>> Hosts = new()
+    private static readonly Dictionary<string, Func<JsonObject, HostMachine>> Hosts = new(
+        StringComparer.Ordinal
+    )
     {
         ["turnstile"] = ir => Host(ir),
         ["gauge"] = ir => Host(ir),
         ["reminder"] = ir =>
             Host(ir) with
             {
-                Triggers = new Dictionary<string, TriggerAccess>
+                Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
                 {
                     ["Open"] = new(Editors),
                     ["Extend"] = new(AccessRule.AnyAuthenticated),
@@ -49,9 +52,9 @@ public class MachineFromIrTests
     public static IEnumerable<string> Served => Hosts.Keys;
 
     [TestCaseSource(nameof(Served))]
-    public void A_conformance_machine_served_from_its_IR_exports_exactly_its_file(string name)
+    public async Task A_conformance_machine_served_from_its_IR_exports_exactly_its_file(string name)
     {
-        var ir = Ir(name);
+        var ir = await Ir(name).ConfigureAwait(false);
 
         var machine = IrMachines.Create(new IrMachines.Source(ir, Hosts[name](ir)), Trains);
 
@@ -61,10 +64,11 @@ public class MachineFromIrTests
     }
 
     [TestCaseSource(nameof(WithCorpus))]
-    public void A_conformance_machine_served_from_its_IR_replays_its_corpus(string name)
+    public async Task A_conformance_machine_served_from_its_IR_replays_its_corpus(string name)
     {
-        var ir = Ir(name);
-        var corpus = File.ReadAllText(FixturePaths.DifferentialFile(name));
+        var ir = await Ir(name).ConfigureAwait(false);
+        var corpus = await File.ReadAllTextAsync(FixturePaths.DifferentialFile(name))
+            .ConfigureAwait(false);
 
         var machine = IrMachines.Create(new IrMachines.Source(ir, Hosts[name](ir), corpus), Trains);
 
@@ -78,9 +82,9 @@ public class MachineFromIrTests
         Served.Where(n => File.Exists(FixturePaths.DifferentialFile(n)));
 
     [Test]
-    public void A_users_machine_is_served_to_clients_and_a_system_machine_is_not()
+    public async Task A_users_machine_is_served_to_clients_and_a_system_machine_is_not()
     {
-        var ir = Ir("turnstile");
+        var ir = await Ir("turnstile").ConfigureAwait(false);
         var user = IrMachines.Create(new IrMachines.Source(ir, Host(ir)), Trains);
         var system = IrMachines.Create(
             new IrMachines.Source(ir, Host(ir) with { SystemKey = "turnstile/main" }),
@@ -93,9 +97,9 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_host_entry_derived_from_another_IR_is_refused()
+    public async Task A_host_entry_derived_from_another_IR_is_refused()
     {
-        var ir = Ir("turnstile");
+        var ir = await Ir("turnstile").ConfigureAwait(false);
 
         var create = () =>
             IrMachines.Create(
@@ -110,9 +114,9 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_host_entry_for_another_machine_is_refused()
+    public async Task A_host_entry_for_another_machine_is_refused()
     {
-        var ir = Ir("turnstile");
+        var ir = await Ir("turnstile").ConfigureAwait(false);
 
         var create = () =>
             IrMachines.Create(new IrMachines.Source(ir, Host(ir) with { Id = "gauge" }), Trains);
@@ -124,12 +128,15 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void Access_that_disagrees_with_the_IRs_timer_rules_is_refused()
+    public async Task Access_that_disagrees_with_the_IRs_timer_rules_is_refused()
     {
-        var ir = Ir("reminder");
+        var ir = await Ir("reminder").ConfigureAwait(false);
         var host = Hosts["reminder"](ir) with
         {
-            Triggers = new Dictionary<string, TriggerAccess> { ["Open"] = new(Editors) },
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
+            {
+                ["Open"] = new(Editors),
+            },
         };
 
         var create = () => IrMachines.Create(new IrMachines.Source(ir, host), Trains);
@@ -141,9 +148,9 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void An_edge_that_runs_an_effect_the_host_entry_names_no_type_for_is_refused()
+    public async Task An_edge_that_runs_an_effect_the_host_entry_names_no_type_for_is_refused()
     {
-        var ir = Ir("checkout");
+        var ir = await Ir("checkout").ConfigureAwait(false);
 
         var create = () => IrMachines.Create(new IrMachines.Source(ir, Host(ir)), Trains);
 
@@ -154,9 +161,9 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_custom_rule_the_host_entry_names_no_type_for_is_refused_wherever_it_nests()
+    public async Task A_custom_rule_the_host_entry_names_no_type_for_is_refused_wherever_it_nests()
     {
-        var ir = Ir("vault");
+        var ir = await Ir("vault").ConfigureAwait(false);
 
         var create = () => IrMachines.Create(new IrMachines.Source(ir, Host(ir)), Trains);
 
@@ -167,9 +174,9 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void An_invoking_state_with_no_train_in_the_host_entry_is_refused()
+    public async Task An_invoking_state_with_no_train_in_the_host_entry_is_refused()
     {
-        var ir = Ir("ingest");
+        var ir = await Ir("ingest").ConfigureAwait(false);
 
         var create = () => IrMachines.Create(new IrMachines.Source(ir, Host(ir)), Trains);
 
@@ -180,17 +187,17 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_train_no_train_assembly_holds_is_refused()
+    public async Task A_train_no_train_assembly_holds_is_refused()
     {
-        var ir = Ir("ingest");
+        var ir = await Ir("ingest").ConfigureAwait(false);
         var host = Host(ir) with
         {
-            Invokes = new Dictionary<string, HostInvoke>
+            Invokes = new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
             {
                 ["Fetching"] = new(
                     "Fetching",
                     "Ingest.Contracts.IMissingTrain",
-                    new Dictionary<string, string>()
+                    new Dictionary<string, string>(StringComparer.Ordinal)
                 ),
             },
         };
@@ -204,14 +211,14 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_user_machines_server_only_trigger_is_not_served_and_needs_no_client_rule()
+    public async Task A_user_machines_server_only_trigger_is_not_served_and_needs_no_client_rule()
     {
-        var ir = Ir("turnstile");
+        var ir = await Ir("turnstile").ConfigureAwait(false);
         var host = Host(ir) with
         {
             Start = AccessRule.AnyAuthenticated,
             Read = AccessRule.AnyAuthenticated,
-            Triggers = new Dictionary<string, TriggerAccess>
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(AccessRule.AnyAuthenticated),
                 ["Push"] = TriggerAccess.Server,
@@ -225,9 +232,12 @@ public class MachineFromIrTests
             .Should()
             .NotContain("Push", "a server-only trigger is not in the typed API");
         ((IMachineInternals)machine).ServerTriggers.Should().Equal("Push");
-        MachineRulesStartupValidator
-            .Problems([machine], new StateMachineOptions(), null)
-            .Result.Should()
+        (
+            await MachineRulesStartupValidator
+                .Problems([machine], new StateMachineOptions(), caller: null)
+                .ConfigureAwait(false)
+        )
+            .Should()
             .BeEmpty();
         machine
             .ExportIr()
@@ -236,12 +246,12 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_server_only_trigger_into_an_invoking_state_of_a_user_machine_refuses_startup()
+    public async Task A_server_only_trigger_into_an_invoking_state_of_a_user_machine_refuses_startup()
     {
-        var ir = Ir("ingest");
+        var ir = await Ir("ingest").ConfigureAwait(false);
         var host = Hosts["ingest"](ir) with
         {
-            Triggers = new Dictionary<string, TriggerAccess>
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Start"] = TriggerAccess.Server,
                 ["Abandon"] = new(AccessRule.AnyAuthenticated),
@@ -265,13 +275,16 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_server_only_trigger_into_an_invoking_state_of_a_system_machine_is_allowed()
+    public async Task A_server_only_trigger_into_an_invoking_state_of_a_system_machine_is_allowed()
     {
-        var ir = Ir("ingest");
+        var ir = await Ir("ingest").ConfigureAwait(false);
         var host = Hosts["ingest"](ir) with
         {
             SystemKey = "ingest/main",
-            Triggers = new Dictionary<string, TriggerAccess> { ["Start"] = TriggerAccess.Server },
+            Triggers = new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
+            {
+                ["Start"] = TriggerAccess.Server,
+            },
         };
         var machine = IrMachines.Create(new IrMachines.Source(ir, host), Trains);
 
@@ -282,9 +295,9 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void A_field_whose_name_no_property_can_have_is_refused()
+    public async Task A_field_whose_name_no_property_can_have_is_refused()
     {
-        var ir = Ir("turnstile");
+        var ir = await Ir("turnstile").ConfigureAwait(false);
         ir["context"] = new JsonObject
         {
             ["Locked"] = new JsonObject
@@ -310,10 +323,10 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void Two_machines_whose_types_would_share_a_name_are_refused_naming_both()
+    public async Task Two_machines_whose_types_would_share_a_name_are_refused_naming_both()
     {
-        var first = Renamed(Ir("turnstile"), "a-1b");
-        var second = Renamed(Ir("turnstile"), "a1b");
+        var first = Renamed((await Ir("turnstile").ConfigureAwait(false)), "a-1b");
+        var second = Renamed((await Ir("turnstile").ConfigureAwait(false)), "a1b");
 
         var create = () =>
             IrMachines.Create(
@@ -328,22 +341,29 @@ public class MachineFromIrTests
     }
 
     [Test]
-    public void The_emitted_records_carry_each_fields_JSON_name()
+    public async Task The_emitted_records_carry_each_fields_JSON_name()
     {
-        var ir = Ir("ingest");
+        var ir = await Ir("ingest").ConfigureAwait(false);
 
         var machine = IrMachines.Create(new IrMachines.Source(ir, Hosts["ingest"](ir)), Trains);
 
-        var context = machine.States.Single(s => s.Name == "Fetched").ContextType!;
+        var context = machine
+            .States.Single(s => string.Equals(s.Name, "Fetched", StringComparison.Ordinal))
+            .ContextType.NotNull();
         context
-            .GetProperty("Fingerprint")!
-            .GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()!
+            .GetProperty("Fingerprint")
+            .NotNull()
+            .GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()
+            .NotNull()
             .Name.Should()
             .Be("fingerprint");
     }
 
-    private static JsonObject Ir(string name) =>
-        JsonNode.Parse(File.ReadAllText(FixturePaths.IrFile(name)))!.AsObject();
+    private static async Task<JsonObject> Ir(string name) =>
+        JsonNode
+            .Parse(await File.ReadAllTextAsync(FixturePaths.IrFile(name)).ConfigureAwait(false))
+            .NotNull()
+            .AsObject();
 
     private static JsonObject Renamed(JsonObject ir, string id)
     {
@@ -353,22 +373,22 @@ public class MachineFromIrTests
 
     private static HostMachine Host(JsonObject ir) =>
         new(
-            ir["id"]!.GetValue<string>(),
+            ir["id"].NotNull().GetValue<string>(),
             Hash(ir),
-            null,
-            null,
-            null,
-            new Dictionary<string, TriggerAccess>(),
-            new Dictionary<string, HostInvoke>()
+            SystemKey: null,
+            Start: null,
+            Read: null,
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal),
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
 
     private static Dictionary<string, HostInvoke> Fetching(string state) =>
-        new()
+        new(StringComparer.Ordinal)
         {
             [state] = new(
                 state,
-                typeof(IFetchTrain).FullName!,
-                new Dictionary<string, string> { ["source"] = "source" }
+                typeof(IFetchTrain).FullName.NotNull(),
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["source"] = "source" }
             ),
         };
 

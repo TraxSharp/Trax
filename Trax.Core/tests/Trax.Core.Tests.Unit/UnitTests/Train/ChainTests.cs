@@ -21,8 +21,8 @@ public class ChainTests : TestSetup
         );
 
         returnValue.IsRight.Should().BeTrue();
-        returnValue.ValueUnsafe().Should().Be(true);
-        monad.Memory.Should().ContainValue(true);
+        returnValue.ValueUnsafe().Should().Be(expected: true);
+        monad.Memory.Should().ContainValue(expected: true);
         monad.Exception.Should().BeNull();
     }
 
@@ -66,7 +66,7 @@ public class ChainTests : TestSetup
             "hello"
         );
 
-        monad.Memory.Should().ContainValue(true);
+        monad.Memory.Should().ContainValue(expected: true);
         monad.Memory.Should().ContainValue('h');
     }
 
@@ -77,7 +77,7 @@ public class ChainTests : TestSetup
 
         await train.ChainJunction<TestJunction, string, bool>(new TestJunction());
 
-        train.Memory.Should().ContainValue(true);
+        train.Memory.Should().ContainValue(expected: true);
         train.Exception.Should().BeNull();
     }
 
@@ -92,7 +92,7 @@ public class ChainTests : TestSetup
 
         await train.Chain<TestJunction, string, bool>(new TestJunction());
 
-        train.Memory.Should().ContainValue(true);
+        train.Memory.Should().ContainValue(expected: true);
         train.Exception.Should().BeNull();
     }
 
@@ -103,7 +103,7 @@ public class ChainTests : TestSetup
 
         await train.Chain<TestJunction, string, bool>();
 
-        train.Memory.Should().ContainValue(true);
+        train.Memory.Should().ContainValue(expected: true);
         train.Exception.Should().BeNull();
     }
 
@@ -141,7 +141,7 @@ public class ChainTests : TestSetup
 
         await train.Chain<TestJunction>(testJunction);
 
-        train.Memory.Should().ContainValue(true);
+        train.Memory.Should().ContainValue(expected: true);
         train.Exception.Should().BeNull();
     }
 
@@ -152,7 +152,7 @@ public class ChainTests : TestSetup
 
         await train.Chain<TestJunction>();
 
-        train.Memory.Should().ContainValue(true);
+        train.Memory.Should().ContainValue(expected: true);
         train.Exception.Should().BeNull();
     }
 
@@ -168,7 +168,7 @@ public class ChainTests : TestSetup
 
         await train.IChain<ITestJunction>();
 
-        train.Memory.Should().ContainValue(true);
+        train.Memory.Should().ContainValue(expected: true);
         train.Exception.Should().BeNull();
     }
 
@@ -186,33 +186,36 @@ public class ChainTests : TestSetup
 
     #region Test fixtures
 
-    private class TestTupleOutputJunction : Junction<string, (bool, char)>
+    private sealed class TestTupleOutputJunction : Junction<string, (bool, char)>
     {
         public override async Task<(bool, char)> Run(string input) =>
-            (input.Equals("hello"), input.First());
+            (input.Equals("hello", StringComparison.Ordinal), input.First());
     }
 
-    private class TestExceptionJunction : Junction<string, bool>
+    private sealed class TestExceptionJunction : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => throw new NotImplementedException();
     }
 
-    private interface ITestUnitJunction : IJunction<string, Trax.Core.Functional.Unit> { }
+    private interface ITestUnitJunction : IJunction<string, Trax.Core.Functional.Unit>;
 
-    private class TestUnitJunction : Junction<string, Trax.Core.Functional.Unit>, ITestUnitJunction
+    private sealed class TestUnitJunction
+        : Junction<string, Trax.Core.Functional.Unit>,
+            ITestUnitJunction
     {
         public override async Task<Trax.Core.Functional.Unit> Run(string input) =>
             Trax.Core.Functional.Unit.Default;
     }
 
-    private interface ITestJunction : IJunction<string, bool> { }
+    private interface ITestJunction : IJunction<string, bool>;
 
-    private class TestJunction : Junction<string, bool>, ITestJunction
+    private sealed class TestJunction : Junction<string, bool>, ITestJunction
     {
-        public override async Task<bool> Run(string input) => input.Equals("hello");
+        public override async Task<bool> Run(string input) =>
+            input.Equals("hello", StringComparison.Ordinal);
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

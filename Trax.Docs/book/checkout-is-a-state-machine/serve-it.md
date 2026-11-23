@@ -29,6 +29,7 @@ says how, in one class.
 
 ```csharp compile=app file=Shopfront.Hub/Auth/TraxCallerSnapshotPrincipal.cs
 using Trax.Api.Auth;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Shopfront.Auth;
@@ -36,7 +37,7 @@ namespace Shopfront.Auth;
 // A machine instance belongs to the signed-in caller, by their qualified id.
 public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPrincipal
 {
-    public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal!.Id : null;
+    public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal.NotNull().Id : null;
 }
 ```
 
@@ -174,8 +175,8 @@ if (development)
 {
     app.MapGet(
             "/dev/token/{user}",
-            (string user, bool staff = false) =>
-                DevJwt.Mint(user, staff ? Roles.Staff : Roles.Customer)
+            (string user, TimeProvider clock, bool staff = false) =>
+                DevJwt.Mint(user, staff ? Roles.Staff : Roles.Customer, clock)
         )
         .AllowAnonymous();
 

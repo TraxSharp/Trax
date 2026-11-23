@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Models.SnapshotTransition;
 /// <c>trax.snapshot_transition</c> table: a feature package's table, mapped on the core data context like
 /// <see cref="Trax.Effect.Data.Models.SnapshotDraft.PersistentSnapshotDraft"/>.
 /// </summary>
-internal class PersistentSnapshotTransition : BaseModel
+internal sealed class PersistentSnapshotTransition : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

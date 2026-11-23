@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -38,11 +40,13 @@ public class RequestIdScopeTests
     private static async Task<Guid> Saved(string machine, string state, string context)
     {
         var id = Guid.NewGuid();
-        await TestDb.Seed(
-            "u",
-            id,
-            $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
-        );
+        await TestDb
+            .Seed(
+                "u",
+                id,
+                $"{{\"machine\":\"{machine}\",\"version\":1,\"state\":\"{state}\",\"context\":{context}}}"
+            )
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -66,10 +70,10 @@ public class RequestIdScopeTests
 
     private static async Task<string> Load(string machine, Guid id) =>
         (
-            await new LoadSnapshotJunction(NewRegistry(), User).Run(
-                new LoadSnapshotInput { Machine = machine, Id = id }
-            )
-        ).Snapshot!;
+            await new LoadSnapshotJunction(NewRegistry(), User)
+                .Run(new LoadSnapshotInput { Machine = machine, Id = id })
+                .ConfigureAwait(false)
+        ).Snapshot.NotNull();
 
     [Test]
     public async Task A_requestId_reused_for_a_different_trigger_is_refused_and_writes_nothing()
@@ -141,7 +145,7 @@ public class RequestIdScopeTests
                 "u",
                 id,
                 TestTurnstile.Machine.Definition.CreateInitialSnapshot(),
-                stored!.Token,
+                stored.NotNull().Token,
                 "r1"
             );
 
@@ -192,20 +196,29 @@ public class RequestIdScopeTests
     {
         var user = $"u-{Guid.NewGuid():N}";
         var id = Guid.NewGuid();
-        (await TestDb.NewStore().Upsert(user, id, LogSnapshot(""))).Should().BeTrue();
+        (await TestDb.NewStore().Upsert(user, id, LogSnapshot("")).ConfigureAwait(false))
+            .Should()
+            .BeTrue();
         return (user, id);
     }
 
     private static async Task<string> Append(string user, Guid id, string text, string requestId) =>
-        (await Log().Advance(user, id, "Append", new JsonObject { ["text"] = text }, requestId))
+        (
+            await Log()
+                .Advance(user, id, "Append", new JsonObject { ["text"] = text }, requestId)
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
-            .Which.Snapshot.Context["text"]!.GetValue<string>();
+            .Which.Snapshot.Context["text"]
+            .NotNull()
+            .GetValue<string>();
 
     private static async Task<string> StoredText(string user, Guid id) =>
-        ((LoadResult.Loaded)await Log().Load(user, id)).Snapshot.Context[
-            "text"
-        ]!.GetValue<string>();
+        ((LoadResult.Loaded)await Log().Load(user, id).ConfigureAwait(false))
+            .Snapshot.Context["text"]
+            .NotNull()
+            .GetValue<string>();
 
     [Test]
     [Property("adr", Ring)]
@@ -214,7 +227,12 @@ public class RequestIdScopeTests
         var (user, id) = await NewLog();
         var first = await Append(user, id, "1,", "r1");
         for (var i = 2; i <= RequestIdRing.Capacity; i++)
-            await Append(user, id, $"{i},", $"r{i}");
+            await Append(
+                user,
+                id,
+                string.Create(CultureInfo.InvariantCulture, $"{i},"),
+                string.Create(CultureInfo.InvariantCulture, $"r{i}")
+            );
         var stored = await StoredText(user, id);
 
         // r1 is the oldest of the last sixteen: its retry is answered with what r1 was answered with then.
@@ -225,7 +243,8 @@ public class RequestIdScopeTests
                 $"a retry replays the result recorded for it, not the current snapshot. See {Ring}"
             );
         (await StoredText(user, id)).Should().Be(stored, "a replay fires nothing");
-        (await TestDb.NewStore().Get(user, id))!
+        (await TestDb.NewStore().Get(user, id))
+            .NotNull()
             .RecentRequests.Should()
             .HaveCount(RequestIdRing.Capacity)
             .And.Contain(r => r.RequestId == "r1");
@@ -249,7 +268,7 @@ public class RequestIdScopeTests
                     DraftOwner.User(user),
                     "log",
                     id,
-                    row!.Token,
+                    row.NotNull().Token,
                     new InvokeTokenWrite(token)
                 )
             )
@@ -260,7 +279,7 @@ public class RequestIdScopeTests
                 .BeTrue();
         }
         for (var i = 2; i < RequestIdRing.Capacity; i++)
-            await Append(user, id, "", $"r{i}");
+            await Append(user, id, "", string.Create(CultureInfo.InvariantCulture, $"r{i}"));
         var stored = await StoredText(user, id);
 
         (await Append(user, id, "a", "r1"))
@@ -276,8 +295,9 @@ public class RequestIdScopeTests
         // An evicted id is new again: it fires under every rule, as any request does.
         var (user, id) = await NewLog();
         for (var i = 1; i <= RequestIdRing.Capacity + 1; i++)
-            await Append(user, id, "x", $"r{i}");
-        (await TestDb.NewStore().Get(user, id))!
+            await Append(user, id, "x", string.Create(CultureInfo.InvariantCulture, $"r{i}"));
+        (await TestDb.NewStore().Get(user, id))
+            .NotNull()
             .RecentRequests.Should()
             .NotBeNull()
             .And.HaveCount(RequestIdRing.Capacity)
@@ -300,7 +320,7 @@ public class RequestIdScopeTests
                     turnstile,
                     i % 2 == 1 ? "Coin" : "Push",
                     i % 2 == 1 ? new JsonObject { ["coin"] = "quarter" } : null,
-                    $"t{i}"
+                    string.Create(CultureInfo.InvariantCulture, $"t{i}")
                 );
         (
             await Service()
@@ -355,9 +375,10 @@ public class RequestIdScopeTests
             .Select(_ =>
                 Task.Run(async () =>
                 {
-                    await release.Task;
+                    await release.Task.ConfigureAwait(false);
                     return await Log()
-                        .Advance(user, id, "Append", new JsonObject { ["text"] = "b" }, "r2");
+                        .Advance(user, id, "Append", new JsonObject { ["text"] = "b" }, "r2")
+                        .ConfigureAwait(false);
                 })
             )
             .ToList();
@@ -367,7 +388,10 @@ public class RequestIdScopeTests
         outcomes
             .Should()
             .AllSatisfy(o =>
-                o.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot.Context["text"]!
+                o.Should()
+                    .BeOfType<AdvanceOutcome.Advanced>()
+                    .Which.Snapshot.Context["text"]
+                    .NotNull()
                     .GetValue<string>()
                     .Should()
                     .Be("ab", $"every attempt of r2 is answered with r2's one result. See {Ring}")

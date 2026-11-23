@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -26,12 +28,20 @@ public class OrderSendTests
     }
 
     private static async Task SeedReview(string user, Guid id) =>
-        (await TestOrder.Service(TestDb.NewStore()).Autosave(user, id, TestOrder.ReviewJson(1, 2)))
+        (
+            await TestOrder
+                .Service(TestDb.NewStore())
+                .Autosave(user, id, TestOrder.ReviewJson(1, 2))
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
 
     private static async Task<Snapshot> Load(string user, Guid id) =>
-        ((LoadResult.Loaded)await TestOrder.Service(TestDb.NewStore()).Load(user, id)).Snapshot;
+        (
+            (LoadResult.Loaded)
+                await TestOrder.Service(TestDb.NewStore()).Load(user, id).ConfigureAwait(false)
+        ).Snapshot;
 
     [Test]
     public async Task Places_an_order_exactly_once_and_folds_the_receipt_into_the_snapshot()
@@ -48,7 +58,12 @@ public class OrderSendTests
             .Which.Snapshot.State.Should()
             .Be("Placed");
         effect.Calls.Should().Be(1);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
     }
 
     [Test]
@@ -75,7 +90,12 @@ public class OrderSendTests
         var outcomes = await Task.WhenAll(
             Enumerable
                 .Range(0, 12)
-                .Select(i => Task.Run(() => NewRunner(effect).Run("u", id, $"req-{i}")))
+                .Select(i =>
+                    Task.Run(() =>
+                        NewRunner(effect)
+                            .Run("u", id, string.Create(CultureInfo.InvariantCulture, $"req-{i}"))
+                    )
+                )
         );
 
         effect.Calls.Should().Be(1);
@@ -148,7 +168,7 @@ public class OrderSendTests
         await SeedReview("u", id);
 
         var failing = new CountingEffect(fail: true);
-        var act = async () => await NewRunner(failing).Run("u", id, "r1");
+        var act = async () => await NewRunner(failing).Run("u", id, "r1").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         (await Load("u", id)).State.Should().Be("Review");
@@ -209,7 +229,7 @@ public class OrderSendTests
             .BeOfType<AdvanceOutcome.Advanced>()
             .Subject;
         retry.Snapshot.State.Should().Be("Placed");
-        retry.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        retry.Snapshot.Context["receipt"].NotNull().GetValue<string>().Should().Be("receipt-1");
         effect.Calls.Should().Be(1, "a retried send never runs the effect again");
         (await Load("u", id)).State.Should().Be("Review", "a replay writes nothing");
 
@@ -219,7 +239,12 @@ public class OrderSendTests
             .Which.Snapshot.State.Should()
             .Be("Placed");
         effect.Calls.Should().Be(2);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-2");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-2");
     }
 
     [Test]
@@ -266,7 +291,12 @@ public class OrderSendTests
             .Which.Snapshot.State.Should()
             .Be("Placed");
         effect.Calls.Should().Be(1);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
     }
 
     [Test]
@@ -303,11 +333,16 @@ public class OrderSendTests
         }
 
         // With a lease already expired, a claim left without its receipt would be taken over and run again.
-        var retry = await NewRunner(effect).Run("u", id, "req-2");
+        var retry = await NewRunner(effect).Run("u", id, "req-2", CancellationToken.None);
 
         retry.Should().BeOfType<AdvanceOutcome.Advanced>();
         effect.Calls.Should().Be(1);
-        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        (await Load("u", id))
+            .Context["receipt"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("receipt-1");
     }
 
     private sealed class CancelsAfterRunningEffect(CancellationTokenSource request)
@@ -323,8 +358,8 @@ public class OrderSendTests
         )
         {
             var n = Interlocked.Increment(ref _calls);
-            await request.CancelAsync();
-            return $"receipt-{n}";
+            await request.CancelAsync().ConfigureAwait(false);
+            return string.Create(CultureInfo.InvariantCulture, $"receipt-{n}");
         }
     }
 }

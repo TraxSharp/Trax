@@ -19,7 +19,7 @@ public class CommitTransaction(IDataContext dataContextFactory) : Junction<Unit,
     /// <returns><see cref="Unit.Default"/>.</returns>
     public override async Task<Unit> Run(Unit input)
     {
-        await dataContextFactory.CommitTransaction();
+        await dataContextFactory.CommitTransaction().ConfigureAwait(false);
 
         return Unit.Default;
     }

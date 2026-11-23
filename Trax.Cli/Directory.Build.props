@@ -46,4 +46,16 @@
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- The trax tool is a console program, and three things it documents need the terminal itself:
+       reading the typed stack name back for `deploy destroy`, reading a secret without echo (or from
+       piped stdin) for `deploy secret set`, and colouring `machine show` only when stdout is a
+       terminal. Nothing outside System.Console can do those, so this folder alone keeps it. -->
+  <PropertyGroup>
+    <TraxBanConsole>false</TraxBanConsole>
+  </PropertyGroup>
+
+  <!-- The Trax.Analyzers profile: every rule Trax.Analyzers/rules.txt turns on is an error here,
+       in src and tests alike (Trax.Docs/adr/0061). -->
+  <Import Project="$(MSBuildThisFileDirectory)../Trax.Analyzers/Trax.Analyzers.InRepo.props" />
 </Project>

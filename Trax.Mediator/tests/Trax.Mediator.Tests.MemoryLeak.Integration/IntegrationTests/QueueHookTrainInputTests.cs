@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -25,7 +27,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class QueueHookTrainInputTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -47,26 +49,39 @@ public class QueueHookTrainInputTests
     public void TearDown()
     {
         NestingOrderTrain.Execution = null;
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private async Task<string?> SubjectKeyOfAsync(long workQueueId)
     {
-        var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        var entry = await context.WorkQueues.AsNoTracking().FirstAsync(w => w.Id == workQueueId);
+        var factory = _serviceProvider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var entry = await context
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(w => w.Id == workQueueId)
+            .ConfigureAwait(false);
         return entry.SubjectKey;
     }
 
     [Test]
     public async Task A_key_built_from_TrainInput_differs_per_input()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var first = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":1}");
-        var second = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":2}");
+        var first = await execution.QueueAsync(
+            typeof(IKeyedOrderTrain).FullName.NotNull(),
+            "{\"id\":1}"
+        );
+        var second = await execution.QueueAsync(
+            typeof(IKeyedOrderTrain).FullName.NotNull(),
+            "{\"id\":2}"
+        );
 
         (await SubjectKeyOfAsync(first.WorkQueueId)).Should().Be("order:1");
         (await SubjectKeyOfAsync(second.WorkQueueId))
@@ -81,10 +96,14 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task OnQueue_reads_TrainInput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var result = await execution.QueueAsync(typeof(IKeyedOrderTrain).FullName!, "{\"id\":7}");
+        var result = await execution.QueueAsync(
+            typeof(IKeyedOrderTrain).FullName.NotNull(),
+            "{\"id\":7}"
+        );
 
         Seen.Should().ContainKey(result.ExternalId).WhoseValue.Should().Be(7);
     }
@@ -92,11 +111,12 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_deferring_train_reads_TrainInput_in_OnQueue()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(
-            typeof(IDeferringOrderTrain).FullName!,
+            typeof(IDeferringOrderTrain).FullName.NotNull(),
             "{\"id\":11}"
         );
 
@@ -106,11 +126,15 @@ public class QueueHookTrainInputTests
     [Test]
     public async Task A_train_enqueued_from_another_hook_reads_its_own_TrainInput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         NestingOrderTrain.Execution = execution;
 
-        var outer = await execution.QueueAsync(typeof(INestingOrderTrain).FullName!, "{\"id\":3}");
+        var outer = await execution.QueueAsync(
+            typeof(INestingOrderTrain).FullName.NotNull(),
+            "{\"id\":3}"
+        );
 
         Seen.Should().ContainKey(outer.ExternalId).WhoseValue.Should().Be(3);
         Seen.Values.Should()
@@ -125,7 +149,7 @@ public class QueueHookTrainInputTests
 
     // ── probes ──────────────────────────────────────────────────────
 
-    private static readonly ConcurrentDictionary<string, int> Seen = new();
+    private static readonly ConcurrentDictionary<string, int> Seen = new(StringComparer.Ordinal);
 
     public record OrderInput
     {
@@ -146,11 +170,12 @@ public class QueueHookTrainInputTests
 
     public class KeyedOrderTrain : ServiceTrain<OrderInput, Unit>, IKeyedOrderTrain
     {
-        protected override string? QueueSubjectKey(Metadata metadata) => $"order:{TrainInput.Id}";
+        protected override string? QueueSubjectKey(Metadata metadata) =>
+            string.Create(CultureInfo.InvariantCulture, $"order:{TrainInput.NotNull().Id}");
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            Seen[metadata.ExternalId] = TrainInput.Id;
+            Seen[metadata.ExternalId] = TrainInput.NotNull().Id;
             return Task.CompletedTask;
         }
 
@@ -168,7 +193,7 @@ public class QueueHookTrainInputTests
         {
             // Past an await, so the input has to flow with the hook, not just be set on entry.
             await Task.Yield();
-            Seen[metadata.ExternalId] = TrainInput.Id;
+            Seen[metadata.ExternalId] = TrainInput.NotNull().Id;
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
@@ -185,15 +210,21 @@ public class QueueHookTrainInputTests
 
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            Seen[metadata.ExternalId] = TrainInput.Id;
+            Seen[metadata.ExternalId] = TrainInput.NotNull().Id;
 
-            await Execution!.QueueAsync(
-                typeof(IKeyedOrderTrain).FullName!,
-                $"{{\"id\":{1000 + TrainInput.Id}}}",
-                ct: ct
-            );
+            await Execution
+                .NotNull()
+                .QueueAsync(
+                    typeof(IKeyedOrderTrain).FullName.NotNull(),
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{{\"id\":{1000 + TrainInput.NotNull().Id}}}"
+                    ),
+                    ct: ct
+                )
+                .ConfigureAwait(false);
 
-            InputAfterNestedEnqueue = TrainInput.Id;
+            InputAfterNestedEnqueue = TrainInput.NotNull().Id;
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>

@@ -22,11 +22,11 @@ public class GuardRunnerTests
     /// vacuous at once, and nothing says so.
     /// </summary>
     [Test]
-    public void Run_EmptyCorpus_FailsDiscovery_RatherThanPassingEveryCheckOverNothing()
+    public async Task Run_EmptyCorpus_FailsDiscovery_RatherThanPassingEveryCheckOverNothing()
     {
         using var repo = new TempAdrRepo();
 
-        var results = GuardRunner.Run(repo.Options());
+        var results = await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false);
 
         results.Should().ContainSingle();
         results[0].Name.Should().Be("corpus/discovery");
@@ -35,12 +35,16 @@ public class GuardRunnerTests
     }
 
     [Test]
-    public void Run_MissingDirectory_FailsDiscovery()
+    public async Task Run_MissingDirectory_FailsDiscovery()
     {
         using var repo = new TempAdrRepo();
         repo.Write("README.md", "# A repo with no ADR directory at all\n");
 
-        GuardRunner.Run(repo.Options()).Should().ContainSingle().Which.Passed.Should().BeFalse();
+        (await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false))
+            .Should()
+            .ContainSingle()
+            .Which.Passed.Should()
+            .BeFalse();
     }
 
     /// <summary>
@@ -78,11 +82,11 @@ public class GuardRunnerTests
     /// check quietly claiming it is exactly what this test is here to catch.
     /// </summary>
     [Test]
-    public void Run_ValidCorpus_EveryCheckEitherInspectsSomethingOrSaysItHadNothingToCheck()
+    public async Task Run_ValidCorpus_EveryCheckEitherInspectsSomethingOrSaysItHadNothingToCheck()
     {
         using var repo = TempAdrRepo.Valid();
 
-        var results = GuardRunner.Run(repo.Options());
+        var results = await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false);
 
         results.Select(r => r.Name).Should().BeEquivalentTo(RepoLocalRoster);
 
@@ -116,7 +120,7 @@ public class GuardRunnerTests
     /// root is passed. Left unpinned, switching it off is a quieter run rather than a failure.
     /// </summary>
     [Test]
-    public void Run_WithACensusRoot_AddsTheCensusToTheRoster_AndRunsIt()
+    public async Task Run_WithACensusRoot_AddsTheCensusToTheRoster_AndRunsIt()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Write(
@@ -134,15 +138,20 @@ public class GuardRunnerTests
             """
         );
 
-        var results = GuardRunner.Run(repo.Options(censusRoot: "tests/Some.Tests.Meta"));
+        var results = await GuardRunner
+            .RunAsync(repo.Options(censusRoot: "tests/Some.Tests.Meta"))
+            .ConfigureAwait(false);
         var failures = results.Where(r => !r.Passed).ToList();
 
         results
             .Select(r => r.Name)
             .Should()
             .BeEquivalentTo([.. RepoLocalRoster, "census/classified"]);
-        results.Single(r => r.Name == "census/classified").Inspected.Should().Be(1);
-        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
+        results
+            .Single(r => string.Equals(r.Name, "census/classified", StringComparison.Ordinal))
+            .Inspected.Should()
+            .Be(1);
+        failures.Should().BeEmpty(string.Join('\n', failures.SelectMany(f => f.Offenders)));
     }
 
     #endregion
@@ -150,33 +159,41 @@ public class GuardRunnerTests
     #region End to end
 
     [Test]
-    public void Run_ValidRepoLocalCorpus_AllChecksPass()
+    public async Task Run_ValidRepoLocalCorpus_AllChecksPass()
     {
         using var repo = TempAdrRepo.Valid();
 
-        var failures = GuardRunner.Run(repo.Options()).Where(r => !r.Passed).ToList();
+        var failures = (await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false))
+            .Where(r => !r.Passed)
+            .ToList();
 
-        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
+        failures.Should().BeEmpty(string.Join('\n', failures.SelectMany(f => f.Offenders)));
     }
 
     [Test]
-    public void Run_ValidCentralCorpus_AllChecksPass()
+    public async Task Run_ValidCentralCorpus_AllChecksPass()
     {
         using var repo = TempAdrRepo.Valid(central: true);
         var options = repo.Options(requireReposKey: true);
 
-        var failures = GuardRunner.Run(options).Where(r => !r.Passed).ToList();
+        var failures = (await GuardRunner.RunAsync(options).ConfigureAwait(false))
+            .Where(r => !r.Passed)
+            .ToList();
 
-        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
+        failures.Should().BeEmpty(string.Join('\n', failures.SelectMany(f => f.Offenders)));
     }
 
     [Test]
-    public void Run_CentralCorpus_ChecksTheByRepoTable_WhichALocalOneDoesNot()
+    public async Task Run_CentralCorpus_ChecksTheByRepoTable_WhichALocalOneDoesNot()
     {
         using var repo = TempAdrRepo.Valid(central: true);
 
-        var central = GuardRunner.Run(repo.Options(requireReposKey: true)).Select(r => r.Name);
-        var local = GuardRunner.Run(repo.Options()).Select(r => r.Name);
+        var central = (
+            await GuardRunner.RunAsync(repo.Options(requireReposKey: true)).ConfigureAwait(false)
+        ).Select(r => r.Name);
+        var local = (await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false)).Select(r =>
+            r.Name
+        );
 
         central.Should().Contain("index/repos-table");
         local.Should().NotContain("index/repos-table");
@@ -187,25 +204,31 @@ public class GuardRunnerTests
     #region Reporting
 
     [Test]
-    public void Report_WhenEverythingPasses_ReturnsZero()
+    public async Task Report_WhenEverythingPasses_ReturnsZero()
     {
         using var repo = TempAdrRepo.Valid();
         var output = new StringWriter();
 
-        var exitCode = GuardRunner.Report(GuardRunner.Run(repo.Options()), output);
+        var exitCode = GuardRunner.Report(
+            (await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false)),
+            output
+        );
 
         exitCode.Should().Be(0);
         output.ToString().Should().Contain("ADR checks passed");
     }
 
     [Test]
-    public void Report_WhenSomethingFails_ReturnsOne_AndPrintsTheRuleAndTheOffender()
+    public async Task Report_WhenSomethingFails_ReturnsOne_AndPrintsTheRuleAndTheOffender()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(areas: "[invented]"));
         var output = new StringWriter();
 
-        var exitCode = GuardRunner.Report(GuardRunner.Run(repo.Options()), output);
+        var exitCode = GuardRunner.Report(
+            (await GuardRunner.RunAsync(repo.Options()).ConfigureAwait(false)),
+            output
+        );
         var text = output.ToString();
 
         exitCode.Should().Be(1);

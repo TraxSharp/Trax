@@ -22,13 +22,13 @@ public static class ServiceExtensions
     /// <typeparam name="TBuilder">The builder type (supports chaining through promoted builders).</typeparam>
     /// <param name="configurationBuilder">The effect builder.</param>
     /// <param name="serializeJunctionData">
-    /// When <c>true</c>, a successful junction's output is serialized to JSON (with <c>[TraxSensitive]</c>
+    /// When <see langword="true"/>, a successful junction's output is serialized to JSON (with <c>[TraxSensitive]</c>
     /// members masked) into its metadata's <c>OutputJson</c> and so appears in the after-junction entry.
     /// The copy follows the train's lifecycle-hook output policy: none for a train whose output
     /// <c>SaveTrainParameters</c> excludes, and at most <c>MaxParameterBytes</c> (1 MiB by default) before it
     /// is replaced by a <c>_truncated</c> placeholder. An output that cannot be serialized is logged as an
     /// <c>_unserializable</c> placeholder, and never fails the train. Junction input is not serialized.
-    /// Defaults to <c>false</c> to avoid performance overhead.
+    /// Defaults to <see langword="false"/> to avoid performance overhead.
     /// </param>
     /// <returns>The builder for chaining.</returns>
     public static TBuilder AddJunctionLogger<TBuilder>(

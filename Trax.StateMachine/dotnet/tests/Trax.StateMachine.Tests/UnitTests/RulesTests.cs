@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -36,7 +37,7 @@ public class RulesTests
         var reduction = SetAll(
             Set((Ctx c) => c.Name).FromInput((Paid p) => p.Coin),
             Set((Ctx c) => c.Total).FromInput((Paid p) => p.Amount),
-            Set((Ctx c) => c.Flag).ToValue(true)
+            Set((Ctx c) => c.Flag).ToValue(value: true)
         );
 
         reduction
@@ -56,9 +57,9 @@ public class RulesTests
             new JsonObject { ["coin"] = "quarter", ["amount"] = 25 },
             new JsonObject()
         );
-        after["name"]!.GetValue<string>().Should().Be("quarter");
-        after["total"]!.GetValue<int>().Should().Be(25);
-        after["flag"]!.GetValue<bool>().Should().BeTrue();
+        after["name"].NotNull().GetValue<string>().Should().Be("quarter");
+        after["total"].NotNull().GetValue<int>().Should().Be(25);
+        after["flag"].NotNull().GetValue<bool>().Should().BeTrue();
     }
 
     [Test]
@@ -145,11 +146,11 @@ public class RulesTests
         Field((Ctx c) => c.Flag)
             .IsTrue()
             .Should()
-            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", true));
+            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", Value: true));
         Field((Ctx c) => c.Flag)
             .IsFalse()
             .Should()
-            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", false));
+            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", Value: false));
         Field((Ctx c) => c.Items)
             .ArrayOf(JsonFieldType.String)
             .Should()
@@ -203,7 +204,8 @@ public class RulesTests
         step.Field.Should().Be("total");
         step.Source.Should()
             .BeOfType<ValueSource.Constant>()
-            .Which.Value!.GetValue<int>()
+            .Which.Value.NotNull()
+            .GetValue<int>()
             .Should()
             .Be(0);
     }

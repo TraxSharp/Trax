@@ -8,6 +8,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -51,7 +52,7 @@ public class TraxJwtSocketInterceptorJwksTests
         await using var _ = sp;
 
         var token = server
-            .CreateIssuer(Audience)
+            .CreateIssuer(Audience, TimeProvider.System)
             .Mint(b => b.WithSubject("alice").WithClaim("name", "Alice").WithRole("Player"));
 
         var interceptor = NewInterceptor(sp);
@@ -59,13 +60,16 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.Identity!.IsAuthenticated.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxJwt:alice");
+        http.User.Identity.NotNull().IsAuthenticated.Should().BeTrue();
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)
+            .NotNull()
+            .Value.Should()
+            .Be("TraxJwt:alice");
         http.User.IsInRole("Player").Should().BeTrue();
     }
 
@@ -80,7 +84,7 @@ public class TraxJwtSocketInterceptorJwksTests
         await using var _ = sp;
 
         var token = foreignServer
-            .CreateIssuer(Audience)
+            .CreateIssuer(Audience, TimeProvider.System)
             .Mint(b => b.WithSubject("alice").WithIssuer(validatingServer.Issuer));
 
         var interceptor = NewInterceptor(sp);
@@ -88,7 +92,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -104,11 +108,11 @@ public class TraxJwtSocketInterceptorJwksTests
         await using var _ = sp;
 
         var token = server
-            .CreateIssuer(Audience)
+            .CreateIssuer(Audience, TimeProvider.System)
             .Mint(b =>
                 b.WithSubject("alice")
-                    .WithNotBefore(DateTime.UtcNow.AddMinutes(-10))
-                    .WithExpires(DateTime.UtcNow.AddMinutes(-5))
+                    .WithNotBefore(TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10))
+                    .WithExpires(TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5))
             );
 
         var interceptor = NewInterceptor(sp);
@@ -116,7 +120,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -132,7 +136,7 @@ public class TraxJwtSocketInterceptorJwksTests
         await using var _ = sp;
 
         var token = server
-            .CreateIssuer(Audience)
+            .CreateIssuer(Audience, TimeProvider.System)
             .Mint(b => b.WithSubject("alice").WithAudience("some-other-audience"));
 
         var interceptor = NewInterceptor(sp);
@@ -140,7 +144,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -157,7 +161,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         // Signed by the server's real key, but the iss claim is a stranger.
         var token = server
-            .CreateIssuer(Audience)
+            .CreateIssuer(Audience, TimeProvider.System)
             .Mint(b => b.WithSubject("alice").WithIssuer("https://rogue-issuer"));
 
         var interceptor = NewInterceptor(sp);
@@ -165,7 +169,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 
@@ -194,7 +198,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, Bearer: null)),
             CancellationToken.None
         );
 

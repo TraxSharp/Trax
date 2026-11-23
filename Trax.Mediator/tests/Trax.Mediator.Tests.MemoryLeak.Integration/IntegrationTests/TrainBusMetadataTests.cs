@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -8,6 +9,7 @@ using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 
@@ -18,7 +20,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class TrainBusMetadataTests
 {
-    private IServiceProvider _serviceProvider = null!;
+    private IServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -42,13 +44,14 @@ public class TrainBusMetadataTests
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
     [Test]
     public async Task RunAsyncGeneric_WithPendingMetadata_RunsTrain()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-1", 0);
         var metadata = NewPendingMetadata("test-train");
 
@@ -61,7 +64,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncGeneric_WithNonPendingMetadata_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-2", 0);
         var metadata = NewPendingMetadata("test-train");
         metadata.TrainState = TrainState.Completed;
@@ -74,7 +77,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncGenericWithCt_WithPendingMetadata_RunsTrain()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-3", 0);
         var metadata = NewPendingMetadata("test-train");
 
@@ -91,7 +94,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncGenericWithCt_WithNonPendingMetadata_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-4", 0);
         var metadata = NewPendingMetadata("test-train");
         metadata.TrainState = TrainState.InProgress;
@@ -105,7 +108,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncNonGeneric_WithPendingMetadata_RunsTrain()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-5", 0);
         var metadata = NewPendingMetadata("test-train");
 
@@ -115,7 +118,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncNonGeneric_WithNonPendingMetadata_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-6", 0);
         var metadata = NewPendingMetadata("test-train");
         metadata.TrainState = TrainState.Failed;
@@ -128,7 +131,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncNonGenericWithCt_WithPendingMetadata_RunsTrain()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-7", 0);
         var metadata = NewPendingMetadata("test-train");
 
@@ -138,7 +141,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsyncNonGenericWithCt_WithNonPendingMetadata_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput("metadata-8", 0);
         var metadata = NewPendingMetadata("test-train");
         metadata.TrainState = TrainState.Completed;
@@ -151,9 +154,9 @@ public class TrainBusMetadataTests
     [Test]
     public async Task InitializeTrain_NullInput_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
-        Action act = () => trainBus.InitializeTrain(null!);
+        Action act = () => trainBus.InitializeTrain(Null.Of<object>());
 
         act.Should().Throw<TrainException>().WithMessage("*null*");
     }
@@ -161,7 +164,7 @@ public class TrainBusMetadataTests
     [Test]
     public async Task InitializeTrain_UnregisteredInputType_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         Action act = () => trainBus.InitializeTrain(new UnregisteredInput());
 
@@ -171,12 +174,12 @@ public class TrainBusMetadataTests
     [Test]
     public async Task RunAsync_UnregisteredInputType_Throws()
     {
-        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
+        var trainBus = _serviceProvider.NotNull().GetRequiredService<ITrainBus>();
 
         Func<Task> act = () => trainBus.RunAsync<object>(new UnregisteredInput());
 
         await act.Should().ThrowAsync<NoTrainForInputException>();
     }
 
-    private class UnregisteredInput { }
+    private sealed class UnregisteredInput;
 }

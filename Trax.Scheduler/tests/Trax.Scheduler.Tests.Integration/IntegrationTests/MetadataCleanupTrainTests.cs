@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -30,12 +31,12 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class MetadataCleanupTrainTests : TestSetup
 {
-    private IMetadataCleanupTrain _train = null!;
-    private SchedulerConfiguration _config = null!;
+    private IMetadataCleanupTrain? _train;
+    private SchedulerConfiguration? _config;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
     }
@@ -44,7 +45,7 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task MetadataCleanupTrainTestsTearDown()
     {
         // Reset batch size to default for test isolation
-        _config.MetadataCleanup!.DeleteBatchSize = 1000;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = 1000;
 
         if (_train is IDisposable disposable)
             disposable.Dispose();
@@ -56,9 +57,11 @@ public class MetadataCleanupTrainTests : TestSetup
     public void DefaultWhitelist_ContainsManifestManagerTrain()
     {
         _config
-            .MetadataCleanup!.TrainTypeWhitelist.Should()
+            .NotNull()
+            .MetadataCleanup.NotNull()
+            .TrainTypeWhitelist.Should()
             .Contain(
-                typeof(ManifestManagerTrain).FullName!,
+                typeof(ManifestManagerTrain).FullName.NotNull(),
                 "ManifestManagerTrain should be in the default whitelist"
             );
     }
@@ -67,9 +70,11 @@ public class MetadataCleanupTrainTests : TestSetup
     public void DefaultWhitelist_ContainsMetadataCleanupTrain()
     {
         _config
-            .MetadataCleanup!.TrainTypeWhitelist.Should()
+            .NotNull()
+            .MetadataCleanup.NotNull()
+            .TrainTypeWhitelist.Should()
             .Contain(
-                typeof(MetadataCleanupTrain).FullName!,
+                typeof(MetadataCleanupTrain).FullName.NotNull(),
                 "MetadataCleanupTrain should be in the default whitelist"
             );
     }
@@ -78,7 +83,9 @@ public class MetadataCleanupTrainTests : TestSetup
     public void DefaultRetentionPeriod_IsThirtyMinutes()
     {
         _config
-            .MetadataCleanup!.RetentionPeriod.Should()
+            .NotNull()
+            .MetadataCleanup.NotNull()
+            .RetentionPeriod.Should()
             .Be(TimeSpan.FromMinutes(30), "default retention period should be 30 minutes");
     }
 
@@ -86,7 +93,9 @@ public class MetadataCleanupTrainTests : TestSetup
     public void DefaultCleanupInterval_IsOneMinute()
     {
         _config
-            .MetadataCleanup!.CleanupInterval.Should()
+            .NotNull()
+            .MetadataCleanup.NotNull()
+            .CleanupInterval.Should()
             .Be(TimeSpan.FromMinutes(1), "default cleanup interval should be 1 minute");
     }
 
@@ -107,12 +116,12 @@ public class MetadataCleanupTrainTests : TestSetup
             var metadata = await CreateAndSaveMetadata(
                 name: adminName,
                 state: TrainState.Completed,
-                startTime: DateTime.UtcNow.AddHours(-2)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
             );
             seeded.Add(metadata.Id);
         }
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         var remaining = await DataContext.Metadatas.Where(m => seeded.Contains(m.Id)).CountAsync();
@@ -128,19 +137,21 @@ public class MetadataCleanupTrainTests : TestSetup
         // The configurable whitelist never contains JobDispatcher, yet its metadata must be
         // pruned: it persists a row on every dispatch poll and is the dominant source of growth.
         _config
-            .MetadataCleanup!.TrainTypeWhitelist.Should()
+            .NotNull()
+            .MetadataCleanup.NotNull()
+            .TrainTypeWhitelist.Should()
             .NotContain(
-                typeof(JobDispatcherTrain).FullName!,
+                typeof(JobDispatcherTrain).FullName.NotNull(),
                 "JobDispatcher is pruned unconditionally, not via the whitelist"
             );
 
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(JobDispatcherTrain).FullName!,
+            name: typeof(JobDispatcherTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         var remaining = await DataContext
@@ -163,9 +174,9 @@ public class MetadataCleanupTrainTests : TestSetup
         // metadata row, and the RESTRICT foreign key made the whole cleanup DELETE throw.
         var manifest = await CreateAndSaveManifest();
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var deadLetter = await CreateAndSaveDeadLetter(manifest);
 
@@ -174,7 +185,7 @@ public class MetadataCleanupTrainTests : TestSetup
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, metadata.Id));
         DataContext.Reset();
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         var remainingMetadata = await DataContext
@@ -192,7 +203,8 @@ public class MetadataCleanupTrainTests : TestSetup
         survivingDeadLetter
             .Should()
             .NotBeNull("the dead letter is a meaningful record and must survive the cleanup");
-        survivingDeadLetter!
+        survivingDeadLetter
+            .NotNull()
             .RetryMetadataId.Should()
             .BeNull(
                 "the dangling retry reference should be nulled, not left pointing at a deleted row"
@@ -204,9 +216,9 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_ParentMetadataWithRunningChild_NullsChildParentIdAndDeletesParent()
     {
         var parent = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // A still-running child (not eligible for deletion) references the parent via parent_id.
@@ -216,7 +228,7 @@ public class MetadataCleanupTrainTests : TestSetup
             parentId: parent.Id
         );
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         var remainingParent = await DataContext
@@ -232,23 +244,26 @@ public class MetadataCleanupTrainTests : TestSetup
                 "the expired parent should be deleted after the child's parent reference is cleared"
             );
         survivingChild.Should().NotBeNull("the still-running child must survive the cleanup");
-        survivingChild!.ParentId.Should().BeNull("the dangling parent reference should be nulled");
+        survivingChild
+            .NotNull()
+            .ParentId.Should()
+            .BeNull("the dangling parent reference should be nulled");
     }
 
     [Test]
     public async Task Run_WithFkReferencedRowsAcrossBatches_DeletesAll()
     {
         // Batch size 1 forces the per-row delete path, so every row exercises the FK-clearing.
-        _config.MetadataCleanup!.DeleteBatchSize = 1;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = 1;
 
         var manifest = await CreateAndSaveManifest();
         var ids = new List<long>();
         for (var i = 0; i < 5; i++)
         {
             var metadata = await CreateAndSaveMetadata(
-                name: typeof(ManifestManagerTrain).FullName!,
+                name: typeof(ManifestManagerTrain).FullName.NotNull(),
                 state: TrainState.Completed,
-                startTime: DateTime.UtcNow.AddHours(-2)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
             );
             ids.Add(metadata.Id);
 
@@ -259,7 +274,7 @@ public class MetadataCleanupTrainTests : TestSetup
             DataContext.Reset();
         }
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         var remaining = await DataContext.Metadatas.Where(m => ids.Contains(m.Id)).CountAsync();
@@ -281,13 +296,13 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create completed metadata older than retention period
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -303,13 +318,13 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create failed metadata older than retention period
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -329,13 +344,13 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create completed metadata within retention period
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-15) // 15 min ago, within 30 minute retention
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-15) // 15 min ago, within 30 minute retention
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -359,11 +374,11 @@ public class MetadataCleanupTrainTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             name: "SomeOtherTrain",
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -379,19 +394,19 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create expired metadata for both default whitelisted types
         var managerMetadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         var cleanupMetadata = await CreateAndSaveMetadata(
-            name: typeof(MetadataCleanupTrain).FullName!,
+            name: typeof(MetadataCleanupTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -415,13 +430,13 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create old pending metadata (non-terminal state)
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Pending,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -438,13 +453,13 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create old in-progress metadata (non-terminal state)
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.InProgress,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -466,9 +481,9 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create expired metadata with associated logs
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         var log = Log.Create(
@@ -495,7 +510,7 @@ public class MetadataCleanupTrainTests : TestSetup
         DataContext.Reset();
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -519,18 +534,19 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create expired metadata with an associated dispatched work queue entry
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         var workQueueEntry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(ManifestManagerTrain).FullName!,
+                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(workQueueEntry);
@@ -544,13 +560,13 @@ public class MetadataCleanupTrainTests : TestSetup
                 setters
                     .SetProperty(wq => wq.MetadataId, metadata.Id)
                     .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
+                    .SetProperty(wq => wq.DispatchedAt, TimeProvider.System.GetUtcNow().UtcDateTime)
             );
 
         DataContext.Reset();
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -572,18 +588,19 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange - Create recent metadata with an associated work queue entry
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-10) // Within 30 minute retention
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10) // Within 30 minute retention
         );
 
         var workQueueEntry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(ManifestManagerTrain).FullName!,
+                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(workQueueEntry);
@@ -596,13 +613,13 @@ public class MetadataCleanupTrainTests : TestSetup
                 setters
                     .SetProperty(wq => wq.MetadataId, metadata.Id)
                     .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
+                    .SetProperty(wq => wq.DispatchedAt, TimeProvider.System.GetUtcNow().UtcDateTime)
             );
 
         DataContext.Reset();
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -626,13 +643,13 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_KeepsAnExpiredRunAQueuedRequeueWillReplay()
     {
         var source = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var requeue = await QueueReplayOf(source.Id);
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id))
@@ -644,7 +661,7 @@ public class MetadataCleanupTrainTests : TestSetup
             .WorkQueues.Where(q => q.Id == requeue.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled));
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id)).Should().BeFalse();
@@ -654,18 +671,18 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_KeepsAnExpiredRunARetainedRunReplayed()
     {
         var source = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var replayer = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime
         );
         await LinkReplay(replayer.Id, source.Id);
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id))
@@ -682,26 +699,26 @@ public class MetadataCleanupTrainTests : TestSetup
         // replayed it, until a later sweep, and a retry could replay the same answers again
         // (docs/adr/0017-a-manifests-retry-replays-the-decisions-of-the-run-it-retries.md). Even
         // a batch of one takes both.
-        _config.MetadataCleanup!.DeleteBatchSize = batchSize;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = batchSize;
         var source = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-3)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
         );
         var replayer = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var requeueOfReplay = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-1)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
         );
         await LinkReplay(replayer.Id, source.Id);
         await LinkReplay(requeueOfReplay.Id, replayer.Id);
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         (await DataContext.Metadatas.AnyAsync(m => m.Id == replayer.Id)).Should().BeFalse();
@@ -717,23 +734,23 @@ public class MetadataCleanupTrainTests : TestSetup
         // The run replayed is not expired (another train's retention, or a clock that disagreed),
         // so the replay of it stays too.
         var source = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime
         );
         var replayer = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var other = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         await LinkReplay(replayer.Id, source.Id);
 
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         DataContext.Reset();
         (await DataContext.Metadatas.AnyAsync(m => m.Id == replayer.Id))
@@ -753,9 +770,9 @@ public class MetadataCleanupTrainTests : TestSetup
         for (var i = 0; i < 4; i++)
             runs.Add(
                 await CreateAndSaveMetadata(
-                    name: typeof(ManifestManagerTrain).FullName!,
+                    name: typeof(ManifestManagerTrain).FullName.NotNull(),
                     state: TrainState.Failed,
-                    startTime: DateTime.UtcNow.AddHours(-2)
+                    startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
                 )
             );
         var logger = new WarningLogger();
@@ -769,19 +786,21 @@ public class MetadataCleanupTrainTests : TestSetup
                 beforeMetadataDelete: async ct =>
                 {
                     // Each attempt, a requeue links another run of the batch.
-                    using var other = Scope.ServiceProvider.CreateScope();
+                    var other = Scope.ServiceProvider.CreateAsyncScope();
+                    await using var otherDisposal = other.ConfigureAwait(false);
                     var otherData =
                         other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
                     otherData.WorkQueues.Add(
                         WorkQueue.Create(
                             new CreateWorkQueue
                             {
-                                TrainName = typeof(ManifestManagerTrain).FullName!,
+                                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
                                 ReplayDecisionsOf = runs[linked++].Id,
-                            }
+                            },
+                            TimeProvider.System
                         )
                     );
-                    await otherData.SaveChanges(ct);
+                    await otherData.SaveChanges(ct).ConfigureAwait(false);
                 },
                 logger: logger
             );
@@ -807,9 +826,9 @@ public class MetadataCleanupTrainTests : TestSetup
         for (var i = 0; i < 4; i++)
             runs.Add(
                 await CreateAndSaveMetadata(
-                    name: typeof(ManifestManagerTrain).FullName!,
+                    name: typeof(ManifestManagerTrain).FullName.NotNull(),
                     state: TrainState.Failed,
-                    startTime: DateTime.UtcNow.AddHours(-2)
+                    startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
                 )
             );
         DataContext.Reset();
@@ -819,17 +838,7 @@ public class MetadataCleanupTrainTests : TestSetup
             RetentionPeriod = TimeSpan.FromMinutes(30),
             DeleteBatchSize = runs.Count,
         };
-        var junction =
-            new Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction(
-                DataContext,
-                new SchedulerConfiguration { MetadataCleanup = cleanup },
-                Microsoft
-                    .Extensions
-                    .Logging
-                    .Abstractions
-                    .NullLogger<Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction>
-                    .Instance
-            );
+        var junction = NewDeleteJunction(cleanup);
         var attempts = 0;
         junction.BeforeMetadataDelete = async ct =>
         {
@@ -839,19 +848,7 @@ public class MetadataCleanupTrainTests : TestSetup
                 return;
             }
 
-            using var other = Scope.ServiceProvider.CreateScope();
-            var otherData =
-                other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
-            otherData.WorkQueues.Add(
-                WorkQueue.Create(
-                    new CreateWorkQueue
-                    {
-                        TrainName = typeof(ManifestManagerTrain).FullName!,
-                        ReplayDecisionsOf = runs[attempts++].Id,
-                    }
-                )
-            );
-            await otherData.SaveChanges(ct);
+            await CommitReplayEntryOnOtherConnection(runs[attempts++].Id, ct).ConfigureAwait(false);
         };
 
         await junction.Run(new MetadataCleanupRequest());
@@ -868,7 +865,12 @@ public class MetadataCleanupTrainTests : TestSetup
                     .MaxDeleteAttempts,
                 "the batch was tried that many times and not selected again"
             );
-        (await DataContext.Metadatas.AnyAsync(m => m.Id == runs[3].Id))
+        (
+            await DataContext.Metadatas.AnyAsync(
+                m => m.Id == runs[3].Id,
+                cancellationToken: CancellationToken.None
+            )
+        )
             .Should()
             .BeTrue(
                 "a batch left after its attempts waits for the next sweep. See "
@@ -908,17 +910,18 @@ public class MetadataCleanupTrainTests : TestSetup
         // statements repeat the test, so the linked run, its entry and its logs survive
         // (docs/adr/0017-a-manifests-retry-replays-the-decisions-of-the-run-it-retries.md).
         var linked = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var unlinked = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var ownEntry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = typeof(ManifestManagerTrain).FullName! }
+            new CreateWorkQueue { TrainName = typeof(ManifestManagerTrain).FullName.NotNull() },
+            TimeProvider.System
         );
         ownEntry.Status = WorkQueueStatus.Dispatched;
         ownEntry.MetadataId = linked.Id;
@@ -931,9 +934,9 @@ public class MetadataCleanupTrainTests : TestSetup
         else
         {
             var replayer = await CreateAndSaveMetadata(
-                name: typeof(ManifestManagerTrain).FullName!,
+                name: typeof(ManifestManagerTrain).FullName.NotNull(),
                 state: TrainState.InProgress,
-                startTime: DateTime.UtcNow
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime
             );
             await LinkReplay(replayer.Id, linked.Id);
         }
@@ -968,31 +971,22 @@ public class MetadataCleanupTrainTests : TestSetup
         // keeps its entry, logs, dead letter link and child
         // (docs/adr/0017-a-manifests-retry-replays-the-decisions-of-the-run-it-retries.md).
         var linked = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
         var unlinked = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Failed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
-        var ownEntry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = typeof(ManifestManagerTrain).FullName! }
-        );
-        ownEntry.Status = WorkQueueStatus.Dispatched;
-        ownEntry.MetadataId = linked.Id;
-        await DataContext.Track(ownEntry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        var ownEntry = await SaveDispatchedEntryOf(linked.Id);
         var child = await CreateAndSaveChildMetadata(
             name: "Consumer.Trains.SomeChildTrain",
             state: TrainState.InProgress,
             parentId: linked.Id
         );
-        var deadLetter = await CreateAndSaveDeadLetter(await CreateAndSaveManifest());
-        await DataContext
-            .DeadLetters.Where(d => d.Id == deadLetter.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, linked.Id));
+        var deadLetter = await SaveDeadLetterRetriedBy(linked.Id);
         DataContext.Reset();
 
         var linkedOnce = false;
@@ -1009,19 +1003,7 @@ public class MetadataCleanupTrainTests : TestSetup
                     linkedOnce = true;
 
                     // Committed on another connection, as a concurrent requeue would be.
-                    using var other = Scope.ServiceProvider.CreateScope();
-                    var otherData =
-                        other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
-                    otherData.WorkQueues.Add(
-                        WorkQueue.Create(
-                            new CreateWorkQueue
-                            {
-                                TrainName = typeof(ManifestManagerTrain).FullName!,
-                                ReplayDecisionsOf = linked.Id,
-                            }
-                        )
-                    );
-                    await otherData.SaveChanges(ct);
+                    await CommitReplayEntryOnOtherConnection(linked.Id, ct).ConfigureAwait(false);
                 }
             );
 
@@ -1041,19 +1023,127 @@ public class MetadataCleanupTrainTests : TestSetup
         (await DataContext.Metadatas.AnyAsync(m => m.Id == unlinked.Id)).Should().BeFalse();
     }
 
+    private Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction NewDeleteJunction(
+        MetadataCleanupConfiguration cleanup
+    ) =>
+        new(
+            DataContext,
+            new SchedulerConfiguration { MetadataCleanup = cleanup },
+            Microsoft
+                .Extensions
+                .Logging
+                .Abstractions
+                .NullLogger<Trax.Scheduler.Trains.MetadataCleanup.Junctions.DeleteExpiredMetadataJunction>
+                .Instance,
+            TimeProvider.System
+        );
+
+    private async Task CommitReplayEntryOnOtherConnection(long replayOf, CancellationToken ct)
+    {
+        var other = Scope.ServiceProvider.CreateAsyncScope();
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var otherData =
+            other.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.DataContext.IDataContext>();
+        otherData.WorkQueues.Add(
+            WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
+                    ReplayDecisionsOf = replayOf,
+                },
+                TimeProvider.System
+            )
+        );
+        await otherData.SaveChanges(ct).ConfigureAwait(false);
+    }
+
+    private async Task<WorkQueue> SaveDispatchedEntryOf(long metadataId)
+    {
+        var ownEntry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = typeof(ManifestManagerTrain).FullName.NotNull() },
+            TimeProvider.System
+        );
+        ownEntry.Status = WorkQueueStatus.Dispatched;
+        ownEntry.MetadataId = metadataId;
+        await DataContext.Track(ownEntry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        return ownEntry;
+    }
+
+    private async Task<DeadLetter> SaveDeadLetterRetriedBy(long metadataId)
+    {
+        var deadLetter = await CreateAndSaveDeadLetter(
+                await CreateAndSaveManifest().ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+        await DataContext
+            .DeadLetters.Where(d => d.Id == deadLetter.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, metadataId))
+            .ConfigureAwait(false);
+        return deadLetter;
+    }
+
+    private async Task<long> SaveLogOf(long metadataId)
+    {
+        var log = Log.Create(
+            new CreateLog
+            {
+                Level = LogLevel.Information,
+                Message = "Test log entry",
+                CategoryName = "TestCategory",
+                EventId = 1,
+            }
+        );
+        await DataContext.Logs.AddAsync(log).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        var logId = log.Id;
+        await DataContext
+            .Logs.Where(l => l.Id == logId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(l => l.MetadataId, metadataId))
+            .ConfigureAwait(false);
+        return logId;
+    }
+
+    private async Task<long> SaveDispatchedEntryRowOf(long metadataId)
+    {
+        var workQueueEntry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
+                Input = null,
+                InputTypeName = null,
+            },
+            TimeProvider.System
+        );
+        await DataContext.Track(workQueueEntry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        var entryId = workQueueEntry.Id;
+        await DataContext
+            .WorkQueues.Where(wq => wq.Id == entryId)
+            .ExecuteUpdateAsync(setters =>
+                setters
+                    .SetProperty(wq => wq.MetadataId, metadataId)
+                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
+                    .SetProperty(wq => wq.DispatchedAt, TimeProvider.System.GetUtcNow().UtcDateTime)
+            )
+            .ConfigureAwait(false);
+        return entryId;
+    }
+
     private async Task<WorkQueue> QueueReplayOf(long metadataId)
     {
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(ManifestManagerTrain).FullName!,
+                TrainName = typeof(ManifestManagerTrain).FullName.NotNull(),
                 Input = null,
                 InputTypeName = null,
                 ReplayDecisionsOf = metadataId,
-            }
+            },
+            TimeProvider.System
         );
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return entry;
     }
@@ -1062,7 +1152,8 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         await DataContext
             .Metadatas.Where(m => m.Id == replayerId)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOf, (long?)sourceId));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOf, (long?)sourceId))
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -1074,7 +1165,8 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_WithNoExpiredMetadata_CompletesSuccessfully()
     {
         // Act & Assert - Should complete without throwing
-        var act = async () => await _train.Run(new MetadataCleanupRequest());
+        var act = async () =>
+            await _train.NotNull().Run(new MetadataCleanupRequest()).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -1083,31 +1175,31 @@ public class MetadataCleanupTrainTests : TestSetup
     {
         // Arrange
         var expiredWhitelisted = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         var recentWhitelisted = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-10)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
         );
 
         var expiredNonWhitelisted = await CreateAndSaveMetadata(
             name: "SomeOtherTrain",
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         var expiredPending = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Pending,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -1141,24 +1233,24 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_WithMoreExpiredThanBatchSize_DeletesAllInMultipleBatches()
     {
         // Arrange - Set batch size to 2 and create 5 expired metadata rows
-        _config.MetadataCleanup!.DeleteBatchSize = 2;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = 2;
 
         for (var i = 0; i < 5; i++)
         {
             await CreateAndSaveMetadata(
-                name: typeof(ManifestManagerTrain).FullName!,
+                name: typeof(ManifestManagerTrain).FullName.NotNull(),
                 state: TrainState.Completed,
-                startTime: DateTime.UtcNow.AddHours(-2)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
             );
         }
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert - All 5 should be deleted (3 batches: 2 + 2 + 1)
         DataContext.Reset();
         var remaining = await DataContext
-            .Metadatas.Where(m => m.Name == typeof(ManifestManagerTrain).FullName!)
+            .Metadatas.Where(m => m.Name == typeof(ManifestManagerTrain).FullName.NotNull())
             .CountAsync();
 
         remaining.Should().Be(0, "all expired metadata should be deleted across multiple batches");
@@ -1168,24 +1260,24 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_WithBatchSizeNull_DeletesAllInCappedBatches()
     {
         // Arrange - Disable batching
-        _config.MetadataCleanup!.DeleteBatchSize = null;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = null;
 
         for (var i = 0; i < 5; i++)
         {
             await CreateAndSaveMetadata(
-                name: typeof(ManifestManagerTrain).FullName!,
+                name: typeof(ManifestManagerTrain).FullName.NotNull(),
                 state: TrainState.Completed,
-                startTime: DateTime.UtcNow.AddHours(-2)
+                startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
             );
         }
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
         var remaining = await DataContext
-            .Metadatas.Where(m => m.Name == typeof(ManifestManagerTrain).FullName!)
+            .Metadatas.Where(m => m.Name == typeof(ManifestManagerTrain).FullName.NotNull())
             .CountAsync();
 
         remaining.Should().Be(0, "a null batch size sweeps everything, a capped batch at a time");
@@ -1195,56 +1287,24 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_BatchedDeletion_DeletesAssociatedLogsAndWorkQueues()
     {
         // Arrange - Small batch size with associated FK rows
-        _config.MetadataCleanup!.DeleteBatchSize = 1;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = 1;
 
         var metadata = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         // Create associated log
-        var log = Log.Create(
-            new CreateLog
-            {
-                Level = LogLevel.Information,
-                Message = "Test log entry",
-                CategoryName = "TestCategory",
-                EventId = 1,
-            }
-        );
-        await DataContext.Logs.AddAsync(log);
-        await DataContext.SaveChanges(CancellationToken.None);
-        var logId = log.Id;
-        await DataContext
-            .Logs.Where(l => l.Id == logId)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(l => l.MetadataId, metadata.Id));
+        var logId = await SaveLogOf(metadata.Id);
 
         // Create associated work queue entry
-        var workQueueEntry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = typeof(ManifestManagerTrain).FullName!,
-                Input = null,
-                InputTypeName = null,
-            }
-        );
-        await DataContext.Track(workQueueEntry);
-        await DataContext.SaveChanges(CancellationToken.None);
-        var entryId = workQueueEntry.Id;
-        await DataContext
-            .WorkQueues.Where(wq => wq.Id == entryId)
-            .ExecuteUpdateAsync(setters =>
-                setters
-                    .SetProperty(wq => wq.MetadataId, metadata.Id)
-                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
-            );
+        var entryId = await SaveDispatchedEntryRowOf(metadata.Id);
 
         DataContext.Reset();
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -1267,22 +1327,22 @@ public class MetadataCleanupTrainTests : TestSetup
     public async Task Run_BatchedDeletion_DoesNotDeleteNonExpiredMetadata()
     {
         // Arrange - Mix of expired and non-expired, with small batch size
-        _config.MetadataCleanup!.DeleteBatchSize = 1;
+        _config.NotNull().MetadataCleanup.NotNull().DeleteBatchSize = 1;
 
         var expired = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddHours(-2)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
 
         var recent = await CreateAndSaveMetadata(
-            name: typeof(ManifestManagerTrain).FullName!,
+            name: typeof(ManifestManagerTrain).FullName.NotNull(),
             state: TrainState.Completed,
-            startTime: DateTime.UtcNow.AddMinutes(-10)
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
         );
 
         // Act
-        await _train.Run(new MetadataCleanupRequest());
+        await _train.NotNull().Run(new MetadataCleanupRequest());
 
         // Assert
         DataContext.Reset();
@@ -1319,7 +1379,9 @@ public class MetadataCleanupTrainTests : TestSetup
     public void DefaultDeleteBatchSize_IsOneThousand()
     {
         _config
-            .MetadataCleanup!.DeleteBatchSize.Should()
+            .NotNull()
+            .MetadataCleanup.NotNull()
+            .DeleteBatchSize.Should()
             .Be(1000, "default delete batch size should be 1000");
     }
 
@@ -1329,7 +1391,7 @@ public class MetadataCleanupTrainTests : TestSetup
         var config = new MetadataCleanupConfiguration();
         config.AddTrainType<ManifestManagerTrain>();
 
-        config.TrainTypeWhitelist.Should().Contain(typeof(ManifestManagerTrain).FullName!);
+        config.TrainTypeWhitelist.Should().Contain(typeof(ManifestManagerTrain).FullName.NotNull());
     }
 
     [Test]
@@ -1352,8 +1414,8 @@ public class MetadataCleanupTrainTests : TestSetup
         config
             .TrainTypeWhitelist.Should()
             .HaveCount(3)
-            .And.Contain(typeof(ManifestManagerTrain).FullName!)
-            .And.Contain(typeof(MetadataCleanupTrain).FullName!)
+            .And.Contain(typeof(ManifestManagerTrain).FullName.NotNull())
+            .And.Contain(typeof(MetadataCleanupTrain).FullName.NotNull())
             .And.Contain("ThirdTrain");
     }
 
@@ -1373,7 +1435,8 @@ public class MetadataCleanupTrainTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
@@ -1382,8 +1445,8 @@ public class MetadataCleanupTrainTests : TestSetup
         if (state is TrainState.Completed or TrainState.Failed)
             metadata.EndTime = startTime.AddSeconds(1);
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -1402,14 +1465,15 @@ public class MetadataCleanupTrainTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ParentId = parentId,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
-        metadata.StartTime = DateTime.UtcNow;
+        metadata.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;
@@ -1417,10 +1481,8 @@ public class MetadataCleanupTrainTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest()
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -1436,8 +1498,8 @@ public class MetadataCleanupTrainTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -1445,7 +1507,9 @@ public class MetadataCleanupTrainTests : TestSetup
 
     private async Task<DeadLetter> CreateAndSaveDeadLetter(Manifest manifest)
     {
-        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var reloadedManifest = await DataContext
+            .Manifests.FirstAsync(m => m.Id == manifest.Id)
+            .ConfigureAwait(false);
 
         var deadLetter = DeadLetter.Create(
             new CreateDeadLetter
@@ -1453,11 +1517,12 @@ public class MetadataCleanupTrainTests : TestSetup
                 Manifest = reloadedManifest,
                 Reason = "Test dead letter",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
 
-        await DataContext.Track(deadLetter);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(deadLetter).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return deadLetter;

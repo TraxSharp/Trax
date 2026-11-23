@@ -1,9 +1,11 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -43,12 +45,14 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class OperationsServiceRunTests
 {
-    private ServiceProvider _provider = null!;
-    private IJobSubmitter _submitter = null!;
-    private CapturingLogger _logger = null!;
-    private OperationsService _service = null!;
+    private ServiceProvider? _provider;
+
+    private ServiceProvider Provider => _provider.NotNull();
+    private IJobSubmitter? _submitter;
+    private CapturingLogger? _logger;
+    private OperationsService? _service;
     private ITrainAuthorizationService? _authorization;
-    private ITrainExecutionService _execution = null!;
+    private ITrainExecutionService? _execution;
 
     public record ProbeInput
     {
@@ -62,28 +66,34 @@ public class OperationsServiceRunTests
     public interface IRoutedTrain;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         _submitter = Substitute.For<IJobSubmitter>();
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns("job-1");
         _authorization = null;
         _logger = new CapturingLogger();
-        Build();
+        await BuildAsync().ConfigureAwait(false);
     }
 
     [TearDown]
-    public async Task TearDown() => await _provider.DisposeAsync();
-
-    private void Build(Action<IServiceCollection>? configure = null)
+    public async Task TearDown()
     {
-        _provider?.Dispose();
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private async Task BuildAsync(Action<IServiceCollection>? configure = null)
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync().ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
-        services.AddSingleton(_submitter);
+        services.AddSingleton(_submitter.NotNull());
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
         var mediatorConfiguration = new MediatorConfiguration();
         services.AddSingleton(mediatorConfiguration);
@@ -107,12 +117,13 @@ public class OperationsServiceRunTests
             discovery,
             Substitute.For<IRunExecutor>(),
             Substitute.For<IConcurrencyLimiter>(),
-            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            Provider.GetRequiredService<IDataContextProviderFactory>(),
             mediatorConfiguration,
-            _provider
+            Provider
         );
         _execution = Substitute.For<ITrainExecutionService>();
         _execution
+            .NotNull()
             .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
                 mediator.PrepareAsync(
@@ -124,11 +135,11 @@ public class OperationsServiceRunTests
 
         _service = new OperationsService(
             discovery,
-            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            Provider.GetRequiredService<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
-            _execution,
-            _provider,
-            logger: _logger
+            _execution.NotNull(),
+            Provider,
+            logger: _logger.NotNull()
         );
     }
 
@@ -140,10 +151,10 @@ public class OperationsServiceRunTests
             InputType = typeof(ProbeInput),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Scoped,
-            ServiceTypeName = serviceType.FullName!,
-            ImplementationTypeName = serviceType.FullName!,
-            InputTypeName = typeof(ProbeInput).FullName!,
-            OutputTypeName = typeof(object).FullName!,
+            ServiceTypeName = serviceType.FullName.NotNull(),
+            ImplementationTypeName = serviceType.FullName.NotNull(),
+            InputTypeName = typeof(ProbeInput).FullName.NotNull(),
+            OutputTypeName = typeof(object).FullName.NotNull(),
             RequiredPolicies = [],
             RequiredRoles = [],
             HasAuthorizeAttribute = guarded,
@@ -155,13 +166,14 @@ public class OperationsServiceRunTests
         };
 
     private Task<OperationResult> Run(Type train, string? json, CancellationToken ct = default) =>
-        _service.RunTrainAsync(new RunTrainInput(train.FullName!, json), ct);
+        _service.NotNull().RunTrainAsync(new RunTrainInput(train.FullName.NotNull(), json), ct);
 
     private async Task<List<Trax.Effect.Models.Metadata.Metadata>> Runs()
     {
-        using var context = (IDataContext)
-            _provider.GetRequiredService<IDataContextProviderFactory>().Create();
-        return await context.Metadatas.AsNoTracking().ToListAsync();
+        var context = (IDataContext)
+            Provider.GetRequiredService<IDataContextProviderFactory>().Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context.Metadatas.AsNoTracking().ToListAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -169,6 +181,7 @@ public class OperationsServiceRunTests
     {
         object? submitted = null;
         _submitter
+            .NotNull()
             .EnqueueAsync(
                 Arg.Any<long>(),
                 Arg.Do<object>(input => submitted = input),
@@ -185,6 +198,7 @@ public class OperationsServiceRunTests
         run.TrainState.Should().Be(TrainState.Pending);
         submitted.Should().BeEquivalentTo(new ProbeInput { CustomerId = 7 });
         await _submitter
+            .NotNull()
             .Received(1)
             .EnqueueAsync(run.Id, Arg.Any<object>(), Arg.Any<CancellationToken>());
     }
@@ -196,6 +210,7 @@ public class OperationsServiceRunTests
 
         result.Success.Should().BeTrue(result.Message);
         await _submitter
+            .NotNull()
             .Received(1)
             .EnqueueAsync(
                 Arg.Any<long>(),
@@ -211,6 +226,7 @@ public class OperationsServiceRunTests
     {
         object? submitted = null;
         _submitter
+            .NotNull()
             .EnqueueAsync(
                 Arg.Any<long>(),
                 Arg.Do<object>(input => submitted = input),
@@ -243,7 +259,7 @@ public class OperationsServiceRunTests
             .BeFalse("an ambiguous input is refused, never resolved to its last value (docs/0023)");
         result.Message.Should().StartWith("Invalid InputJson");
         (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -252,13 +268,14 @@ public class OperationsServiceRunTests
         using var cts = new CancellationTokenSource();
         var submitCancelled = true;
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
+            .Returns(async call =>
             {
                 // The request is aborted while the job is being handed over.
-                cts.Cancel();
+                await cts.CancelAsync().ConfigureAwait(false);
                 submitCancelled = call.ArgAt<CancellationToken>(2).IsCancellationRequested;
-                return Task.FromResult("job-1");
+                return "job-1";
             });
 
         var result = await Run(typeof(IProbeTrain), "{}", cts.Token);
@@ -274,28 +291,30 @@ public class OperationsServiceRunTests
     public async Task A_caller_cancelled_before_the_run_is_written_submits_nothing()
     {
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
-        var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token);
+        var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
     public async Task A_submit_that_fails_after_a_runner_started_the_run_is_a_success()
     {
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns<Task<string>>(async call =>
             {
                 // A remote runner claimed the run, then the call to it failed or timed out.
                 var id = call.ArgAt<long>(0);
-                using var context = (IDataContext)
-                    _provider.GetRequiredService<IDataContextProviderFactory>().Create();
-                var row = await context.Metadatas.FirstAsync(m => m.Id == id);
+                var context = (IDataContext)
+                    Provider.GetRequiredService<IDataContextProviderFactory>().Create();
+                await using var contextDisposal = context.ConfigureAwait(false);
+                var row = await context.Metadatas.FirstAsync(m => m.Id == id).ConfigureAwait(false);
                 row.TrainState = TrainState.InProgress;
-                await context.SaveChanges(CancellationToken.None);
+                await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
                 throw new TimeoutException("the runner did not answer in time");
             });
 
@@ -308,7 +327,7 @@ public class OperationsServiceRunTests
         var run = (await Runs()).Should().ContainSingle().Subject;
         result.Id.Should().Be(run.Id);
         run.TrainState.Should().Be(TrainState.InProgress, "the runner owns its outcome");
-        _logger.Errors.Should().BeEmpty();
+        _logger.NotNull().Errors.Should().BeEmpty();
     }
 
     [Test]
@@ -316,10 +335,11 @@ public class OperationsServiceRunTests
     {
         var failure = new InvalidOperationException("the worker queue is unreachable");
         _submitter
+            .NotNull()
             .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .Returns<Task<string>>(_ => throw failure);
 
-        var act = async () => await Run(typeof(IProbeTrain), "{}");
+        var act = async () => await Run(typeof(IProbeTrain), "{}").ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Should()
@@ -334,7 +354,7 @@ public class OperationsServiceRunTests
             .Be(TrainState.Failed, "no job exists to move it out of Pending, so it is failed now");
         run.EndTime.Should().NotBeNull();
         run.FailureReason.Should().Contain("the worker queue is unreachable");
-        _logger.Errors.Should().ContainSingle().Which.Should().BeSameAs(failure);
+        _logger.NotNull().Errors.Should().ContainSingle().Which.Should().BeSameAs(failure);
     }
 
     [Test]
@@ -345,7 +365,7 @@ public class OperationsServiceRunTests
         result.Success.Should().BeFalse();
         result.Message.Should().StartWith("Invalid InputJson");
         (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -361,10 +381,9 @@ public class OperationsServiceRunTests
     [Test]
     public async Task An_unknown_train_is_a_failed_result()
     {
-        var result = await _service.RunTrainAsync(
-            new RunTrainInput("No.Such.ITrain", "{}"),
-            CancellationToken.None
-        );
+        var result = await _service
+            .NotNull()
+            .RunTrainAsync(new RunTrainInput("No.Such.ITrain", "{}"), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Unknown train");
@@ -374,10 +393,9 @@ public class OperationsServiceRunTests
     [Test]
     public async Task A_missing_train_name_is_a_failed_result()
     {
-        var result = await _service.RunTrainAsync(
-            new RunTrainInput(" ", "{}"),
-            CancellationToken.None
-        );
+        var result = await _service
+            .NotNull()
+            .RunTrainAsync(new RunTrainInput(" ", "{}"), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be("TrainName is required.");
@@ -392,7 +410,7 @@ public class OperationsServiceRunTests
 
         result.Success.Should().BeFalse();
         (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
@@ -402,23 +420,24 @@ public class OperationsServiceRunTests
         _authorization
             .AuthorizeAsync(Arg.Any<TrainRegistration>(), Arg.Any<CancellationToken>())
             .Returns(_ => throw new UnauthorizedAccessException("Not authorized."));
-        Build();
+        await BuildAsync().ConfigureAwait(false);
 
-        var act = async () => await Run(typeof(IGuardedTrain), "{not json");
+        var act = async () => await Run(typeof(IGuardedTrain), "{not json").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<UnauthorizedAccessException>(
                 "authorization comes first, so a caller who may not run the train learns "
                     + "nothing about its input from a parse error"
-            );
-        (await Runs()).Should().BeEmpty();
-        _submitter.ReceivedCalls().Should().BeEmpty();
+            )
+            .ConfigureAwait(false);
+        (await Runs().ConfigureAwait(false)).Should().BeEmpty();
+        _submitter.NotNull().ReceivedCalls().Should().BeEmpty();
     }
 
     [Test]
     public async Task A_guarded_train_with_no_enforcer_is_a_server_fault_not_a_refusal()
     {
-        var act = async () => await Run(typeof(IGuardedTrain), "{}");
+        var act = async () => await Run(typeof(IGuardedTrain), "{}").ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<TrainAuthorizationNotConfiguredException>())
             .Which.Message.Should()
@@ -436,17 +455,23 @@ public class OperationsServiceRunTests
         result.Success.Should().BeFalse("docs/0023: a property given twice is refused");
         result.Message.Should().StartWith("Invalid InputJson");
         await _execution
+            .NotNull()
             .Received(1)
-            .PrepareAsync(typeof(IProbeTrain).FullName!, json, Arg.Any<CancellationToken>());
+            .PrepareAsync(
+                typeof(IProbeTrain).FullName.NotNull(),
+                json,
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Test]
     public async Task A_train_the_mediator_cannot_find_is_an_unknown_train()
     {
         _execution
+            .NotNull()
             .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns<Task<PreparedTrain>>(_ =>
-                throw new TrainNotFoundException(typeof(IProbeTrain).FullName!)
+                throw new TrainNotFoundException(typeof(IProbeTrain).FullName.NotNull())
             );
 
         var result = await Run(typeof(IProbeTrain), "{}");
@@ -459,7 +484,7 @@ public class OperationsServiceRunTests
     [Test]
     public async Task A_guarded_train_runs_inside_a_trusted_scope_with_no_enforcer()
     {
-        var trusted = _provider.GetRequiredService<ITrustedExecutionScope>();
+        var trusted = Provider.GetRequiredService<ITrustedExecutionScope>();
         OperationResult result;
 
         using (((TrustedExecutionScope)trusted).BeginTrusted("dashboard"))
@@ -473,19 +498,24 @@ public class OperationsServiceRunTests
     public async Task A_routed_train_goes_to_its_own_submitter()
     {
         var routed = new RecordingSubmitter();
-        Build(services =>
-        {
-            var routing = new JobSubmitterRoutingConfiguration();
-            routing.AddRoute(typeof(IRoutedTrain).FullName!, typeof(RecordingSubmitter));
-            services.AddSingleton(routing);
-            services.AddSingleton(routed);
-        });
+        await BuildAsync(services =>
+            {
+                var routing = new JobSubmitterRoutingConfiguration();
+                routing.AddRoute(
+                    typeof(IRoutedTrain).FullName.NotNull(),
+                    typeof(RecordingSubmitter)
+                );
+                services.AddSingleton(routing);
+                services.AddSingleton(routed);
+            })
+            .ConfigureAwait(false);
 
-        var result = await Run(typeof(IRoutedTrain), "{}");
+        var result = await Run(typeof(IRoutedTrain), "{}").ConfigureAwait(false);
 
         result.Success.Should().BeTrue(result.Message);
-        routed.Submitted.Should().ContainSingle().Which.Should().Be(result.Id!.Value);
+        routed.Submitted.Should().ContainSingle().Which.Should().Be(result.Id.NotNull().Value);
         _submitter
+            .NotNull()
             .ReceivedCalls()
             .Should()
             .BeEmpty("the job dispatcher would send this train to its routed submitter too");
@@ -496,23 +526,25 @@ public class OperationsServiceRunTests
     {
         var service = new OperationsService(
             Substitute.For<ITrainDiscoveryService>(),
-            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            Provider.GetRequiredService<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );
 
         var act = async () =>
-            await service.RunTrainAsync(
-                new RunTrainInput(typeof(IProbeTrain).FullName!),
-                CancellationToken.None
-            );
+            await service
+                .RunTrainAsync(
+                    new RunTrainInput(typeof(IProbeTrain).FullName.NotNull()),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     public sealed class RecordingSubmitter : IJobSubmitter
     {
-        public List<long> Submitted { get; } = [];
+        public IList<long> Submitted { get; } = [];
 
         public Task<string> EnqueueAsync(long metadataId) => Record(metadataId);
 
@@ -521,7 +553,9 @@ public class OperationsServiceRunTests
         private Task<string> Record(long metadataId)
         {
             Submitted.Add(metadataId);
-            return Task.FromResult($"routed-{metadataId}");
+            return Task.FromResult(
+                string.Create(CultureInfo.InvariantCulture, $"routed-{metadataId}")
+            );
         }
     }
 

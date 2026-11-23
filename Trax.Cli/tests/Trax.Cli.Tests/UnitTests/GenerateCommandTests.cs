@@ -1,6 +1,7 @@
 using System.CommandLine;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
+using Trax.Cli.Tests.Fakes;
 using Trax.Cli.Tests.IntegrationTests;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -8,7 +9,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class GenerateCommandTests
 {
-    private string _tempDir = null!;
+    private string _tempDir = "";
     private int _originalExitCode;
 
     [SetUp]
@@ -43,30 +44,54 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Handle_SchemaMissing_SetsExitCode1()
+    public async Task Handle_SchemaMissing_SetsExitCode1()
     {
         var schema = new FileInfo(Path.Combine(_tempDir, "missing.graphql"));
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
-        var stderr = CaptureStderr(() =>
-            GenerateCommand.Handle(schema, output, "Proj", null, false)
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "Proj",
+                        type: null,
+                        force: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+        var stderr = run.Stderr;
 
         Environment.ExitCode.Should().Be(1);
         stderr.Should().Contain("Schema file not found");
     }
 
     [Test]
-    public void Handle_OutputExistsWithoutForce_SetsExitCode1()
+    public async Task Handle_OutputExistsWithoutForce_SetsExitCode1()
     {
         var schema = new FileInfo(Path.Combine(_tempDir, "schema.graphql"));
-        File.WriteAllText(schema.FullName, "type Query { hi: String }");
+        await File.WriteAllTextAsync(schema.FullName, "type Query { hi: String }");
         var output = new DirectoryInfo(Path.Combine(_tempDir, "existing"));
         Directory.CreateDirectory(output.FullName);
 
-        var stderr = CaptureStderr(() =>
-            GenerateCommand.Handle(schema, output, "Proj", null, false)
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "Proj",
+                        type: null,
+                        force: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+        var stderr = run.Stderr;
 
         Environment.ExitCode.Should().Be(1);
         stderr.Should().Contain("already exists");
@@ -74,16 +99,28 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Handle_with_an_unknown_type_reports_it_and_exits_1()
+    public async Task Handle_with_an_unknown_type_reports_it_and_exits_1()
     {
         var schema = new FileInfo(Path.Combine(_tempDir, "schema.graphql"));
-        File.WriteAllText(schema.FullName, "type Query { hi: String }");
+        await File.WriteAllTextAsync(schema.FullName, "type Query { hi: String }");
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
-        var exitCode = 0;
-        var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", "swagger", false)
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "Proj",
+                        "swagger",
+                        force: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+        var exitCode = run.ExitCode;
+        var stderr = run.Stderr;
 
         exitCode.Should().Be(1);
         stderr.Should().Contain("Unknown schema type 'swagger'");
@@ -91,16 +128,28 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Handle_with_an_extension_it_cannot_detect_reports_it_and_exits_1()
+    public async Task Handle_with_an_extension_it_cannot_detect_reports_it_and_exits_1()
     {
         var schema = new FileInfo(Path.Combine(_tempDir, "schema.txt"));
-        File.WriteAllText(schema.FullName, "type Query { hi: String }");
+        await File.WriteAllTextAsync(schema.FullName, "type Query { hi: String }");
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
-        var exitCode = 0;
-        var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "Proj",
+                        type: null,
+                        force: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+        var exitCode = run.ExitCode;
+        var stderr = run.Stderr;
 
         exitCode.Should().Be(1);
         stderr.Should().Contain("Use --type");
@@ -110,7 +159,7 @@ public class GenerateCommandTests
     [TestCase("compose.yml", "is not an OpenAPI document")]
     [TestCase("broken.json", "Cannot read")]
     [TestCase("broken.graphql", "is not valid GraphQL SDL")]
-    public void Handle_with_a_schema_it_cannot_read_reports_it_and_exits_1(
+    public async Task Handle_with_a_schema_it_cannot_read_reports_it_and_exits_1(
         string file,
         string expected
     )
@@ -125,10 +174,22 @@ public class GenerateCommandTests
         );
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
-        var exitCode = 0;
-        var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "Proj",
+                        type: null,
+                        force: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+        var exitCode = run.ExitCode;
+        var stderr = run.Stderr;
 
         exitCode.Should().Be(1);
         stderr.Should().Contain(expected).And.Contain(file);
@@ -137,24 +198,28 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Create_ParseAndInvoke_MissingSchema_ReportsError()
+    public async Task Create_ParseAndInvoke_MissingSchema_ReportsError()
     {
         var command = GenerateCommand.Create();
         var schemaPath = Path.Combine(_tempDir, "no-such-file.graphql");
         var outputPath = Path.Combine(_tempDir, "out");
 
-        var stderr = CaptureStderr(() =>
-            command
-                .Parse(new[] { "--schema", schemaPath, "--output", outputPath, "--name", "MyProj" })
-                .Invoke()
-        );
+        var stderr = (
+            await CommandOutput
+                .InvokeAsync(
+                    command.Parse(
+                        new[] { "--schema", schemaPath, "--output", outputPath, "--name", "MyProj" }
+                    )
+                )
+                .ConfigureAwait(false)
+        ).Stderr;
 
         stderr.Should().Contain("Schema file not found");
         Environment.ExitCode.Should().Be(1);
     }
 
     [Test]
-    public void Handle_SchemaWithAnInvalidName_ReportsTheNameAndReturns1()
+    public async Task Handle_SchemaWithAnInvalidName_ReportsTheNameAndReturns1()
     {
         var schema = new FileInfo(
             Path.Combine(
@@ -166,10 +231,22 @@ public class GenerateCommandTests
         );
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
-        var exitCode = 0;
-        var stderr = CaptureStderr(() =>
-            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "Proj",
+                        type: null,
+                        force: false,
+                        o,
+                        e
+                    )
+            )
+            .ConfigureAwait(false);
+        var exitCode = run.ExitCode;
+        var stderr = run.Stderr;
 
         exitCode.Should().Be(1);
         stderr.Should().Contain("group of operation 'ListPlayers'");
@@ -178,32 +255,48 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Invoke_WhenHandleFails_ReturnsExitCode1()
+    public async Task Invoke_WhenHandleFails_ReturnsExitCode1()
     {
         var command = GenerateCommand.Create();
         var schemaPath = Path.Combine(_tempDir, "no-such-file.graphql");
 
-        var exitCode = 0;
-        CaptureStderr(() =>
-            exitCode = command
-                .Parse(new[] { "--schema", schemaPath, "--output", _tempDir + "/o", "--name", "P" })
-                .Invoke()
-        );
+        var exitCode = (
+            await CommandOutput
+                .InvokeAsync(
+                    command.Parse(
+                        new[] { "--schema", schemaPath, "--output", _tempDir + "/o", "--name", "P" }
+                    )
+                )
+                .ConfigureAwait(false)
+        ).ExitCode;
 
         exitCode.Should().Be(1, "Program returns this value as the process exit code");
     }
 
     [Test]
-    public void Handle_HappyPathGraphQL_ParsesAndGenerates()
+    public async Task Handle_HappyPathGraphQL_ParsesAndGenerates()
     {
-        using var hive = TemplateHive.Install();
+        using var hive = await TemplateHive.InstallAsync().ConfigureAwait(false);
 
         var schema = new FileInfo(FixturePath("simple.graphql"));
         var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-graphql"));
 
-        var stdout = CaptureStdout(() =>
-            GenerateCommand.Handle(schema, output, "HappyGraphQL", null, false, hive.Generator())
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "HappyGraphQL",
+                        type: null,
+                        force: false,
+                        o,
+                        e,
+                        hive.Generator()
+                    )
+            )
+            .ConfigureAwait(false);
+        var stdout = run.Stdout;
 
         Environment.ExitCode.Should().Be(0);
         stdout.Should().Contain("from graphql schema");
@@ -214,16 +307,29 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Handle_HappyPathOpenApi_ParsesAndGenerates()
+    public async Task Handle_HappyPathOpenApi_ParsesAndGenerates()
     {
-        using var hive = TemplateHive.Install();
+        using var hive = await TemplateHive.InstallAsync().ConfigureAwait(false);
 
         var schema = new FileInfo(FixturePath("petstore.json"));
         var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-openapi"));
 
-        var stdout = CaptureStdout(() =>
-            GenerateCommand.Handle(schema, output, "HappyOpenApi", null, false, hive.Generator())
-        );
+        var run = await CommandOutput
+            .OfAsync(
+                (o, e) =>
+                    GenerateCommand.HandleAsync(
+                        schema,
+                        output,
+                        "HappyOpenApi",
+                        type: null,
+                        force: false,
+                        o,
+                        e,
+                        hive.Generator()
+                    )
+            )
+            .ConfigureAwait(false);
+        var stdout = run.Stdout;
 
         Environment.ExitCode.Should().Be(0);
         stdout.Should().Contain("from openapi schema");
@@ -232,36 +338,4 @@ public class GenerateCommandTests
 
     private static string FixturePath(string name) =>
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
-
-    private static string CaptureStderr(Action action)
-    {
-        var originalErr = Console.Error;
-        using var writer = new StringWriter();
-        Console.SetError(writer);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetError(originalErr);
-        }
-        return writer.ToString();
-    }
-
-    private static string CaptureStdout(Action action)
-    {
-        var originalOut = Console.Out;
-        using var writer = new StringWriter();
-        Console.SetOut(writer);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-        }
-        return writer.ToString();
-    }
 }

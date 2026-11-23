@@ -34,19 +34,22 @@ internal static class ReapedRuns
         string reason,
         string exception,
         string junction,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken
     )
     {
-        var mark = NextMark();
-        var moved = await stillStale.ExecuteUpdateAsync(
-            s =>
-                s.SetProperty(m => m.TrainState, TrainState.Failed)
-                    .SetProperty(m => m.EndTime, mark)
-                    .SetProperty(m => m.FailureReason, reason)
-                    .SetProperty(m => m.FailureException, exception)
-                    .SetProperty(m => m.FailureJunction, junction),
-            cancellationToken
-        );
+        var mark = NextMark(timeProvider);
+        var moved = await stillStale
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(m => m.TrainState, TrainState.Failed)
+                        .SetProperty(m => m.EndTime, mark)
+                        .SetProperty(m => m.FailureReason, reason)
+                        .SetProperty(m => m.FailureException, exception)
+                        .SetProperty(m => m.FailureJunction, junction),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (moved == 0)
             return [];
 
@@ -61,15 +64,16 @@ internal static class ReapedRuns
                 && m.FailureJunction == junction
             )
             .Select(m => m.Id)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
     /// A UTC time to the microsecond, later than any this process has returned before.
     /// </summary>
-    internal static DateTime NextMark()
+    internal static DateTime NextMark(TimeProvider timeProvider)
     {
-        var now = DateTime.UtcNow.Ticks;
+        var now = timeProvider.GetUtcNow().UtcDateTime.Ticks;
         now -= now % TimeSpan.TicksPerMicrosecond;
         while (true)
         {

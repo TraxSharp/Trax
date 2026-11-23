@@ -35,21 +35,3 @@ public record MachineBoard(
             board.Links.Select(l => new MachineBoardLink(l.From, l.To)).ToList()
         );
 }
-
-/// <summary>
-/// One sticky: its flow role (<c>actor</c>, <c>command</c>, <c>event</c>, <c>policy</c>, <c>aggregate</c> or
-/// <c>view</c>), its lane, its label, and the scenarios that produced it, none when the host file has no provenance.
-/// </summary>
-public record MachineSticky(
-    string Id,
-    string Kind,
-    string Machine,
-    string Label,
-    IReadOnlyList<MachineScenario> Scenarios
-);
-
-/// <summary>A scenario behind a sticky: its feature file, line and name, never its steps.</summary>
-public record MachineScenario(string File, long Line, string Scenario);
-
-/// <summary>An arrow from one sticky's id to another's.</summary>
-public record MachineBoardLink(string From, string To);

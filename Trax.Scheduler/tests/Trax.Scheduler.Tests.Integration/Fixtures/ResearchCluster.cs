@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -42,7 +44,7 @@ public sealed class ResearchCluster : IAsyncDisposable
         Action<SchedulerConfigurationBuilder>? scheduling = null
     )
     {
-        var cluster = await InvokeCluster.Create(store);
+        var cluster = await InvokeCluster.Create(store).ConfigureAwait(false);
         var host = cluster.Host(
             machines: false,
             scheduler: true,
@@ -77,12 +79,12 @@ public sealed class ResearchCluster : IAsyncDisposable
         int? timeoutSeconds = null
     )
     {
-        using var scope = Host.Services.CreateScope();
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            data,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(data, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Effect.Models.Manifest.Manifest.Create(
             new CreateManifest
             {
@@ -97,16 +99,17 @@ public sealed class ResearchCluster : IAsyncDisposable
         );
         manifest.ManifestGroupId = group.Id;
         manifest.TimeoutSeconds = timeoutSeconds;
-        await data.Track(manifest);
-        await data.SaveChanges(CancellationToken.None);
+        await data.Track(manifest).ConfigureAwait(false);
+        await data.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return manifest;
     }
 
     /// <summary>One ManifestManager cycle, then the manifest's queued entry dispatched and run here.</summary>
     public async Task<Metadata> Cycle(Manifest manifest)
     {
-        await Host.RunManifestManager();
-        return await DispatchAndRun(await QueuedEntry(manifest.Id));
+        await Host.RunManifestManager().ConfigureAwait(false);
+        return await DispatchAndRun(await QueuedEntry(manifest.Id).ConfigureAwait(false))
+            .ConfigureAwait(false);
     }
 
     /// <summary>The manifest's one queued entry.</summary>
@@ -119,107 +122,141 @@ public sealed class ResearchCluster : IAsyncDisposable
     /// <summary>Dispatches <paramref name="entry"/> and runs it here to its end.</summary>
     public async Task<Metadata> DispatchAndRun(WorkQueue entry)
     {
-        var runId = await Dispatch(entry);
-        await Host.RunJob(runId);
-        return await Host.Run(runId);
+        var runId = await Dispatch(entry).ConfigureAwait(false);
+        await Host.RunJob(runId).ConfigureAwait(false);
+        return await Host.Run(runId).ConfigureAwait(false);
     }
 
     /// <summary>Runs the dispatcher once and returns the run it made for <paramref name="entry"/>.</summary>
     public async Task<long> Dispatch(WorkQueue entry)
     {
-        using (var scope = Host.Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+        var scope = Host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            await scope
+                .ServiceProvider.GetRequiredService<IJobDispatcherTrain>()
+                .Run(Unit.Default)
+                .ConfigureAwait(false);
 
-        var dispatched = await Entry(entry.Id);
+        var dispatched = await Entry(entry.Id).ConfigureAwait(false);
         return dispatched.MetadataId
             ?? throw new InvalidOperationException(
-                $"Entry {entry.Id} was not dispatched: it is {dispatched.Status}."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Entry {entry.Id} was not dispatched: it is {dispatched.Status}."
+                )
             );
     }
 
     public Task<WorkQueue> Entry(long id) =>
         With(data => data.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == id));
 
-    public Task<List<Effect.Models.Checkpoint.Checkpoint>> Checkpoints(long runId) =>
-        With(data =>
-            data.Checkpoints.AsNoTracking().Where(c => c.MetadataId == runId).ToListAsync()
-        );
+    public async Task<IReadOnlyList<Effect.Models.Checkpoint.Checkpoint>> Checkpoints(long runId) =>
+        await With(data =>
+                data.Checkpoints.AsNoTracking().Where(c => c.MetadataId == runId).ToListAsync()
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// The run's junction events, once the host's writer has written every step queued before
     /// the call: it writes in the background, so a read straight after a run can miss its last.
     /// </summary>
-    public async Task<List<Effect.Models.JunctionRun.JunctionRun>> JunctionRuns(long runId)
+    public async Task<IReadOnlyList<Effect.Models.JunctionRun.JunctionRun>> JunctionRuns(long runId)
     {
         // The writer's flush is internal to Trax.Effect.Data, which this assembly cannot see.
         var writer = Host.Services.GetRequiredService(
-            typeof(Effect.Data.Extensions.ServiceExtensions).Assembly.GetType(
-                "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
-                throwOnError: true
-            )!
+            typeof(Effect.Data.Extensions.ServiceExtensions)
+                .Assembly.GetType(
+                    "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
+                    throwOnError: true
+                )
+                .NotNull()
         );
         await (
             (Task)
                 writer
                     .GetType()
-                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(writer, [CancellationToken.None])!
-        ).WaitAsync(TimeSpan.FromSeconds(30));
+                    .GetMethod("FlushAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .NotNull()
+                    .Invoke(writer, [CancellationToken.None])
+                    .NotNull()
+        )
+            .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
 
         return await With(data =>
-            data.JunctionRuns.AsNoTracking()
-                .Where(j => j.MetadataId == runId)
-                .OrderBy(j => j.Position)
-                .ToListAsync()
-        );
+                data.JunctionRuns.AsNoTracking()
+                    .Where(j => j.MetadataId == runId)
+                    .OrderBy(j => j.Position)
+                    .ToListAsync()
+            )
+            .ConfigureAwait(false);
     }
 
     public async Task<OperationResult> Operation(
         Func<IOperationsService, Task<OperationResult>> call
     )
     {
-        using var scope = Host.Services.CreateScope();
-        return await call(scope.ServiceProvider.GetRequiredService<IOperationsService>());
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        return await call(scope.ServiceProvider.GetRequiredService<IOperationsService>())
+            .ConfigureAwait(false);
     }
 
     public async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        using var scope = Host.Services.CreateScope();
-        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>());
+        var scope = Host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
+        return await read(scope.ServiceProvider.GetRequiredService<IDataContext>())
+            .ConfigureAwait(false);
     }
 
     /// <summary>
     /// Every work queue and run row whose <c>resume_from</c> names no run, which
     /// <c>TraxInvariants</c> reports as <c>resume-from-missing-run</c>.
     /// </summary>
-    public async Task<List<string>> ResumesOfMissingRuns() =>
+    public async Task<IReadOnlyList<string>> ResumesOfMissingRuns() =>
         await With(async data =>
-            (
-                await data
+            {
+                var entries = await data
                     .WorkQueues.AsNoTracking()
                     .Where(q =>
                         q.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == q.ResumeFrom)
                     )
-                    .Select(q => $"work_queue {q.Id} resumes {q.ResumeFrom}")
+                    .Select(q => new { q.Id, q.ResumeFrom })
                     .ToListAsync()
-            )
-                .Concat(
-                    await data
-                        .Metadatas.AsNoTracking()
-                        .Where(r =>
-                            r.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
+                    .ConfigureAwait(false);
+                var runs = await data
+                    .Metadatas.AsNoTracking()
+                    .Where(r =>
+                        r.ResumeFrom != null && !data.Metadatas.Any(m => m.Id == r.ResumeFrom)
+                    )
+                    .Select(r => new { r.Id, r.ResumeFrom })
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+                return entries
+                    .Select(q =>
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"work_queue {q.Id} resumes {q.ResumeFrom}"
                         )
-                        .Select(r => $"metadata {r.Id} resumes {r.ResumeFrom}")
-                        .ToListAsync()
-                )
-                .ToList()
-        );
+                    )
+                    .Concat(
+                        runs.Select(r =>
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"metadata {r.Id} resumes {r.ResumeFrom}"
+                            )
+                        )
+                    )
+                    .ToList();
+            })
+            .ConfigureAwait(false);
 
     public Task Reset() => Cluster.Reset();
 
     public async ValueTask DisposeAsync()
     {
-        await Host.DisposeAsync();
-        await Cluster.DisposeAsync();
+        await Host.DisposeAsync().ConfigureAwait(false);
+        await Cluster.DisposeAsync().ConfigureAwait(false);
     }
 }

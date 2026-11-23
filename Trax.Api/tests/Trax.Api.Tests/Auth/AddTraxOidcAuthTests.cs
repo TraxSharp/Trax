@@ -12,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Oidc;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -97,13 +98,14 @@ public class AddTraxOidcAuthTests
         var services = NewServices();
 
         services.AddTraxOidcAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(OidcDefaults.PolicyName);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
         policy.AuthenticationSchemes.Should().NotContain(OidcDefaults.SchemeName);
     }
 
@@ -113,13 +115,14 @@ public class AddTraxOidcAuthTests
         var services = NewServices();
 
         services.AddTraxOidcAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(OidcDefaults.CookieSchemeName);
     }
 
     [Test]
@@ -137,7 +140,7 @@ public class AddTraxOidcAuthTests
     {
         var services = NewServices();
 
-        var act = () => services.AddTraxOidcAuth((Action<OidcBuilder>)null!);
+        var act = () => services.AddTraxOidcAuth((Action<OidcBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -188,7 +191,7 @@ public class AddTraxOidcAuthTests
 
         var hostedCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
 
         hostedCount.Should().Be(1);
@@ -317,7 +320,7 @@ public class AddTraxOidcAuthTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 

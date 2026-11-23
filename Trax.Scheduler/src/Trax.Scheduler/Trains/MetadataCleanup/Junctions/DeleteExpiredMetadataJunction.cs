@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -42,16 +43,17 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// A batch that fails (for example an unexpected foreign-key reference) is bisected to isolate the
 /// offending row, which is logged and skipped so one bad row can never abort the whole sweep.
 /// </remarks>
-internal class DeleteExpiredMetadataJunction(
+internal sealed class DeleteExpiredMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
     ILogger<DeleteExpiredMetadataJunction> logger,
+    TimeProvider timeProvider,
     ITrainDiscoveryService? discoveryService = null
 ) : EffectJunction<MetadataCleanupRequest, Unit>
 {
     public override async Task<Unit> Run(MetadataCleanupRequest input)
     {
-        var cleanupConfig = configuration.MetadataCleanup!;
+        var cleanupConfig = configuration.MetadataCleanup.NotNull();
         var plan = MetadataRetentionPlan.Build(cleanupConfig, discoveryService, out var conflicts);
 
         // A conflict is refused at startup by MetadataCleanupConfigurationValidator, so reaching
@@ -64,7 +66,7 @@ internal class DeleteExpiredMetadataJunction(
                 conflict.ToString()
             );
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var batchSize = BatchSize(cleanupConfig.DeleteBatchSize);
         var totals = new CleanupTotals();
 
@@ -86,84 +88,8 @@ internal class DeleteExpiredMetadataJunction(
                 string.Join(", ", names)
             );
 
-            var eligible = dataContext
-                .Metadatas.Where(m => names.Contains(m.Name))
-                .Where(m => m.StartTime < cutoffTime)
-                .Where(m =>
-                    m.TrainState == TrainState.Completed
-                    || m.TrainState == TrainState.Failed
-                    || m.TrainState == TrainState.Cancelled
-                )
-                .Where(m => !skippedIds.Contains(m.Id))
-                // A run a state machine invoked is kept while an instance still holds its token: its outcome
-                // has not been delivered, and the delivery reads how it ended from this row. A token is never
-                // set again once cleared (each entry mints a new run), so a run that passes this test cannot
-                // become held again before it is deleted, and the selection needs no recheck for it.
-                .Where(m =>
-                    m.InvokingMachine == null
-                    || !dataContext.SnapshotDrafts.Any(d => d.InvokeToken == m.ExternalId)
-                );
-
-            while (true)
-            {
-                // A run another run will replay is kept while anything that stays points at it: a
-                // queued requeue that has not been dispatched, or a run that replayed it and may
-                // itself be requeued, whose replay follows the link back. Deleting it takes its
-                // decisions with it, and the replay then fails rather than asking afresh. A run
-                // that replays another is kept while the run it replays is: deleted alone, it
-                // would leave that run looking as though nothing had replayed it, and a retry
-                // would replay the same answers again. So a replay and the run it replays, both
-                // expired, are selected and deleted together.
-                var query = eligible
-                    .Where(m =>
-                        !dataContext.WorkQueues.Any(q =>
-                            q.ReplayDecisionsOf == m.Id && q.Status == WorkQueueStatus.Queued
-                        )
-                    )
-                    .Where(m =>
-                        !dataContext.Metadatas.Any(r =>
-                            r.ReplayDecisionsOf == m.Id && !eligible.Any(e => e.Id == r.Id)
-                        )
-                    )
-                    .Where(m =>
-                        m.ReplayDecisionsOf == null
-                        || !dataContext.Metadatas.Any(s => s.Id == m.ReplayDecisionsOf)
-                        || eligible.Any(e => e.Id == m.ReplayDecisionsOf)
-                    )
-                    // The same for a resume (Trax.Docs/adr/0047): a run a queued entry or a run
-                    // that stays resumes is kept, since its checkpoints go with it, and a resumed
-                    // run goes with the run it resumed.
-                    .Where(m =>
-                        !dataContext.WorkQueues.Any(q =>
-                            q.ResumeFrom == m.Id && q.Status == WorkQueueStatus.Queued
-                        )
-                    )
-                    .Where(m =>
-                        !dataContext.Metadatas.Any(r =>
-                            r.ResumeFrom == m.Id && !eligible.Any(e => e.Id == r.Id)
-                        )
-                    )
-                    .Where(m =>
-                        m.ResumeFrom == null
-                        || !dataContext.Metadatas.Any(s => s.Id == m.ResumeFrom)
-                        || eligible.Any(e => e.Id == m.ResumeFrom)
-                    )
-                    .OrderBy(m => m.Id)
-                    .Select(m => m.Id);
-
-                var selected = await query.Take(batchSize).ToListAsync(CancellationToken);
-
-                if (selected.Count == 0)
-                    break;
-
-                var batchIds = await WithReplayRelativesAsync(selected, eligible, skippedIds);
-
-                if (batchIds.Count > 0)
-                    await DeleteBatch(batchIds, totals, skippedIds);
-
-                if (selected.Count < batchSize)
-                    break;
-            }
+            await SweepAsync(names, cutoffTime, batchSize, totals, skippedIds)
+                .ConfigureAwait(false);
         }
 
         if (totals.Metadata > 0 || totals.Skipped > 0)
@@ -183,6 +109,112 @@ internal class DeleteExpiredMetadataJunction(
 
         return Unit.Default;
     }
+
+    // The terminal runs of these trains older than the cutoff that the sweep may select.
+    private IQueryable<Trax.Effect.Models.Metadata.Metadata> Eligible(
+        List<string> names,
+        DateTime cutoffTime,
+        List<long> skippedIds
+    ) =>
+        dataContext
+            .Metadatas.Where(m => names.Contains(m.Name))
+            .Where(m => m.StartTime < cutoffTime)
+            .Where(m =>
+                m.TrainState == TrainState.Completed
+                || m.TrainState == TrainState.Failed
+                || m.TrainState == TrainState.Cancelled
+            )
+            .Where(m => !skippedIds.Contains(m.Id))
+            // A run a state machine invoked is kept while an instance still holds its token: its outcome
+            // has not been delivered, and the delivery reads how it ended from this row. A token is never
+            // set again once cleared (each entry mints a new run), so a run that passes this test cannot
+            // become held again before it is deleted, and the selection needs no recheck for it.
+            .Where(m =>
+                m.InvokingMachine == null
+                || !dataContext.SnapshotDrafts.Any(d => d.InvokeToken == m.ExternalId)
+            );
+
+    // Sweeps one retention group's eligible runs, a batch at a time.
+    private async Task SweepAsync(
+        List<string> names,
+        DateTime cutoffTime,
+        int batchSize,
+        CleanupTotals totals,
+        List<long> skippedIds
+    )
+    {
+        var eligible = Eligible(names, cutoffTime, skippedIds);
+
+        while (true)
+        {
+            var query = DeletableBatch(eligible);
+
+            var selected = await query
+                .Take(batchSize)
+                .ToListAsync(CancellationToken)
+                .ConfigureAwait(false);
+
+            if (selected.Count == 0)
+                break;
+
+            var batchIds = await WithReplayRelativesAsync(selected, eligible, skippedIds)
+                .ConfigureAwait(false);
+
+            if (batchIds.Count > 0)
+                await DeleteBatch(batchIds, totals, skippedIds).ConfigureAwait(false);
+
+            if (selected.Count < batchSize)
+                break;
+        }
+    }
+
+    private IQueryable<long> DeletableBatch(
+        IQueryable<Trax.Effect.Models.Metadata.Metadata> eligible
+    ) =>
+        // A run another run will replay is kept while anything that stays points at it: a
+        // queued requeue that has not been dispatched, or a run that replayed it and may
+        // itself be requeued, whose replay follows the link back. Deleting it takes its
+        // decisions with it, and the replay then fails rather than asking afresh. A run
+        // that replays another is kept while the run it replays is: deleted alone, it
+        // would leave that run looking as though nothing had replayed it, and a retry
+        // would replay the same answers again. So a replay and the run it replays, both
+        // expired, are selected and deleted together.
+        eligible
+            .Where(m =>
+                !dataContext.WorkQueues.Any(q =>
+                    q.ReplayDecisionsOf == m.Id && q.Status == WorkQueueStatus.Queued
+                )
+            )
+            .Where(m =>
+                !dataContext.Metadatas.Any(r =>
+                    r.ReplayDecisionsOf == m.Id && !eligible.Any(e => e.Id == r.Id)
+                )
+            )
+            .Where(m =>
+                m.ReplayDecisionsOf == null
+                || !dataContext.Metadatas.Any(s => s.Id == m.ReplayDecisionsOf)
+                || eligible.Any(e => e.Id == m.ReplayDecisionsOf)
+            )
+            // The same for a resume (Trax.Docs/adr/0047): a run a queued entry or a run
+            // that stays resumes is kept, since its checkpoints go with it, and a resumed
+            // run goes with the run it resumed.
+            .Where(m =>
+                !dataContext.WorkQueues.Any(q =>
+                    q.ResumeFrom == m.Id && q.Status == WorkQueueStatus.Queued
+                )
+            )
+            .Where(m =>
+                !dataContext.Metadatas.Any(r =>
+                    r.ResumeFrom == m.Id && !eligible.Any(e => e.Id == r.Id)
+                )
+            )
+            .Where(m =>
+                m.ResumeFrom == null
+                || !dataContext.Metadatas.Any(s => s.Id == m.ResumeFrom)
+                || eligible.Any(e => e.Id == m.ResumeFrom)
+            )
+            .OrderBy(m => m.Id)
+            .Select(m => m.Id);
 
     /// <summary>
     /// The batch a sweep deletes at a time. Never unbounded: a batch is one transaction holding
@@ -229,17 +261,19 @@ internal class DeleteExpiredMetadataJunction(
                     )
                 )
                 .Select(m => m.Id)
-                .ToListAsync(CancellationToken);
+                .ToListAsync(CancellationToken)
+                .ConfigureAwait(false);
 
             if (relatives.Count == 0)
                 break;
             batch.UnionWith(relatives);
         }
 
-        var kept = await KeptAsync(dataContext, batch.ToList(), CancellationToken);
+        var kept = await KeptAsync(dataContext, batch.ToList(), CancellationToken)
+            .ConfigureAwait(false);
         excluded.AddRange(kept);
         batch.ExceptWith(kept);
-        return batch.OrderBy(id => id).ToList();
+        return batch.Order().ToList();
     }
 
     /// <summary>
@@ -261,7 +295,7 @@ internal class DeleteExpiredMetadataJunction(
     {
         try
         {
-            await DeleteMetadataByIds(batchIds, totals, skippedIds);
+            await DeleteMetadataByIds(batchIds, totals, skippedIds).ConfigureAwait(false);
         }
         catch (Exception ex) when (batchIds.Count > 1)
         {
@@ -272,8 +306,10 @@ internal class DeleteExpiredMetadataJunction(
             );
 
             var mid = batchIds.Count / 2;
-            await DeleteBatch(batchIds.Take(mid).ToList(), totals, skippedIds);
-            await DeleteBatch(batchIds.Skip(mid).ToList(), totals, skippedIds);
+            await DeleteBatch(batchIds.Take(mid).ToList(), totals, skippedIds)
+                .ConfigureAwait(false);
+            await DeleteBatch(batchIds.Skip(mid).ToList(), totals, skippedIds)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -301,13 +337,14 @@ internal class DeleteExpiredMetadataJunction(
     )
     {
         var deleted = await DeleteUnreferencedAsync(
-            dataContext,
-            batchIds,
-            CancellationToken,
-            BeforeMetadataDelete,
-            logger,
-            leftOver: skippedIds
-        );
+                dataContext,
+                batchIds,
+                CancellationToken,
+                BeforeMetadataDelete,
+                logger,
+                leftOver: skippedIds
+            )
+            .ConfigureAwait(false);
         totals.WorkQueues += deleted.WorkQueues;
         totals.Logs += deleted.Logs;
         totals.Metadata += deleted.Metadata;
@@ -344,14 +381,15 @@ internal class DeleteExpiredMetadataJunction(
 
         for (var attempt = 1; attempt <= MaxDeleteAttempts; attempt++)
         {
-            var kept = await KeptAsync(dataContext, remaining, ct);
+            var kept = await KeptAsync(dataContext, remaining, ct).ConfigureAwait(false);
             remaining.RemoveAll(kept.Contains);
 
             if (remaining.Count == 0)
                 return (0, 0, 0);
 
             if (
-                await TryDeleteAllAsync(dataContext, remaining, beforeMetadataDelete, ct) is
+                await TryDeleteAllAsync(dataContext, remaining, beforeMetadataDelete, ct)
+                    .ConfigureAwait(false) is
                 { } deleted
             )
                 return deleted;
@@ -388,7 +426,8 @@ internal class DeleteExpiredMetadataJunction(
         {
             var deletable = await Deletable(dataContext, remaining)
                 .Select(m => m.Id)
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
             if (deletable.Count == remaining.Count)
                 break;
 
@@ -445,87 +484,116 @@ internal class DeleteExpiredMetadataJunction(
 
         // Inside a caller's transaction the batch gets a savepoint instead of its own.
         var outer = database.CurrentTransaction;
-        var own = outer is null ? await database.BeginTransactionAsync(ct) : null;
+        var own = outer is null
+            ? await database.BeginTransactionAsync(ct).ConfigureAwait(false)
+            : null;
         const string savepoint = "trax_metadata_cleanup_batch";
         if (outer is not null)
-            await outer.CreateSavepointAsync(savepoint, ct);
+            await outer.CreateSavepointAsync(savepoint, ct).ConfigureAwait(false);
 
         try
         {
-            // Work queue entries and logs are owned by the metadata and deleted outright.
-            var workQueues = await dataContext
-                .WorkQueues.Where(wq => wq.MetadataId.HasValue && ids.Contains(wq.MetadataId.Value))
-                .ExecuteDeleteAsync(ct);
-
-            var logs = await dataContext
-                .Logs.Where(l => ids.Contains(l.MetadataId))
-                .ExecuteDeleteAsync(ct);
-
-            // Dead letters and child metadata reference the metadata but are not owned by it: a
-            // dead letter is a meaningful record and a child train's metadata can outlive its
-            // parent. Null the back-references so the FK does not block the delete, rather than
-            // cascading into them.
-            await dataContext
-                .DeadLetters.Where(d =>
-                    d.RetryMetadataId.HasValue && ids.Contains(d.RetryMetadataId.Value)
-                )
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct);
-
-            await dataContext
-                .Metadatas.Where(c => c.ParentId.HasValue && ids.Contains(c.ParentId.Value))
-                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParentId, (long?)null), ct);
-
-            // An entry that is no longer queued and resumes one of these runs, a cancelled one or
-            // one dispatched as a run that is not this batch's, will never read its link again: a
-            // dispatched entry's run carries its own. Its link is cleared, so nothing names a run
-            // that is gone (Trax.Docs/adr/0047). A queued one keeps the run (the keep test).
-            await dataContext
-                .WorkQueues.Where(q =>
-                    q.ResumeFrom.HasValue
-                    && ids.Contains(q.ResumeFrom.Value)
-                    && q.Status != WorkQueueStatus.Queued
-                )
-                .ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(q => q.ResumeFrom, (long?)null)
-                            .SetProperty(q => q.ResumeAt, (string?)null),
-                    ct
-                );
+            var (workQueues, logs) = await DeleteOwnedAndClearReferencesAsync(dataContext, ids, ct)
+                .ConfigureAwait(false);
 
             if (beforeMetadataDelete is not null)
-                await beforeMetadataDelete(ct);
+                await beforeMetadataDelete(ct).ConfigureAwait(false);
 
-            var metadata = await Deletable(dataContext, ids).ExecuteDeleteAsync(ct);
+            var metadata = await Deletable(dataContext, ids)
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
 
             if (metadata == ids.Count)
             {
                 if (own is not null)
-                    await own.CommitAsync(ct);
+                    await own.CommitAsync(ct).ConfigureAwait(false);
                 else
-                    await outer!.ReleaseSavepointAsync(savepoint, ct);
+                    await outer
+                        .NotNull()
+                        .ReleaseSavepointAsync(savepoint, ct)
+                        .ConfigureAwait(false);
                 return (metadata, workQueues, logs);
             }
 
             // A run was linked after the recheck: undo the batch so it keeps everything it owns.
             if (own is not null)
-                await own.RollbackAsync(ct);
+                await own.RollbackAsync(ct).ConfigureAwait(false);
             else
-                await outer!.RollbackToSavepointAsync(savepoint, ct);
+                await outer.NotNull().RollbackToSavepointAsync(savepoint, ct).ConfigureAwait(false);
             return null;
         }
         catch
         {
             if (own is not null)
-                await own.RollbackAsync(CancellationToken.None);
+                await own.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             else
-                await outer!.RollbackToSavepointAsync(savepoint, CancellationToken.None);
+                await outer
+                    .NotNull()
+                    .RollbackToSavepointAsync(savepoint, CancellationToken.None)
+                    .ConfigureAwait(false);
             throw;
         }
         finally
         {
             if (own is not null)
-                await own.DisposeAsync();
+                await own.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    // Inside TryDeleteAllAsync's transaction: deletes what the runs own and clears what only
+    // refers to them.
+    private static async Task<(int WorkQueues, int Logs)> DeleteOwnedAndClearReferencesAsync(
+        IDataContext dataContext,
+        List<long> ids,
+        CancellationToken ct
+    )
+    {
+        // Work queue entries and logs are owned by the metadata and deleted outright.
+        var workQueues = await dataContext
+            .WorkQueues.Where(wq => wq.MetadataId.HasValue && ids.Contains(wq.MetadataId.Value))
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
+
+        var logs = await dataContext
+            .Logs.Where(l => ids.Contains(l.MetadataId))
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
+
+        // Dead letters and child metadata reference the metadata but are not owned by it: a
+        // dead letter is a meaningful record and a child train's metadata can outlive its
+        // parent. Null the back-references so the FK does not block the delete, rather than
+        // cascading into them.
+        await dataContext
+            .DeadLetters.Where(d =>
+                d.RetryMetadataId.HasValue && ids.Contains(d.RetryMetadataId.Value)
+            )
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct)
+            .ConfigureAwait(false);
+
+        await dataContext
+            .Metadatas.Where(c => c.ParentId.HasValue && ids.Contains(c.ParentId.Value))
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParentId, (long?)null), ct)
+            .ConfigureAwait(false);
+
+        // An entry that is no longer queued and resumes one of these runs, a cancelled one or
+        // one dispatched as a run that is not this batch's, will never read its link again: a
+        // dispatched entry's run carries its own. Its link is cleared, so nothing names a run
+        // that is gone (Trax.Docs/adr/0047). A queued one keeps the run (the keep test).
+        await dataContext
+            .WorkQueues.Where(q =>
+                q.ResumeFrom.HasValue
+                && ids.Contains(q.ResumeFrom.Value)
+                && q.Status != WorkQueueStatus.Queued
+            )
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(q => q.ResumeFrom, (long?)null)
+                        .SetProperty(q => q.ResumeAt, (string?)null),
+                ct
+            )
+            .ConfigureAwait(false);
+
+        return (workQueues, logs);
     }
 
     private sealed class CleanupTotals

@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
+using Trax.Testing;
 
 namespace Trax.StateMachine.Persistence.Integration;
 
@@ -40,7 +41,7 @@ public class MachineEffectRunnerTests
 
         var act = () =>
             new OrderMachine().CreateEffectRunner(
-                null!,
+                Null.Of<ISnapshotDraftService>(),
                 new IdempotentEffect(TestDb.NewClaims()),
                 services
             );

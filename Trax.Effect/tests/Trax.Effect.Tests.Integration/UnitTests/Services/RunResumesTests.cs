@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Tests.Integration.Fakes.Trains;
@@ -32,15 +33,14 @@ public class RunResumesTests
                 Id = 7,
                 MetadataId = 1,
                 NodeId = Checkpoint,
-                StateType = typeof(CheckedFindings).FullName!,
-                State = null!,
+                StateType = typeof(CheckedFindings).FullName.NotNull(),
                 Tracks =
                     """[{"key":"Trax.Effect.Tests.Integration.Fakes.Trains.ResearchSource","track":"Papers","fallbackReason":null}]""",
                 ChainHash = ChainGraph
                     .From(chain, typeof(ResearchTrain), typeof(string), typeof(string))
                     .Hash,
                 StateFingerprint = Fingerprint(typeof(CheckedFindings)),
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
             }
         );
         var resumes = new RunResumes([rows], new ServiceCollection().BuildServiceProvider());
@@ -66,9 +66,12 @@ public class RunResumesTests
     private static string Fingerprint(Type state) =>
         (string)
             typeof(ChainGraph)
-                .Assembly.GetType("Trax.Core.Monad.CheckpointState")!
-                .GetMethod("Fingerprint")!
-                .Invoke(null, [state])!;
+                .Assembly.GetType("Trax.Core.Monad.CheckpointState")
+                .NotNull()
+                .GetMethod("Fingerprint")
+                .NotNull()
+                .Invoke(null, [state])
+                .NotNull();
 
     /// <summary>One run with the given rows, counting what is read.</summary>
     private sealed class CountingRows(params Trax.Effect.Models.Checkpoint.Checkpoint[] rows)
@@ -90,7 +93,7 @@ public class RunResumesTests
         {
             Lineages++;
             return Task.FromResult<IReadOnlyList<ResumedRun>>([
-                new ResumedRun(runId, null, null, rows),
+                new ResumedRun(runId, ResumeFrom: null, ResumeAt: null, rows),
             ]);
         }
 

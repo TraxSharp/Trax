@@ -10,16 +10,17 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class SdkReferenceBlockTests
+public partial class SdkReferenceBlockTests
 {
-    private static readonly Regex CodeBlock = new(
-        @"^```",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
-    private static readonly Regex SdkReferenceHeading = new(
+    [GeneratedRegex(@"^```", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex CodeBlock { get; }
+
+    [GeneratedRegex(
         @"^##\s+SDK Reference\s*$",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SdkReferenceHeading { get; }
 
     /// <summary>
     /// Folders that are reference material and don't require an SDK Reference block.

@@ -49,10 +49,12 @@ public class ChatSubscriptions
         var userId = caller.Principal?.Id;
         var isParticipant =
             userId is not null
-            && await db.ChatParticipants.AnyAsync(
-                p => p.ChatRoomId == chatRoomId && p.UserId == userId,
-                cancellationToken
-            );
+            && await db
+                .ChatParticipants.AnyAsync(
+                    p => p.ChatRoomId == chatRoomId && p.UserId == userId,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
 
         if (!isParticipant)
             throw new GraphQLException(
@@ -63,9 +65,8 @@ public class ChatSubscriptions
                     .Build()
             );
 
-        return await receiver.SubscribeAsync<ChatSubscriptionEvent>(
-            Topic(chatRoomId),
-            cancellationToken
-        );
+        return await receiver
+            .SubscribeAsync<ChatSubscriptionEvent>(Topic(chatRoomId), cancellationToken)
+            .ConfigureAwait(false);
     }
 }

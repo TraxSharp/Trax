@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Effect.Data.Testing.Tests;
 
 /// <summary>Throwaway directory tree for exercising source-scanning guards against synthetic fixtures.</summary>
@@ -11,7 +13,7 @@ public sealed class TempRepo : IDisposable
     public TempRepo Write(string relativePath, string content)
     {
         var full = Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(full).NotNull());
         File.WriteAllText(full, content);
         return this;
     }

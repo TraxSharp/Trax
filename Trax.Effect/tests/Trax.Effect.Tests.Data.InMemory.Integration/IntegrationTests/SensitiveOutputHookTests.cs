@@ -61,7 +61,7 @@ public class SensitiveOutputHookTests : TestSetup
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class SensitiveOutputTrain : ServiceTrain<Unit, Issued>, ISensitiveOutputTrain
+    private sealed class SensitiveOutputTrain : ServiceTrain<Unit, Issued>, ISensitiveOutputTrain
     {
         protected override Task<Either<Exception, Issued>> Junctions() =>
             Task.FromResult<Either<Exception, Issued>>(
@@ -69,5 +69,5 @@ public class SensitiveOutputHookTests : TestSetup
             );
     }
 
-    private interface ISensitiveOutputTrain : IServiceTrain<Unit, Issued> { }
+    private interface ISensitiveOutputTrain : IServiceTrain<Unit, Issued>;
 }

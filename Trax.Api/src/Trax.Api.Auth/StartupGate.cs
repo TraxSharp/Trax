@@ -14,6 +14,9 @@ namespace Trax.Api.Auth;
 /// <c>StartAsync</c>, such as a custom <c>IHost</c> or a test harness, gets the same check from
 /// <see cref="StartAsync"/>, so the gate does not open because a lifecycle step was skipped.
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal abstract class StartupGate : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;

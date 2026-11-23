@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -49,27 +50,15 @@ public class SavedInputJsonbTests : TestSetup
         var row = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISpotsTrain).FullName!,
+                Name = typeof(ISpotsTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         row.Input = JsonSerializer.Serialize(original, legacy);
 
-        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using (var context = (IDataContext)factory.Create())
-        {
-            await context.Track(row);
-            await context.SaveChanges(CancellationToken.None);
-        }
-
-        string saved;
-        using (var context = (IDataContext)factory.Create())
-        {
-            saved = (
-                await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == row.Id)
-            ).Input!;
-        }
+        var saved = await SaveAndReadBackInputAsync(row);
 
         // What makes this test worth having: the column reordered the metadata away from the
         // front of the root and of every object with a shorter property, and still carries it.
@@ -98,6 +87,35 @@ public class SavedInputJsonbTests : TestSetup
             );
     }
 
+    /// <summary>
+    /// Writes <paramref name="row"/> through one context and reads its input column back through
+    /// another.
+    /// </summary>
+    private async Task<string> SaveAndReadBackInputAsync(Metadata row)
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await using (context.ConfigureAwait(false))
+        {
+            await context.Track(row).ConfigureAwait(false);
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        }
+
+        string saved;
+        var readContext = (IDataContext)factory.Create();
+        await using (readContext.ConfigureAwait(false))
+        {
+            saved = (
+                await readContext
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(m => m.Id == row.Id)
+                    .ConfigureAwait(false)
+            ).Input.NotNull();
+        }
+
+        return saved;
+    }
+
     public class Spot
     {
         public int Id { get; set; }
@@ -109,7 +127,7 @@ public class SavedInputJsonbTests : TestSetup
         public int Id { get; set; }
         public Spot? Home { get; set; }
         public Spot? Work { get; set; }
-        public List<Spot> Stops { get; set; } = [];
+        public IList<Spot> Stops { get; set; } = [];
     }
 
     public interface ISpotsTrain : IServiceTrain<SpotsInput, Unit>;

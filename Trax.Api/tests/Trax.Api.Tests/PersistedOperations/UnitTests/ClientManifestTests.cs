@@ -73,7 +73,7 @@ public class ClientManifestTests
             .ToList();
 
         manifest
-            .Trains.Single(t => t.Field == "findChild")
+            .Trains.Single(t => string.Equals(t.Field, "findChild", StringComparison.Ordinal))
             .Arguments.Should()
             .ContainSingle(a => a.Name == "input");
         defined
@@ -141,7 +141,8 @@ public class ClientManifestTests
             )
             .Services.BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (executor.Schema, TrainTypeModule.AssignTrainNames(registrations));
     }
 
@@ -209,5 +210,5 @@ public class ClientManifestTests
 
     private interface IStubTrain;
 
-    private sealed class StubTrain;
+    private static class StubTrain;
 }

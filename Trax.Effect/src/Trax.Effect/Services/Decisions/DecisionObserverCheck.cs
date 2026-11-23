@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.Services.Decisions;
@@ -21,7 +22,7 @@ namespace Trax.Effect.Services.Decisions;
 /// <para>It checks once, from a scope of its own. The host's start refuses (in
 /// <see cref="StartingAsync"/>, before any other hosted service starts, or in
 /// <see cref="StartAsync"/> for a harness that skips the lifecycle steps), and so does every run on
-/// the host (<see cref="ThrowIfReplaced"/>), so a host built without the generic host fails closed
+/// the host (<see cref="ThrowIfReplacedAsync"/>), so a host built without the generic host fails closed
 /// too. A composite that cannot be built, because an observer it must tell cannot be, refuses the
 /// same way, with what building it threw; a host observer known to be best effort that cannot be
 /// built is left out by the composite and refuses nothing.</para>
@@ -30,29 +31,30 @@ internal sealed class DecisionObserverCheck(IServiceProvider services)
     : IHostedLifecycleService,
         ITraxStartupCheck
 {
-    private readonly Lazy<string?> _problem = new(() => Find(services));
+    private readonly Lazy<Task<string?>> _problem = new(() => FindAsync(services));
     private bool _checked;
 
     /// <summary>Throws when Trax's decision observers would not be told about decisions.</summary>
     /// <exception cref="InvalidOperationException">
     /// An observer replaced the composite, or the composite cannot be built.
     /// </exception>
-    public void ThrowIfReplaced()
+    public async Task ThrowIfReplacedAsync()
     {
-        if (_problem.Value is { } problem)
+        if (await _problem.Value.ConfigureAwait(false) is { } problem)
             throw new InvalidOperationException(problem);
     }
 
-    private static string? Find(IServiceProvider services)
+    private static async Task<string?> FindAsync(IServiceProvider services)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var provider = scope.ServiceProvider;
 
         var parts = provider
             .GetServices<DecisionObserverPart>()
             .Where(part => part.Tag is not null)
-            .Select(part => part.Tag!.Name)
-            .Distinct()
+            .Select(part => part.Tag.NotNull().Name)
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         IDecisionObserver? resolved;
@@ -85,11 +87,10 @@ internal sealed class DecisionObserverCheck(IServiceProvider services)
             + "before AddTrax(...); Trax then tells it alongside its own.";
     }
 
-    public Task StartingAsync(CancellationToken cancellationToken)
+    public async Task StartingAsync(CancellationToken cancellationToken)
     {
         _checked = true;
-        ThrowIfReplaced();
-        return Task.CompletedTask;
+        await ThrowIfReplacedAsync().ConfigureAwait(false);
     }
 
     public Task StartAsync(CancellationToken cancellationToken) =>

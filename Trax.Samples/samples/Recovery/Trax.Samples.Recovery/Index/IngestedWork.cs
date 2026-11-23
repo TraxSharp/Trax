@@ -26,9 +26,9 @@ public class IngestedWork
 
     public int Year { get; set; }
 
-    public List<string> Authors { get; set; } = [];
+    public string[] Authors { get; set; } = [];
 
-    public List<string> References { get; set; } = [];
+    public string[] References { get; set; } = [];
 
     /// <summary>
     /// A SHA-256 of the normalised content, so a later step can tell which works changed since
@@ -44,17 +44,4 @@ public class IngestedWork
 
     /// <summary>The corpus work it was merged into, or proposed for when it needs review.</summary>
     public string? ExistingWorkId { get; set; }
-}
-
-/// <summary>What the ingest decided about one work.</summary>
-public static class Resolutions
-{
-    /// <summary>A work the corpus did not hold: added as new.</summary>
-    public const string Created = "Created";
-
-    /// <summary>The same work as one the corpus holds: linked to it.</summary>
-    public const string Merged = "Merged";
-
-    /// <summary>Possibly a work the corpus holds: kept aside for a person to decide.</summary>
-    public const string NeedsReview = "NeedsReview";
 }

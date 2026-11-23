@@ -24,10 +24,12 @@ internal sealed class TrainRegistrationOrderValidator(
     {
         var missed = discovery
             .DiscoverTrains()
-            .Where(r => r.IsQuery || r.IsMutation || r.IsBroadcastEnabled)
-            .Where(r => !seenByAddTraxGraphQL.Contains(r.ServiceType))
+            .Where(r =>
+                (r.IsQuery || r.IsMutation || r.IsBroadcastEnabled)
+                && !seenByAddTraxGraphQL.Contains(r.ServiceType)
+            )
             .Select(r => r.ServiceType.FullName)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         if (missed.Count > 0)

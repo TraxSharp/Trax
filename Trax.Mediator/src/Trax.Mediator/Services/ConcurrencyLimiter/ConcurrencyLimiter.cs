@@ -22,11 +22,13 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
     private readonly MediatorConfiguration _configuration;
     private readonly ITrainDiscoveryService _discoveryService;
     private readonly ICurrentPrincipalProvider _principalProvider;
-    private readonly ConcurrentDictionary<string, Lazy<SemaphoreSlim?>> _perTrainSemaphores = new();
+    private readonly ConcurrentDictionary<string, Lazy<SemaphoreSlim?>> _perTrainSemaphores = new(
+        StringComparer.Ordinal
+    );
     private readonly Dictionary<string, PrincipalSlot> _perPrincipalSlots = new(
         StringComparer.Ordinal
     );
-    private readonly object _perPrincipalLock = new();
+    private readonly Lock _perPrincipalLock = new();
     private readonly SemaphoreSlim? _globalSemaphore;
 
     /// <summary>
@@ -59,7 +61,7 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         // Acquire in a deterministic order (per-train → per-principal → global)
         // to prevent cross-lock deadlocks. Release in reverse.
         if (perTrainSemaphore is not null)
-            await perTrainSemaphore.WaitAsync(ct);
+            await perTrainSemaphore.WaitAsync(ct).ConfigureAwait(false);
 
         // Rented after the per-train wait, so a run queued behind the per-train limit does not
         // keep its principal's entry alive while it waits there. Inside the try, because renting
@@ -72,7 +74,7 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
             perPrincipalSlot = RentPerPrincipalSlot();
 
             if (perPrincipalSlot is not null)
-                await perPrincipalSlot.Semaphore.WaitAsync(ct);
+                await perPrincipalSlot.Semaphore.WaitAsync(ct).ConfigureAwait(false);
         }
         catch
         {
@@ -84,7 +86,7 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         try
         {
             if (_globalSemaphore is not null)
-                await _globalSemaphore.WaitAsync(ct);
+                await _globalSemaphore.WaitAsync(ct).ConfigureAwait(false);
         }
         catch
         {
@@ -115,11 +117,13 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         return _perTrainSemaphores
             .GetOrAdd(
                 trainFullName,
-                name => new Lazy<SemaphoreSlim?>(() =>
-                {
-                    var limit = ResolveLimit(name);
-                    return limit is { } l ? new SemaphoreSlim(l, l) : null;
-                })
+                static (name, limiter) =>
+                    new Lazy<SemaphoreSlim?>(() =>
+                    {
+                        var limit = limiter.ResolveLimit(name);
+                        return limit is { } l ? new SemaphoreSlim(l, l) : null;
+                    }),
+                this
             )
             .Value;
     }
@@ -177,7 +181,9 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         // Priority 2: Attribute on train class
         var registration = _discoveryService
             .DiscoverTrains()
-            .FirstOrDefault(r => r.ServiceType.FullName == trainFullName);
+            .FirstOrDefault(r =>
+                string.Equals(r.ServiceType.FullName, trainFullName, StringComparison.Ordinal)
+            );
 
         return registration?.MaxConcurrentRun;
     }

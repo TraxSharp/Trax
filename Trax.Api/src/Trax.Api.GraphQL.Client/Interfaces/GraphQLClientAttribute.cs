@@ -20,7 +20,7 @@ public sealed class GraphQLClientAttribute : Attribute
     /// The service key, compared with <see cref="object.Equals(object?, object?)"/>: a string or
     /// an enum value, matching the one the client was registered with.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     public GraphQLClientAttribute(object key)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -33,7 +33,7 @@ public sealed class GraphQLClientAttribute : Attribute
     /// <summary>
     /// Whether <paramref name="requestType"/> belongs to the client registered under
     /// <paramref name="serviceKey"/>: a marked type to the client with its key, an unmarked type
-    /// to the unkeyed client (<paramref name="serviceKey"/> is <c>null</c>).
+    /// to the unkeyed client (<paramref name="serviceKey"/> is <see langword="null"/>).
     /// </summary>
     internal static bool BelongsTo(Type requestType, object? serviceKey)
     {

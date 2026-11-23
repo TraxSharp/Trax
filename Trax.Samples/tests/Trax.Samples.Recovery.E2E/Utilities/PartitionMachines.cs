@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
@@ -18,17 +19,21 @@ public static class PartitionMachines
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
 
     /// <summary>Every instance of the machine, by partition.</summary>
-    public static async Task<List<SnapshotDraft>> AllAsync()
+    public static async Task<IReadOnlyList<SnapshotDraft>> AllAsync()
     {
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        return await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .SnapshotDrafts.AsNoTracking()
-            .Where(x =>
-                x.Machine == SourcePartitionMachine.MachineId
-                && x.OwnerKind == SnapshotOwnerKind.System
-            )
-            .ToListAsync();
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.AsNoTracking()
+                .Where(x =>
+                    x.Machine == SourcePartitionMachine.MachineId
+                    && x.OwnerKind == SnapshotOwnerKind.System
+                )
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>The instance for one partition, or null.</summary>
@@ -38,7 +43,7 @@ public static class PartitionMachines
             SourcePartitionMachine.MachineId,
             SourcePartitionMachine.KeyFor(source, month)
         );
-        return (await AllAsync()).SingleOrDefault(x => x.Id == id);
+        return (await AllAsync().ConfigureAwait(false)).SingleOrDefault(x => x.Id == id);
     }
 
     /// <summary>Waits until the partition's instance is in <paramref name="state"/> with no live run.</summary>
@@ -49,21 +54,24 @@ public static class PartitionMachines
     )
     {
         SnapshotDraft? row = null;
-        var reached = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                row = await OfAsync(source, month);
-                return row is { InvokeToken: null } && row.State == state;
-            },
-            Timeout,
-            TimeSpan.FromMilliseconds(100)
-        );
+        var reached = await Polling
+            .WaitUntilAsync(
+                async () =>
+                {
+                    row = await OfAsync(source, month).ConfigureAwait(false);
+                    return row is { InvokeToken: null }
+                        && string.Equals(row.State, state, StringComparison.Ordinal);
+                },
+                Timeout,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         reached
             .Should()
             .BeTrue(
                 $"{source}/{month} should reach {state}; it is in {row?.State ?? "no instance"}"
             );
-        return row!;
+        return row.NotNull();
     }
 
     /// <summary>
@@ -72,11 +80,14 @@ public static class PartitionMachines
     /// </summary>
     public static async Task WaitUntilSettledAsync()
     {
-        var settled = await Polling.WaitUntilAsync(
-            async () => (await AllAsync()).All(x => x.InvokeToken is null),
-            Timeout,
-            TimeSpan.FromMilliseconds(100)
-        );
+        var settled = await Polling
+            .WaitUntilAsync(
+                async () =>
+                    (await AllAsync().ConfigureAwait(false)).All(x => x.InvokeToken is null),
+                Timeout,
+                TimeSpan.FromMilliseconds(100)
+            )
+            .ConfigureAwait(false);
         settled.Should().BeTrue("every partition instance's ingest run should finish");
     }
 
@@ -86,14 +97,18 @@ public static class PartitionMachines
     /// </summary>
     public static async Task ResetAsync()
     {
-        await WaitUntilSettledAsync();
-        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
-        await scope
-            .ServiceProvider.GetRequiredService<IDataContext>()
-            .SnapshotDrafts.Where(x =>
-                x.Machine == SourcePartitionMachine.MachineId
-                && x.OwnerKind == SnapshotOwnerKind.System
-            )
-            .ExecuteDeleteAsync();
+        await WaitUntilSettledAsync().ConfigureAwait(false);
+        var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.Where(x =>
+                    x.Machine == SourcePartitionMachine.MachineId
+                    && x.OwnerKind == SnapshotOwnerKind.System
+                )
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+        }
     }
 }

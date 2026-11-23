@@ -23,7 +23,7 @@ internal sealed class MachineRegistrationOrderValidator(IEnumerable<IMachine> ma
         var missed = StateMachineOptions
             .Served(machines)
             .Select(m => $"'{m.Name}' ({m.GetType().FullName})")
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         if (missed.Count > 0)

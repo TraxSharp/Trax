@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.Filtering.Operations;
 
@@ -8,10 +9,9 @@ namespace Trax.Api.GraphQL.Filtering.Operations;
 /// </summary>
 internal static class CaseInsensitiveExpression
 {
-    private static readonly MethodInfo ToLowerMethod = typeof(string).GetMethod(
-        nameof(string.ToLower),
-        Type.EmptyTypes
-    )!;
+    private static readonly MethodInfo ToLowerMethod = typeof(string)
+        .GetMethod(nameof(string.ToLower), Type.EmptyTypes)
+        .NotNull();
 
     /// <summary>Wraps a string expression in <c>.ToLower()</c>.</summary>
     public static Expression Lower(Expression value) => Expression.Call(value, ToLowerMethod);

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.PersistedOperationHistory;
 
@@ -28,25 +29,41 @@ public class PersistedOperationHistory
     /// Mirrors the live row's id.
     /// </summary>
     [Column("id")]
-    public string Id { get; set; } = null!;
+    public string Id
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// Snapshot of the document text at the time of the change.
     /// </summary>
     [Column("document")]
-    public string Document { get; set; } = null!;
+    public string Document
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// Snapshot of the shape fingerprint at the time of the change.
     /// </summary>
     [Column("shape_fingerprint")]
-    public string ShapeFingerprint { get; set; } = null!;
+    public string ShapeFingerprint
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// One of <c>Upsert</c>, <c>Deactivate</c>, <c>Restore</c>.
     /// </summary>
     [Column("change_type")]
-    public string ChangeType { get; set; } = null!;
+    public string ChangeType
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// When the change happened.

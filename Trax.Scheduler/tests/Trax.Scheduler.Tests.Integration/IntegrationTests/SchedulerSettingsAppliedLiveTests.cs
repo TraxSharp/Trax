@@ -48,10 +48,11 @@ public class SchedulerSettingsAppliedLiveTests
                 Manifest = manifest,
                 Reason = "kept for investigation",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
-        deadLetter.Acknowledge("resolved long ago");
-        deadLetter.ResolvedAt = DateTime.UtcNow.AddDays(-60);
+        deadLetter.Acknowledge("resolved long ago", TimeProvider.System);
+        deadLetter.ResolvedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-60);
         await fx.DataContext.Track(deadLetter);
         await fx.DataContext.SaveChanges(CancellationToken.None);
         fx.DataContext.Reset();
@@ -73,7 +74,7 @@ public class SchedulerSettingsAppliedLiveTests
     public async Task AutoPurgeDeadLetters_false_in_code_keeps_resolved_dead_letters()
     {
         await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
-            s.AutoPurgeDeadLetters(false)
+            s.AutoPurgeDeadLetters(purge: false)
                 .DeadLetterRetentionPeriod(TimeSpan.FromDays(7))
                 .Schedule<ISchedulerTestTrain>(
                     "purge-off-in-code",
@@ -95,10 +96,11 @@ public class SchedulerSettingsAppliedLiveTests
                 Manifest = manifest,
                 Reason = "kept",
                 RetryCount = 3,
-            }
+            },
+            TimeProvider.System
         );
-        deadLetter.Acknowledge("resolved long ago");
-        deadLetter.ResolvedAt = DateTime.UtcNow.AddDays(-60);
+        deadLetter.Acknowledge("resolved long ago", TimeProvider.System);
+        deadLetter.ResolvedAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-60);
         await fx.DataContext.Track(deadLetter);
         await fx.DataContext.SaveChanges(CancellationToken.None);
         fx.DataContext.Reset();

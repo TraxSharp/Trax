@@ -81,14 +81,17 @@ internal sealed record SubscriptionRecheck(
         if (configuration?.AuthorizationRequired != true)
             return true;
 
-        await using var scope = scopes.CreateAsyncScope();
-        return await EndpointPolicy
-            .IsSatisfiedAsync(
-                scope.ServiceProvider.GetRequiredService<IAuthorizationService>(),
-                configuration,
-                user
-            )
-            .ConfigureAwait(false);
+        var scope = scopes.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await EndpointPolicy
+                .IsSatisfiedAsync(
+                    scope.ServiceProvider.GetRequiredService<IAuthorizationService>(),
+                    configuration,
+                    user
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -144,18 +147,7 @@ internal sealed record SubscriptionRecheck(
         }
         finally
         {
-            await stop.CancelAsync().ConfigureAwait(false);
-            if (pending is null || pending.IsCompleted)
-            {
-                await events.DisposeAsync().ConfigureAwait(false);
-                stop.Dispose();
-            }
-            else
-            {
-                // An async iterator cannot be disposed while it is being read; it is disposed once
-                // the read it is in answers the cancellation.
-                _ = DisposeAfterAsync(pending, events, stop);
-            }
+            await ReleaseAsync(stop, pending, events).ConfigureAwait(false);
         }
 
         if (!refused)
@@ -163,6 +155,30 @@ internal sealed record SubscriptionRecheck(
         if (last is null)
             throw new SubscriptionNoLongerAuthorizedException();
         yield return last();
+    }
+
+    /// <summary>
+    /// Stops the source and disposes it, now when no read is in flight, otherwise once that read
+    /// answers the cancellation.
+    /// </summary>
+    private static async Task ReleaseAsync<T>(
+        CancellationTokenSource stop,
+        Task<bool>? pending,
+        IAsyncEnumerator<T> events
+    )
+    {
+        await stop.CancelAsync().ConfigureAwait(false);
+        if (pending is null || pending.IsCompleted)
+        {
+            await events.DisposeAsync().ConfigureAwait(false);
+            stop.Dispose();
+        }
+        else
+        {
+            // An async iterator cannot be disposed while it is being read; it is disposed once
+            // the read it is in answers the cancellation.
+            _ = DisposeAfterAsync(pending, events, stop);
+        }
     }
 
     private async ValueTask<bool> PassesAsync(CancellationToken ct)

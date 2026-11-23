@@ -1,0 +1,4 @@
+// TraxBanProcessExit: a library does not end the process. Return or throw; the host decides.
+M:System.Environment.Exit(System.Int32);Return or throw; the host decides when the process ends
+M:System.Environment.FailFast(System.String);Return or throw; the host decides when the process ends
+M:System.Environment.FailFast(System.String,System.Exception);Return or throw; the host decides when the process ends

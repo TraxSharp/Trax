@@ -49,13 +49,13 @@ public interface IJobSubmitter
     /// Enqueues a job for immediate execution with cancellation support.
     /// </summary>
     Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken) =>
-        EnqueueAsync(metadataId);
+        EnqueueWithoutToken(this, metadataId);
 
     /// <summary>
     /// Enqueues a job for immediate execution with an in-memory train input and cancellation support.
     /// </summary>
     Task<string> EnqueueAsync(long metadataId, object input, CancellationToken cancellationToken) =>
-        EnqueueAsync(metadataId, input);
+        EnqueueWithoutToken(this, metadataId, input);
 
     /// <summary>
     /// Enqueues a job with a dispatch priority. Higher values are dequeued first by workers.
@@ -77,4 +77,16 @@ public interface IJobSubmitter
         int priority,
         CancellationToken cancellationToken
     ) => EnqueueAsync(metadataId, input, cancellationToken);
+
+    // The token overloads fall back to the ones without a token, so an implementation written
+    // before they existed keeps working. The call is made from here, where no token is in scope,
+    // so it cannot be mistaken for one that should forward it.
+    private static Task<string> EnqueueWithoutToken(IJobSubmitter submitter, long metadataId) =>
+        submitter.EnqueueAsync(metadataId);
+
+    private static Task<string> EnqueueWithoutToken(
+        IJobSubmitter submitter,
+        long metadataId,
+        object input
+    ) => submitter.EnqueueAsync(metadataId, input);
 }

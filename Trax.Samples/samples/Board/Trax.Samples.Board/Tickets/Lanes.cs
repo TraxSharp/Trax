@@ -4,16 +4,6 @@ using Trax.Samples.Board.Trains.Work;
 
 namespace Trax.Samples.Board.Tickets;
 
-/// <summary>A lane of the board: the state it works, the role that works it, and what a claim hands its worker.</summary>
-public sealed record LaneSpec(
-    string Key,
-    TicketState State,
-    string Role,
-    string Instructions,
-    IReadOnlyList<string> Tools,
-    IReadOnlyList<string> Events
-);
-
 public static class Lanes
 {
     public static readonly IReadOnlyList<LaneSpec> All =
@@ -60,7 +50,8 @@ public static class Lanes
         ),
     ];
 
-    public static LaneSpec? Find(string key) => All.FirstOrDefault(l => l.Key == key);
+    public static LaneSpec? Find(string key) =>
+        All.FirstOrDefault(l => string.Equals(l.Key, key, StringComparison.Ordinal));
 
     public static TicketView View(Ticket ticket) =>
         new()

@@ -34,7 +34,13 @@ public class CatalogSearchTests : ApiTestFixture
 
         var hobbit = books
             .EnumerateArray()
-            .FirstOrDefault(b => b.GetProperty("title").GetString() == "The Hobbit");
+            .FirstOrDefault(b =>
+                string.Equals(
+                    b.GetProperty("title").GetString(),
+                    "The Hobbit",
+                    StringComparison.Ordinal
+                )
+            );
 
         hobbit
             .ValueKind.Should()

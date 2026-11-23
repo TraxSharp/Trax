@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Conformance;
@@ -23,14 +24,14 @@ public partial class IrFormatParityTests
             Path.Combine(FixturePaths.TypeScriptEngineRoot, "src", "rules", "irFormat.ts")
         );
 
-        Declared(TsIrFormatVersion(), irFormatTs, "irFormat.ts", "irFormatVersion")
+        Declared(TsIrFormatVersion, irFormatTs, "irFormat.ts", "irFormatVersion")
             .Should()
             .Be(
                 IrExporter.FormatVersion,
                 "the TypeScript engine's irFormatVersion and IrExporter.FormatVersion name one IR format; bump "
                     + "both together"
             );
-        Declared(TsOldestIrFormatRead(), irFormatTs, "irFormat.ts", "oldestIrFormatRead")
+        Declared(TsOldestIrFormatRead, irFormatTs, "irFormat.ts", "oldestIrFormatRead")
             .Should()
             .Be(
                 IrExporter.OldestFormatRead,
@@ -43,10 +44,10 @@ public partial class IrFormatParityTests
     {
         var irRs = File.ReadAllText(Path.Combine(FixturePaths.FolderRoot, "rust", "src", "ir.rs"));
 
-        Declared(RsIrFormatVersion(), irRs, "ir.rs", "IR_FORMAT_VERSION")
+        Declared(RsIrFormatVersion, irRs, "ir.rs", "IR_FORMAT_VERSION")
             .Should()
             .Be(IrExporter.FormatVersion, "the Rust engine reads the format IrExporter writes");
-        Declared(RsOldestIrFormatRead(), irRs, "ir.rs", "OLDEST_IR_FORMAT_READ")
+        Declared(RsOldestIrFormatRead, irRs, "ir.rs", "OLDEST_IR_FORMAT_READ")
             .Should()
             .Be(
                 IrExporter.OldestFormatRead,
@@ -57,15 +58,19 @@ public partial class IrFormatParityTests
     [Test]
     public void The_schema_is_of_the_IR_format_this_engine_exports()
     {
-        var schema = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "ir.schema.json"))
-        )!;
+        var schema = JsonNode
+            .Parse(File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "ir.schema.json")))
+            .NotNull();
 
-        schema["$id"]!
+        schema["$id"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be($"urn:trax:state-machine:ir-format:{IrExporter.FormatVersion}");
-        schema["properties"]!["irFormat"]!["const"]!
+        schema["properties"]
+            .NotNull()["irFormat"]
+            .NotNull()["const"]
+            .NotNull()
             .GetValue<int>()
             .Should()
             .Be(IrExporter.FormatVersion);
@@ -74,15 +79,19 @@ public partial class IrFormatParityTests
     [Test]
     public void The_unreadable_IR_formats_sit_just_outside_the_formats_read()
     {
-        var cases = JsonNode.Parse(
-            File.ReadAllText(
-                Path.Combine(FixturePaths.ConformanceRoot, "unreadable-ir", "cases.json")
+        var cases = JsonNode
+            .Parse(
+                File.ReadAllText(
+                    Path.Combine(FixturePaths.ConformanceRoot, "unreadable-ir", "cases.json")
+                )
             )
-        )!["cases"]!
+            .NotNull()["cases"]
+            .NotNull()
             .AsArray()
             .ToDictionary(
-                c => c!["name"]!.GetValue<string>(),
-                c => c!["ir"]!["irFormat"]?.GetValue<int>()
+                c => c.NotNull()["name"].NotNull().GetValue<string>(),
+                c => c.NotNull()["ir"].NotNull()["irFormat"]?.GetValue<int>(),
+                StringComparer.Ordinal
             );
 
         cases["ir-format-too-new"].Should().Be(IrExporter.FormatVersion + 1);
@@ -93,27 +102,37 @@ public partial class IrFormatParityTests
     {
         var match = declaration.Match(source);
         match.Success.Should().BeTrue($"{file} declares {name}");
-        return int.Parse(match.Groups["version"].Value);
+        return int.Parse(
+            match.Groups["version"].Value,
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
-    [GeneratedRegex(@"^export const irFormatVersion = (?<version>\d+);$", RegexOptions.Multiline)]
-    private static partial Regex TsIrFormatVersion();
+    [GeneratedRegex(
+        @"^export const irFormatVersion = (?<version>\d+);$",
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TsIrFormatVersion { get; }
 
     [GeneratedRegex(
         @"^export const oldestIrFormatRead = (?<version>\d+);$",
-        RegexOptions.Multiline
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex TsOldestIrFormatRead();
+    private static partial Regex TsOldestIrFormatRead { get; }
 
     [GeneratedRegex(
         @"^pub const IR_FORMAT_VERSION: i64 = (?<version>\d+);$",
-        RegexOptions.Multiline
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex RsIrFormatVersion();
+    private static partial Regex RsIrFormatVersion { get; }
 
     [GeneratedRegex(
         @"^pub const OLDEST_IR_FORMAT_READ: i64 = (?<version>\d+);$",
-        RegexOptions.Multiline
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex RsOldestIrFormatRead();
+    private static partial Regex RsOldestIrFormatRead { get; }
 }

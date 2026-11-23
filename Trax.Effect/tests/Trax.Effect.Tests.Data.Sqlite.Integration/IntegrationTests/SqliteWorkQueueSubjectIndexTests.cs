@@ -26,7 +26,8 @@ public class SqliteWorkQueueSubjectIndexTests : TestSetup
     public async Task The_queued_behind_lookup_reads_the_queued_subject_index()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (DbContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = (DbContext)await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         await context.Database.ExecuteSqlRawAsync(
             """
@@ -44,7 +45,8 @@ public class SqliteWorkQueueSubjectIndexTests : TestSetup
 
         var connection = context.Database.GetDbConnection();
         await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             EXPLAIN QUERY PLAN
             SELECT w.id
@@ -63,12 +65,13 @@ public class SqliteWorkQueueSubjectIndexTests : TestSetup
             """;
         AddParameter(command, "$subject", "customer-42");
         AddParameter(command, "$id", 0L);
-        AddParameter(command, "$now", DateTime.UtcNow);
+        AddParameter(command, "$now", TestTime.UtcDateTime);
         AddParameter(command, "$priority", 1);
 
         // EXPLAIN QUERY PLAN returns (id, parent, notused, detail); detail names the index.
         var plan = new List<string>();
-        await using (var reader = await command.ExecuteReaderAsync())
+        var reader = await command.ExecuteReaderAsync();
+        await using (reader.ConfigureAwait(false))
             while (await reader.ReadAsync())
                 plan.Add(reader.GetString(3));
 

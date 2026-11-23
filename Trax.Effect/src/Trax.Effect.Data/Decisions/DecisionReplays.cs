@@ -33,11 +33,13 @@ public static class DecisionReplays
             .Metadatas.AsNoTracking()
             .Where(m => m.Id == metadataId)
             .Select(m => m.ReplayDecisionsOf)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         return replays is not null
             || await context
                 .RecordedDecisions.AsNoTracking()
-                .AnyAsync(d => d.MetadataId == metadataId && d.Refused == null, cancellationToken);
+                .AnyAsync(d => d.MetadataId == metadataId && d.Refused == null, cancellationToken)
+                .ConfigureAwait(false);
     }
 }

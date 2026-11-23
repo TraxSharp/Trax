@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -21,22 +22,38 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.Fixtures;
 [TestFixture]
 public abstract class TestSetup
 {
-    private ServiceProvider ServiceProvider { get; set; } = null!;
-    private string _dbPath = null!;
+    private ServiceProvider ServiceProvider
+    {
+        get => field.NotNull(nameof(ServiceProvider));
+        set;
+    }
+    private string? _dbPath;
 
-    public IServiceScope Scope { get; private set; } = null!;
+    public AsyncServiceScope Scope { get; private set; }
 
-    public ITrainBus TrainBus { get; private set; } = null!;
+    public ITrainBus TrainBus
+    {
+        get => field.NotNull(nameof(TrainBus));
+        private set;
+    }
 
-    public IJobRunnerTrain JobRunner { get; private set; } = null!;
+    public IJobRunnerTrain JobRunner
+    {
+        get => field.NotNull(nameof(JobRunner));
+        private set;
+    }
 
-    public IDataContext DataContext { get; private set; } = null!;
+    public IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"trax_scheduler_test_{Guid.NewGuid():N}.db");
-        var connectionString = $"Data Source={_dbPath}";
+        var connectionString = $"Data Source={_dbPath.NotNull()}";
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 
@@ -70,12 +87,12 @@ public abstract class TestSetup
     {
         await ServiceProvider.DisposeAsync();
 
-        if (File.Exists(_dbPath))
-            File.Delete(_dbPath);
-        var walPath = _dbPath + "-wal";
+        if (File.Exists(_dbPath.NotNull()))
+            File.Delete(_dbPath.NotNull());
+        var walPath = _dbPath.NotNull() + "-wal";
         if (File.Exists(walPath))
             File.Delete(walPath);
-        var shmPath = _dbPath + "-shm";
+        var shmPath = _dbPath.NotNull() + "-shm";
         if (File.Exists(shmPath))
             File.Delete(shmPath);
     }
@@ -83,7 +100,7 @@ public abstract class TestSetup
     [SetUp]
     public virtual async Task TestSetUp()
     {
-        Scope = ServiceProvider.CreateScope();
+        Scope = ServiceProvider.CreateAsyncScope();
         TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
         JobRunner = Scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
         DataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -93,17 +110,18 @@ public abstract class TestSetup
 
     public static async Task CleanupDatabase(IDataContext dataContext)
     {
-        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await dataContext.Logs.ExecuteDeleteAsync();
-        await dataContext.WorkQueues.ExecuteDeleteAsync();
-        await dataContext.DeadLetters.ExecuteDeleteAsync();
-        await dataContext.Metadatas.ExecuteDeleteAsync();
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
 
         await dataContext
             .Manifests.Where(m => m.DependsOnManifestId != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
-        await dataContext.Manifests.ExecuteDeleteAsync();
-        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null))
+            .ConfigureAwait(false);
+        await dataContext.Manifests.ExecuteDeleteAsync().ConfigureAwait(false);
+        await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
 
         dataContext.Reset();
     }
@@ -122,11 +140,11 @@ public abstract class TestSetup
             MaxActiveJobs = maxActiveJobs,
             Priority = priority,
             IsEnabled = isEnabled,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
-        await dataContext.Track(group);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await dataContext.Track(group).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         dataContext.Reset();
         return group;
     }
@@ -140,6 +158,6 @@ public abstract class TestSetup
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 }

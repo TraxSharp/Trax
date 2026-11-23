@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 
@@ -65,9 +66,9 @@ public class BoardTests
         """;
 
     [Test]
-    public void Each_sticky_has_its_role_and_the_scenarios_behind_it()
+    public async Task Each_sticky_has_its_role_and_the_scenarios_behind_it()
     {
-        var board = Draw();
+        var board = await Draw().ConfigureAwait(false);
 
         Kinds(board)
             .Should()
@@ -89,25 +90,37 @@ public class BoardTests
     }
 
     [Test]
-    public void The_same_files_draw_the_same_board()
+    public async Task The_same_files_draw_the_same_board()
     {
-        Kinds(Draw()).Should().Equal(Kinds(Draw()));
-        Draw().Links.Should().Equal(Draw().Links);
+        Kinds(await Draw().ConfigureAwait(false))
+            .Should()
+            .Equal(Kinds(await Draw().ConfigureAwait(false)));
+        (await Draw().ConfigureAwait(false))
+            .Links.Should()
+            .Equal((await Draw().ConfigureAwait(false)).Links);
     }
 
     private static List<(Board.Kind, string)> Kinds(Board.Drawn board) =>
         board.Stickies.Select(s => (s.Kind, s.Label)).ToList();
 
-    private static Board.Drawn Draw()
+    private static async Task<Board.Drawn> Draw()
     {
-        var derived = FeatureDerivation.Derive(
-            Trax.StateMachine.Features.Glossary.Read(Glossary),
-            [("ordering.feature", Ordering)]
+        var derived = (
+            await FeatureDerivation
+                .DeriveAsync(
+                    Trax.StateMachine.Features.Glossary.Read(Glossary),
+                    [("ordering.feature", Ordering)]
+                )
+                .ConfigureAwait(false)
         );
         derived.Problems.Should().BeEmpty();
         return Board.Draw(
-            derived.Irs.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value)!.AsObject()),
-            HostFile.Read(derived.Host!)
+            derived.Irs.ToDictionary(
+                kv => kv.Key,
+                kv => JsonNode.Parse(kv.Value).NotNull().AsObject(),
+                StringComparer.Ordinal
+            ),
+            HostFile.Read(derived.Host.NotNull())
         );
     }
 }

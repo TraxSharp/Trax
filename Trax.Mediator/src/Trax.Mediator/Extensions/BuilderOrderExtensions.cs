@@ -78,7 +78,7 @@ public static class BuilderOrderExtensions
     /// <c>AddMediator</c>, which reads the assemblies it contributes.
     /// </summary>
     /// <remarks>
-    /// The options parameter is <c>dynamic</c> because this package does not reference the one that
+    /// The options parameter is <see langword="dynamic"/> because this package does not reference the one that
     /// declares the options type, and a lambda written for the real overload must still bind here
     /// so that the error reported is this one.
     /// </remarks>

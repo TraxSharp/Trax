@@ -58,5 +58,6 @@ public class PostgresContext(DbContextOptions<PostgresContext> options)
 
         modelBuilder.HasDefaultSchema("trax").AddPostgresEnums().ApplyUtcDateTimeConverter();
         modelBuilder.AddRunExternalIdCast();
+        modelBuilder.AddPostgresDatabaseFunctions();
     }
 }

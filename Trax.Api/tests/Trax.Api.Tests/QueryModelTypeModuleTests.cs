@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
@@ -200,7 +201,10 @@ public class QueryModelTypeModuleTests
         var config = new GraphQLConfiguration([], [], [], []);
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().BeEmpty();
     }
@@ -222,7 +226,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // ObjectType<TestPlayer> + ObjectTypeExtension on DiscoverQueries
         types.Should().HaveCount(2);
@@ -260,7 +267,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Only 1 ObjectType<TestPlayer> despite 2 registrations
         types
@@ -316,7 +326,10 @@ public class QueryModelTypeModuleTests
         );
 
         var module = new Trax.Api.GraphQL.TypeModules.TrainTypeModule(discovery, config);
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should NOT contain ObjectType<DiscoverQueries> (base type registered externally)
         types
@@ -358,7 +371,10 @@ public class QueryModelTypeModuleTests
         ]);
 
         var module = new Trax.Api.GraphQL.TypeModules.TrainTypeModule(discovery);
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // SHOULD contain ObjectType<DiscoverQueries> (no model registrations, so we own it)
         types
@@ -435,7 +451,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // ObjectType<TestPlayer> + ObjectType (namespace base) + 2x ObjectTypeExtension
         // (namespace fields + namespace field on DiscoverQueries)
@@ -462,7 +481,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Should still have one extension directly on DiscoverQueries
         types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
@@ -505,7 +527,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         // Root model extension on DiscoverQueries + namespace field extension on DiscoverQueries
         // + namespace type extension (GameDiscoverQueries)
@@ -557,7 +582,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(2);
         types
@@ -587,7 +615,10 @@ public class QueryModelTypeModuleTests
         );
         var module = new QueryModelTypeModule(config);
 
-        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+        var types = await module.CreateTypesAsync(
+            Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+            CancellationToken.None
+        );
 
         types.Should().HaveCount(2);
         types
@@ -603,7 +634,7 @@ public class QueryModelTypeModuleTests
 
     #region Stubs
 
-    private class StubDiscoveryService(
+    private sealed class StubDiscoveryService(
         IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> registrations
     ) : Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService
     {
@@ -613,109 +644,7 @@ public class QueryModelTypeModuleTests
 
     private interface IStubTrain;
 
-    private class StubTrain;
+    private static class StubTrain;
 
     #endregion
 }
-
-#region Test Entities and DbContexts
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Description = "Test players")]
-public class TestPlayer
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}
-
-public class TestIgnored
-{
-    public int Id { get; set; }
-    public string Value { get; set; } = "";
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Filtering = false, Sorting = false)]
-public class ToggleEntity
-{
-    public int Id { get; set; }
-}
-
-[TraxQueryModel(Description = "Test items")]
-[TraxAllowAnonymous]
-public class TestItem
-{
-    public int Id { get; set; }
-    public string ItemName { get; set; } = "";
-}
-
-public class TestDbContext : DbContext
-{
-    public DbSet<TestPlayer> Players { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("TestDb_" + Guid.NewGuid());
-}
-
-public class MixedDbContext : DbContext
-{
-    public DbSet<TestPlayer> Players { get; set; } = null!;
-    public DbSet<TestIgnored> Ignored { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("MixedDb_" + Guid.NewGuid());
-}
-
-public class ToggleDbContext : DbContext
-{
-    public DbSet<ToggleEntity> Toggles { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("ToggleDb_" + Guid.NewGuid());
-}
-
-public class SecondDbContext : DbContext
-{
-    public DbSet<TestItem> Items { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("SecondDb_" + Guid.NewGuid());
-}
-
-public record StubInput
-{
-    public string Value { get; init; } = "";
-}
-
-public record StubOutput
-{
-    public string Result { get; init; } = "";
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
-public class ExplicitEntity
-{
-    [Column("id")]
-    public int Id { get; set; }
-
-    [Column("display_name")]
-    public string DisplayName { get; set; } = "";
-
-    [NotMapped]
-    public string ComputedAlias => $"Entity-{Id}";
-
-    public string NonColumnProp { get; set; } = "";
-
-    public void AddToDbContext() { }
-}
-
-public class ExplicitDbContext : DbContext
-{
-    public DbSet<ExplicitEntity> Entities { get; set; } = null!;
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-        optionsBuilder.UseInMemoryDatabase("ExplicitDb_" + Guid.NewGuid());
-}
-
-#endregion

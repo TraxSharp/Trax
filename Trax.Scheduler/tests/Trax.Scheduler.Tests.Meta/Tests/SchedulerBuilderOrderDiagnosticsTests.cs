@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Extensions;
 
 namespace Trax.Scheduler.Tests.Meta.Tests;
@@ -97,7 +98,7 @@ public class SchedulerBuilderOrderDiagnosticsTests
             );
 
     /// <summary>
-    /// A call the compiler refuses can still be made through reflection or <c>dynamic</c>, which
+    /// A call the compiler refuses can still be made through reflection or <see langword="dynamic"/>, which
     /// bind at run time and ignore <c>[Obsolete]</c>. Such a call gets the same instruction as the
     /// compile error, and every public member of the class is one of these refusals.
     /// </summary>
@@ -111,7 +112,7 @@ public class SchedulerBuilderOrderDiagnosticsTests
             .NotBeNull(
                 "every public member of SchedulerBuilderOrderExtensions exists only to be refused"
             );
-        obsolete!.IsError.Should().BeTrue();
+        obsolete.NotNull().IsError.Should().BeTrue();
 
         var call = () => method.Invoke(null, new object?[method.GetParameters().Length]);
 
@@ -129,7 +130,7 @@ public class SchedulerBuilderOrderDiagnosticsTests
             new CSharpParseOptions(LanguageVersion.Latest)
         );
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
 

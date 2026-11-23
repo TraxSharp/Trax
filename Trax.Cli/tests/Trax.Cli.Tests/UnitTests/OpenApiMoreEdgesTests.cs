@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -10,10 +11,12 @@ public class OpenApiMoreEdgesTests
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
 
     [Test]
-    public void Parse_OperationIdCollision_NoPathParams_FallsBackToNumericSuffix()
+    public async Task Parse_OperationIdCollision_NoPathParams_FallsBackToNumericSuffix()
     {
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("openapi-more-edges.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("openapi-more-edges.json"))
+            .ConfigureAwait(false);
 
         // Three GET ops with operationId "listThings" and no path params force the
         // numeric fallback in EnsureUniqueOperationName.
@@ -28,25 +31,34 @@ public class OpenApiMoreEdgesTests
     }
 
     [Test]
-    public void Parse_StringEnumComponent_BuildsApiEnum()
+    public async Task Parse_StringEnumComponent_BuildsApiEnum()
     {
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("openapi-more-edges.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("openapi-more-edges.json"))
+            .ConfigureAwait(false);
 
-        var statusEnum = schema.Enums.SingleOrDefault(e => e.Name == "Status");
+        var statusEnum = schema.Enums.SingleOrDefault(e =>
+            string.Equals(e.Name, "Status", StringComparison.Ordinal)
+        );
         statusEnum.Should().NotBeNull();
-        statusEnum!.Values.Should().BeEquivalentTo("Active", "Inactive", "Pending");
+        statusEnum.NotNull().Values.Should().BeEquivalentTo("Active", "Inactive", "Pending");
     }
 
     [Test]
-    public void Parse_RepeatedRef_ReusesCachedType()
+    public async Task Parse_RepeatedRef_ReusesCachedType()
     {
         // Two operations both reference Status — second resolution hits the
         // _resolvedTypes/_resolvedEnums cache rather than building a fresh entry.
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("openapi-more-edges.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("openapi-more-edges.json"))
+            .ConfigureAwait(false);
 
         // One enum entry total even though referenced twice.
-        schema.Enums.Where(e => e.Name == "Status").Should().HaveCount(1);
+        schema
+            .Enums.Where(e => string.Equals(e.Name, "Status", StringComparison.Ordinal))
+            .Should()
+            .HaveCount(1);
     }
 }

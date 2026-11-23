@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.IntegrationTests;
@@ -15,13 +16,13 @@ public class MachineGeneratorNodeTests
 {
     private static readonly IMachine Turnstile = new DeclarativeTurnstileMachine();
 
-    private string _out = null!;
-    private string _engineSrc = null!;
+    private string _out = "";
+    private string _engineSrc = "";
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        if (!new NodeRunner().IsAvailable())
+        if (!(await new NodeRunner().IsAvailableAsync().ConfigureAwait(false)))
             NodePrerequisite.Missing(
                 "node is not on PATH; skipping the real-node byte-parity test."
             );
@@ -32,7 +33,7 @@ public class MachineGeneratorNodeTests
                 "Trax.StateMachine/ts is not checked out beside Trax.Cli; skipping byte-parity test."
             );
 
-        _engineSrc = Path.Combine(engineRoot!, "src");
+        _engineSrc = Path.Combine(engineRoot.NotNull(), "src");
         _out = Path.Combine(Path.GetTempPath(), $"trax-machine-it-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_out);
     }
@@ -45,15 +46,16 @@ public class MachineGeneratorNodeTests
     }
 
     [Test]
-    public void Generate_produces_canonical_ir_a_full_twin_and_a_corpus_and_is_idempotent()
+    public async Task Generate_produces_canonical_ir_a_full_twin_and_a_corpus_and_is_idempotent()
     {
         var generator = new MachineGenerator(new NodeRunner());
-        var first = GenerateInto("a");
-        var second = GenerateInto("b");
+        var first = await GenerateIntoAsync("a").ConfigureAwait(false);
+        var second = await GenerateIntoAsync("b").ConfigureAwait(false);
 
         // IR: the CLI writes the canonical single-line export plus a trailing newline (not the pretty format
         // the engine repo's older committed turnstile.ir.json still carries; that is retired in Increment E).
-        var ir = File.ReadAllText(Path.Combine(_out, "a", "ir", "turnstile.ir.json"));
+        var ir = await File.ReadAllTextAsync(Path.Combine(_out, "a", "ir", "turnstile.ir.json"))
+            .ConfigureAwait(false);
         ir.Should().Be(Turnstile.ExportIr() + "\n");
         ir.TrimEnd('\n').Should().NotContain("\n", "the on-disk IR is canonical single-line");
 
@@ -61,48 +63,63 @@ public class MachineGeneratorNodeTests
         var contexts = Path.Combine(_out, "a", "twin", "turnstile.contexts.g.ts");
         var machine = Path.Combine(_out, "a", "twin", "turnstile.machine.g.ts");
         var corpus = Path.Combine(_out, "a", "corpus", "differential.json");
-        File.ReadAllText(contexts).Should().Contain("export type TurnstileState");
-        File.ReadAllText(machine).Should().Contain("typedMachineFromIr");
-        File.ReadAllText(corpus).Should().Contain("\"cases\"");
+        (await File.ReadAllTextAsync(contexts).ConfigureAwait(false))
+            .Should()
+            .Contain("export type TurnstileState");
+        (await File.ReadAllTextAsync(machine).ConfigureAwait(false))
+            .Should()
+            .Contain("typedMachineFromIr");
+        (await File.ReadAllTextAsync(corpus).ConfigureAwait(false)).Should().Contain("\"cases\"");
 
         // Idempotent: a second run against the same source is byte-identical, which is what makes check sound.
-        FilesShouldMatch(machine, Path.Combine(_out, "b", "twin", "turnstile.machine.g.ts"));
-        FilesShouldMatch(corpus, Path.Combine(_out, "b", "corpus", "differential.json"));
+        await FilesShouldMatchAsync(
+                machine,
+                Path.Combine(_out, "b", "twin", "turnstile.machine.g.ts")
+            )
+            .ConfigureAwait(false);
+        await FilesShouldMatchAsync(corpus, Path.Combine(_out, "b", "corpus", "differential.json"))
+            .ConfigureAwait(false);
         first
             .Written.Select(w => w.Kind)
             .Should()
             .BeEquivalentTo(second.Written.Select(w => w.Kind));
     }
 
-    private GenerateResult GenerateInto(string sub) =>
-        new MachineGenerator(new NodeRunner()).Generate(
-            new MachineGenerateOptions(
-                MachineIr.Of(Turnstile),
-                Path.Combine(_out, sub, "ir"),
-                Path.Combine(_out, sub, "twin"),
-                Path.Combine(_out, sub, "corpus"),
-                EngineSrc: _engineSrc,
-                ImportStyle: "relative"
+    private async Task<GenerateResult> GenerateIntoAsync(string sub) =>
+        await new MachineGenerator(new NodeRunner())
+            .GenerateAsync(
+                new MachineGenerateOptions(
+                    MachineIr.Of(Turnstile),
+                    Path.Combine(_out, sub, "ir"),
+                    Path.Combine(_out, sub, "twin"),
+                    Path.Combine(_out, sub, "corpus"),
+                    EngineSrc: _engineSrc,
+                    ImportStyle: "relative"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
     [Test]
-    public void Generate_reproduces_the_committed_turnstile_artifacts_byte_for_byte() =>
-        AssertByteParityWithCommitted(new DeclarativeTurnstileMachine(), "turnstile");
+    public async Task Generate_reproduces_the_committed_turnstile_artifacts_byte_for_byte() =>
+        await AssertByteParityWithCommittedAsync(new DeclarativeTurnstileMachine(), "turnstile")
+            .ConfigureAwait(false);
 
     [Test]
-    public void Generate_reproduces_the_committed_checkout_artifacts_byte_for_byte() =>
-        AssertByteParityWithCommitted(new DeclarativeCheckoutMachine(), "checkout");
+    public async Task Generate_reproduces_the_committed_checkout_artifacts_byte_for_byte() =>
+        await AssertByteParityWithCommittedAsync(new DeclarativeCheckoutMachine(), "checkout")
+            .ConfigureAwait(false);
 
     // A state that invokes a train exports outcome triggers, which the twin and corpus generators carry through.
     [Test]
-    public void Generate_reproduces_the_committed_ingest_artifacts_with_outcome_triggers_byte_for_byte() =>
-        AssertByteParityWithCommitted(new DeclarativeIngestMachine(), "ingest");
+    public async Task Generate_reproduces_the_committed_ingest_artifacts_with_outcome_triggers_byte_for_byte() =>
+        await AssertByteParityWithCommittedAsync(new DeclarativeIngestMachine(), "ingest")
+            .ConfigureAwait(false);
 
     // Guards that compare with lt, gte and lte, whose corpus holds both runtimes to the same bounds.
     [Test]
-    public void Generate_reproduces_the_committed_gauge_artifacts_byte_for_byte() =>
-        AssertByteParityWithCommitted(new DeclarativeGaugeMachine(), "gauge");
+    public async Task Generate_reproduces_the_committed_gauge_artifacts_byte_for_byte() =>
+        await AssertByteParityWithCommittedAsync(new DeclarativeGaugeMachine(), "gauge")
+            .ConfigureAwait(false);
 
     // A timed state exports its timer as a trigger of its own kind, which the twin shows and never fires and the
     // corpus replays through AdvanceTimer. The committed reminder artifacts are written by the generation this
@@ -112,7 +129,7 @@ public class MachineGeneratorNodeTests
         "adr",
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
     )]
-    public void Generate_reproduces_the_committed_reminder_artifacts_with_timers_byte_for_byte()
+    public async Task Generate_reproduces_the_committed_reminder_artifacts_with_timers_byte_for_byte()
     {
         var reminder = new DeclarativeReminderMachine();
 
@@ -123,50 +140,56 @@ public class MachineGeneratorNodeTests
             .And.Contain("Review.after")
             .And.Contain("PT10M");
 
-        AssertByteParityWithCommitted(reminder, "reminder");
+        await AssertByteParityWithCommittedAsync(reminder, "reminder").ConfigureAwait(false);
     }
 
     // The end goal: the CLI's IR/twin/corpus for a machine are byte-identical to what the engine repo commits,
     // so `trax machine generate` (and `check`) is a faithful stand-in for the retired regenerate-via-tests path.
-    private void AssertByteParityWithCommitted(IMachine machine, string id)
+    private async Task AssertByteParityWithCommittedAsync(IMachine machine, string id)
     {
         var irOut = Path.Combine(_out, id, "ir");
         var twinOut = Path.Combine(_out, id, "twin");
         var corpusOut = Path.Combine(_out, id, "corpus");
 
-        new MachineGenerator(new NodeRunner()).Generate(
-            new MachineGenerateOptions(
-                MachineIr.Of(machine),
-                irOut,
-                twinOut,
-                corpusOut,
-                EngineSrc: _engineSrc,
-                ImportStyle: "relative"
+        await new MachineGenerator(new NodeRunner())
+            .GenerateAsync(
+                new MachineGenerateOptions(
+                    MachineIr.Of(machine),
+                    irOut,
+                    twinOut,
+                    corpusOut,
+                    EngineSrc: _engineSrc,
+                    ImportStyle: "relative"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
-        var engineRoot = Directory.GetParent(_engineSrc)!.FullName;
+        var engineRoot = Directory.GetParent(_engineSrc).NotNull().FullName;
         var machinesRoot = Path.Combine(engineRoot, "..", "conformance", "machines");
-        FilesShouldMatch(
-            Path.Combine(irOut, $"{id}.ir.json"),
-            Path.Combine(machinesRoot, id, $"{id}.ir.json")
-        );
-        FilesShouldMatch(
-            Path.Combine(twinOut, $"{id}.contexts.g.ts"),
-            Path.Combine(engineRoot, "src", "machines", id, $"{id}.contexts.g.ts")
-        );
-        FilesShouldMatch(
-            Path.Combine(twinOut, $"{id}.machine.g.ts"),
-            Path.Combine(engineRoot, "src", "machines", id, $"{id}.machine.g.ts")
-        );
-        FilesShouldMatch(
-            Path.Combine(corpusOut, "differential.json"),
-            Path.Combine(machinesRoot, id, "differential.json")
-        );
+        await FilesShouldMatchAsync(
+                Path.Combine(irOut, $"{id}.ir.json"),
+                Path.Combine(machinesRoot, id, $"{id}.ir.json")
+            )
+            .ConfigureAwait(false);
+        await FilesShouldMatchAsync(
+                Path.Combine(twinOut, $"{id}.contexts.g.ts"),
+                Path.Combine(engineRoot, "src", "machines", id, $"{id}.contexts.g.ts")
+            )
+            .ConfigureAwait(false);
+        await FilesShouldMatchAsync(
+                Path.Combine(twinOut, $"{id}.machine.g.ts"),
+                Path.Combine(engineRoot, "src", "machines", id, $"{id}.machine.g.ts")
+            )
+            .ConfigureAwait(false);
+        await FilesShouldMatchAsync(
+                Path.Combine(corpusOut, "differential.json"),
+                Path.Combine(machinesRoot, id, "differential.json")
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
-    public void Check_is_clean_against_freshly_generated_artifacts()
+    public async Task Check_is_clean_against_freshly_generated_artifacts()
     {
         var options = new MachineGenerateOptions(
             MachineIr.Of(Turnstile),
@@ -178,20 +201,20 @@ public class MachineGeneratorNodeTests
         );
         var generator = new MachineGenerator(new NodeRunner());
 
-        generator.Generate(options);
-        var check = generator.Check(options);
+        await generator.GenerateAsync(options).ConfigureAwait(false);
+        var check = await generator.CheckAsync(options).ConfigureAwait(false);
 
         check.IsClean.Should().BeTrue();
         check.Checks.Should().OnlyContain(c => c.Status == DriftStatus.UpToDate);
     }
 
-    private static void FilesShouldMatch(string generated, string committed)
+    private static async Task FilesShouldMatchAsync(string generated, string committed)
     {
         File.Exists(committed).Should().BeTrue($"committed artifact should exist: {committed}");
-        File.ReadAllBytes(generated)
+        (await File.ReadAllBytesAsync(generated).ConfigureAwait(false))
             .Should()
             .Equal(
-                File.ReadAllBytes(committed),
+                await File.ReadAllBytesAsync(committed).ConfigureAwait(false),
                 $"{Path.GetFileName(generated)} must be byte-identical"
             );
     }

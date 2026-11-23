@@ -52,17 +52,26 @@ public class BookSampleIsTheBookTests
     ];
 
     [Test]
-    public void EveryFileTheBookPrints_IsInTheSample_AsPrinted()
+    public async Task EveryFileTheBookPrints_IsInTheSample_AsPrinted()
     {
         var offenders = new List<string>();
         foreach (
-            var (file, fence) in BookProject.Files().OrderBy(f => f.Key, StringComparer.Ordinal)
+            var (file, fence) in (await BookProject.FilesAsync().ConfigureAwait(false)).OrderBy(
+                f => f.Key,
+                StringComparer.Ordinal
+            )
         )
         {
             var path = Path.Combine(Sample, file);
             if (!File.Exists(path))
                 offenders.Add($"{file}  is missing (printed by {fence.Location})");
-            else if (Normalized(File.ReadAllText(path)) != Normalized(fence.Code))
+            else if (
+                !string.Equals(
+                    Normalized(await File.ReadAllTextAsync(path).ConfigureAwait(false)),
+                    Normalized(fence.Code),
+                    StringComparison.Ordinal
+                )
+            )
                 offenders.Add($"{file}  differs from {fence.Location}");
         }
 
@@ -79,13 +88,15 @@ public class BookSampleIsTheBookTests
     }
 
     [Test]
-    public void EveryFileInTheSample_IsPrintedByTheBook_OrGeneratedByIt()
+    public async Task EveryFileInTheSample_IsPrintedByTheBook_OrGeneratedByIt()
     {
-        var printed = BookProject.Files().Keys.ToHashSet(StringComparer.Ordinal);
+        var printed = (await BookProject.FilesAsync().ConfigureAwait(false)).Keys.ToHashSet(
+            StringComparer.Ordinal
+        );
         var allowed = NotPrintedByTheBook.Select(p => Glob(p.Pattern)).ToList();
 
         var offenders = SampleFiles()
-            .Where(f => !printed.Contains(f) && !allowed.Any(a => a.IsMatch(f)))
+            .Where(f => !printed.Contains(f) && !allowed.Exists(a => a.IsMatch(f)))
             .ToList();
 
         offenders
@@ -105,7 +116,7 @@ public class BookSampleIsTheBookTests
     {
         var files = SampleFiles();
         var unused = NotPrintedByTheBook
-            .Where(p => !files.Any(Glob(p.Pattern).IsMatch))
+            .Where(p => !files.Exists(Glob(p.Pattern).IsMatch))
             .Select(p => p.Pattern)
             .ToList();
 
@@ -126,20 +137,23 @@ public class BookSampleIsTheBookTests
             .EnumerateFiles(Sample, "*", SearchOption.AllDirectories)
             .Where(f => !skipped.Any(x => f.Contains(x, StringComparison.Ordinal)))
             .Select(f => Path.GetRelativePath(Sample, f).Replace('\\', '/'))
-            .OrderBy(f => f, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
     }
 
-    private static string Normalized(string text) => text.Replace("\r\n", "\n").TrimEnd('\n');
+    private static string Normalized(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
 
     private static Regex Glob(string pattern) =>
         new(
             "^"
                 + Regex
                     .Escape(pattern)
-                    .Replace(@"\*\*/", "(?:.*/)?")
-                    .Replace(@"\*\*", ".*")
-                    .Replace(@"\*", "[^/]*")
-                + "$"
+                    .Replace(@"\*\*/", "(?:.*/)?", StringComparison.Ordinal)
+                    .Replace(@"\*\*", ".*", StringComparison.Ordinal)
+                    .Replace(@"\*", "[^/]*", StringComparison.Ordinal)
+                + "$",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(1)
         );
 }

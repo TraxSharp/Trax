@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.Operations;
 using Trax.StateMachine.Persistence;
 
@@ -34,7 +35,7 @@ public class OperatorMachineFeedE2ETests
     /// <summary>The <c>application_name</c> of a host's one listening session.</summary>
     private const string ListenerApplicationName = "trax_snapshot_listener";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -55,27 +56,30 @@ public class OperatorMachineFeedE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        await ShelfHosts.StopAsync(_host);
+        await ShelfHosts.StopAsync(_host.NotNull());
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     [Test]
     public async Task The_operator_subscription_is_gated_and_shows_state_revision_and_runs()
     {
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.OperatorKey);
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
 
         // A row written by any path reaches the feed: here one written by hand.
         var first = await WaitUntilListeningAsync(operatorWs);
         first.GetProperty("state").GetString().Should().Be("Naming", "per " + Adr);
 
-        var approving = await _host.WizardInApprovingAsync(E2EHost.AliceKey);
-        var building = await _host.AdvanceWizardAsync(E2EHost.AliceKey, "approve", approving.Id);
+        var approving = await _host.NotNull().WizardInApprovingAsync(E2EHost.AliceKey);
+        var building = await _host
+            .NotNull()
+            .AdvanceWizardAsync(E2EHost.AliceKey, "approve", approving.Id);
         JsonElement seen;
         do seen = await NextForAsync(operatorWs, approving.Id);
         while (!MachineResult.SameName(seen.GetProperty("state").GetString(), "Building"));
 
-        seen.GetProperty("revision").GetInt64().Should().Be(building.Revision!.Value);
+        seen.GetProperty("revision").GetInt64().Should().Be(building.Revision.NotNull().Value);
         seen.GetProperty("hasLiveInvokedRun")
             .GetBoolean()
             .Should()
@@ -86,13 +90,13 @@ public class OperatorMachineFeedE2ETests
             GraphQLWs ws;
             try
             {
-                ws = await GraphQLWs.ConnectAsync(_host, caller);
+                ws = await GraphQLWs.ConnectAsync(_host.NotNull(), caller);
             }
             catch (Exception ex) when (ex is InvalidOperationException or WebSocketException)
             {
                 continue; // refused at the handshake
             }
-            await using (ws)
+            await using ((ws).ConfigureAwait(false))
             {
                 await ws.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
                 var answer = await ws.NextAsync("feed");
@@ -114,7 +118,8 @@ public class OperatorMachineFeedE2ETests
     public async Task A_users_draft_change_appears_to_an_operator_without_its_context()
     {
         const string Secret = "Secret-Atlas-7731";
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.OperatorKey);
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
         await WaitUntilListeningAsync(operatorWs);
         var raw = new List<string>();
@@ -123,7 +128,7 @@ public class OperatorMachineFeedE2ETests
             // Every event the feed sends until the described draft shows up.
             while (true)
             {
-                var data = await operatorWs.NextDataAsync("feed");
+                var data = await operatorWs.NextDataAsync("feed").ConfigureAwait(false);
                 raw.Add(data.GetRawText());
                 if (
                     MachineResult.SameName(
@@ -137,14 +142,16 @@ public class OperatorMachineFeedE2ETests
             }
         });
 
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey, title: Secret);
-        await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            started.Id,
-            WizardOps.DetailsInput(title: Secret, note: "private")
-        );
-        await operatorSees.WaitAsync(GraphQLWs.DefaultTimeout);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey, title: Secret);
+        await _host
+            .NotNull()
+            .AdvanceWizardAsync(
+                E2EHost.AliceKey,
+                "describe",
+                started.Id,
+                WizardOps.DetailsInput(title: Secret, note: "private")
+            );
+        await operatorSees.WaitAsync(GraphQLWs.DefaultTimeout, TimeProvider.System);
 
         raw.Should().NotBeEmpty();
         raw.Should()
@@ -162,7 +169,8 @@ public class OperatorMachineFeedE2ETests
     public async Task Each_host_runs_one_listener_shared_by_the_dashboard_and_GraphQL()
     {
         // The dashboard's feed: the shared operations service, read the way the Blazor page reads it.
-        using var scope = _host.Services.CreateScope();
+        var scope = _host.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         using var stop = new CancellationTokenSource();
         var dashboard = scope
             .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -170,38 +178,39 @@ public class OperatorMachineFeedE2ETests
             .GetAsyncEnumerator(stop.Token);
         var dashboardReading = dashboard.MoveNextAsync().AsTask();
 
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
-        await using var userWs = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
+        var userWs = await GraphQLWs.ConnectAsync(
+            _host.NotNull(),
+            E2EHost.AliceKey,
+            cancellationToken: CancellationToken.None
+        );
+        await using var userWsDisposal = userWs.ConfigureAwait(false);
         await userWs.SubscribeAsync("mine", MachineChangedOps.Subscribe(started.Id));
         await userWs.NextChangeAsync("mine");
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(
+            _host.NotNull(),
+            E2EHost.OperatorKey,
+            cancellationToken: CancellationToken.None
+        );
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
         await WaitUntilListeningAsync(operatorWs);
-        await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            started.Id,
-            WizardOps.DetailsInput()
-        );
+        await _host
+            .NotNull()
+            .AdvanceWizardAsync(E2EHost.AliceKey, "describe", started.Id, WizardOps.DetailsInput());
         await NextForAsync(operatorWs, started.Id);
-        (await dashboardReading.WaitAsync(GraphQLWs.DefaultTimeout))
+        (
+            await dashboardReading.WaitAsync(
+                GraphQLWs.DefaultTimeout,
+                TimeProvider.System,
+                cancellationToken: CancellationToken.None
+            )
+        )
             .Should()
             .BeTrue("the dashboard's feed heard the write too");
 
         // The listener's session names itself, whatever the host's own sessions are called.
-        var listeners = await E2ESql.ScalarAsync<long>(
-            Database,
-            "SELECT count(*) FROM pg_stat_activity WHERE application_name = @name "
-                + "AND datname = current_database()",
-            ("name", ListenerApplicationName)
-        );
-        listeners
-            .Should()
-            .Be(
-                1,
-                "one listening session serves every subscriber on a host, the dashboard's and GraphQL's, per "
-                    + Adr
-            );
+        await AssertOneListenerSessionAsync();
 
         await stop.CancelAsync();
         try
@@ -214,7 +223,8 @@ public class OperatorMachineFeedE2ETests
     [Test]
     public async Task After_a_listener_reconnect_the_operator_feed_sends_a_reload()
     {
-        await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        var operatorWs = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.OperatorKey);
+        await using var operatorWsDisposal = operatorWs.ConfigureAwait(false);
         await operatorWs.SubscribeAsync(
             "feed",
             $"subscription {{ onMachineInstanceChanged(machine: {WizardOps.Literal(WizardMachine.MachineId)}) {{ {MachineChangedOps.OperatorFields} reload }} }}"
@@ -242,8 +252,8 @@ public class OperatorMachineFeedE2ETests
     [Test]
     public async Task An_instance_whose_timer_is_due_while_no_poller_fires_it_is_overdue_and_counted_stuck()
     {
-        var approving = await _host.WizardInApprovingAsync(E2EHost.AliceKey);
-        var poller = _host.Services.GetRequiredService<InvokeOutcomeReconciler>();
+        var approving = await _host.NotNull().WizardInApprovingAsync(E2EHost.AliceKey);
+        var poller = _host.NotNull().Services.GetRequiredService<InvokeOutcomeReconciler>();
         await poller.StopAsync(CancellationToken.None);
         try
         {
@@ -255,51 +265,26 @@ public class OperatorMachineFeedE2ETests
                 ("id", approving.Id)
             );
 
-            using var doc = await _host.PostAsync(
-                $$"""
-                { operations {
-                    machineInstances(machine: "{{WizardMachine.MachineId}}", stuck: true, take: 500) {
-                      items { id state dueAt overdue stuck inStateSince updatedAt waitingOn { executionId trainState } }
-                    }
-                    machineInstanceCounts(machine: "{{WizardMachine.MachineId}}") { state ownerKind count stuck }
-                } }
-                """,
-                apiKey: E2EHost.OperatorKey
-            );
+            using var doc = await _host
+                .NotNull()
+                .PostAsync(
+                    $$"""
+                    { operations {
+                        machineInstances(machine: "{{WizardMachine.MachineId}}", stuck: true, take: 500) {
+                          items { id state dueAt overdue stuck inStateSince updatedAt waitingOn { executionId trainState } }
+                        }
+                        machineInstanceCounts(machine: "{{WizardMachine.MachineId}}") { state ownerKind count stuck }
+                    } }
+                    """,
+                    apiKey: E2EHost.OperatorKey
+                );
             doc.RootElement.TryGetProperty("errors", out _)
                 .Should()
                 .BeFalse(doc.RootElement.GetRawText());
             var operations = doc.RootElement.GetProperty("data").GetProperty("operations");
 
-            var item = operations
-                .GetProperty("machineInstances")
-                .GetProperty("items")
-                .EnumerateArray()
-                .Single(i => i.GetProperty("id").GetString() == approving.Id.ToString());
-            item.GetProperty("state").GetString().Should().Be(nameof(WizardState.Approving));
-            item.GetProperty("dueAt").ValueKind.Should().Be(JsonValueKind.String);
-            item.GetProperty("overdue")
-                .GetBoolean()
-                .Should()
-                .BeTrue("its timer is an hour past due and nothing fired it");
-            item.GetProperty("stuck").GetBoolean().Should().BeTrue();
-            item.GetProperty("waitingOn").ValueKind.Should().Be(JsonValueKind.Null);
-            item.GetProperty("inStateSince")
-                .GetString()
-                .Should()
-                .Be(item.GetProperty("updatedAt").GetString(), "no transition log is kept yet");
-
-            operations
-                .GetProperty("machineInstanceCounts")
-                .EnumerateArray()
-                .Single(c =>
-                    c.GetProperty("state").GetString() == nameof(WizardState.Approving)
-                    && c.GetProperty("ownerKind").GetString() == "USER"
-                )
-                .GetProperty("stuck")
-                .GetInt64()
-                .Should()
-                .BeGreaterThanOrEqualTo(1, "the overdue instance is counted stuck in its state");
+            AssertOverdueItem(operations, approving.Id);
+            AssertCountedStuck(operations);
         }
         finally
         {
@@ -313,6 +298,75 @@ public class OperatorMachineFeedE2ETests
         }
     }
 
+    private static async Task AssertOneListenerSessionAsync()
+    {
+        var listeners = await E2ESql
+            .ScalarAsync<long>(
+                Database,
+                "SELECT count(*) FROM pg_stat_activity WHERE application_name = @name "
+                    + "AND datname = current_database()",
+                ("name", ListenerApplicationName)
+            )
+            .ConfigureAwait(false);
+        listeners
+            .Should()
+            .Be(
+                1,
+                "one listening session serves every subscriber on a host, the dashboard's and GraphQL's, per "
+                    + Adr
+            );
+    }
+
+    private static void AssertOverdueItem(JsonElement operations, Guid id)
+    {
+        var item = operations
+            .GetProperty("machineInstances")
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single(i =>
+                string.Equals(
+                    i.GetProperty("id").GetString(),
+                    id.ToString(),
+                    StringComparison.Ordinal
+                )
+            );
+        item.GetProperty("state").GetString().Should().Be(nameof(WizardState.Approving));
+        item.GetProperty("dueAt").ValueKind.Should().Be(JsonValueKind.String);
+        item.GetProperty("overdue")
+            .GetBoolean()
+            .Should()
+            .BeTrue("its timer is an hour past due and nothing fired it");
+        item.GetProperty("stuck").GetBoolean().Should().BeTrue();
+        item.GetProperty("waitingOn").ValueKind.Should().Be(JsonValueKind.Null);
+        item.GetProperty("inStateSince")
+            .GetString()
+            .Should()
+            .Be(item.GetProperty("updatedAt").GetString(), "no transition log is kept yet");
+    }
+
+    private static void AssertCountedStuck(JsonElement operations)
+    {
+        operations
+            .GetProperty("machineInstanceCounts")
+            .EnumerateArray()
+            .Single(c =>
+                string.Equals(
+                    c.GetProperty("state").GetString(),
+                    nameof(WizardState.Approving),
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    c.GetProperty("ownerKind").GetString(),
+                    "USER",
+                    StringComparison.Ordinal
+                )
+            )
+            .GetProperty("stuck")
+            .GetInt64()
+            .Should()
+            .BeGreaterThanOrEqualTo(1, "the overdue instance is counted stuck in its state");
+    }
+
     // graphql-transport-ws sends no ack for subscribe, so the feed is live only once a write reaches it, and a write
     // made before the server registered the subscription is never announced to it. Writes a system draft by hand
     // until one is seen, and returns the event about it.
@@ -323,16 +377,21 @@ public class OperatorMachineFeedE2ETests
         {
             deadline.IsCancellationRequested.Should().BeFalse("a written draft reaches the feed");
             var probe = Guid.NewGuid();
-            await E2ESql.ExecuteAsync(
-                Database,
-                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
-                    + "concurrency_token, updated_at, created_at, owner_kind) "
-                    + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
-                    + "'system')",
-                ("id", probe),
-                ("machine", WizardMachine.MachineId)
-            );
-            if (await SeenWithinAsync(ws, probe, TimeSpan.FromSeconds(1)) is { } seen)
+            await E2ESql
+                .ExecuteAsync(
+                    Database,
+                    "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
+                        + "concurrency_token, updated_at, created_at, owner_kind) "
+                        + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
+                        + "'system')",
+                    ("id", probe),
+                    ("machine", WizardMachine.MachineId)
+                )
+                .ConfigureAwait(false);
+            if (
+                await SeenWithinAsync(ws, probe, TimeSpan.FromSeconds(1)).ConfigureAwait(false) is
+                { } seen
+            )
                 return seen;
         }
     }
@@ -340,17 +399,27 @@ public class OperatorMachineFeedE2ETests
     // The operator event about instance `id` if one arrives within `window`, skipping events about others.
     private static async Task<JsonElement?> SeenWithinAsync(GraphQLWs ws, Guid id, TimeSpan window)
     {
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (clock.Elapsed < window)
+        var clock = TimeProvider.System.GetTimestamp();
+        while (TimeProvider.System.GetElapsedTime(clock) < window)
         {
-            var message = await ws.TryNextAsync("feed", window - clock.Elapsed);
+            var message = await ws.TryNextAsync(
+                    "feed",
+                    window - TimeProvider.System.GetElapsedTime(clock)
+                )
+                .ConfigureAwait(false);
             if (message is null)
                 return null;
             var change = message
                 .Value.GetProperty("payload")
                 .GetProperty("data")
                 .GetProperty("onMachineInstanceChanged");
-            if (change.GetProperty("id").GetString() == id.ToString())
+            if (
+                string.Equals(
+                    change.GetProperty("id").GetString(),
+                    id.ToString(),
+                    StringComparison.Ordinal
+                )
+            )
                 return change;
         }
         return null;
@@ -361,8 +430,16 @@ public class OperatorMachineFeedE2ETests
     {
         while (true)
         {
-            var change = (await ws.NextDataAsync("feed")).GetProperty("onMachineInstanceChanged");
-            if (change.GetProperty("id").GetString() == id.ToString())
+            var change = (await ws.NextDataAsync("feed").ConfigureAwait(false)).GetProperty(
+                "onMachineInstanceChanged"
+            );
+            if (
+                string.Equals(
+                    change.GetProperty("id").GetString(),
+                    id.ToString(),
+                    StringComparison.Ordinal
+                )
+            )
                 return change;
         }
     }

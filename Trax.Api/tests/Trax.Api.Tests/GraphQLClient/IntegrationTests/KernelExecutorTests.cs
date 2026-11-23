@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -26,9 +27,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class KernelExecutorTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
-    private ServiceProvider _services = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private GraphQLTestServerFixture? _fixture;
+    private ServiceProvider? _services;
+    private IGraphQLClientExecutor? _executor;
 
     [SetUp]
     public void SetUp()
@@ -37,17 +38,17 @@ public class KernelExecutorTests
 
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient());
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient());
         _services = services.BuildServiceProvider();
-        _executor = _services.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _services.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _fixture.Dispose();
+        _services?.Dispose();
+        _fixture?.Dispose();
     }
 
     #region Happy path - query
@@ -55,7 +56,9 @@ public class KernelExecutorTests
     [Test]
     public async Task RawString_FetchPlayer_ReturnsPopulatedProfile()
     {
-        var player = await _executor.Run(new GetPlayerByRawStringRequest { Id = "player-1" });
+        var player = await _executor
+            .NotNull()
+            .Run(new GetPlayerByRawStringRequest { Id = "player-1" });
 
         player.Should().NotBeNull();
         player.Id.Should().Be("player-1");
@@ -63,7 +66,7 @@ public class KernelExecutorTests
         player.Level.Should().Be(42);
         player.Rank.Should().Be("GOLD");
         player.Guild.Should().NotBeNull();
-        player.Guild!.Id.Should().Be("guild-1");
+        player.Guild.NotNull().Id.Should().Be("guild-1");
         player.Guild.Name.Should().Be("Dragonsworn");
         player.Inventory.Should().HaveCount(2);
         player.Inventory[0].Category.Should().Be("WEAPON");
@@ -72,10 +75,12 @@ public class KernelExecutorTests
     [Test]
     public async Task Resource_FetchPlayer_ReturnsSameShapeAsRawString()
     {
-        var rawResult = await _executor.Run(new GetPlayerByRawStringRequest { Id = "player-1" });
-        var resourceResult = await _executor.Run(
-            new GetPlayerByResourceRequest { Id = "player-1" }
-        );
+        var rawResult = await _executor
+            .NotNull()
+            .Run(new GetPlayerByRawStringRequest { Id = "player-1" });
+        var resourceResult = await _executor
+            .NotNull()
+            .Run(new GetPlayerByResourceRequest { Id = "player-1" });
 
         // Byte-equal across modes - the contract that lets us prove modes are interchangeable.
         resourceResult.Should().BeEquivalentTo(rawResult);
@@ -84,7 +89,9 @@ public class KernelExecutorTests
     [Test]
     public async Task RawString_NullableLevelField_IsPreservedAsNull()
     {
-        var player = await _executor.Run(new GetPlayerByRawStringRequest { Id = "player-2" });
+        var player = await _executor
+            .NotNull()
+            .Run(new GetPlayerByRawStringRequest { Id = "player-2" });
 
         player.Level.Should().BeNull();
         player.Guild.Should().BeNull();
@@ -94,7 +101,9 @@ public class KernelExecutorTests
     [Test]
     public async Task Resource_NullableLevelField_IsPreservedAsNull()
     {
-        var player = await _executor.Run(new GetPlayerByResourceRequest { Id = "player-2" });
+        var player = await _executor
+            .NotNull()
+            .Run(new GetPlayerByResourceRequest { Id = "player-2" });
 
         player.Level.Should().BeNull();
         player.Guild.Should().BeNull();
@@ -107,7 +116,7 @@ public class KernelExecutorTests
     [Test]
     public async Task RawString_ListOfPlayers_FiltersByVariable()
     {
-        var players = await _executor.Run(new PlayersByLevelRequest { Min = 50 });
+        var players = await _executor.NotNull().Run(new PlayersByLevelRequest { Min = 50 });
 
         players.Should().HaveCount(1);
         players[0].Id.Should().Be("player-3");
@@ -117,7 +126,7 @@ public class KernelExecutorTests
     [Test]
     public async Task RawString_ListOfItems_DecodesEnumCategory()
     {
-        var items = await _executor.Run(new AllItemsRequest());
+        var items = await _executor.NotNull().Run(new AllItemsRequest());
 
         items.Should().HaveCount(3);
         items.Select(i => i.Category).Should().BeEquivalentTo(["WEAPON", "ARMOR", "CONSUMABLE"]);
@@ -130,25 +139,25 @@ public class KernelExecutorTests
     [Test]
     public async Task RawString_RenamePlayer_PersistsViaMutation()
     {
-        var renamed = await _executor.Run(
-            new RenamePlayerRequest { Id = "player-1", NewName = "Strider" }
-        );
+        var renamed = await _executor
+            .NotNull()
+            .Run(new RenamePlayerRequest { Id = "player-1", NewName = "Strider" });
 
         renamed.Name.Should().Be("Strider");
 
-        _fixture.PlayerStore.Get("player-1")!.Name.Should().Be("Strider");
+        _fixture.NotNull().PlayerStore.Get("player-1").NotNull().Name.Should().Be("Strider");
     }
 
     [Test]
     public async Task Resource_RenamePlayer_PersistsViaMutation()
     {
-        var renamed = await _executor.Run(
-            new RenamePlayerByResourceRequest { Id = "player-2", NewName = "Frodo" }
-        );
+        var renamed = await _executor
+            .NotNull()
+            .Run(new RenamePlayerByResourceRequest { Id = "player-2", NewName = "Frodo" });
 
         renamed.Name.Should().Be("Frodo");
 
-        _fixture.PlayerStore.Get("player-2")!.Name.Should().Be("Frodo");
+        _fixture.NotNull().PlayerStore.Get("player-2").NotNull().Name.Should().Be("Frodo");
     }
 
     #endregion
@@ -160,7 +169,10 @@ public class KernelExecutorTests
     {
         // player-999 doesn't exist -> rename mutation throws GraphQLException server-side
         var act = async () =>
-            await _executor.Run(new RenamePlayerRequest { Id = "player-999", NewName = "Ghost" });
+            await _executor
+                .NotNull()
+                .Run(new RenamePlayerRequest { Id = "player-999", NewName = "Ghost" })
+                .ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLExecutionException>();
         ex.Which.Errors.Should().NotBeEmpty();
@@ -171,7 +183,10 @@ public class KernelExecutorTests
     public async Task RawString_DriftedQuery_FailsValidationBeforeHttpCall()
     {
         var act = async () =>
-            await _executor.Run(new GetPlayerByDriftedQueryRequest { Id = "player-1" });
+            await _executor
+                .NotNull()
+                .Run(new GetPlayerByDriftedQueryRequest { Id = "player-1" })
+                .ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<GraphQLValidationException>();
         ex.Which.Errors.Should().NotBeEmpty();
@@ -182,7 +197,10 @@ public class KernelExecutorTests
     public async Task Run_NullRequest_ThrowsArgumentNull()
     {
         var act = async () =>
-            await _executor.Run<PlayerProfile>((IGraphQLClientRequest<PlayerProfile>)null!);
+            await _executor
+                .NotNull()
+                .Run((IGraphQLClientRequest<PlayerProfile>)Null.Of<object>())
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -191,11 +209,12 @@ public class KernelExecutorTests
     public async Task Run_PreCancelledToken_ThrowsOperationCanceled()
     {
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
-        var act = async () => await _executor.Run(new AllItemsRequest(), cts.Token);
+        var act = async () =>
+            await _executor.NotNull().Run(new AllItemsRequest(), cts.Token).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion

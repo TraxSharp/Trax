@@ -2,12 +2,14 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Decisions.SystemOne;
 
@@ -40,7 +42,11 @@ namespace Trax.Effect.Decisions.SystemOne;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-system-one-decider">SDK reference</seealso>
 public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 {
-    private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private readonly SystemOneOptions _options;
 
@@ -50,6 +56,8 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
     private readonly SemaphoreSlim? _slots;
 
+    private readonly TimeProvider _clock;
+
     private int _disposed;
 
     /// <summary>
@@ -58,28 +66,51 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// </summary>
     /// <exception cref="ArgumentException">The options are not usable.</exception>
     public SystemOneDecider(SystemOneOptions options)
-        : this(
-            options,
-            new HttpClient(
-                new SocketsHttpHandler
-                {
-                    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-                    AllowAutoRedirect = false,
-                }
-            )
-            {
-                Timeout = Timeout.InfiniteTimeSpan,
-            },
-            ownsHttp: true
-        ) { }
+        : this(options, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates a decider with an HTTP client of its own, as
+    /// <see cref="SystemOneDecider(SystemOneOptions)"/> does, that waits between retries and reads
+    /// a <c>Retry-After</c> date on <paramref name="timeProvider"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The options are not usable.</exception>
+    public SystemOneDecider(SystemOneOptions options, TimeProvider timeProvider)
+        : this(options, OwnHttpClient(), ownsHttp: true, timeProvider) { }
 
     /// <summary>Creates a decider that sends through <paramref name="http"/>, which it does not dispose.</summary>
     /// <exception cref="ArgumentException">The options are not usable.</exception>
     public SystemOneDecider(SystemOneOptions options, HttpClient http)
-        : this(options, http, ownsHttp: false) { }
+        : this(options, http, ownsHttp: false, TimeProvider.System) { }
 
-    private SystemOneDecider(SystemOneOptions options, HttpClient http, bool ownsHttp)
+    /// <summary>
+    /// Creates a decider that sends through <paramref name="http"/>, which it does not dispose, and
+    /// waits between retries on <paramref name="timeProvider"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The options are not usable.</exception>
+    public SystemOneDecider(SystemOneOptions options, HttpClient http, TimeProvider timeProvider)
+        : this(options, http, ownsHttp: false, timeProvider) { }
+
+    private static HttpClient OwnHttpClient() =>
+        new(
+            new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                AllowAutoRedirect = false,
+            }
+        )
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+
+    private SystemOneDecider(
+        SystemOneOptions options,
+        HttpClient http,
+        bool ownsHttp,
+        TimeProvider timeProvider
+    )
     {
+        _clock = timeProvider;
+        Wait = (delay, ct) => Task.Delay(delay, _clock, ct);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(http);
 
@@ -106,11 +137,11 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     internal SystemOneOptions Options => _options;
 
     /// <summary>How the decider waits before a retry. Replaced in tests to record the waits.</summary>
-    internal Func<TimeSpan, CancellationToken, Task> Wait { get; set; } =
-        (delay, ct) => Task.Delay(delay, ct);
+    internal Func<TimeSpan, CancellationToken, Task> Wait { get; set; }
 
     /// <summary>A number in [0, 1) that spreads retries out. Replaced in tests to fix it.</summary>
-    internal Func<double> Jitter { get; set; } = Random.Shared.NextDouble;
+    internal Func<double> Jitter { get; set; } =
+        () => RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue;
 
     /// <inheritdoc />
     public async Task<DecisionResult> Decide(
@@ -120,19 +151,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (TooManyQuestions(request.Questions.Count) is { } tooMany)
-            throw Refused(request, tooMany, FailureClass.Permanent);
-
-        string body;
-
-        try
-        {
-            body = Request(request).ToJsonString();
-        }
-        catch (Unsendable unsendable)
-        {
-            throw Refused(request, unsendable.Message, FailureClass.Permanent);
-        }
+        var body = RequestBody(request);
 
         for (var attempt = 1; ; attempt++)
         {
@@ -149,40 +168,12 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
             try
             {
-                using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
-                {
-                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
-                };
+                var sent = await SendOnce(request, body, timeout.Token).ConfigureAwait(false);
+                if (sent.Result is { } result)
+                    return result;
 
-                if (_options.Bearer is { } key)
-                    message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-
-                using var response = await _http
-                    .SendAsync(message, timeout.Token)
-                    .ConfigureAwait(false);
-
-                if (response.IsSuccessStatusCode)
-                    return Read(await Body(response, timeout.Token).ConfigureAwait(false), request);
-
-                var status = (int)response.StatusCode;
-
-                // Not followed, even by a client that would: the endpoint is the one configured.
-                if (status is >= 300 and < 400)
-                    throw Refused(
-                        request,
-                        $"the model answered {status} {response.ReasonPhrase}, a redirect, and "
-                            + "redirects are not followed: the endpoint is the one configured",
-                        FailureClass.Permanent
-                    );
-
-                failure =
-                    $"the model answered {status} {response.ReasonPhrase} ({Classify(status)})"
-                    + RequestId(response);
-
-                if (!IsRetryable(response.StatusCode))
-                    throw Refused(request, failure, FailureClass.Permanent);
-
-                retryAfter = RetryAfter(response.Headers.RetryAfter);
+                failure = sent.Failure;
+                retryAfter = sent.RetryAfter;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -190,24 +181,17 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             }
             catch (OperationCanceledException)
             {
-                failure =
-                    $"the model did not answer within {_options.AttemptTimeout.TotalSeconds:0.#}s";
+                failure = TimedOut();
             }
             catch (HttpRequestException e) when (CannotReach(e.HttpRequestError))
             {
-                // A name that does not resolve or a certificate that is not trusted is a
-                // configuration to fix, not a blip to wait out.
-                throw Refused(
-                    request,
-                    $"the model's endpoint cannot be reached as configured: {e.Message}",
-                    FailureClass.Permanent
-                );
+                throw Unreachable(request, e);
             }
             catch (HttpRequestException e)
             {
                 failure = $"the model could not be reached: {e.Message}";
             }
-            catch (MalformedResponse e)
+            catch (MalformedResponseException e)
             {
                 failure =
                     $"the model answered with something that is not a System One response: {e.Message}";
@@ -217,23 +201,118 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                 _slots?.Release();
             }
 
-            if (attempt >= _options.MaxAttempts)
-                throw Refused(
-                    request,
-                    $"{failure}, after {attempt} attempt{(attempt == 1 ? "" : "s")}",
-                    FailureClass.Transient
-                );
-
-            if (retryAfter > _options.MaxRetryDelay)
-                throw Refused(
-                    request,
-                    $"{failure}, and it asked to be retried in {Seconds(retryAfter.Value)}, "
-                        + $"longer than MaxRetryDelay ({Seconds(_options.MaxRetryDelay)})",
-                    FailureClass.Transient
-                );
+            ThrowIfNoRetry(request, failure, attempt, retryAfter);
 
             await Wait(Delay(attempt, retryAfter), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private string TimedOut() =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"the model did not answer within {_options.AttemptTimeout.TotalSeconds:0.#}s"
+        );
+
+    // A name that does not resolve or a certificate that is not trusted is a
+    // configuration to fix, not a blip to wait out.
+    private static DecisionServiceException Unreachable(
+        DecisionRequest request,
+        HttpRequestException e
+    ) =>
+        Refused(
+            request,
+            $"the model's endpoint cannot be reached as configured: {e.Message}",
+            FailureClass.Permanent
+        );
+
+    // The request body, or a refusal when the model would refuse the request whatever the state.
+    private string RequestBody(DecisionRequest request)
+    {
+        if (TooManyQuestions(request.Questions.Count) is { } tooMany)
+            throw Refused(request, tooMany, FailureClass.Permanent);
+
+        try
+        {
+            return Request(request).ToJsonString();
+        }
+        catch (UnsendableException unsendable)
+        {
+            throw Refused(request, unsendable.Message, FailureClass.Permanent);
+        }
+    }
+
+    // One attempt: the model's answer, or why the attempt failed and when the model asked to be
+    // retried. A failure no retry can fix is thrown as a refusal.
+    private async Task<(DecisionResult? Result, string Failure, TimeSpan? RetryAfter)> SendOnce(
+        DecisionRequest request,
+        string body,
+        CancellationToken timeout
+    )
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+
+        if (_options.Bearer is { } key)
+            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+
+        using var response = await _http.SendAsync(message, timeout).ConfigureAwait(false);
+
+        if (response.IsSuccessStatusCode)
+            return (Read(await Body(response, timeout).ConfigureAwait(false), request), "", null);
+
+        var status = (int)response.StatusCode;
+
+        // Not followed, even by a client that would: the endpoint is the one configured.
+        if (status is >= 300 and < 400)
+            throw Refused(
+                request,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the model answered {status} {response.ReasonPhrase}, a redirect, and "
+                ) + "redirects are not followed: the endpoint is the one configured",
+                FailureClass.Permanent
+            );
+
+        var failure =
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"the model answered {status} {response.ReasonPhrase} ({Classify(status)})"
+            ) + RequestId(response);
+
+        if (!IsRetryable(response.StatusCode))
+            throw Refused(request, failure, FailureClass.Permanent);
+
+        return (null, failure, RetryAfter(response.Headers.RetryAfter));
+    }
+
+    // Refuses the request once its attempts are spent, or when the model asked to be retried later
+    // than MaxRetryDelay allows.
+    private void ThrowIfNoRetry(
+        DecisionRequest request,
+        string failure,
+        int attempt,
+        TimeSpan? retryAfter
+    )
+    {
+        if (attempt >= _options.MaxAttempts)
+            throw Refused(
+                request,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{failure}, after {attempt} attempt{(attempt == 1 ? "" : "s")}"
+                ),
+                FailureClass.Transient
+            );
+
+        if (retryAfter > _options.MaxRetryDelay)
+            throw Refused(
+                request,
+                $"{failure}, and it asked to be retried in {Seconds(retryAfter.Value)}, "
+                    + $"longer than MaxRetryDelay ({Seconds(_options.MaxRetryDelay)})",
+                FailureClass.Transient
+            );
     }
 
     /// <inheritdoc />
@@ -248,7 +327,11 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     public IEnumerable<string> Problems(DeclaredQuestions declared)
     {
         ArgumentNullException.ThrowIfNull(declared);
+        return ProblemsOf(declared);
+    }
 
+    private IEnumerable<string> ProblemsOf(DeclaredQuestions declared)
+    {
         if (TooManyQuestions(declared.Questions.Count) is { } tooMany)
             yield return tooMany;
 
@@ -310,10 +393,10 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         foreach (var question in request.Questions)
         {
             if (questions.ContainsKey(question.Key))
-                throw new Unsendable(KeyUsedTwice(question));
+                throw new UnsendableException(KeyUsedTwice(question));
 
             if (QuestionProblem(question) is { } problem)
-                throw new Unsendable(problem);
+                throw new UnsendableException(problem);
 
             questions[question.Key] = question switch
             {
@@ -345,7 +428,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                         ["false"] = yesNo.No ?? "No",
                     },
                 },
-                _ => throw new Unsendable(CannotAsk(question)),
+                _ => throw new UnsendableException(CannotAsk(question)),
             };
         }
 
@@ -359,8 +442,14 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
     private string? TooManyQuestions(int count) =>
         count > _options.MaxQuestions
-            ? $"it asks {count} questions in one request, and the model accepts at most "
-                + $"{_options.MaxQuestions}. Split the Decide"
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"it asks {count} questions in one request, and the model accepts at most "
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{_options.MaxQuestions}. Split the Decide"
+                )
             : null;
 
     private static string KeyUsedTwice(Question question) =>
@@ -403,9 +492,10 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             < 2 => $"the question '{question.Key}' offers {criteria.Count} "
                 + $"{(criteria.Count == 1 ? noun : noun + "s")}, and the model needs at least 2 to "
                 + "choose between",
-            var count when count > _options.MaxOptions =>
+            var count when count > _options.MaxOptions => string.Create(
+                CultureInfo.InvariantCulture,
                 $"the question '{question.Key}' offers {count} {noun}s, and the model accepts at "
-                    + $"most {_options.MaxOptions}",
+            ) + string.Create(CultureInfo.InvariantCulture, $"most {_options.MaxOptions}"),
             _ => null,
         };
 
@@ -439,13 +529,13 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
         catch (Exception e) when (e is JsonException or NotSupportedException)
         {
-            throw new Unsendable($"its state cannot be written as JSON: {e.Message}");
+            throw new UnsendableException($"its state cannot be written as JSON: {e.Message}");
         }
 
         return node?.GetValueKind() switch
         {
             JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.String => node,
-            var kind => throw new Unsendable(
+            var kind => throw new UnsendableException(
                 $"its state is written as JSON {(kind is null ? "null" : $"{kind}".ToLowerInvariant())}, "
                     + "and the model takes a string, an object or an array. Decide from a type "
                     + "that holds the value"
@@ -467,7 +557,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
             : IsNumber(underlying) ? "a number"
             // The options have no enum converter, so an enum is written as its number unless the
             // type names a converter of its own.
-            : underlying.IsEnum && underlying.GetCustomAttribute<JsonConverterAttribute>() is null
+            : underlying.IsEnum && !Attribute.IsDefined(underlying, typeof(JsonConverterAttribute))
                 ? "a number"
             : null;
 
@@ -496,30 +586,30 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// <summary>
     /// Reads the answers out of a response. An answer that cannot be read is left out, so the
     /// train fails on it as unanswered rather than acting on a guess. A body that is not a System
-    /// One response at all is thrown as <see cref="MalformedResponse"/>.
+    /// One response at all is thrown as <see cref="MalformedResponseException"/>.
     /// </summary>
     private static DecisionResult Read(string json, DecisionRequest request)
     {
-        var answers = new Dictionary<string, Answer>();
+        var answers = new Dictionary<string, Answer>(StringComparer.Ordinal);
 
         try
         {
             if (JsonNode.Parse(json) is not JsonObject root)
-                throw new MalformedResponse("the body is not a JSON object");
+                throw new MalformedResponseException("the body is not a JSON object");
 
             var model = root["model"] switch
             {
                 null => null,
                 JsonValue value when value.GetValueKind() == JsonValueKind.String =>
                     value.GetValue<string>(),
-                _ => throw new MalformedResponse("its 'model' is not a string"),
+                _ => throw new MalformedResponseException("its 'model' is not a string"),
             };
 
             // A response without its answers is not a System One response, however it is
             // otherwise shaped; read as answering nothing, it would fail the train as unanswered
             // instead of being retried.
             if (root["answers"] is not JsonObject given)
-                throw new MalformedResponse("it has no 'answers' object");
+                throw new MalformedResponseException("it has no 'answers' object");
 
             foreach (var question in request.Questions)
                 if (given[question.Key] is JsonObject node && Answer(node, question) is { } answer)
@@ -527,7 +617,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
         catch (Exception e) when (e is JsonException or ArgumentException)
         {
-            throw new MalformedResponse(e.Message);
+            throw new MalformedResponseException(e.Message);
         }
 
         return new DecisionResult(answers);
@@ -535,7 +625,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
     /// <summary>
     /// The body of a successful response as text. One whose declared character set cannot be
-    /// decoded is not a System One response, and is thrown as <see cref="MalformedResponse"/>
+    /// decoded is not a System One response, and is thrown as <see cref="MalformedResponseException"/>
     /// rather than escaping unclassified.
     /// </summary>
     private static async Task<string> Body(HttpResponseMessage response, CancellationToken ct)
@@ -546,7 +636,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
         catch (InvalidOperationException e)
         {
-            throw new MalformedResponse(e.Message);
+            throw new MalformedResponseException(e.Message);
         }
     }
 
@@ -558,11 +648,12 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 
             return question switch
             {
-                ChoiceQuestion when type == "choice" => Choice(node),
-                ScoreQuestion score when type == "score" => Score(node, score.Levels.Count),
-                YesNoQuestion when type == "noul" => new YesNoAnswer(
-                    node["noul"]!.GetValue<double>()
-                ),
+                ChoiceQuestion when string.Equals(type, "choice", StringComparison.Ordinal) =>
+                    Choice(node),
+                ScoreQuestion score when string.Equals(type, "score", StringComparison.Ordinal) =>
+                    Score(node, score.Levels.Count),
+                YesNoQuestion when string.Equals(type, "noul", StringComparison.Ordinal) =>
+                    new YesNoAnswer(node["noul"].NotNull().GetValue<double>()),
                 _ => null,
             };
         }
@@ -583,10 +674,14 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// </summary>
     private static ChoiceAnswer? Choice(JsonObject node)
     {
-        var choice = node["choice"]!.GetValue<string>();
+        var choice = node["choice"].NotNull().GetValue<string>();
         var probabilities = node["probabilities"]
             ?.AsObject()
-            .ToDictionary(p => p.Key, p => p.Value!.GetValue<double>());
+            .ToDictionary(
+                p => p.Key,
+                p => p.Value.NotNull().GetValue<double>(),
+                StringComparer.Ordinal
+            );
 
         double? confidence =
             node["confidence"] is { } given ? given.GetValue<double>()
@@ -603,7 +698,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     /// </summary>
     private static ScoreAnswer? Score(JsonObject node, int levels)
     {
-        var score = node["score"]!.GetValue<double>();
+        var score = node["score"].NotNull().GetValue<double>();
         List<double>? probabilities = null;
 
         if (node["probabilities"] is { } given)
@@ -657,9 +752,9 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                     and not HttpStatusCode.HttpVersionNotSupported
         );
 
-    private static TimeSpan? RetryAfter(RetryConditionHeaderValue? header) =>
+    private TimeSpan? RetryAfter(RetryConditionHeaderValue? header) =>
         header?.Delta
-        ?? (header?.Date is { } date ? Max(date - DateTimeOffset.UtcNow, TimeSpan.Zero) : null);
+        ?? (header?.Date is { } date ? Max(date - _clock.GetUtcNow(), TimeSpan.Zero) : null);
 
     /// <summary>
     /// What a failed status means, in a few words. The response body is never quoted: a server's
@@ -734,13 +829,8 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
     /// <summary>A request that cannot be sent as it is; never worth retrying.</summary>
-    private sealed class Unsendable(string message) : Exception(message);
+    private sealed class UnsendableException(string message) : Exception(message);
 
     /// <summary>A successful status whose body is not a System One response.</summary>
-    private sealed class MalformedResponse(string message) : Exception(message);
+    private sealed class MalformedResponseException(string message) : Exception(message);
 }
-
-/// <summary>
-/// The decision model could not answer. Its failure class says whether trying again later can help.
-/// </summary>
-public sealed class DecisionServiceException(string message) : Exception(message);

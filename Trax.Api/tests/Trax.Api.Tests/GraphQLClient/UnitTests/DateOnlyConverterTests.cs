@@ -13,7 +13,12 @@ namespace Trax.Api.Tests.GraphQLClient.UnitTests;
 public class DateOnlyConverterTests
 {
     private static JsonSerializerOptions Options() =>
-        new() { Converters = { new DateOnlyConverter() } };
+        new()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+            Converters = { new DateOnlyConverter() },
+        };
 
     [Test]
     public void Read_ValidDateTimeString_ParsesToDateOnly()

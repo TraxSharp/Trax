@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.Services.BulkOperations;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
@@ -115,51 +117,104 @@ public class BulkOperationStressTests : StressTestSetup
     {
         var jobs = Services.GetRequiredService<BulkOperationJobs>();
 
-        var answer = Stopwatch.StartNew();
+        var id = await StartBulkOperationAsync(kind, filter, matching).ConfigureAwait(false);
+
+        var finish = TimeProvider.System.GetTimestamp();
+        var reads = new List<TimeSpan>();
+        while (jobs.Get(id)?.Status == BulkOperationStatus.Running)
+        {
+            var read = TimeProvider.System.GetTimestamp();
+            await OperationsFieldAsync(
+                    "{ operations { executions(take: 500) { totalCount items { id } } } }"
+                )
+                .ConfigureAwait(false);
+            var readTook = TimeProvider.System.GetElapsedTime(read);
+            reads.Add(readTook);
+            TimeProvider
+                .System.GetElapsedTime(finish)
+                .Should()
+                .BeLessThan(FinishBudget, $"the operation over every match finishes ({Adr})");
+        }
+        var finishTook = TimeProvider.System.GetElapsedTime(finish);
+
+        await ReportAndAssertFinishedAsync(
+                jobs,
+                id,
+                kind,
+                matching,
+                expectedDone,
+                finishTook,
+                reads
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<Guid> StartBulkOperationAsync(string kind, string filter, int matching)
+    {
+        var answer = TimeProvider.System.GetTimestamp();
         var started = await OperationsFieldAsync(
-            $"mutation {{ operations {{ startBulkOperation(kind: {kind}, filter: {filter}, "
-                + $"expectedCount: {matching}) {{ success message matched operation {{ id total }} }} }} }}"
-        );
-        answer.Stop();
-        TestContext.Out.WriteLine(
-            $"startBulkOperation({kind}) over {matching:N0} answered in "
-                + $"{answer.Elapsed.TotalMilliseconds:F0}ms"
-        );
+                $"mutation {{ operations {{ startBulkOperation(kind: {kind}, filter: {filter}, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"expectedCount: {matching}) {{ success message matched operation {{ id total }} }} }} }}"
+                    )
+            )
+            .ConfigureAwait(false);
+        var answerTook = TimeProvider.System.GetElapsedTime(answer);
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"startBulkOperation({kind}) over {matching:N0} answered in "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{answerTook.TotalMilliseconds:F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
 
         started
             .GetProperty("success")
             .GetBoolean()
             .Should()
             .BeTrue(started.GetProperty("message").GetString());
-        answer
-            .Elapsed.Should()
-            .BeLessThan(StartBudget, $"the snapshot is read in short pages ({Adr})");
-        var id = Guid.Parse(started.GetProperty("operation").GetProperty("id").GetString()!);
+        answerTook.Should().BeLessThan(StartBudget, $"the snapshot is read in short pages ({Adr})");
+        return Guid.Parse(started.GetProperty("operation").GetProperty("id").GetString().NotNull());
+    }
 
-        var finish = Stopwatch.StartNew();
-        var reads = new List<TimeSpan>();
-        while (jobs.Get(id)?.Status == BulkOperationStatus.Running)
-        {
-            var read = Stopwatch.StartNew();
-            await OperationsFieldAsync(
-                "{ operations { executions(take: 500) { totalCount items { id } } } }"
-            );
-            read.Stop();
-            reads.Add(read.Elapsed);
-            finish
-                .Elapsed.Should()
-                .BeLessThan(FinishBudget, $"the operation over every match finishes ({Adr})");
-        }
-        finish.Stop();
-
-        var operation = jobs.Get(id)!;
-        var run = jobs.Run(id)!;
-        TestContext.Out.WriteLine(
-            $"{kind}: {operation.Done:N0} done, {operation.Failed:N0} failed in "
-                + $"{finish.Elapsed.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
-                + $"{run.LongestBatch.TotalMilliseconds:F0}ms; {reads.Count} reads meanwhile, "
-                + $"slowest {(reads.Count == 0 ? 0 : reads.Max().TotalMilliseconds):F0}ms"
-        );
+    private async Task ReportAndAssertFinishedAsync(
+        BulkOperationJobs jobs,
+        Guid id,
+        string kind,
+        int matching,
+        int expectedDone,
+        TimeSpan finishTook,
+        List<TimeSpan> reads
+    )
+    {
+        var operation = jobs.Get(id).NotNull();
+        var run = jobs.Run(id).NotNull();
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{kind}: {operation.Done:N0} done, {operation.Failed:N0} failed in "
+                )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{finishTook.TotalSeconds:F1}s over {run.Batches} batches; longest batch "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{run.LongestBatch.TotalMilliseconds:F0}ms; {reads.Count} reads meanwhile, "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"slowest {(reads.Count == 0 ? 0 : reads.Max().TotalMilliseconds):F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
 
         operation.Status.Should().Be(BulkOperationStatus.Finished, operation.Message);
         operation.Total.Should().Be(matching);

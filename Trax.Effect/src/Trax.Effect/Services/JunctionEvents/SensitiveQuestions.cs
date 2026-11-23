@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Effect.Services.JunctionEvents;
@@ -28,7 +29,7 @@ internal static class SensitiveQuestions
 {
     private static readonly string EffectAssembly = typeof(TraxSensitiveAttribute)
         .Assembly.GetName()
-        .Name!;
+        .Name.NotNull();
 
     private static readonly char[] KeySeparators = ['<', '>', ',', '[', ']'];
 
@@ -87,7 +88,8 @@ internal static class SensitiveQuestions
             type.IsGenericType
             && !type.IsGenericTypeDefinition
             && (
-                type.GetGenericTypeDefinition().IsDefined(typeof(TraxSensitiveAttribute), true)
+                type.GetGenericTypeDefinition()
+                    .IsDefined(typeof(TraxSensitiveAttribute), inherit: true)
                 || type.GetGenericArguments().Any(IsMarked)
             )
         )
@@ -106,7 +108,7 @@ internal static class SensitiveQuestions
             Names.TryAdd(declared, 0);
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
         Names.TryAdd(tick >= 0 ? name[..tick] : name, 0);
     }
 
@@ -131,8 +133,10 @@ internal static class SensitiveQuestions
 
             var name = assembly.GetName().Name;
             if (
-                name != EffectAssembly
-                && !assembly.GetReferencedAssemblies().Any(r => r.Name == EffectAssembly)
+                !string.Equals(name, EffectAssembly, StringComparison.Ordinal)
+                && !assembly
+                    .GetReferencedAssemblies()
+                    .Any(r => string.Equals(r.Name, EffectAssembly, StringComparison.Ordinal))
             )
                 return;
 

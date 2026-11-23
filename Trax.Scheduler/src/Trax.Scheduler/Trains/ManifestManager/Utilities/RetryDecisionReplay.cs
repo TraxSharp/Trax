@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -71,7 +73,7 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
 
         try
         {
-            return await LookUpAsync(replaying, ct);
+            return await LookUpAsync(replaying, ct).ConfigureAwait(false);
         }
         catch (Exception e) when (!ct.IsCancellationRequested)
         {
@@ -88,7 +90,10 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
 
     /// <summary>The run <paramref name="manifest"/>'s retry replays, or null when it asks afresh.</summary>
     public async Task<long?> SourceForRetryAsync(Manifest manifest, CancellationToken ct) =>
-        (await SourcesForRetriesAsync([manifest], ct)).TryGetValue(manifest.Id, out var source)
+        (await SourcesForRetriesAsync([manifest], ct).ConfigureAwait(false)).TryGetValue(
+            manifest.Id,
+            out var source
+        )
             ? source
             : null;
 
@@ -97,10 +102,94 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
         CancellationToken ct
     )
     {
-        using var context = await contextFactory.CreateDbContextAsync(ct);
+        var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestIds = manifests.Select(m => m.Id).ToList();
 
+        var latestByManifest = await ReadLatestFinishedAsync(context, manifestIds, ct)
+            .ConfigureAwait(false);
+
+        var latestIds = latestByManifest
+            .Where(l => l.Latest is not null)
+            .Select(l => l.Latest.NotNull().Value)
+            .ToList();
+
+        if (latestIds.Count == 0)
+            return new Dictionary<long, long>();
+
+        var runs = await ReadFailedRunsAsync(context, latestIds, ct).ConfigureAwait(false);
+
+        var runIds = runs.Select(r => r.Id).ToList();
+
+        var entries = await ReadEntriesAsync(context, runIds, ct).ConfigureAwait(false);
+
+        var alreadyReplayed = await ReadAlreadyReplayedAsync(context, runIds, ct)
+            .ConfigureAwait(false);
+
+        var parentSuccess = await ReadParentSuccessAsync(context, manifests, ct)
+            .ConfigureAwait(false);
+
+        var decided = await ReadDecidedAsync(context, runIds, ct).ConfigureAwait(false);
+
+        var runById = runs.ToDictionary(r => r.Id);
+        var latestById = latestByManifest.ToDictionary(l => l.Id, l => l.Latest);
+        var sources = new Dictionary<long, long>();
+
+        foreach (var manifest in manifests)
+        {
+            if (
+                latestById.GetValueOrDefault(manifest.Id) is not { } runId
+                || !runById.TryGetValue(runId, out var run)
+            )
+                continue; // No failed run to retry: an ordinary occurrence.
+
+            entries.TryGetValue(runId, out var entry);
+
+            var why = WhyAsksAfresh(manifest, runId, run, entry, alreadyReplayed, parentSuccess);
+
+            if (why is not null)
+            {
+                LogAsksAfresh(manifest.Id, runId, why);
+                continue;
+            }
+
+            // A train that never decides is retried plainly, with no link.
+            if (decided.Contains(runId))
+                sources[manifest.Id] = runId;
+        }
+
+        return sources;
+    }
+
+    // A manifest's latest finished run, and a failed run and its entry, as the lookup reads them.
+    private sealed record LatestRun(long Id, long? Latest);
+
+    private sealed record FailedRun(
+        long Id,
+        long? ManifestId,
+        string Name,
+        bool DecisionsRecorded,
+        long? ReplayDecisionsOf,
+        bool ReplayAbandoned,
+        DateTime StartTime
+    );
+
+    private sealed record RunEntry(
+        long MetadataId,
+        long? ManifestId,
+        string? Input,
+        string? InputTypeName,
+        string? SubjectKey,
+        DateTime? DispatchedAt
+    );
+
+    private static async Task<List<LatestRun>> ReadLatestFinishedAsync(
+        IDataContext context,
+        List<long> manifestIds,
+        CancellationToken ct
+    )
+    {
         // The latest run that finished, chosen as LoadManifestsJunction chooses it.
         var latestByManifest = await context
             .Manifests.AsNoTracking()
@@ -122,16 +211,18 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     .Select(md => (long?)md.Id)
                     .FirstOrDefault(),
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        var latestIds = latestByManifest
-            .Where(l => l.Latest is not null)
-            .Select(l => l.Latest!.Value)
-            .ToList();
+        return latestByManifest.Select(l => new LatestRun(l.Id, l.Latest)).ToList();
+    }
 
-        if (latestIds.Count == 0)
-            return new Dictionary<long, long>();
-
+    private static async Task<List<FailedRun>> ReadFailedRunsAsync(
+        IDataContext context,
+        List<long> latestIds,
+        CancellationToken ct
+    )
+    {
         var runs = await context
             .Metadatas.AsNoTracking()
             .Where(m => latestIds.Contains(m.Id) && m.TrainState == TrainState.Failed)
@@ -145,17 +236,34 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 m.ReplayAbandoned,
                 m.StartTime,
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        var runIds = runs.Select(r => r.Id).ToList();
+        return runs.Select(r => new FailedRun(
+                r.Id,
+                r.ManifestId,
+                r.Name,
+                r.DecisionsRecorded,
+                r.ReplayDecisionsOf,
+                r.ReplayAbandoned,
+                r.StartTime
+            ))
+            .ToList();
+    }
 
+    private static async Task<Dictionary<long, RunEntry>> ReadEntriesAsync(
+        IDataContext context,
+        List<long> runIds,
+        CancellationToken ct
+    )
+    {
         var entries = (
             await context
                 .WorkQueues.AsNoTracking()
                 .Where(q => q.MetadataId != null && runIds.Contains(q.MetadataId.Value))
                 .Select(q => new
                 {
-                    MetadataId = q.MetadataId!.Value,
+                    MetadataId = q.MetadataId.NotNull().Value,
                     q.ManifestId,
                     q.Input,
                     q.InputTypeName,
@@ -163,8 +271,28 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     q.DispatchedAt,
                 })
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).GroupBy(q => q.MetadataId).ToDictionary(g => g.Key, g => g.First());
 
+        return entries.ToDictionary(
+            e => e.Key,
+            e => new RunEntry(
+                e.Value.MetadataId,
+                e.Value.ManifestId,
+                e.Value.Input,
+                e.Value.InputTypeName,
+                e.Value.SubjectKey,
+                e.Value.DispatchedAt
+            )
+        );
+    }
+
+    private static async Task<HashSet<long>> ReadAlreadyReplayedAsync(
+        IDataContext context,
+        List<long> runIds,
+        CancellationToken ct
+    )
+    {
         // Runs whose answers something already replays, in any state: a run queued, running or
         // finished with them (a manifest retry, or a requeue through RequeueExecutionAsync, which
         // belongs to no manifest), or an entry still queued to. Each is the answers' one replay.
@@ -177,9 +305,10 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     && runIds.Contains(r.ReplayDecisionsOf.Value)
                     && !r.ReplayAbandoned
                 )
-                .Select(r => r.ReplayDecisionsOf!.Value)
+                .Select(r => r.ReplayDecisionsOf ?? 0)
                 .Distinct()
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).ToHashSet();
         alreadyReplayed.UnionWith(
             await context
@@ -189,16 +318,26 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                     && runIds.Contains(q.ReplayDecisionsOf.Value)
                     && q.Status == WorkQueueStatus.Queued
                 )
-                .Select(q => q.ReplayDecisionsOf!.Value)
+                .Select(q => q.ReplayDecisionsOf ?? 0)
                 .Distinct()
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         );
 
+        return alreadyReplayed;
+    }
+
+    private static async Task<Dictionary<long, DateTime?>> ReadParentSuccessAsync(
+        IDataContext context,
+        List<Manifest> manifests,
+        CancellationToken ct
+    )
+    {
         // A dependent is fired by its parent's success. Once the parent has succeeded again since
         // the failed run was dispatched, the next run is a new firing, not a retry of that one.
         var parentIds = manifests
             .Where(m => m.DependsOnManifestId is not null)
-            .Select(m => (long)m.DependsOnManifestId!.Value)
+            .Select(m => (long)m.DependsOnManifestId.NotNull().Value)
             .Distinct()
             .ToList();
         var parentSuccess =
@@ -207,8 +346,18 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 : await context
                     .Manifests.AsNoTracking()
                     .Where(m => parentIds.Contains(m.Id))
-                    .ToDictionaryAsync(m => m.Id, m => m.LastSuccessfulRun, ct);
+                    .ToDictionaryAsync(m => m.Id, m => m.LastSuccessfulRun, ct)
+                    .ConfigureAwait(false);
 
+        return parentSuccess;
+    }
+
+    private static async Task<HashSet<long>> ReadDecidedAsync(
+        IDataContext context,
+        List<long> runIds,
+        CancellationToken ct
+    )
+    {
         // A decision the run acted on: a refused answer is never replayed, so it does not count.
         var decided = (
             await context
@@ -217,66 +366,57 @@ internal class RetryDecisionReplay(IDataContextProviderFactory contextFactory, I
                 .Select(d => d.MetadataId)
                 .Distinct()
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).ToHashSet();
 
-        var runById = runs.ToDictionary(r => r.Id);
-        var latestById = latestByManifest.ToDictionary(l => l.Id, l => l.Latest);
-        var sources = new Dictionary<long, long>();
-
-        foreach (var manifest in manifests)
-        {
-            if (
-                latestById.GetValueOrDefault(manifest.Id) is not { } runId
-                || !runById.TryGetValue(runId, out var run)
-            )
-                continue; // No failed run to retry: an ordinary occurrence.
-
-            entries.TryGetValue(runId, out var entry);
-
-            string? why =
-                run.Name != manifest.Name ? "it is not a run of this manifest's train"
-                : !run.DecisionsRecorded ? "it did not record its decisions"
-                // A run that abandoned its replay asked its deciders itself, so its answers are
-                // its own and may be replayed once, like any run's.
-                : run.ReplayDecisionsOf is not null && !run.ReplayAbandoned
-                    ? "it replayed another run's answers and failed, so they are not replayed again"
-                : alreadyReplayed.Contains(runId)
-                    ? "its answers are already being, or have been, replayed once"
-                : manifest.DependsOnManifestId is { } parent
-                && parentSuccess.GetValueOrDefault(parent) is { } succeeded
-                // Both by the database's clock, as LoadManifestsJunction compares them: the
-                // parent's LastSuccessfulRun is stamped by it (DatabaseClock), and so is the
-                // entry's DispatchedAt. A run with no dispatched entry falls back to its start.
-                && succeeded > (entry?.DispatchedAt ?? run.StartTime)
-                    ? "its parent succeeded again since, so this run is a new firing, not a retry"
-                : entry is null || entry.ManifestId != manifest.Id
-                    ? "it has no work queue entry of this manifest to compare inputs with"
-                : entry.SubjectKey is not null ? "it was queued under a subject key"
-                : !string.Equals(
-                    entry.InputTypeName,
-                    manifest.PropertyTypeName,
-                    StringComparison.Ordinal
-                ) || !string.Equals(entry.Input, manifest.Properties, StringComparison.Ordinal)
-                    ? "it was given a different input from the one the retry is given"
-                : null;
-
-            if (why is not null)
-            {
-                logger.LogInformation(
-                    "The retry of manifest {ManifestId} asks its deciders afresh instead of "
-                        + "replaying run {FailedRun}: {Reason}",
-                    manifest.Id,
-                    runId,
-                    why
-                );
-                continue;
-            }
-
-            // A train that never decides is retried plainly, with no link.
-            if (decided.Contains(runId))
-                sources[manifest.Id] = runId;
-        }
-
-        return sources;
+        return decided;
     }
+
+    // Why a manifest's retry asks its deciders afresh rather than replaying its failed run, or
+    // null when it replays it.
+    private static string? WhyAsksAfresh(
+        Manifest manifest,
+        long runId,
+        FailedRun run,
+        RunEntry? entry,
+        HashSet<long> alreadyReplayed,
+        Dictionary<long, DateTime?> parentSuccess
+    )
+    {
+        return !string.Equals(run.Name, manifest.Name, StringComparison.Ordinal)
+                ? "it is not a run of this manifest's train"
+            : !run.DecisionsRecorded ? "it did not record its decisions"
+            // A run that abandoned its replay asked its deciders itself, so its answers are
+            // its own and may be replayed once, like any run's.
+            : run.ReplayDecisionsOf is not null && !run.ReplayAbandoned
+                ? "it replayed another run's answers and failed, so they are not replayed again"
+            : alreadyReplayed.Contains(runId)
+                ? "its answers are already being, or have been, replayed once"
+            : manifest.DependsOnManifestId is { } parent
+            && parentSuccess.GetValueOrDefault(parent) is { } succeeded
+            // Both by the database's clock, as LoadManifestsJunction compares them: the
+            // parent's LastSuccessfulRun is stamped by it (DatabaseClock), and so is the
+            // entry's DispatchedAt. A run with no dispatched entry falls back to its start.
+            && succeeded > (entry?.DispatchedAt ?? run.StartTime)
+                ? "its parent succeeded again since, so this run is a new firing, not a retry"
+            : entry is null || entry.ManifestId != manifest.Id
+                ? "it has no work queue entry of this manifest to compare inputs with"
+            : entry.SubjectKey is not null ? "it was queued under a subject key"
+            : !string.Equals(
+                entry.InputTypeName,
+                manifest.PropertyTypeName,
+                StringComparison.Ordinal
+            ) || !string.Equals(entry.Input, manifest.Properties, StringComparison.Ordinal)
+                ? "it was given a different input from the one the retry is given"
+            : null;
+    }
+
+    private void LogAsksAfresh(long manifestId, long runId, string why) =>
+        logger.LogInformation(
+            "The retry of manifest {ManifestId} asks its deciders afresh instead of "
+                + "replaying run {FailedRun}: {Reason}",
+            manifestId,
+            runId,
+            why
+        );
 }

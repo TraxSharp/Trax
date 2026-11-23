@@ -58,7 +58,8 @@ internal static class MachineInstanceTransitionsField
                             ctx.ArgumentValue<long?>("after"),
                             OperationsPageBounds.Take(ctx.ArgumentValue<int>("first")),
                             ctx.RequestAborted
-                        );
+                        )
+                        .ConfigureAwait(false);
                     return MachineInstanceTransitions.From(page);
                 })
         );

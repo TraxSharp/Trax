@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -22,23 +23,23 @@ public class StrictInputGoldenTests
     private static string CasesFile => Path.Combine(Dir, "cases.json");
 
     [Test]
-    public void The_committed_IR_is_what_the_exporter_writes()
+    public async Task The_committed_IR_is_what_the_exporter_writes()
     {
         var exported = IrExporter.Export(StrictInputMachine.Built) + "\n";
-        Update(IrFile, exported);
+        await Update(IrFile, exported).ConfigureAwait(false);
 
-        File.ReadAllText(IrFile)
+        (await File.ReadAllTextAsync(IrFile).ConfigureAwait(false))
             .Should()
             .Be(exported, "regenerate it deliberately with UPDATE_CONFORMANCE=1");
     }
 
     [Test]
-    public void The_committed_cases_are_what_the_engine_answers()
+    public async Task The_committed_cases_are_what_the_engine_answers()
     {
         var written = Write();
-        Update(CasesFile, written);
+        await Update(CasesFile, written).ConfigureAwait(false);
 
-        File.ReadAllText(CasesFile)
+        (await File.ReadAllTextAsync(CasesFile).ConfigureAwait(false))
             .Should()
             .Be(written, "regenerate it deliberately with UPDATE_CONFORMANCE=1");
     }
@@ -48,26 +49,34 @@ public class StrictInputGoldenTests
     {
         // The file stores numbers as the canonical wire writes them (3.4028235e+38, not 3.4028235E+38), so it is
         // replayed as read, not trusted to mean what the C# literals did.
-        var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(CasesFile))!;
-        var start = StrictInputMachine.Machine.Rehydrate(golden["start"]!.GetValue<string>());
+        var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(CasesFile)).NotNull();
+        var start = StrictInputMachine.Machine.Rehydrate(
+            golden["start"].NotNull().GetValue<string>()
+        );
         var snapshot = start.Should().BeOfType<RehydrationResult.Ok>().Which.Snapshot;
-        var trigger = golden["trigger"]!.GetValue<string>();
+        var trigger = golden["trigger"].NotNull().GetValue<string>();
 
         var diffs = new List<string>();
-        foreach (var node in golden["cases"]!.AsArray())
+        foreach (var node in golden["cases"].NotNull().AsArray())
         {
-            var @case = (JsonObject)node!;
-            var input = (JsonObject)golden["validInput"]!.DeepClone();
+            var @case = (JsonObject)node.NotNull();
+            var input = (JsonObject)golden["validInput"].NotNull().DeepClone();
             if (@case["field"] is { } field)
                 input[field.GetValue<string>()] = @case["value"]?.DeepClone();
             var expect = Answer(StrictInputMachine.Machine.Advance(snapshot, trigger, input));
-            if (expect.ToJsonString() != @case["expect"]!.ToJsonString())
+            if (
+                !string.Equals(
+                    expect.ToJsonString(),
+                    @case["expect"].NotNull().ToJsonString(),
+                    StringComparison.Ordinal
+                )
+            )
                 diffs.Add(
-                    $"{@case["name"]}: file says {@case["expect"]!.ToJsonString()}, engine {expect.ToJsonString()}"
+                    $"{@case["name"]}: file says {@case["expect"].NotNull().ToJsonString()}, engine {expect.ToJsonString()}"
                 );
         }
 
-        diffs.Should().BeEmpty(string.Join("\n", diffs));
+        diffs.Should().BeEmpty(string.Join('\n', diffs));
     }
 
     private static string Write()
@@ -118,7 +127,7 @@ public class StrictInputGoldenTests
         sb.Append("  \"trigger\": ").Append(CanonicalJson.Serialize(trigger)).Append(",\n");
         sb.Append("  \"validInput\": ").Append(CanonicalJson.Serialize(valid)).Append(",\n");
         sb.Append("  \"cases\": [\n    ");
-        sb.Append(string.Join(",\n    ", lines));
+        sb.AppendJoin(",\n    ", lines);
         sb.Append("\n  ]\n}\n");
         return sb.ToString();
     }
@@ -139,11 +148,17 @@ public class StrictInputGoldenTests
             _ => throw new InvalidOperationException($"Unexpected advance result {result}."),
         };
 
-    private static void Update(string path, string content)
+    private static async Task Update(string path, string content)
     {
-        if (Environment.GetEnvironmentVariable("UPDATE_CONFORMANCE") != "1")
+        if (
+            !string.Equals(
+                Environment.GetEnvironmentVariable("UPDATE_CONFORMANCE"),
+                "1",
+                StringComparison.Ordinal
+            )
+        )
             return;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, content);
+        Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
+        await File.WriteAllTextAsync(path, content).ConfigureAwait(false);
     }
 }

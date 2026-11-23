@@ -5,8 +5,11 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class ConfirmOrderJunction(IShopfrontDbContext db, ILogger<ConfirmOrderJunction> logger)
-    : EffectJunction<(Customer Customer, PricedCart Cart, Payment Payment), PlaceOrderOutput>
+internal sealed class ConfirmOrderJunction(
+    IShopfrontDbContext db,
+    ILogger<ConfirmOrderJunction> logger,
+    TimeProvider clock
+) : EffectJunction<(Customer Customer, PricedCart Cart, Payment Payment), PlaceOrderOutput>
 {
     public override async Task<PlaceOrderOutput> Run(
         (Customer Customer, PricedCart Cart, Payment Payment) input
@@ -18,7 +21,7 @@ internal class ConfirmOrderJunction(IShopfrontDbContext db, ILogger<ConfirmOrder
             CustomerId = input.Customer.Id,
             Total = input.Cart.Total,
             TransactionId = input.Payment.TransactionId,
-            PlacedAt = DateTime.UtcNow,
+            PlacedAt = clock.GetUtcNow().UtcDateTime,
             Items =
             [
                 .. input.Cart.Lines.Select(l => new OrderItem
@@ -30,7 +33,7 @@ internal class ConfirmOrderJunction(IShopfrontDbContext db, ILogger<ConfirmOrder
             ],
         };
         db.Orders.Add(order);
-        await db.SaveChangesAsync(CancellationToken);
+        await db.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation("Confirmed order {OrderId}", order.Id);
         return new PlaceOrderOutput(order.Id, order.Total, order.TransactionId);

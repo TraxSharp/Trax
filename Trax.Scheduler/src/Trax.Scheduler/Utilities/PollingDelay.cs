@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Scheduler.Utilities;
@@ -29,10 +28,11 @@ internal static class PollingDelay
     /// </summary>
     public static async Task<bool> WaitAsync(
         Func<TimeSpan> interval,
+        TimeProvider timeProvider,
         CancellationToken stoppingToken
     )
     {
-        var elapsed = Stopwatch.StartNew();
+        var started = timeProvider.GetTimestamp();
         try
         {
             while (true)
@@ -43,11 +43,12 @@ internal static class PollingDelay
                 if (wanted < SchedulerConfigLimits.MinTimerInterval)
                     wanted = SchedulerConfigLimits.MinTimerInterval;
 
-                var remaining = wanted - elapsed.Elapsed;
+                var remaining = wanted - timeProvider.GetElapsedTime(started);
                 if (remaining <= TimeSpan.Zero)
                     return true;
 
-                await Task.Delay(remaining < Slice ? remaining : Slice, stoppingToken);
+                await Task.Delay(remaining < Slice ? remaining : Slice, timeProvider, stoppingToken)
+                    .ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

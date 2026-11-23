@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
 namespace Trax.Samples.ApiDashboard.Browser.Tests;
@@ -27,16 +28,16 @@ public partial class ConsoleCoverageTests
     private static readonly IReadOnlyDictionary<string, string> Excluded = new Dictionary<
         string,
         string
-    >
+    >(StringComparer.Ordinal)
     {
         ["route:/dev/mock-overlay"] =
             "the mock's scenario switcher: it exists only in the mock and the demo, never on a host's console",
     };
 
     [Test]
-    public void Every_route_and_mutation_has_a_browser_test()
+    public async Task Every_route_and_mutation_has_a_browser_test()
     {
-        var console = Surface();
+        var console = await SurfaceAsync().ConfigureAwait(false);
         var covered = CoveredByTests();
 
         var uncovered = console
@@ -71,9 +72,9 @@ public partial class ConsoleCoverageTests
 
     /// <summary>The guard reads something on each side, so an empty read cannot pass it.</summary>
     [Test]
-    public void The_guard_reads_the_routes_the_operations_and_the_tests()
+    public async Task The_guard_reads_the_routes_the_operations_and_the_tests()
     {
-        var console = Surface();
+        var console = await SurfaceAsync().ConfigureAwait(false);
         console.Should().Contain("route:/runs/:id").And.Contain("route:/executions/:id");
         console.Should().Contain("mutation:RequeueDeadLetter");
         console.Should().Contain("mutation:UploadPersistedOperation");
@@ -86,14 +87,15 @@ public partial class ConsoleCoverageTests
     /// Everything the console offers: <c>route:</c> each path in AppRoutes.tsx and each moved path,
     /// <c>mutation:</c> and <c>subscription:</c> each operation by its name.
     /// </summary>
-    private static HashSet<string> Surface()
+    private static async Task<HashSet<string>> SurfaceAsync()
     {
         var clientApp = ClientApp();
-        var routes = File.ReadAllText(Path.Combine(clientApp, "src", "AppRoutes.tsx"));
+        var routes = await File.ReadAllTextAsync(Path.Combine(clientApp, "src", "AppRoutes.tsx"))
+            .ConfigureAwait(false);
         var surface = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match m in RoutePath().Matches(routes))
+        foreach (Match m in RoutePath.Matches(routes))
             surface.Add($"route:{m.Groups["path"].Value}");
-        foreach (Match m in MovedPath().Matches(routes))
+        foreach (Match m in MovedPath.Matches(routes))
             surface.Add($"route:{m.Groups["from"].Value}");
 
         foreach (
@@ -104,14 +106,18 @@ public partial class ConsoleCoverageTests
         )
         {
             // A comment may name an operation in prose, so only the document itself is read.
-            var m = Operation()
-                .Match(
-                    string.Join(
-                        '\n',
-                        File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith('#'))
+            var m = Operation.Match(
+                string.Join(
+                    '\n',
+                    (await File.ReadAllLinesAsync(file).ConfigureAwait(false)).Where(l =>
+                        !l.TrimStart().StartsWith('#')
                     )
-                );
-            if (m.Success && m.Groups["kind"].Value != "query")
+                )
+            );
+            if (
+                m.Success
+                && !string.Equals(m.Groups["kind"].Value, "query", StringComparison.Ordinal)
+            )
                 surface.Add($"{m.Groups["kind"].Value}:{m.Groups["name"].Value}");
         }
 
@@ -133,7 +139,7 @@ public partial class ConsoleCoverageTests
         foreach (var method in methods)
         foreach (var covers in method.GetCustomAttributes<CoversAttribute>())
         {
-            var test = $"{method.DeclaringType!.Name}.{method.Name}";
+            var test = $"{method.DeclaringType.NotNull().Name}.{method.Name}";
             if (!covered.TryGetValue(covers.What, out var tests))
                 covered[covers.What] = tests = [];
             tests.Add(test);
@@ -167,12 +173,24 @@ public partial class ConsoleCoverageTests
         );
     }
 
-    [GeneratedRegex("<Route\\s+path=\"(?<path>[^\"]+)\"")]
-    private static partial Regex RoutePath();
+    [GeneratedRegex(
+        "<Route\\s+path=\"(?<path>[^\"]+)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex RoutePath { get; }
 
-    [GeneratedRegex("\\[\"(?<from>/[^\"]*)\",\\s*\"/[^\"]*\"\\]")]
-    private static partial Regex MovedPath();
+    [GeneratedRegex(
+        "\\[\"(?<from>/[^\"]*)\",\\s*\"/[^\"]*\"\\]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex MovedPath { get; }
 
-    [GeneratedRegex(@"\b(?<kind>query|mutation|subscription)\s+(?<name>[A-Z]\w*)")]
-    private static partial Regex Operation();
+    [GeneratedRegex(
+        @"\b(?<kind>query|mutation|subscription)\s+(?<name>[A-Z]\w*)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Operation { get; }
 }

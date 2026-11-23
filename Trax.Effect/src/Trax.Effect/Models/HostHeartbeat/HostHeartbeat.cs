@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Models.HostHeartbeat;
 
@@ -34,11 +35,19 @@ public class HostHeartbeat
     /// task id, or machine name and process id. The primary key.
     /// </summary>
     [Column("instance_id")]
-    public string InstanceId { get; set; } = null!;
+    public string InstanceId
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>The machine or container host name (<see cref="Host.TraxHostInfo.HostName"/>).</summary>
     [Column("host_name")]
-    public string HostName { get; set; } = null!;
+    public string HostName
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The kind of environment the process runs in (<see cref="Host.TraxHostInfo.HostEnvironment"/>):
@@ -46,11 +55,19 @@ public class HostHeartbeat
     /// value given to <c>SetHostEnvironment</c>.
     /// </summary>
     [Column("host_environment")]
-    public string HostEnvironment { get; set; } = null!;
+    public string HostEnvironment
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>The Trax version the process runs, so a rolling upgrade shows which hosts it has reached.</summary>
     [Column("trax_version")]
-    public string TraxVersion { get; set; } = null!;
+    public string TraxVersion
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>When the process began beating, in UTC. Rewritten when a restarted process reuses the instance id.</summary>
     [Column("started_at")]

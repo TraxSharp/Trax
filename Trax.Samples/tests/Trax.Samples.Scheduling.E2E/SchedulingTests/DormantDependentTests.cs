@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Samples.Scheduling.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
@@ -30,7 +31,7 @@ public class DormantDependentTests : SchedulingTestFixture
         );
 
         run.Input.Should().NotBeNull("the host saves train parameters");
-        using var input = JsonDocument.Parse(run.Input!);
+        using var input = JsonDocument.Parse(run.Input.NotNull());
         input.RootElement.GetProperty("changePercent").GetDecimal().Should().Be(7.5m);
     }
 
@@ -45,7 +46,7 @@ public class DormantDependentTests : SchedulingTestFixture
         // A spike activated before the feed went calm may still be on its way.
         await Db.WaitUntil(
             async () =>
-                (await Db.Runs(alert.Id, 0)).All(r =>
+                (await Db.Runs(alert.Id, 0).ConfigureAwait(false)).All(r =>
                     r.TrainState is not (TrainState.Pending or TrainState.InProgress)
                 ),
             TimeSpan.FromSeconds(15),

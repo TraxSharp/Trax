@@ -11,7 +11,7 @@ public class Deliver(FaultInjector faults, DemoPace pace) : EffectJunction<Picke
 {
     public override async Task<OrderDelivered> Run(PickedUp order)
     {
-        await Task.Delay(pace.StepDelay * 2, CancellationToken);
+        await Task.Delay(pace.StepDelay * 2, CancellationToken).ConfigureAwait(false);
         faults.Disarm(order.OrderId);
         return new OrderDelivered(order.OrderId, order.Courier);
     }

@@ -8,6 +8,9 @@ namespace Trax.StateMachine.Gherkin.Lexical;
 /// notes kept where they were. The reader ignores all of it, so formatting never changes what a lexicon elaborates to;
 /// it exists for the person reading the file. Formatting twice changes nothing the second time.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class LexiconFormatter
 {
     // The keywords whose first word after them is lined up: the second column starts at one place in a run.
@@ -36,27 +39,7 @@ internal static class LexiconFormatter
             return (null, problems);
         var byNumber = lines.ToDictionary(l => l.Number);
 
-        // Each keyword line's depth is where it attaches, by the reader's own rule.
-        var open = new List<Block> { Block.Root };
-        var rows = new List<Row>();
-        var number = 0;
-        foreach (var raw in text.Split('\n'))
-        {
-            number++;
-            var note = Note(raw.TrimEnd('\r'));
-            if (!byNumber.TryGetValue(number, out var line))
-            {
-                rows.Add(new Row(-1, null, [], note));
-                continue;
-            }
-            var at = open.FindLastIndex(b => line.Keyword.Under.Contains(b));
-            if (at < 0)
-                at = open.Count - 1;
-            open.RemoveRange(at + 1, open.Count - at - 1);
-            rows.Add(new Row(at, line.Keyword.Text, line.Tokens, note));
-            if (line.Keyword.Opens is { } block)
-                open.Add(block);
-        }
+        var rows = Rows(text, byNumber);
 
         // A note alone on its line takes the depth of the next keyword line.
         var depths = new int[rows.Count];
@@ -68,29 +51,7 @@ internal static class LexiconFormatter
             depths[i] = rows[i].Keyword is not null ? rows[i].Depth : next;
         }
 
-        // The widths of each run's first column.
-        var widths = new int[rows.Count];
-        for (var i = 0; i < rows.Count; )
-        {
-            var row = rows[i];
-            if (row.Keyword is null || !Columns.Contains(row.Keyword) || row.Tokens.Count < 2)
-            {
-                i++;
-                continue;
-            }
-            var end = i;
-            while (
-                end < rows.Count
-                && rows[end].Keyword == row.Keyword
-                && rows[end].Depth == row.Depth
-                && rows[end].Tokens.Count >= 2
-            )
-                end++;
-            var width = rows.Skip(i).Take(end - i).Max(r => Render([r.Tokens[0]]).Length);
-            for (var j = i; j < end; j++)
-                widths[j] = width;
-            i = end;
-        }
+        var widths = Widths(rows);
 
         var output = new StringBuilder();
         var blank = true;
@@ -113,6 +74,60 @@ internal static class LexiconFormatter
         // One newline at the end, never a blank line.
         var result = output.ToString().TrimEnd('\n') + "\n";
         return (result, []);
+    }
+
+    private static List<Row> Rows(string text, Dictionary<int, LexLine> byNumber)
+    {
+        // Each keyword line's depth is where it attaches, by the reader's own rule.
+        var open = new List<Block> { Block.Root };
+        var rows = new List<Row>();
+        var number = 0;
+        foreach (var raw in text.Split('\n'))
+        {
+            number++;
+            var note = Note(raw.TrimEnd('\r'));
+            if (!byNumber.TryGetValue(number, out var line))
+            {
+                rows.Add(new Row(-1, Keyword: null, [], note));
+                continue;
+            }
+            var at = open.FindLastIndex(b => line.Keyword.Under.Contains(b));
+            if (at < 0)
+                at = open.Count - 1;
+            open.RemoveRange(at + 1, open.Count - at - 1);
+            rows.Add(new Row(at, line.Keyword.Text, line.Tokens, note));
+            if (line.Keyword.Opens is { } block)
+                open.Add(block);
+        }
+        return rows;
+    }
+
+    private static int[] Widths(List<Row> rows)
+    {
+        // The widths of each run's first column.
+        var widths = new int[rows.Count];
+        for (var i = 0; i < rows.Count; )
+        {
+            var row = rows[i];
+            if (row.Keyword is null || !Columns.Contains(row.Keyword) || row.Tokens.Count < 2)
+            {
+                i++;
+                continue;
+            }
+            var end = i;
+            while (
+                end < rows.Count
+                && string.Equals(rows[end].Keyword, row.Keyword, StringComparison.Ordinal)
+                && rows[end].Depth == row.Depth
+                && rows[end].Tokens.Count >= 2
+            )
+                end++;
+            var width = rows.Skip(i).Take(end - i).Max(r => Render([r.Tokens[0]]).Length);
+            for (var j = i; j < end; j++)
+                widths[j] = width;
+            i = end;
+        }
+        return widths;
     }
 
     private static string Content(Row row, int width)

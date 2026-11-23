@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Samples.Scheduling.E2E.Factories;
 using Trax.Samples.Scheduling.E2E.Utilities;
 using Trax.Samples.Shared.Testing;
@@ -15,9 +16,17 @@ namespace Trax.Samples.Scheduling.E2E;
 [SetUpFixture]
 public class SharedSchedulingSetup
 {
-    public static SchedulingHostFactory Factory { get; private set; } = null!;
+    public static SchedulingHostFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
-    public static Db Db { get; private set; } = null!;
+    public static Db Db
+    {
+        get => field.NotNull(nameof(Db));
+        private set;
+    }
 
     /// <summary>When the host started, by the test's clock.</summary>
     public static DateTime StartedAt { get; private set; }
@@ -27,7 +36,7 @@ public class SharedSchedulingSetup
     {
         await DropTraxSchema();
 
-        StartedAt = DateTime.UtcNow;
+        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         Factory = new SchedulingHostFactory();
 
         // Resolving Services starts the host: migrations run and the manifests are seeded
@@ -35,7 +44,7 @@ public class SharedSchedulingSetup
         Db = new Db(Factory.Services);
 
         var seeded = await Polling.WaitUntilAsync(
-            async () => await Db.Query(dc => dc.Manifests.CountAsync()) == 6,
+            async () => await Db.Query(dc => dc.Manifests.CountAsync()).ConfigureAwait(false) == 6,
             TimeSpan.FromSeconds(30),
             TimeSpan.FromMilliseconds(200)
         );
@@ -51,14 +60,15 @@ public class SharedSchedulingSetup
 
     private static async Task DropTraxSchema()
     {
-        await using var connection = new NpgsqlConnection(
-            SchedulingHostFactory.TestConnectionString
-        );
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "DROP SCHEMA IF EXISTS trax CASCADE;",
-            connection
-        );
-        await command.ExecuteNonQueryAsync();
+        var connection = new NpgsqlConnection(SchedulingHostFactory.TestConnectionString);
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var command = new NpgsqlCommand("DROP SCHEMA IF EXISTS trax CASCADE;", connection);
+            await using (command.ConfigureAwait(false))
+            {
+                await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

@@ -90,6 +90,13 @@ public static class DeclarativeCheckout
             .Reduce(Reset())
             .To(CheckoutState.Cart);
 
+        AddDifferential(m);
+
+        return m.Build();
+    }
+
+    private static void AddDifferential(MachineBuilder<CheckoutState, CheckoutTrigger> m)
+    {
         // The differential inputs the committed IR carries, so this machine exports that IR byte for byte, as the host
         // that serves it does: Pay with and without a receipt, and seeds for the states only Pay and its effect reach.
         m.Differential(d =>
@@ -116,7 +123,5 @@ public static class DeclarativeCheckout
                     }
                 )
         );
-
-        return m.Build();
     }
 }

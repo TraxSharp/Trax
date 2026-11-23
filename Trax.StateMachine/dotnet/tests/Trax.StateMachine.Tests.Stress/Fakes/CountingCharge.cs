@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -17,6 +18,6 @@ public sealed class CountingCharge : ISnapshotEffect
     public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default)
     {
         var n = Interlocked.Increment(ref _calls);
-        return Task.FromResult($"receipt-{n}");
+        return Task.FromResult(string.Create(CultureInfo.InvariantCulture, $"receipt-{n}"));
     }
 }

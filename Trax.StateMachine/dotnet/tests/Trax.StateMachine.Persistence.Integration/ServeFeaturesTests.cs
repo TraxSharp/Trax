@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
@@ -135,12 +136,12 @@ public class ServeFeaturesTests
         + Scored("the scoring fails", "is unscored")
         + Scored("the scoring is called off", "is unscored");
 
-    private string _dir = null!;
+    private string? _dir;
 
     [SetUp]
-    public void SetUp() => _dir = Write(Glossary, Ordering);
+    public async Task SetUp() => _dir = await Write(Glossary, Ordering).ConfigureAwait(false);
 
-    private static string Write(string glossary, string feature)
+    private static async Task<string> Write(string glossary, string feature)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"trax-serve-features-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -148,15 +149,17 @@ public class ServeFeaturesTests
             FeatureGlossary.Read(glossary),
             [new FeatureFile("machines.feature", feature)]
         );
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(dir, id + ".ir.json"), ir);
-        File.WriteAllText(Path.Combine(dir, "host.json"), derived.Host);
+            await File.WriteAllTextAsync(Path.Combine(dir, id + ".ir.json"), ir)
+                .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(dir, "host.json"), derived.Host)
+            .ConfigureAwait(false);
         return dir;
     }
 
     [TearDown]
-    public void TearDown() => Directory.Delete(_dir, recursive: true);
+    public void TearDown() => Directory.Delete(_dir.NotNull(), recursive: true);
 
     [Test]
     public void The_directorys_machines_and_host_file_are_registered()
@@ -164,7 +167,8 @@ public class ServeFeaturesTests
         var services = new ServiceCollection();
 
         services.AddTrax(trax =>
-            trax.AddEffects(e => e.UseInMemory()).AddStateMachines(o => o.ServeFeatures(_dir))
+            trax.AddEffects(e => e.UseInMemory())
+                .AddStateMachines(o => o.ServeFeatures(_dir.NotNull()))
         );
 
         services
@@ -178,17 +182,22 @@ public class ServeFeaturesTests
     [Test]
     public void A_directory_whose_host_file_was_derived_from_another_ir_is_refused()
     {
-        var ir = Path.Combine(_dir, "order.ir.json");
+        var ir = Path.Combine(_dir.NotNull(), "order.ir.json");
         File.WriteAllText(
             ir,
             File.ReadAllText(ir)
-                .Replace("\"committedStates\":[]", "\"committedStates\":[\"Placed\"]")
+                .Replace(
+                    "\"committedStates\":[]",
+                    "\"committedStates\":[\"Placed\"]",
+                    StringComparison.Ordinal
+                )
         );
         var services = new ServiceCollection();
 
         var act = () =>
             services.AddTrax(trax =>
-                trax.AddEffects(e => e.UseInMemory()).AddStateMachines(o => o.ServeFeatures(_dir))
+                trax.AddEffects(e => e.UseInMemory())
+                    .AddStateMachines(o => o.ServeFeatures(_dir.NotNull()))
             );
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*derived from another IR*");
@@ -211,9 +220,9 @@ public class ServeFeaturesTests
     }
 
     [Test]
-    public void Policies_on_the_InMemory_provider_are_refused()
+    public async Task Policies_on_the_InMemory_provider_are_refused()
     {
-        var dir = Write(WithPolicy, Expiring);
+        var dir = await Write(WithPolicy, Expiring).ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -241,9 +250,12 @@ public class ServeFeaturesTests
     [TestCase("Interval", 0)]
     [TestCase("Interval", -1)]
     [TestCase("Interval", 50 * 24 * 3600)]
-    public void A_policy_runner_option_out_of_range_is_refused_naming_it(string option, int value)
+    public async Task A_policy_runner_option_out_of_range_is_refused_naming_it(
+        string option,
+        int value
+    )
     {
-        var dir = Write(WithPolicy, Expiring);
+        var dir = await Write(WithPolicy, Expiring).ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -283,9 +295,10 @@ public class ServeFeaturesTests
     }
 
     [Test]
-    public void ServeFeatures_names_the_output_range_a_train_needs()
+    public async Task ServeFeatures_names_the_output_range_a_train_needs()
     {
-        var dir = Write(Scoring.Replace("{range}", ""), Tallying);
+        var dir = await Write(Scoring.Replace("{range}", "", StringComparison.Ordinal), Tallying)
+            .ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -320,12 +333,17 @@ public class ServeFeaturesTests
     }
 
     [Test]
-    public void ServeFeatures_serves_a_train_output_whose_range_the_glossary_gives()
+    public async Task ServeFeatures_serves_a_train_output_whose_range_the_glossary_gives()
     {
-        var dir = Write(
-            Scoring.Replace("{range}", ", \"minimum\": -2147483648, \"maximum\": 2147483647"),
-            Tallying
-        );
+        var dir = await Write(
+                Scoring.Replace(
+                    "{range}",
+                    ", \"minimum\": -2147483648, \"maximum\": 2147483647",
+                    StringComparison.Ordinal
+                ),
+                Tallying
+            )
+            .ConfigureAwait(false);
         try
         {
             var services = new ServiceCollection();
@@ -349,17 +367,11 @@ public class ServeFeaturesTests
     [Test]
     public void Serving_two_directories_is_refused()
     {
-        var options = new StateMachineOptions().ServeFeatures(_dir);
+        var options = new StateMachineOptions().ServeFeatures(_dir.NotNull());
 
-        options.Invoking(o => o.ServeFeatures(_dir)).Should().Throw<InvalidOperationException>();
+        options
+            .Invoking(o => o.ServeFeatures(_dir.NotNull()))
+            .Should()
+            .Throw<InvalidOperationException>();
     }
 }
-
-/// <summary>The input of the train the tally's Scoring state invokes.</summary>
-public sealed record ScoreTallyInput;
-
-/// <summary>Its output: an integer per name, so the glossary's values need an int's range.</summary>
-public sealed record ScoreTallyOutput(Dictionary<string, int> Totals);
-
-/// <summary>The train, named by its interface; registering the machine never runs it.</summary>
-public interface IScoreTallyTrain : IServiceTrain<ScoreTallyInput, ScoreTallyOutput>;

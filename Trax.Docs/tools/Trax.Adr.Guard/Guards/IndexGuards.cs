@@ -5,16 +5,18 @@ namespace Trax.Adr.Guard.Guards;
 /// An index nothing verifies is the failure mode this whole corpus exists to avoid: it
 /// looks authoritative and quietly stops being true.
 /// </summary>
-public static class IndexGuards
+public static partial class IndexGuards
 {
     public const string ByRepoHeading = "By repo";
     public const string ByAreaHeading = "By area";
     public const string FullListHeading = "All of them";
 
-    private static readonly Regex RowLink = new(
+    [GeneratedRegex(
         @"\[[^\]]*\]\(\.\/(?<file>\d{4}-[a-z0-9-]+\.md)\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex RowLink { get; }
 
     public static GuardResult Exists(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
@@ -36,14 +38,14 @@ public static class IndexGuards
     }
 
     /// <summary>Every ADR appears in the tag table under each tag it declares, and nowhere else.</summary>
-    public static GuardResult TagTable(
+    public static async Task<GuardResult> TagTableAsync(
         IReadOnlyList<Adr> adrs,
         GuardOptions options,
         string heading,
         string frontmatterKey
     )
     {
-        var index = ReadIndex(options);
+        var index = await ReadIndexAsync(options).ConfigureAwait(false);
         var offenders = new List<string>();
         var name = $"index/{frontmatterKey}-table";
 
@@ -76,6 +78,20 @@ public static class IndexGuards
             }
         }
 
+        CheckListedRows(adrs, listed, heading, frontmatterKey, offenders);
+
+        return new GuardResult(name, offenders, adrs.Count, Rule(heading, frontmatterKey));
+    }
+
+    /// <summary>Every file a tag row lists exists and declares that tag.</summary>
+    private static void CheckListedRows(
+        IReadOnlyList<Adr> adrs,
+        Dictionary<string, HashSet<string>> listed,
+        string heading,
+        string frontmatterKey,
+        List<string> offenders
+    )
+    {
         // Index -> frontmatter.
         // The same file name twice (an ADR and its copy in a subfolder) is frontmatter/file-names'
         // failure to report; the first one answers here rather than the check throwing.
@@ -101,14 +117,15 @@ public static class IndexGuards
                     );
             }
         }
-
-        return new GuardResult(name, offenders, adrs.Count, Rule(heading, frontmatterKey));
     }
 
     /// <summary>The full table lists every ADR exactly once, with its title and its tags.</summary>
-    public static GuardResult FullList(IReadOnlyList<Adr> adrs, GuardOptions options)
+    public static async Task<GuardResult> FullListAsync(
+        IReadOnlyList<Adr> adrs,
+        GuardOptions options
+    )
     {
-        var index = ReadIndex(options);
+        var index = await ReadIndexAsync(options).ConfigureAwait(false);
         var offenders = new List<string>();
         const string name = "index/full-list";
         var rule =
@@ -139,31 +156,7 @@ public static class IndexGuards
                 continue;
             }
 
-            // Every row is checked, not the last one parsed. A second row for the same ADR is
-            // what a bad merge of two branches that each edited the row leaves behind, and a
-            // reader sees both; keeping only the last let the stale one say anything at all.
-            if (listed.Count > 1)
-                offenders.Add(
-                    $"'## {FullListHeading}': {adr.FileName} is listed {listed.Count} times. "
-                        + "Each ADR has one row."
-                );
-
-            foreach (var row in listed)
-            {
-                if (
-                    adr.Title is not null
-                    && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
-                )
-                    offenders.Add(
-                        $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
-                            + $"document's title is '{adr.Title}'"
-                    );
-
-                if (options.RequireReposKey)
-                    CompareTags(offenders, adr, "repos", row.Repos);
-
-                CompareTags(offenders, adr, "areas", row.Areas);
-            }
+            CheckFullRows(adr, listed, options, offenders);
         }
 
         var known = adrs.Select(a => a.FileName).ToHashSet(StringComparer.Ordinal);
@@ -173,15 +166,54 @@ public static class IndexGuards
         return new GuardResult(name, offenders, adrs.Count, rule);
     }
 
+    /// <summary>Checks every full-table row for one ADR against its title and its tags.</summary>
+    private static void CheckFullRows(
+        Adr adr,
+        List<FullRow> listed,
+        GuardOptions options,
+        List<string> offenders
+    )
+    {
+        // Every row is checked, not the last one parsed. A second row for the same ADR is
+        // what a bad merge of two branches that each edited the row leaves behind, and a
+        // reader sees both; keeping only the last let the stale one say anything at all.
+        if (listed.Count > 1)
+            offenders.Add(
+                $"'## {FullListHeading}': {adr.FileName} is listed {listed.Count} times. "
+                    + "Each ADR has one row."
+            );
+
+        foreach (var row in listed)
+        {
+            if (
+                adr.Title is not null
+                && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
+            )
+                offenders.Add(
+                    $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
+                        + $"document's title is '{adr.Title}'"
+                );
+
+            if (options.RequireReposKey)
+                CompareTags(offenders, adr, "repos", row.Repos);
+
+            CompareTags(offenders, adr, "areas", row.Areas);
+        }
+    }
+
     private static string Rule(string heading, string key) =>
         $"The '## {heading}' table is checked against every ADR's '{key}' frontmatter in both "
         + "directions: an ADR missing from its row fails, and a row naming an ADR that does not "
         + "declare that tag fails too.";
 
-    private static string? ReadIndex(GuardOptions options)
+    private static async Task<string?> ReadIndexAsync(GuardOptions options)
     {
         var path = AdrCorpus.IndexPath(options);
-        return File.Exists(path) ? File.ReadAllText(path).Replace("\r\n", "\n") : null;
+        if (!File.Exists(path))
+            return null;
+
+        var text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        return text.Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     private static Dictionary<string, HashSet<string>> ParseTagRows(string section)

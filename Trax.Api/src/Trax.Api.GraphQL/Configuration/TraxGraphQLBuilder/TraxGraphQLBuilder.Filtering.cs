@@ -29,7 +29,7 @@ public partial class TraxGraphQLBuilder
         // a module registers fixed operation names, and HotChocolate throws if the same
         // name is added twice.
         foreach (var module in filterBuilder.Build())
-            if (FilterModules.All(existing => existing.GetType() != module.GetType()))
+            if (FilterModules.TrueForAll(existing => existing.GetType() != module.GetType()))
                 FilterModules.Add(module);
 
         return this;

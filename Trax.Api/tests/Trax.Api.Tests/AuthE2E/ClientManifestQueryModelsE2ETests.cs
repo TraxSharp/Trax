@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
 
@@ -22,8 +23,8 @@ public class ClientManifestQueryModelsE2ETests
 
     private const string Database = "trax_api_client_manifest_models";
 
-    private IHost _host = null!;
-    private ClientManifest _manifest = null!;
+    private IHost? _host;
+    private ClientManifest? _manifest;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -34,7 +35,11 @@ public class ClientManifestQueryModelsE2ETests
         var path = Path.Combine(Path.GetTempPath(), $"trax-manifest-{Guid.NewGuid():N}.json");
         try
         {
-            await ClientManifestExport.WriteAsync(_host.Services, path, CancellationToken.None);
+            await ClientManifestExport.WriteAsync(
+                _host.NotNull().Services,
+                path,
+                CancellationToken.None
+            );
             _manifest = ClientManifest.Read(await File.ReadAllTextAsync(path));
         }
         finally
@@ -44,12 +49,16 @@ public class ClientManifestQueryModelsE2ETests
     }
 
     [OneTimeTearDown]
-    public void Down() => _host.Dispose();
+    public void Down() => _host?.Dispose();
 
     [Test]
     public void The_manifest_lists_each_query_model_with_its_arguments_and_answer()
     {
-        var books = _manifest.QueryModels.Single(q => q.Field == "bookRecords");
+        var books = _manifest
+            .NotNull()
+            .QueryModels.Single(q =>
+                string.Equals(q.Field, "bookRecords", StringComparison.Ordinal)
+            );
 
         books.Namespace.Should().Be("library");
         books.Answer.Should().EndWith("Connection", "the model is paged");
@@ -58,8 +67,10 @@ public class ClientManifestQueryModelsE2ETests
             .Should()
             .Contain(["first", "after", "where", "order"], "per " + Adr);
         _manifest
-            .QueryModels.Single(q => q.Field == "ownedBooks")
-            .Requires!.RoleSets.Should()
+            .NotNull()
+            .QueryModels.Single(q => string.Equals(q.Field, "ownedBooks", StringComparison.Ordinal))
+            .Requires.NotNull()
+            .RoleSets.Should()
             .ContainSingle()
             .Which.Should()
             .Equal("Admin");
@@ -69,12 +80,20 @@ public class ClientManifestQueryModelsE2ETests
     public void The_manifest_lists_the_types_a_query_model_reaches_and_marks_its_filter_inputs()
     {
         var where = _manifest
-            .QueryModels.Single(q => q.Field == "bookRecords")
-            .Arguments.Single(a => a.Name == "where")
+            .NotNull()
+            .QueryModels.Single(q =>
+                string.Equals(q.Field, "bookRecords", StringComparison.Ordinal)
+            )
+            .Arguments.Single(a => string.Equals(a.Name, "where", StringComparison.Ordinal))
             .Type;
 
-        _manifest.Types.Should().Contain($"input {where}").And.NotContain("type DiscoverQueries");
         _manifest
+            .NotNull()
+            .Types.Should()
+            .Contain($"input {where}")
+            .And.NotContain("type DiscoverQueries");
+        _manifest
+            .NotNull()
             .FilterInputs.Should()
             .Contain(where)
             .And.Contain(

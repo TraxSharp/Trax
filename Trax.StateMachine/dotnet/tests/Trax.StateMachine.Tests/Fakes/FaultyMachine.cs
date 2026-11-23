@@ -3,19 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Tests.Fakes;
 
-public enum FaultyState
-{
-    A,
-    B,
-}
-
-public enum FaultyTrigger
-{
-    Boom,
-    Bad,
-    Trap,
-}
-
 /// <summary>
 /// A machine whose handlers misbehave, to prove the engine failure modes that must stay total: a reducer
 /// that THROWS degrades to <c>INTERNAL_ERROR</c> (the totality backstop), a reducer that produces a

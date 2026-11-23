@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using CsCheck;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -66,78 +68,109 @@ public class ResumeCheckPropertyTests : TestSetup
                     ops,
                     new Services().With<ICheckpointStore>(store),
                     Rounds.All(1)
-                ).RunEither(new V0(1));
+                )
+                    .RunEither(new V0(1))
+                    .ConfigureAwait(false);
                 full.IsRight.Should().BeTrue("a generated chain is valid by construction");
 
                 var written = store.Taken.Select(t => t.NodeId).ToList();
                 var chain = new GeneratedTrain(ops, new Services(), Rounds.All(1)).DeclaredChain();
-                var points = ChainVerification.NodeOrder(chain).Where(Startable).Prepend(null);
+                var points = ChainVerification
+                    .NodeOrder(chain)
+                    .Where(Startable)
+                    .Prepend(element: null);
 
                 foreach (var point in points)
-                {
-                    var outcome = ChainVerification.CheckResume(
-                        chain,
-                        typeof(V0),
-                        typeof(Out),
-                        t => t.IsInterface,
-                        written,
-                        point
-                    );
-
-                    if (outcome.CanResume)
-                    {
-                        var rounds = Rounds.All(2);
-                        var resumed = await Resumed(ops, Plan(outcome, store), rounds);
-                        resumed
-                            .IsRight.Should()
-                            .BeTrue(
-                                $"the check allowed resuming at {point ?? "the latest checkpoint"}, "
-                                    + $"so no step from there lacks an input ({Adr})"
-                            );
-
-                        // After the latest checkpoint every value a later step reads is the
-                        // checkpoint's or recomputed from it, as in a full run in which the
-                        // same steps ran again. An operator's later point also skips the steps
-                        // between, which is what they asked.
-                        if (point is null)
-                        {
-                            var expected = await new GeneratedTrain(
-                                ops,
-                                new Services(),
-                                rounds.RanAgain()
-                            ).RunEither(new V0(1));
-
-                            resumed
-                                .ValueUnsafe()
-                                .Should()
-                                .Be(
-                                    expected.ValueUnsafe(),
-                                    "a resumed run equals a full run in which the steps it ran "
-                                        + $"again ran again ({Adr})"
-                                );
-                        }
-                    }
-                    else if (
-                        outcome.RefusalCode == ResumeRefusals.MissingInput
-                        && Forced(chain, store, written, point) is { } forcedPlan
-                    )
-                    {
-                        var forced = await Resumed(ops, forcedPlan, Rounds.All(2));
-                        forced
-                            .IsLeft.Should()
-                            .BeTrue(
-                                $"the check refused {point ?? "the latest checkpoint"} for a missing input, "
-                                    + $"so running from it fails: {outcome.Refusal} ({Adr})"
-                            );
-                    }
-                }
+                    await CheckAgreesAt(ops, store, chain, written, point).ConfigureAwait(false);
             },
             iter: 400,
-            print: ops => string.Join(" ", ops)
+            print: ops => string.Join(' ', ops)
         );
 
+    /// <summary>
+    /// Checks one resume point: where the check allows it, resuming there runs; where it refuses
+    /// it for a missing input, forcing the resume fails.
+    /// </summary>
+    private static async Task CheckAgreesAt(
+        Op[] ops,
+        Store store,
+        ChainRecorder chain,
+        List<string> written,
+        string? point
+    )
+    {
+        var outcome = ChainVerification.CheckResume(
+            chain,
+            typeof(V0),
+            typeof(Out),
+            t => t.IsInterface,
+            written,
+            point
+        );
+
+        if (outcome.CanResume)
+        {
+            await CheckResumedRun(ops, outcome, store, point).ConfigureAwait(false);
+        }
+        else if (
+            string.Equals(
+                outcome.RefusalCode,
+                ResumeRefusals.MissingInput,
+                StringComparison.Ordinal
+            ) && Forced(chain, store, written, point) is { } forcedPlan
+        )
+        {
+            var forced = await Resumed(ops, forcedPlan, Rounds.All(2)).ConfigureAwait(false);
+            forced
+                .IsLeft.Should()
+                .BeTrue(
+                    $"the check refused {point ?? "the latest checkpoint"} for a missing input, "
+                        + $"so running from it fails: {outcome.Refusal} ({Adr})"
+                );
+        }
+    }
+
+    private static async Task CheckResumedRun(
+        Op[] ops,
+        ResumeOutcome outcome,
+        Store store,
+        string? point
+    )
+    {
+        var rounds = Rounds.All(2);
+        var resumed = await Resumed(ops, Plan(outcome, store), rounds).ConfigureAwait(false);
+        resumed
+            .IsRight.Should()
+            .BeTrue(
+                $"the check allowed resuming at {point ?? "the latest checkpoint"}, "
+                    + $"so no step from there lacks an input ({Adr})"
+            );
+
+        // After the latest checkpoint every value a later step reads is the
+        // checkpoint's or recomputed from it, as in a full run in which the
+        // same steps ran again. An operator's later point also skips the steps
+        // between, which is what they asked.
+        if (point is null)
+        {
+            var expected = await new GeneratedTrain(ops, new Services(), rounds.RanAgain())
+                .RunEither(new V0(1))
+                .ConfigureAwait(false);
+
+            resumed
+                .ValueUnsafe()
+                .Should()
+                .Be(
+                    expected.ValueUnsafe(),
+                    "a resumed run equals a full run in which the steps it ran "
+                        + $"again ran again ({Adr})"
+                );
+        }
+    }
+
     private static bool Startable(string? id) =>
-        id is not null && !id.StartsWith("Seed<", StringComparison.Ordinal) && id != "Resolve#0";
+        id is not null
+        && !id.StartsWith("Seed<", StringComparison.Ordinal)
+        && !string.Equals(id, "Resolve#0", StringComparison.Ordinal);
 
     private static Task<Either<Exception, Out>> Resumed(Op[] ops, ResumePlan plan, Rounds rounds) =>
         new GeneratedTrain(ops, new Services().With<ICheckpointStore>(new Store()), rounds)
@@ -147,7 +180,7 @@ public class ResumeCheckPropertyTests : TestSetup
 
     private static ResumePlan Plan(ResumeOutcome outcome, Store store)
     {
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
         if (outcome.MainCheckpoint is { } main)
             restored[""] = store.Restored(main);
         foreach (var (branch, node) in outcome.BranchCheckpoints)
@@ -169,24 +202,26 @@ public class ResumeCheckPropertyTests : TestSetup
     )
     {
         var order = ChainVerification.NodeOrder(chain).ToList();
-        var mainWritten = written.Where(w => !w.Contains('/')).ToList();
+        var mainWritten = written.Where(w => !w.Contains('/', StringComparison.Ordinal)).ToList();
         var limit = point is null ? order.Count : order.IndexOf(point);
         var main = mainWritten.Where(w => order.IndexOf(w) < limit).MaxBy(order.IndexOf);
-        var restored = new Dictionary<string, RestoredCheckpoint>();
+        var restored = new Dictionary<string, RestoredCheckpoint>(StringComparer.Ordinal);
         if (main is not null)
             restored[""] = store.Restored(main);
 
         if (point is null)
-            return written.Any(w => w.Contains('/')) ? null : new ResumePlan(main, true, restored);
+            return written.Any(w => w.Contains('/', StringComparison.Ordinal))
+                ? null
+                : new ResumePlan(main, Inclusive: true, restored);
 
         foreach (
             var branch in written
                 .Where(w => w.StartsWith(point + "/", StringComparison.Ordinal))
-                .GroupBy(w => w[..w.LastIndexOf('/')])
+                .GroupBy(w => w[..w.LastIndexOf('/')], StringComparer.Ordinal)
         )
-            restored[branch.Key] = store.Restored(branch.MaxBy(order.IndexOf)!);
+            restored[branch.Key] = store.Restored(branch.MaxBy(order.IndexOf).NotNull());
 
-        return new ResumePlan(point, false, restored);
+        return new ResumePlan(point, Inclusive: false, restored);
     }
 
     public enum OpKind
@@ -229,7 +264,7 @@ public class ResumeCheckPropertyTests : TestSetup
                 A1 => "A1",
                 A2 => "A2",
                 B1 => "B1",
-                _ => $"V{index}",
+                _ => string.Create(CultureInfo.InvariantCulture, $"V{index}"),
             };
     }
 
@@ -335,24 +370,24 @@ public class ResumeCheckPropertyTests : TestSetup
         public override Task<TTo> Run(TFrom input) =>
             Task.FromResult(
                 (TTo)
-                    Activator.CreateInstance(
-                        typeof(TTo),
-                        input.Value * 31 + step + 1000 * rounds.Run(step)
-                    )!
+                    Activator
+                        .CreateInstance(
+                            typeof(TTo),
+                            input.Value * 31 + step + 1000 * rounds.Run(step)
+                        )
+                        .NotNull()
             );
     }
 
     private sealed class GeneratedTrain(Op[] ops, Services services, Rounds rounds) : Train<V0, Out>
     {
-        private static readonly MethodInfo MapStep = typeof(GeneratedTrain).GetMethod(
-            nameof(MapOf),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        private static readonly MethodInfo MapStep = typeof(GeneratedTrain)
+            .GetMethod(nameof(MapOf), BindingFlags.NonPublic | BindingFlags.Static)
+            .NotNull();
 
-        private static readonly MethodInfo CheckpointStep = typeof(GeneratedTrain).GetMethod(
-            nameof(CheckpointOf),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        private static readonly MethodInfo CheckpointStep = typeof(GeneratedTrain)
+            .GetMethod(nameof(CheckpointOf), BindingFlags.NonPublic | BindingFlags.Static)
+            .NotNull();
 
         protected override Task<Either<Exception, Out>> Junctions()
         {
@@ -399,11 +434,12 @@ public class ResumeCheckPropertyTests : TestSetup
             (MonadTask<V0, Out>)
                 MapStep
                     .MakeGenericMethod(Values[from], to < 0 ? typeof(Out) : Values[to])
-                    .Invoke(null, [chain, step, rounds])!;
+                    .Invoke(null, [chain, step, rounds])
+                    .NotNull();
 
         private static MonadTask<V0, Out> Checkpoint(MonadTask<V0, Out> chain, int state) =>
             (MonadTask<V0, Out>)
-                CheckpointStep.MakeGenericMethod(Values[state]).Invoke(null, [chain])!;
+                CheckpointStep.MakeGenericMethod(Values[state]).Invoke(null, [chain]).NotNull();
 
         private static MonadTask<V0, Out> MapOf<TFrom, TTo>(
             MonadTask<V0, Out> chain,

@@ -366,8 +366,8 @@ public static class CorpusFixture
             Field = field,
             Title = title,
             Abstract = @abstract,
-            Authors = authors,
-            References = references,
-            Concepts = concepts,
+            Authors = [.. authors],
+            References = [.. references],
+            Concepts = [.. concepts],
         };
 }

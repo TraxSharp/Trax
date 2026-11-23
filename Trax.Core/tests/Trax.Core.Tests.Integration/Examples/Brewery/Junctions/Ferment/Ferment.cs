@@ -9,12 +9,12 @@ public class Ferment : Junction<BrewingJug, Unit>, IFerment
 {
     public override async Task<Unit> Run(BrewingJug input)
     {
-        var cinnamonSticks = await AddCinnamonSticks(input);
+        var cinnamonSticks = await AddCinnamonSticks(input).ConfigureAwait(false);
 
         if (cinnamonSticks.IsLeft)
             throw cinnamonSticks.Swap().ValueUnsafe();
 
-        var yeast = await AddYeast(input);
+        var yeast = await AddYeast(input).ConfigureAwait(false);
 
         if (yeast.IsLeft)
             throw yeast.Swap().ValueUnsafe();
@@ -24,14 +24,14 @@ public class Ferment : Junction<BrewingJug, Unit>, IFerment
         return Unit.Default;
     }
 
-    public async Task<Either<TrainException, Unit>> AddCinnamonSticks(BrewingJug jug)
+    public static async Task<Either<TrainException, Unit>> AddCinnamonSticks(BrewingJug jug)
     {
         jug.HasCinnamonSticks = jug.Ingredients.Cinnamon > 0;
 
         return Unit.Default;
     }
 
-    public async Task<Either<TrainException, Unit>> AddYeast(BrewingJug jug)
+    public static async Task<Either<TrainException, Unit>> AddYeast(BrewingJug jug)
     {
         if (jug.Ingredients.Yeast <= 0)
             return new TrainException("We need yeast to make Cider!");

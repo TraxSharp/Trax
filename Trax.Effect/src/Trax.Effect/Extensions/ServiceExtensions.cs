@@ -95,20 +95,7 @@ public static class ServiceExtensions
 
         configure(builder);
 
-        // Build and set the process-wide host identity
-        var hostInfo = Models.Host.TraxHostInfo.AutoDetect();
-        if (builder.HostEnvironmentOverride != null)
-            hostInfo = hostInfo with { HostEnvironment = builder.HostEnvironmentOverride };
-        if (builder.HostInstanceIdOverride != null)
-            hostInfo = hostInfo with { HostInstanceId = builder.HostInstanceIdOverride };
-        if (builder.HostLabels.Count > 0)
-        {
-            var mergedLabels = new Dictionary<string, string>(hostInfo.Labels);
-            foreach (var (key, value) in builder.HostLabels)
-                mergedLabels[key] = value;
-            hostInfo = hostInfo with { Labels = mergedLabels };
-        }
-        Models.Host.TraxHostInfo.Current = hostInfo;
+        SetHostIdentity(builder);
 
         // Use effect configuration from AddEffects(), or defaults if not called
         var effectConfig =
@@ -158,6 +145,27 @@ public static class ServiceExtensions
             .AddTransient<IEffectRunner, EffectRunner>()
             .AddTransient<IJunctionEffectRunner, JunctionEffectRunner>()
             .AddTransient<ILifecycleHookRunner, LifecycleHookRunner>();
+    }
+
+    // Build and set the process-wide host identity
+    private static void SetHostIdentity(TraxBuilder builder)
+    {
+        var hostInfo = Models.Host.TraxHostInfo.AutoDetect();
+        if (builder.HostEnvironmentOverride != null)
+            hostInfo = hostInfo with { HostEnvironment = builder.HostEnvironmentOverride };
+        if (builder.HostInstanceIdOverride != null)
+            hostInfo = hostInfo with { HostInstanceId = builder.HostInstanceIdOverride };
+        if (builder.HostLabels.Count > 0)
+        {
+            var mergedLabels = new Dictionary<string, string>(
+                hostInfo.Labels,
+                StringComparer.Ordinal
+            );
+            foreach (var (key, value) in builder.HostLabels)
+                mergedLabels[key] = value;
+            hostInfo = hostInfo with { Labels = mergedLabels };
+        }
+        Models.Host.TraxHostInfo.Current = hostInfo;
     }
 
     /// <summary>
@@ -271,7 +279,7 @@ public static class ServiceExtensions
     /// <typeparam name="TEffectProviderFactory">The concrete effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
         this TraxEffectBuilder builder,
@@ -301,7 +309,7 @@ public static class ServiceExtensions
     /// </summary>
     /// <typeparam name="TEffectProviderFactory">The concrete effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
         this TraxEffectBuilder builder,
@@ -327,7 +335,7 @@ public static class ServiceExtensions
     /// <typeparam name="TIEffectProviderFactory">The effect provider factory interface.</typeparam>
     /// <typeparam name="TEffectProviderFactory">The concrete effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
         this TraxEffectBuilder builder,
@@ -357,7 +365,7 @@ public static class ServiceExtensions
     /// <typeparam name="TEffectProviderFactory">The concrete effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
         this TraxEffectBuilder builder,
@@ -385,7 +393,7 @@ public static class ServiceExtensions
     /// <typeparam name="TJunctionEffectProviderFactory">The concrete junction effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddJunctionEffect<
         TIJunctionEffectProviderFactory,
@@ -421,7 +429,7 @@ public static class ServiceExtensions
     /// </summary>
     /// <typeparam name="TJunctionEffectProviderFactory">The concrete junction effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
         this TraxEffectBuilder builder,
@@ -450,7 +458,7 @@ public static class ServiceExtensions
     /// <typeparam name="TJunctionEffectProviderFactory">The concrete junction effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
-    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
         this TraxEffectBuilder builder,
@@ -489,7 +497,7 @@ public static class ServiceExtensions
     /// Either a concrete <see cref="ITrainLifecycleHook"/> type or an <see cref="ITrainLifecycleHookFactory"/> type.
     /// </typeparam>
     /// <param name="builder">The effect builder.</param>
-    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddLifecycleHook<T>(
         this TraxEffectBuilder builder,
@@ -538,7 +546,7 @@ public static class ServiceExtensions
     /// <typeparam name="TLifecycleHookFactory">The concrete lifecycle hook factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
-    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddLifecycleHook<TILifecycleHookFactory, TLifecycleHookFactory>(
         this TraxEffectBuilder builder,
@@ -569,7 +577,7 @@ public static class ServiceExtensions
     /// <typeparam name="TLifecycleHookFactory">The concrete lifecycle hook factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
-    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <see langword="true"/>.</param>
     /// <returns>The effect builder for chaining.</returns>
     public static TraxEffectBuilder AddLifecycleHook<TLifecycleHookFactory>(
         this TraxEffectBuilder builder,
