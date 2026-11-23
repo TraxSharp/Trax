@@ -543,6 +543,21 @@ public class AwsStackTemplateTests
     }
 
     [Test]
+    public void An_environment_named_base_is_refused_so_no_runtime_is_named_like_a_foundation()
+    {
+        // App "orders-prod" with environment "base" would run as orders-prod-base, the foundation of app "orders"
+        // in environment "prod".
+        var file = File_();
+        file.Environments["base"] = file.Environments["production"];
+
+        var act = () => file.Environment("base");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*'base'*another app's foundation*");
+    }
+
+    [Test]
     public void An_environment_name_of_letters_and_digits_is_accepted()
     {
         var file = File_();

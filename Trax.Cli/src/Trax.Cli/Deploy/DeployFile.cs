@@ -70,6 +70,13 @@ internal sealed partial class DeployFile
                         + "a dash here would give two apps the same stack."
                 )
             );
+        if (string.Equals(name, FoundationSuffix, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                Problem(
+                    $"'{FoundationSuffix}' is taken. Its stack would be <app>-{FoundationSuffix}, which is the name of "
+                        + "another app's foundation (app 'orders-prod' would collide with app 'orders' in 'prod')."
+                )
+            );
         if (env.Profile is not (DeployEnvironment.Production or DeployEnvironment.Try))
             throw new InvalidOperationException(
                 Problem($"profile '{env.Profile}' is not production or try.")
@@ -166,7 +173,11 @@ internal sealed partial class DeployFile
     /// The stack holding the environment's network, database, secrets and sign-in, beneath its runtime:
     /// <c>&lt;app&gt;-&lt;environment&gt;-base</c>.
     /// </summary>
-    public string FoundationStackName(string environment) => $"{StackName(environment)}-base";
+    public string FoundationStackName(string environment) =>
+        $"{StackName(environment)}-{FoundationSuffix}";
+
+    // An environment may not take this name, or its runtime would be named like another app's foundation.
+    private const string FoundationSuffix = "base";
 
     /// <summary>How many copies of <paramref name="service"/> run in <paramref name="environment"/>.</summary>
     public int Count(DeployEnvironment environment, string service) =>
