@@ -740,7 +740,9 @@ and so is a `compose.yaml` trax did not write.
 foundation `<app>-<name>-base` (the network, security groups, the database and its secret, the Cognito pool) and the
 runtime `<app>-<name>` on top of it (the load balancer, CloudFront in `try`, the ECS cluster, roles, tasks and
 services). The runtime reads what the foundation creates through parameters trax fills from the foundation's
-outputs, not CloudFormation exports, so the foundation can change its database or network under a running app. An
+outputs, not CloudFormation exports, so the foundation can change its database under a running app. A change that
+would replace the network or its security groups under a running app (a different `network`, say) is refused before
+anything changes: destroy the environment and deploy again. An
 environment's name is lower-case letters and digits only, and never `base`, so no two apps share a stack name; trax also refuses a
 stack whose `trax:app` tag names another app, or that has none, and one deployed before the split into two stacks
 (destroy it and deploy again: the new database starts empty, production's final snapshot of the old one is restored

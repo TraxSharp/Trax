@@ -28,13 +28,15 @@ internal interface IAwsDeployClient
     /// <summary>
     /// Creates or updates <paramref name="stack"/> through a change set and waits until it settles. A parameter whose
     /// value is null keeps its previous value; a null <paramref name="template"/> keeps the previous template.
-    /// Returns false when there was nothing to change. Throws naming the resources that failed.
+    /// Refuses, before changing anything, a change set that would replace one of <paramref name="unreplaceable"/>
+    /// (logical ids). Returns false when there was nothing to change. Throws naming the resources that failed.
     /// </summary>
     Task<bool> DeployAsync(
         string stack,
         string? template,
         IReadOnlyDictionary<string, string?> parameters,
         IReadOnlyDictionary<string, string> tags,
+        IReadOnlySet<string> unreplaceable,
         Action<string> progress,
         CancellationToken ct
     );

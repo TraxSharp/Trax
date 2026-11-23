@@ -334,6 +334,64 @@ public class AwsDeployerTests
         aws.Deploys[1]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
     }
 
+    [Test]
+    public async Task A_foundation_under_a_running_runtime_may_not_replace_its_network()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
+
+        await DeployAsync(deployer);
+
+        aws.Unreplaceable[0]
+            .Should()
+            .Contain(["Vpc", "DatabaseClientSecurityGroup", "DatabaseSecurityGroup"])
+            .And.NotContain("Database", "the database is not a network resource the tasks wear");
+        aws.Unreplaceable[1].Should().BeEmpty("the runtime replaces what it likes");
+    }
+
+    [Test]
+    public async Task A_foundation_with_no_runtime_on_it_may_replace_anything()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+
+        await DeployAsync(deployer);
+
+        aws.Unreplaceable[0].Should().BeEmpty();
+    }
+
+    [Test]
+    public void A_change_set_that_replaces_a_resource_it_must_not_is_named()
+    {
+        static Amazon.CloudFormation.Model.Change Change(string id, string replacement) =>
+            new()
+            {
+                ResourceChange = new Amazon.CloudFormation.Model.ResourceChange
+                {
+                    LogicalResourceId = id,
+                    Replacement = replacement,
+                },
+            };
+
+        AwsDeployClient
+            .Replaced(
+                [
+                    Change("Vpc", "True"),
+                    Change("PublicSubnetA", "Conditional"),
+                    Change("DatabaseClientSecurityGroup", "False"),
+                    Change("Database", "True"),
+                ],
+                new HashSet<string>(
+                    ["Vpc", "PublicSubnetA", "DatabaseClientSecurityGroup"],
+                    StringComparer.Ordinal
+                )
+            )
+            .Should()
+            .Equal("Vpc", "PublicSubnetA");
+    }
+
     [TestCase(null, "CREATE")]
     [TestCase("REVIEW_IN_PROGRESS", "CREATE")]
     [TestCase("UPDATE_COMPLETE", "UPDATE")]
@@ -999,6 +1057,7 @@ public class AwsDeployerTests
         public List<string> Stacks { get; } = [];
         public List<IReadOnlyDictionary<string, string?>> Deploys { get; } = [];
         public List<string?> Templates { get; } = [];
+        public List<IReadOnlySet<string>> Unreplaceable { get; } = [];
         public HashSet<string> Secrets { get; } = [];
         public Dictionary<string, string> Parameters { get; } = new(StringComparer.Ordinal);
         public List<AwsNetworkInterface> NetworkInterfaces { get; } = [];
@@ -1133,10 +1192,12 @@ public class AwsDeployerTests
             string? template,
             IReadOnlyDictionary<string, string?> parameters,
             IReadOnlyDictionary<string, string> tags,
+            IReadOnlySet<string> unreplaceable,
             Action<string> progress,
             CancellationToken ct
         )
         {
+            Unreplaceable.Add(unreplaceable);
             Calls.Add(Call("deploy", stack));
             Stacks.Add(stack);
             Deploys.Add(parameters);

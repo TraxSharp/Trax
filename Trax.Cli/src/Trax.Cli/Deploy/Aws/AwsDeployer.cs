@@ -71,6 +71,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 environment,
                 foundation,
                 foundationTemplate,
+                existing is null ? AnyReplaced : NetworkResources(templates.Foundation),
                 templates.Runtime,
                 ct
             )
@@ -90,18 +91,40 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         }
         var tags = StackTags(file, environment, RuntimePart);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
-        await aws.DeployAsync(stack, runtimeTemplate, first, tags, say, ct).ConfigureAwait(false);
+        await aws.DeployAsync(stack, runtimeTemplate, first, tags, AnyReplaced, say, ct)
+            .ConfigureAwait(false);
 
         await MigrateAsync(stack, environment, ct).ConfigureAwait(false);
 
         var second = SecondPassParameters(file, env, migrator, image, given);
         say($"Rolling the services onto {tag}...");
-        await aws.DeployAsync(stack, runtimeTemplate, second, tags, say, ct).ConfigureAwait(false);
+        await aws.DeployAsync(stack, runtimeTemplate, second, tags, AnyReplaced, say, ct)
+            .ConfigureAwait(false);
 
         return (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
             .NotNull()
             .Outputs.GetValueOrDefault("Url");
     }
+
+    private static readonly IReadOnlySet<string> AnyReplaced = new HashSet<string>(
+        StringComparer.Ordinal
+    );
+
+    // What the runtime's tasks run in and wear. A foundation update must not replace these under a running runtime:
+    // the old ones cannot be deleted while tasks hold them, CloudFormation forgets them, and destroy later fails.
+    private static HashSet<string> NetworkResources(JsonObject foundation) =>
+        [
+            .. foundation["Resources"]
+                .NotNull()
+                .AsObject()
+                .Where(r =>
+                    r.Value?["Type"]?.GetValue<string>()
+                        is "AWS::EC2::VPC"
+                            or "AWS::EC2::Subnet"
+                            or "AWS::EC2::SecurityGroup"
+                )
+                .Select(r => r.Key),
+        ];
 
     // The foundation first: the runtime reads what it outputs. Returns the outputs the runtime takes as parameters.
     private async Task<Dictionary<string, string?>> DeployFoundationAsync(
@@ -109,6 +132,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         string environment,
         AwsStackState? foundation,
         string template,
+        IReadOnlySet<string> unreplaceable,
         JsonObject runtime,
         CancellationToken ct
     )
@@ -130,6 +154,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 template,
                 under,
                 StackTags(file, environment, FoundationPart),
+                unreplaceable,
                 say,
                 ct
             )
@@ -422,7 +447,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                         : (string?)null,
                 StringComparer.Ordinal
             );
-            await aws.DeployAsync(stack, template: null, keep, existing.Tags, say, ct)
+            await aws.DeployAsync(stack, template: null, keep, existing.Tags, AnyReplaced, say, ct)
                 .ConfigureAwait(false);
         }
         say($"Deleting {stack}...");

@@ -847,6 +847,28 @@ public class AwsStackTemplateTests
     }
 
     [Test]
+    public void The_database_client_group_is_described_the_same_whichever_database_it_reaches()
+    {
+        // GroupDescription forces a replacement, and running tasks wear this group: switching an environment to an
+        // existing database, or back, must update the group in place.
+        var existing = File_();
+        existing.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        string Description(JsonObject foundation) =>
+            foundation["Resources"]
+                .NotNull()["DatabaseClientSecurityGroup"]
+                .NotNull()["Properties"]
+                .NotNull()["GroupDescription"]
+                .NotNull()
+                .ToJsonString();
+
+        Description(Templates(existing).Foundation)
+            .Should()
+            .Be(Description(Templates().Foundation));
+    }
+
+    [Test]
     public void The_migrate_task_wears_the_database_client_group()
     {
         OutputOf(Templates().Runtime, "TaskSecurityGroups")

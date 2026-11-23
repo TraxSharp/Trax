@@ -195,7 +195,7 @@ internal static class AwsStack
             resources["DatabaseClientSecurityGroup"] = SecurityGroup(
                 stack,
                 vpc,
-                "Clients of the existing Postgres database",
+                ClientsOfTheDatabase,
                 [
                     Rule(
                         "tcp",
@@ -486,13 +486,17 @@ internal static class AwsStack
             ]
         );
 
+    // One description whichever database the clients reach: a new description replaces the group, and running tasks
+    // wear it.
+    private const string ClientsOfTheDatabase = "Clients of the Postgres database";
+
     // The database's group admits its clients alone and sends nothing out; the clients' group reaches it alone.
     private static void AddDatabaseSecurityGroups(JsonObject resources, string stack, JsonNode vpc)
     {
         resources["DatabaseClientSecurityGroup"] = SecurityGroup(
             stack,
             vpc,
-            "Clients of the Postgres database",
+            ClientsOfTheDatabase,
             [
                 Rule(
                     "-1",

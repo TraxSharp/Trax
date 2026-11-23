@@ -206,6 +206,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         string? template,
         IReadOnlyDictionary<string, string?> parameters,
         IReadOnlyDictionary<string, string> tags,
+        IReadOnlySet<string> unreplaceable,
         Action<string> progress,
         CancellationToken ct
     )
@@ -226,6 +227,20 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
             if (described is null)
                 return false;
             ReportChanges(described, progress);
+            var replaced = Replaced(described.Changes ?? [], unreplaceable);
+            if (replaced.Count > 0)
+            {
+                await cfn.DeleteChangeSetAsync(
+                        new DeleteChangeSetRequest { ChangeSetName = changeSet.Id },
+                        ct
+                    )
+                    .ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    $"{stack} would replace {string.Join(", ", replaced)}, which running services still use, so "
+                        + "the old ones could not be deleted and would be left behind. Nothing was changed. To move "
+                        + "the environment to another network, destroy it and deploy again."
+                );
+            }
 
             await cfn.ExecuteChangeSetAsync(
                     new ExecuteChangeSetRequest { ChangeSetName = changeSet.Id },
@@ -446,6 +461,24 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
             );
         }
     }
+
+    /// <summary>
+    /// The resources of <paramref name="keep"/> that <paramref name="changes"/> replace, or may replace.
+    /// </summary>
+    internal static IReadOnlyList<string> Replaced(
+        IEnumerable<Change> changes,
+        IReadOnlySet<string> keep
+    ) =>
+        [
+            .. changes
+                .Select(c => c.ResourceChange)
+                .Where(r =>
+                    r is not null
+                    && keep.Contains(r.LogicalResourceId)
+                    && r.Replacement?.Value is "True" or "Conditional"
+                )
+                .Select(r => r.LogicalResourceId),
+        ];
 
     private static void ReportChanges(DescribeChangeSetResponse described, Action<string> progress)
     {
