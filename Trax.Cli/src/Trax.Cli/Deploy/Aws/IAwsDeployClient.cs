@@ -28,13 +28,15 @@ internal interface IAwsDeployClient
     /// <summary>
     /// Creates or updates <paramref name="stack"/> through a change set and waits until it settles. A parameter whose
     /// value is null keeps its previous value; a null <paramref name="template"/> keeps the previous template.
-    /// Returns false when there was nothing to change. Throws naming the resources that failed.
+    /// Refuses, before changing anything, a change set that would replace one of <paramref name="unreplaceable"/>
+    /// (logical ids). Returns false when there was nothing to change. Throws naming the resources that failed.
     /// </summary>
     Task<bool> DeployAsync(
         string stack,
         string? template,
         IReadOnlyDictionary<string, string?> parameters,
         IReadOnlyDictionary<string, string> tags,
+        IReadOnlySet<string> unreplaceable,
         Action<string> progress,
         CancellationToken ct
     );
@@ -81,6 +83,12 @@ internal interface IAwsDeployClient
 
     /// <summary>Turns off the user pool's deletion protection and deletes it; nothing when it does not exist.</summary>
     Task DeleteUserPoolAsync(string userPoolId, CancellationToken ct);
+
+    /// <summary>The network interfaces in <paramref name="vpcId"/>, whoever created them.</summary>
+    Task<IReadOnlyList<AwsNetworkInterface>> NetworkInterfacesAsync(
+        string vpcId,
+        CancellationToken ct
+    );
 
     Task<IReadOnlyList<AwsServiceState>> DescribeServicesAsync(
         string cluster,

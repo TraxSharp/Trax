@@ -5,6 +5,6 @@ internal sealed record AwsTaskRequest(
     string TaskDefinition,
     string Container,
     IReadOnlyList<string> Subnets,
-    string SecurityGroup,
+    IReadOnlyList<string> SecurityGroups,
     bool AssignPublicIp
 );

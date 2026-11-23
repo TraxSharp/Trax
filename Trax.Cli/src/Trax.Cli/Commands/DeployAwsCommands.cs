@@ -58,7 +58,8 @@ internal static class DeployAwsCommands
         var file = FileOption();
         var command = new Command(
             "plan",
-            "Write the environment's CloudFormation template under .trax/deploy/aws/ and say what it creates."
+            "Write the environment's two CloudFormation templates, the foundation and the runtime, under "
+                + ".trax/deploy/aws/ and say what they create."
         )
         {
             env,
@@ -84,7 +85,7 @@ internal static class DeployAwsCommands
         var file = FileOption();
         var command = new Command(
             "status",
-            "Show the environment's stack, its address and each service."
+            "Show the environment's two stacks, its address and each service."
         )
         {
             env,
@@ -155,7 +156,10 @@ internal static class DeployAwsCommands
         {
             Description = "Do not ask for the stack's name to be typed back.",
         };
-        var command = new Command("destroy", "Delete the environment's stack.")
+        var command = new Command(
+            "destroy",
+            "Delete the environment's two stacks, the runtime and then the foundation."
+        )
         {
             env,
             file,
@@ -287,7 +291,7 @@ internal static class DeployAwsCommands
                     var exports = await DeployCommand
                         .ExportAsync(file, filePath, exporter, stdout)
                         .ConfigureAwait(false);
-                    var template = await new AwsDeployer(
+                    var templates = await new AwsDeployer(
                         Client(env.Region),
                         Images,
                         stdout.WriteLine
@@ -301,11 +305,20 @@ internal static class DeployAwsCommands
                         "aws"
                     );
                     Directory.CreateDirectory(dir);
-                    var path = Path.Combine(dir, $"{file.StackName(environment)}.template.json");
-                    await File.WriteAllTextAsync(path, AwsStack.Indented(template), ct)
-                        .ConfigureAwait(false);
-                    await stdout.WriteLineAsync($"Wrote {path}").ConfigureAwait(false);
-                    foreach (var line in AwsPlanSummary.Lines(file, environment, template))
+                    foreach (
+                        var (stack, template) in new[]
+                        {
+                            (file.FoundationStackName(environment), templates.Foundation),
+                            (file.StackName(environment), templates.Runtime),
+                        }
+                    )
+                    {
+                        var path = Path.Combine(dir, $"{stack}.template.json");
+                        await File.WriteAllTextAsync(path, AwsStack.Indented(template), ct)
+                            .ConfigureAwait(false);
+                        await stdout.WriteLineAsync($"Wrote {path}").ConfigureAwait(false);
+                    }
+                    foreach (var line in AwsPlanSummary.Lines(file, environment, templates))
                         await stdout.WriteLineAsync(line).ConfigureAwait(false);
                 }
             )
@@ -326,6 +339,13 @@ internal static class DeployAwsCommands
                     var env = file.Environment(environment);
                     var aws = Client(env.Region);
                     var stack = file.StackName(environment);
+                    await FoundationStatusAsync(
+                            aws,
+                            file.FoundationStackName(environment),
+                            stdout,
+                            ct
+                        )
+                        .ConfigureAwait(false);
                     var state = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
                     if (state is null)
                     {
@@ -369,6 +389,19 @@ internal static class DeployAwsCommands
                 }
             )
             .ConfigureAwait(false);
+
+    // The foundation's status, when it exists: the runtime's line says when nothing is deployed.
+    private static async Task FoundationStatusAsync(
+        IAwsDeployClient aws,
+        string stack,
+        TextWriter stdout,
+        CancellationToken ct
+    )
+    {
+        var foundation = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        if (foundation is not null)
+            await stdout.WriteLineAsync($"{stack}: {foundation.Status}").ConfigureAwait(false);
+    }
 
     internal static async Task<int> LogsAsync(
         string filePath,
@@ -420,7 +453,7 @@ internal static class DeployAwsCommands
             DeployEnvironment.Production,
             StringComparison.Ordinal
         );
-        var gone = new List<string> { stack };
+        var gone = new List<string> { $"{stack} and {file.FoundationStackName(environment)}" };
         if (cognito && (deleteData || !production))
             gone.Add("its user pool with every user in it");
         if (deleteData)

@@ -7,15 +7,22 @@ using Trax.Effect.Configuration.Deploy;
 namespace Trax.Cli.Deploy.Aws;
 
 /// <summary>
-/// Puts an environment on AWS: checks its secrets, pushes the images, then changes the stack in two passes around
-/// the migration, so no service of the new version starts before its schema exists.
+/// Puts an environment on AWS: checks its secrets, pushes the images, brings the foundation (network, database,
+/// secrets, sign-in) up to date, then changes the ECS runtime in two passes around the migration, so no service of
+/// the new version starts before its schema exists.
 /// </summary>
 internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, Action<string> say)
 {
     /// <summary>CloudFormation's limit on a template sent inline.</summary>
     public const int InlineTemplateLimit = 51_200;
 
-    public async Task<JsonObject> PlanAsync(
+    /// <summary>The tag naming which of an environment's two stacks a stack is.</summary>
+    public const string PartTag = "trax:part";
+
+    public const string FoundationPart = "foundation";
+    public const string RuntimePart = "runtime";
+
+    public async Task<AwsTemplates> PlanAsync(
         DeployFile file,
         string environment,
         IReadOnlyDictionary<string, DeployManifest> exports,
@@ -41,60 +48,180 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     {
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
-        var tags = Tags(file, environment);
-        var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
-        // A first deploy that stopped before its change set ran left an empty stack in review: create it again.
-        if (existing is { Created: false })
-            existing = null;
-        if (existing is not null)
-            CheckOwner(existing, file, stack);
+        var baseStack = file.FoundationStackName(environment);
+        var foundation = await ExistingAsync(baseStack, file, FoundationPart, ct)
+            .ConfigureAwait(false);
+        var existing = await ExistingAsync(stack, file, RuntimePart, ct).ConfigureAwait(false);
 
         await CheckSecretsAsync(file, stack, environment, ct).ConfigureAwait(false);
 
+        CheckSettled(foundation, baseStack, environment);
         CheckSettled(existing, stack, environment);
 
-        var template = AwsStack.Compact(
-            await PlanAsync(file, environment, exports, ct).ConfigureAwait(false)
-        );
-        if (template.Length > InlineTemplateLimit)
-            throw new InvalidOperationException(
-                $"The template is {template.Length} bytes, over CloudFormation's {InlineTemplateLimit}-byte limit "
-                    + "for a template sent inline."
-            );
+        var templates = await PlanAsync(file, environment, exports, ct).ConfigureAwait(false);
+        var foundationTemplate = Inline(baseStack, templates.Foundation);
+        var runtimeTemplate = Inline(stack, templates.Runtime);
 
-        var image = await PushImagesAsync(file, filePath, stack, tag, tags, ct)
+        var image = await PushImagesAsync(file, filePath, stack, tag, Tags(file, environment), ct)
             .ConfigureAwait(false);
         var migrator = image[AwsStack.Migrator(file, exports)];
 
-        // Pass 1: the infrastructure, and the migrate task on the new image. A service the stack does not run yet
-        // (every service of a new stack) waits at zero on the new image; one it runs keeps its image and count.
-        var first = new Dictionary<string, string?>(StringComparer.Ordinal)
+        var given = await DeployFoundationAsync(
+                file,
+                environment,
+                foundation,
+                foundationTemplate,
+                existing is null ? AnyReplaced : NetworkResources(templates.Foundation),
+                templates.Runtime,
+                ct
+            )
+            .ConfigureAwait(false);
+
+        // Pass 1: the runtime, and the migrate task on the new image. A service the stack does not run yet (every
+        // service of a new stack) waits at zero on the new image; one it runs keeps its image and count.
+        var first = new Dictionary<string, string?>(given, StringComparer.Ordinal)
         {
             [AwsStack.MigrateImageParameter] = migrator,
         };
         foreach (var name in file.Services.Keys)
         {
-            var (count, current) = Holding(existing, file, env, name);
+            var (count, current) = Holding(existing, name);
             first[AwsStack.CountParameter(name)] = count;
             first[AwsStack.ImageParameter(name)] = current ? null : image[name];
         }
-        if (existing?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
-            first[AwsStack.ProtectParameter] = "true";
-        if (KeepsItsUserPool(env))
-            first[AwsStack.UserPoolParameter] = await UserPoolAsync(stack, existing, ct)
-                .ConfigureAwait(false);
+        var tags = StackTags(file, environment, RuntimePart);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
-        await aws.DeployAsync(stack, template, first, tags, say, ct).ConfigureAwait(false);
+        await aws.DeployAsync(stack, runtimeTemplate, first, tags, AnyReplaced, say, ct)
+            .ConfigureAwait(false);
 
         await MigrateAsync(stack, environment, ct).ConfigureAwait(false);
 
-        var second = SecondPassParameters(file, env, migrator, image, first);
+        var second = SecondPassParameters(file, env, migrator, image, given);
         say($"Rolling the services onto {tag}...");
-        await aws.DeployAsync(stack, template, second, tags, say, ct).ConfigureAwait(false);
+        await aws.DeployAsync(stack, runtimeTemplate, second, tags, AnyReplaced, say, ct)
+            .ConfigureAwait(false);
 
         return (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
             .NotNull()
             .Outputs.GetValueOrDefault("Url");
+    }
+
+    private static readonly IReadOnlySet<string> AnyReplaced = new HashSet<string>(
+        StringComparer.Ordinal
+    );
+
+    // What the runtime's tasks run in and wear. A foundation update must not replace these under a running runtime:
+    // the old ones cannot be deleted while tasks hold them, CloudFormation forgets them, and destroy later fails.
+    private static HashSet<string> NetworkResources(JsonObject foundation) =>
+        [
+            .. foundation["Resources"]
+                .NotNull()
+                .AsObject()
+                .Where(r =>
+                    r.Value?["Type"]?.GetValue<string>()
+                        is "AWS::EC2::VPC"
+                            or "AWS::EC2::Subnet"
+                            or "AWS::EC2::SecurityGroup"
+                )
+                .Select(r => r.Key),
+        ];
+
+    // The foundation first: the runtime reads what it outputs. Returns the outputs the runtime takes as parameters.
+    private async Task<Dictionary<string, string?>> DeployFoundationAsync(
+        DeployFile file,
+        string environment,
+        AwsStackState? foundation,
+        string template,
+        IReadOnlySet<string> unreplaceable,
+        JsonObject runtime,
+        CancellationToken ct
+    )
+    {
+        var baseStack = file.FoundationStackName(environment);
+        var under = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (foundation?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
+            under[AwsStack.ProtectParameter] = "true";
+        if (KeepsItsUserPool(file.Environment(environment)))
+            under[AwsStack.UserPoolParameter] = await UserPoolAsync(
+                    file.StackName(environment),
+                    foundation,
+                    ct
+                )
+                .ConfigureAwait(false);
+        say(foundation is null ? $"Creating {baseStack}..." : $"Updating {baseStack}...");
+        await aws.DeployAsync(
+                baseStack,
+                template,
+                under,
+                StackTags(file, environment, FoundationPart),
+                unreplaceable,
+                say,
+                ct
+            )
+            .ConfigureAwait(false);
+        var outputs = (await aws.DescribeStackAsync(baseStack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs;
+        return FoundationValues(outputs, runtime);
+    }
+
+    /// <summary>
+    /// The stack as it stands, checked to be this app's and the expected part; null when there is none, or when a
+    /// first deploy's change set never ran and left it empty in review (it is created again).
+    /// </summary>
+    private async Task<AwsStackState?> ExistingAsync(
+        string stack,
+        DeployFile file,
+        string part,
+        CancellationToken ct
+    )
+    {
+        var state = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        if (state is null or { Created: false })
+            return null;
+        CheckOwner(state, file, stack);
+        var found = state.Tags.GetValueOrDefault(PartTag);
+        if (string.Equals(found, part, StringComparison.Ordinal))
+            return state;
+        throw new InvalidOperationException(
+            found is null
+                ? $"{stack} was deployed as one stack by an earlier trax, which now keeps the network, database and "
+                    + "sign-in in a stack of their own. Run 'trax deploy destroy' for this environment, then deploy "
+                    + "again. The new database starts empty: production keeps a final snapshot of the old one, which "
+                    + "you restore by hand, and its user pool; a try environment loses its data and its users."
+                : $"{stack} is a {found} stack where trax expects the {part}. Rename this app or its environment."
+        );
+    }
+
+    /// <summary>The template as sent inline, refused when it is over CloudFormation's limit.</summary>
+    private static string Inline(string stack, JsonObject template)
+    {
+        var text = AwsStack.Compact(template);
+        if (text.Length > InlineTemplateLimit)
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The template of {stack} is {text.Length} bytes, over CloudFormation's {InlineTemplateLimit}-byte "
+                ) + "limit for a template sent inline."
+            );
+        return text;
+    }
+
+    /// <summary>The foundation's outputs the runtime template declares as parameters.</summary>
+    private static Dictionary<string, string?> FoundationValues(
+        IReadOnlyDictionary<string, string> outputs,
+        JsonObject runtime
+    )
+    {
+        var declared = (JsonObject)runtime["Parameters"].NotNull();
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var name in AwsStack.FoundationValues.Where(declared.ContainsKey))
+            values[name] = outputs.TryGetValue(name, out var value)
+                ? value
+                : throw new InvalidOperationException(
+                    $"The foundation stack has no output {name}, which the services need. Deploy again."
+                );
+        return values;
     }
 
     // Nothing is created until every secret the app needs has a value.
@@ -171,7 +298,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     outputs["MigrateTaskDefinition"],
                     AwsStack.MigrateContainer,
                     outputs["ServiceSubnets"].Split(','),
-                    outputs["TaskSecurityGroup"],
+                    outputs["TaskSecurityGroups"].Split(','),
                     string.Equals(outputs["AssignPublicIp"], "ENABLED", StringComparison.Ordinal)
                 ),
                 say,
@@ -194,10 +321,10 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         DeployEnvironment env,
         string migrator,
         Dictionary<string, string> image,
-        Dictionary<string, string?> first
+        Dictionary<string, string?> given
     )
     {
-        var second = new Dictionary<string, string?>(StringComparer.Ordinal)
+        var second = new Dictionary<string, string?>(given, StringComparer.Ordinal)
         {
             [AwsStack.MigrateImageParameter] = migrator,
         };
@@ -207,10 +334,6 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 .ToString(System.Globalization.CultureInfo.InvariantCulture);
             second[AwsStack.ImageParameter(name)] = image[name];
         }
-        if (first.ContainsKey(AwsStack.ProtectParameter))
-            second[AwsStack.ProtectParameter] = "true";
-        if (first.TryGetValue(AwsStack.UserPoolParameter, out var pool))
-            second[AwsStack.UserPoolParameter] = pool;
         return second;
     }
 
@@ -220,18 +343,18 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         && env.Auth is { Kind: DeployAuth.Cognito };
 
     /// <summary>
-    /// The pool a deploy passes the stack: the one the stack already uses, or on a new stack the one an earlier
+    /// The pool a deploy passes the foundation: the one it already uses, or on a new foundation the one an earlier
     /// destroy kept, or empty to create one.
     /// </summary>
     private async Task<string> UserPoolAsync(
         string stack,
-        AwsStackState? existing,
+        AwsStackState? foundation,
         CancellationToken ct
     )
     {
-        if (existing is not null)
+        if (foundation is not null)
             // A stack keeps the pool it has: switching would take the one it created out of the stack.
-            return existing.Parameters.GetValueOrDefault(AwsStack.UserPoolParameter) ?? "";
+            return foundation.Parameters.GetValueOrDefault(AwsStack.UserPoolParameter) ?? "";
         var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct).ConfigureAwait(false);
         if (kept is not null)
             say($"Signing in against the user pool {kept}, which the last destroy kept.");
@@ -239,9 +362,11 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     }
 
     /// <summary>
-    /// Deletes the environment's stack. Production's database is unprotected first and keeps a final snapshot, and
-    /// production's user pool is kept and recorded for the next deploy; with <paramref name="deleteData"/> the pool,
-    /// the images and the app's secrets go too.
+    /// Deletes the environment: the runtime, then the foundation. It refuses first, deleting nothing, when the
+    /// foundation's network holds something trax did not create there, such as an EKS cluster: deleting the
+    /// network would fail partway or strand it. Production's database is unprotected first and keeps a final
+    /// snapshot, and production's user pool is kept and recorded for the next deploy; with
+    /// <paramref name="deleteData"/> the pool, the images and the app's secrets go too.
     /// </summary>
     public async Task DestroyAsync(
         DeployFile file,
@@ -252,26 +377,47 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     {
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
-        var existing = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        var baseStack = file.FoundationStackName(environment);
+        var runtime = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        var foundation = await aws.DescribeStackAsync(baseStack, ct).ConfigureAwait(false);
+        if (runtime is not null)
+            CheckOwner(runtime, file, stack);
+        if (foundation is not null)
+            CheckOwner(foundation, file, baseStack);
+        if (foundation is { Dead: false })
+            await CheckNetworkAsync(baseStack, foundation, runtime, ct).ConfigureAwait(false);
+
         var record = UserPoolRecord(stack);
         var pool = KeepsItsUserPool(env)
-            ? existing?.Outputs.GetValueOrDefault("UserPoolId")
+            ? foundation?.Outputs.GetValueOrDefault("UserPoolId")
+                // A single stack from before the split kept its pool in its own outputs.
+                ?? runtime?.Outputs.GetValueOrDefault("UserPoolId")
                 ?? await aws.GetParameterAsync(record, ct).ConfigureAwait(false)
             : null;
-        // Recorded before the stack goes, so a destroy that stops partway still leaves the pool findable.
+        // Recorded before the stacks go, so a destroy that stops partway still leaves the pool findable.
         if (pool is not null && !deleteData)
             await aws.PutParameterAsync(record, pool, Tags(file, environment), ct)
                 .ConfigureAwait(false);
-        if (existing is null)
+        if (runtime is null && foundation is null)
             say($"{stack} does not exist.");
-        else
-            await DeleteExistingStackAsync(existing, file, environment, stack, ct)
-                .ConfigureAwait(false);
+        var snapshot = false;
+        foreach (var (name, state) in new[] { (stack, runtime), (baseStack, foundation) })
+            if (state is not null)
+                snapshot |= await DeleteExistingStackAsync(state, name, ct).ConfigureAwait(false);
+        if (snapshot)
+            say(
+                "The database left a final snapshot, which RDS keeps until you delete it (RDS console, "
+                    + "Snapshots)."
+            );
         if (pool is not null)
             await SettleUserPoolAsync(pool, record, deleteData, environment, ct)
                 .ConfigureAwait(false);
-        if (!deleteData)
-            return;
+        if (deleteData)
+            await DeleteDataAsync(file, stack, ct).ConfigureAwait(false);
+    }
+
+    private async Task DeleteDataAsync(DeployFile file, string stack, CancellationToken ct)
+    {
         foreach (var name in file.Services.Keys)
             await aws.DeleteRepositoryAsync(Repository(stack, name), ct).ConfigureAwait(false);
         foreach (var name in file.Secrets)
@@ -283,15 +429,13 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         );
     }
 
-    private async Task DeleteExistingStackAsync(
+    // Deletes one stack, unprotecting its database first; true when the database leaves a final snapshot.
+    private async Task<bool> DeleteExistingStackAsync(
         AwsStackState existing,
-        DeployFile file,
-        string environment,
         string stack,
         CancellationToken ct
     )
     {
-        CheckOwner(existing, file, stack);
         if (existing.Parameters.ContainsKey(AwsStack.ProtectParameter) && !existing.Dead)
         {
             say("Turning off the database's deletion protection...");
@@ -303,17 +447,72 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                         : (string?)null,
                 StringComparer.Ordinal
             );
-            await aws.DeployAsync(stack, template: null, keep, Tags(file, environment), say, ct)
+            await aws.DeployAsync(stack, template: null, keep, existing.Tags, AnyReplaced, say, ct)
                 .ConfigureAwait(false);
         }
         say($"Deleting {stack}...");
         await aws.DeleteStackAsync(stack, say, ct).ConfigureAwait(false);
-        if (existing.Parameters.ContainsKey(AwsStack.ProtectParameter))
-            say(
-                "The database left a final snapshot, which RDS keeps until you delete it (RDS console, "
-                    + "Snapshots)."
-            );
+        return existing.Parameters.ContainsKey(AwsStack.ProtectParameter);
     }
+
+    /// <summary>
+    /// Refuses to delete a foundation whose network holds an interface trax did not create: one wearing a group
+    /// neither stack created (an EKS node given the database client group, say), one that wears only trax's groups but
+    /// is not a task, the database or the load balancer (a Lambda given the client group), or one with no group at
+    /// all, other than the NAT gateway's. In a VPC the foundation created, every interface counts; in an existing VPC, only those
+    /// wearing one of the foundation's groups, since the rest of that network is not the foundation's to delete.
+    /// </summary>
+    private async Task CheckNetworkAsync(
+        string baseStack,
+        AwsStackState foundation,
+        AwsStackState? runtime,
+        CancellationToken ct
+    )
+    {
+        if (foundation.Outputs.GetValueOrDefault("VpcId") is not { Length: > 0 } vpc)
+            return;
+        var ownsVpc = string.Equals(
+            foundation.Outputs.GetValueOrDefault("OwnsVpc"),
+            "true",
+            StringComparison.Ordinal
+        );
+        var mine = Split(foundation.Outputs.GetValueOrDefault("SecurityGroups"));
+        var ours = mine.Concat(Split(runtime?.Outputs.GetValueOrDefault("SecurityGroups")))
+            .ToHashSet(StringComparer.Ordinal);
+        var foreign = (await aws.NetworkInterfacesAsync(vpc, ct).ConfigureAwait(false))
+            .Where(e =>
+                (ownsVpc || e.SecurityGroups.Any(mine.Contains))
+                && !(ownsVpc && string.Equals(e.Type, "nat_gateway", StringComparison.Ordinal))
+                && (
+                    e.SecurityGroups.Count == 0
+                    || !e.SecurityGroups.All(ours.Contains)
+                    || !MadeByTrax(e)
+                )
+            )
+            .ToList();
+        if (foreign.Count == 0)
+            return;
+        throw new InvalidOperationException(
+            $"{baseStack} cannot be deleted: its network holds what trax did not create, and deleting the "
+                + "network would fail partway or strand it. Remove these first (or the cluster they belong to), "
+                + "then destroy again: "
+                + string.Join(", ", foreign.Select(e => $"{e.Id} ({e.Description})"))
+                + ". Nothing was deleted."
+        );
+    }
+
+    // Wearing only trax's groups is not enough: a user's Lambda given the client group wears nothing else. What the
+    // stacks create in the network is a task (an ECS attachment), the database (RDS) or the load balancer (ELB).
+    private static bool MadeByTrax(AwsNetworkInterface e) =>
+        e.RequesterId is "amazon-rds" or "amazon-elb"
+        || (
+            e.Description.StartsWith("arn:aws", StringComparison.Ordinal)
+            && e.Description.Contains(":ecs:", StringComparison.Ordinal)
+            && e.Description.Contains(":attachment/", StringComparison.Ordinal)
+        );
+
+    private static string[] Split(string? list) =>
+        string.IsNullOrEmpty(list) ? [] : list.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
     // Production's pool, once its stack is gone: deleted with the data, else kept and recorded for the next deploy.
     private async Task SettleUserPoolAsync(
@@ -348,32 +547,18 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     /// <summary>
     /// What pass 1 sends for <paramref name="service"/>: its count (null keeps the stack's), and whether it stays on
     /// the image it runs. A service the stack holds no image for, or runs none of, waits at zero on the new image.
-    /// A stack from before the count parameters says whether its services run in its "Scale" parameter.
     /// </summary>
-    private static (string? Count, bool Current) Holding(
-        AwsStackState? existing,
-        DeployFile file,
-        DeployEnvironment env,
-        string service
-    )
+    private static (string? Count, bool Current) Holding(AwsStackState? existing, string service)
     {
         if (existing?.Parameters.ContainsKey(AwsStack.ImageParameter(service)) is not true)
             return ("0", false);
-        if (existing.Parameters.TryGetValue(AwsStack.CountParameter(service), out var count))
-            return string.Equals(count, "0", StringComparison.Ordinal)
-                ? ("0", false)
-                : (null, true);
         return string.Equals(
-            existing.Parameters.GetValueOrDefault("Scale"),
+            existing.Parameters.GetValueOrDefault(AwsStack.CountParameter(service)),
             "0",
             StringComparison.Ordinal
         )
             ? ("0", false)
-            : (
-                file.Count(env, service)
-                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
-                true
-            );
+            : (null, true);
     }
 
     /// <summary>
@@ -408,6 +593,17 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         {
             ["trax:app"] = file.App,
             ["trax:environment"] = environment,
+        };
+
+    /// <summary><see cref="Tags"/>, and which of the environment's two stacks this is.</summary>
+    public static IReadOnlyDictionary<string, string> StackTags(
+        DeployFile file,
+        string environment,
+        string part
+    ) =>
+        new Dictionary<string, string>(Tags(file, environment), StringComparer.Ordinal)
+        {
+            [PartTag] = part,
         };
 
     /// <summary>

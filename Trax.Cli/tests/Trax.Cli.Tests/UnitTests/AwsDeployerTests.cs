@@ -47,14 +47,17 @@ public class AwsDeployerTests
 
         var url = await DeployAsync(deployer);
 
-        aws.Calls.Should().Equal("deploy", "run-task", "deploy");
-        aws.Deploys[0]["HubCount"].Should().Be("0");
-        aws.Deploys[0]["WorkerCount"].Should().Be("0");
-        aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
-        aws.Deploys[1]["HubCount"].Should().Be("1");
-        aws.Deploys[1]["WorkerCount"].Should().Be("3");
-        aws.Deploys[1]["WorkerImage"].Should().Be($"repo/trax/orders-production/worker:{Tag}");
+        aws.Calls.Should().Equal("deploy-base", "deploy", "run-task", "deploy");
+        aws.Stacks.Should()
+            .Equal("orders-production-base", "orders-production", "orders-production");
+        aws.Deploys[1]["HubCount"].Should().Be("0");
+        aws.Deploys[1]["WorkerCount"].Should().Be("0");
+        aws.Deploys[1]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+        aws.Deploys[2]["HubCount"].Should().Be("1");
+        aws.Deploys[2]["WorkerCount"].Should().Be("3");
+        aws.Deploys[2]["WorkerImage"].Should().Be($"repo/trax/orders-production/worker:{Tag}");
         aws.Task.NotNull().TaskDefinition.Should().Be("migrate-td");
+        aws.Task.NotNull().SecurityGroups.Should().Equal("sg-task", "sg-client");
         images.Published.Should().Equal("hub", "worker");
         url.Should().Be("https://orders.example.com");
     }
@@ -68,12 +71,12 @@ public class AwsDeployerTests
 
         await DeployAsync(deployer);
 
-        aws.Deploys[0]["HubCount"].Should().BeNull("null keeps the previous value");
-        aws.Deploys[0]["HubImage"].Should().BeNull("null keeps the previous value");
-        aws.Deploys[0][AwsStack.MigrateImageParameter]
+        aws.Deploys[1]["HubCount"].Should().BeNull("null keeps the previous value");
+        aws.Deploys[1]["HubImage"].Should().BeNull("null keeps the previous value");
+        aws.Deploys[1][AwsStack.MigrateImageParameter]
             .Should()
             .Be($"repo/trax/orders-production/hub:{Tag}");
-        aws.Deploys[1]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+        aws.Deploys[2]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
     }
 
     [Test]
@@ -104,40 +107,135 @@ public class AwsDeployerTests
             CancellationToken.None
         );
 
-        aws.Calls.Should().Equal("deploy", "run-task", "deploy");
-        aws.Deploys[0]["ReportsCount"].Should().Be("0", "its image is new and the schema is not");
-        aws.Deploys[0]["HubCount"].Should().BeNull("a running service keeps its count");
-        aws.Deploys[0]["HubImage"].Should().BeNull("and its image");
-        aws.Deploys[1]["ReportsCount"].Should().Be("2");
-        aws.Deploys[1]["WorkerCount"]
+        aws.Calls.Should().Equal("deploy-base", "deploy", "run-task", "deploy");
+        aws.Deploys[1]["ReportsCount"].Should().Be("0", "its image is new and the schema is not");
+        aws.Deploys[1]["HubCount"].Should().BeNull("a running service keeps its count");
+        aws.Deploys[1]["HubImage"].Should().BeNull("and its image");
+        aws.Deploys[2]["ReportsCount"].Should().Be("2");
+        aws.Deploys[2]["WorkerCount"]
             .Should()
             .Be("3", "the environment's count overrides the file's");
-        aws.Deploys[1]["ReportsImage"].Should().Be($"repo/trax/orders-production/reports:{Tag}");
+        aws.Deploys[2]["ReportsImage"].Should().Be($"repo/trax/orders-production/reports:{Tag}");
     }
 
     [Test]
-    public async Task A_stack_from_before_service_counts_keeps_its_services_running()
+    public async Task A_single_stack_from_before_the_split_is_refused()
     {
-        var (deployer, aws, _) = Deployer();
+        var (deployer, aws, images) = Deployer();
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running() with
         {
-            Parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["Scale"] = "1",
-                [AwsStack.MigrateImageParameter] = "old",
-                ["HubImage"] = "old",
-                ["WorkerImage"] = "old",
-                [AwsStack.ProtectParameter] = "true",
+                ["trax:app"] = "orders",
+                ["trax:environment"] = "production",
             },
         };
 
+        var act = () => DeployAsync(deployer);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*orders-production*one stack*destroy*starts empty*snapshot*by hand*");
+        aws.Calls.Should().BeEmpty();
+        images.Published.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task The_runtime_receives_the_foundations_outputs_as_parameters()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+
         await DeployAsync(deployer);
 
-        aws.Deploys[0]["HubCount"].Should().Be("1");
-        aws.Deploys[0]["WorkerCount"].Should().Be("3");
-        aws.Deploys[0]["HubImage"].Should().BeNull();
-        aws.Deploys[0].Should().NotContainKey("Scale", "the template no longer declares it");
+        foreach (var runtime in aws.Deploys.Skip(1))
+        {
+            runtime["DatabaseClientSecurityGroup"].Should().Be("sg-client");
+            runtime["DatabaseAddress"].Should().Be("db.example");
+            runtime["ServiceSubnets"].Should().Be("subnet-1,subnet-2");
+            runtime["UserPoolId"].Should().Be("us-west-2_pool1");
+        }
+        aws.Deploys[0].Should().NotContainKey("DatabaseClientSecurityGroup");
+    }
+
+    [Test]
+    public async Task A_deploy_over_a_foundation_protects_its_database_again_and_keeps_its_pool()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        // A destroy that stopped after turning protection off left Protect at false.
+        aws.Foundation = FakeAws.FoundationRunning(pool: "us-west-2_given", protect: "false");
+        aws.Parameters[AwsDeployer.UserPoolRecord("orders-production")] = "us-west-2_other";
+
+        await DeployAsync(deployer);
+
+        aws.Stacks[0].Should().Be("orders-production-base");
+        aws.Deploys[0][AwsStack.ProtectParameter].Should().Be("true");
+        aws.Deploys[0][AwsStack.UserPoolParameter]
+            .Should()
+            .Be("us-west-2_given", "a foundation keeps the pool it was given");
+    }
+
+    [TestCase("ROLLBACK_COMPLETE", "*orders-production-base*ROLLBACK_COMPLETE*destroy*")]
+    [TestCase("UPDATE_IN_PROGRESS", "*orders-production-base*UPDATE_IN_PROGRESS*settle*")]
+    public async Task A_foundation_that_cannot_be_changed_stops_the_deploy_before_anything_is_pushed(
+        string status,
+        string message
+    )
+    {
+        var (deployer, aws, images) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning(status: status);
+
+        var act = () => DeployAsync(deployer);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(message);
+        aws.Calls.Should().BeEmpty();
+        images.Published.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_foundation_missing_an_output_the_services_need_stops_before_the_runtime()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        var outputs = FakeAws.FoundationOutputs();
+        outputs.Remove("DatabaseAddress");
+        aws.Foundation = FakeAws.FoundationRunning() with { Outputs = outputs };
+
+        var act = () => DeployAsync(deployer);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*no output DatabaseAddress*");
+        aws.Calls.Should().Equal("deploy-base");
+    }
+
+    [Test]
+    public async Task Refuses_a_foundation_another_app_owns()
+    {
+        var (deployer, aws, images) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Foundation = FakeAws.FoundationRunning() with
+        {
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["trax:app"] = "orders-production",
+                ["trax:part"] = "runtime",
+            },
+        };
+
+        var act = () => DeployAsync(deployer);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*orders-production-base*app 'orders-production'*not 'orders'*");
+        aws.Calls.Should().BeEmpty();
+        images.Published.Should().BeEmpty();
     }
 
     [Test]
@@ -176,7 +274,7 @@ public class AwsDeployerTests
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*exit code 1*trax deploy logs migrate*");
-        aws.Calls.Should().Equal("deploy", "run-task");
+        aws.Calls.Should().Equal("deploy-base", "deploy", "run-task");
     }
 
     [Test]
@@ -207,6 +305,7 @@ public class AwsDeployerTests
             Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["trax:app"] = "orders",
+                ["trax:part"] = "runtime",
             },
         };
 
@@ -230,9 +329,67 @@ public class AwsDeployerTests
 
         await DeployAsync(deployer);
 
-        aws.Calls.Should().Equal("deploy", "run-task", "deploy");
-        aws.Deploys[0]["HubCount"].Should().Be("0");
-        aws.Deploys[0]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+        aws.Calls.Should().Equal("deploy-base", "deploy", "run-task", "deploy");
+        aws.Deploys[1]["HubCount"].Should().Be("0");
+        aws.Deploys[1]["HubImage"].Should().Be($"repo/trax/orders-production/hub:{Tag}");
+    }
+
+    [Test]
+    public async Task A_foundation_under_a_running_runtime_may_not_replace_its_network()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
+
+        await DeployAsync(deployer);
+
+        aws.Unreplaceable[0]
+            .Should()
+            .Contain(["Vpc", "DatabaseClientSecurityGroup", "DatabaseSecurityGroup"])
+            .And.NotContain("Database", "the database is not a network resource the tasks wear");
+        aws.Unreplaceable[1].Should().BeEmpty("the runtime replaces what it likes");
+    }
+
+    [Test]
+    public async Task A_foundation_with_no_runtime_on_it_may_replace_anything()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
+
+        await DeployAsync(deployer);
+
+        aws.Unreplaceable[0].Should().BeEmpty();
+    }
+
+    [Test]
+    public void A_change_set_that_replaces_a_resource_it_must_not_is_named()
+    {
+        static Amazon.CloudFormation.Model.Change Change(string id, string replacement) =>
+            new()
+            {
+                ResourceChange = new Amazon.CloudFormation.Model.ResourceChange
+                {
+                    LogicalResourceId = id,
+                    Replacement = replacement,
+                },
+            };
+
+        AwsDeployClient
+            .Replaced(
+                [
+                    Change("Vpc", "True"),
+                    Change("PublicSubnetA", "Conditional"),
+                    Change("DatabaseClientSecurityGroup", "False"),
+                    Change("Database", "True"),
+                ],
+                new HashSet<string>(
+                    ["Vpc", "PublicSubnetA", "DatabaseClientSecurityGroup"],
+                    StringComparer.Ordinal
+                )
+            )
+            .Should()
+            .Equal("Vpc", "PublicSubnetA");
     }
 
     [TestCase(null, "CREATE")]
@@ -253,10 +410,11 @@ public class AwsDeployerTests
             .Be(type);
 
     [Test]
-    public async Task Destroy_unprotects_a_production_database_then_deletes_the_stack()
+    public async Task Destroy_deletes_the_runtime_then_unprotects_and_deletes_the_foundation()
     {
         var (deployer, aws, _) = Deployer();
         aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
 
         await deployer.DestroyAsync(
             AwsStackTemplateTests.File_(),
@@ -267,23 +425,219 @@ public class AwsDeployerTests
 
         aws.Calls.Should()
             .Equal(
-                "deploy",
                 "delete-stack",
+                "deploy-base",
+                "delete-stack-base",
                 "delete-user-pool",
                 "delete-parameter",
                 "delete-repository",
                 "delete-repository",
                 "delete-secret"
             );
+        aws.Stacks.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be("orders-production-base", "the database's protection is in the foundation");
         aws.Deploys[0][AwsStack.ProtectParameter].Should().Be("false");
         aws.Templates[0].Should().BeNull("destroy keeps the template the stack has");
+    }
+
+    [Test]
+    public async Task Destroy_unprotects_and_deletes_a_single_stack_from_before_the_split()
+    {
+        var (deployer, aws, _) = Deployer();
+        var outputs = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["UserPoolId"] = "us-west-2_old",
+        };
+        aws.Existing = new AwsStackState(
+            "UPDATE_COMPLETE",
+            outputs,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AwsStack.ProtectParameter] = "true",
+                ["HubImage"] = "old",
+            }
+        )
+        {
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["trax:app"] = "orders",
+                ["trax:environment"] = "production",
+            },
+        };
+        aws.Pools["us-west-2_old"] = 7;
+
+        await deployer.DestroyAsync(
+            AwsStackTemplateTests.File_(),
+            "production",
+            deleteData: false,
+            CancellationToken.None
+        );
+
+        aws.Calls.Should().Equal("put-parameter", "deploy", "delete-stack");
+        aws.Stacks.Should().Equal("orders-production");
+        aws.Deploys[0][AwsStack.ProtectParameter].Should().Be("false");
+        aws.Parameters[AwsDeployer.UserPoolRecord("orders-production")]
+            .Should()
+            .Be("us-west-2_old", "the old stack kept its pool in its own outputs");
+    }
+
+    [Test]
+    public async Task Destroy_refuses_a_foundation_whose_network_holds_something_trax_did_not_create()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface("eni-rds", "interface", "RDSNetworkInterface", ["sg-db"])
+        );
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface("eni-nat", "nat_gateway", "Interface for NAT Gateway", [])
+        );
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-eks",
+                "interface",
+                "Amazon EKS orders-cluster",
+                ["sg-eks", "sg-client"]
+            )
+        );
+
+        var act = () =>
+            deployer.DestroyAsync(
+                AwsStackTemplateTests.File_(),
+                "production",
+                deleteData: false,
+                CancellationToken.None
+            );
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*orders-production-base*eni-eks*Amazon EKS orders-cluster*");
+        aws.Calls.Should().BeEmpty("nothing is deleted or recorded");
+        aws.Parameters.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Destroy_goes_ahead_when_the_network_holds_only_what_trax_created()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-rds",
+                "interface",
+                "RDSNetworkInterface",
+                ["sg-db"],
+                "amazon-rds"
+            )
+        );
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-task",
+                "interface",
+                "arn:aws:ecs:us-west-2:123456789012:attachment/0f1e2d3c",
+                ["sg-task", "sg-client"],
+                "578734482556"
+            )
+        );
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-alb",
+                "interface",
+                "ELB app/orders-production/50dc6c495c0c9188",
+                ["sg-lb"],
+                "amazon-elb"
+            )
+        );
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface("eni-nat", "nat_gateway", "Interface for NAT Gateway", [])
+        );
+
+        await deployer.DestroyAsync(
+            AwsStackTemplateTests.File_(),
+            "production",
+            deleteData: false,
+            CancellationToken.None
+        );
+
+        aws.Calls.Should().Contain("delete-stack-base");
+    }
+
+    [Test]
+    public async Task Destroy_refuses_an_interface_that_wears_only_trax_groups_but_is_not_trax_s()
+    {
+        // A Lambda the user put in the network with only the database client group, to reach Postgres: every
+        // group it wears is trax's, but deleting the network would still fail on it.
+        var (deployer, aws, _) = Deployer();
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-lambda",
+                "lambda",
+                "AWS Lambda VPC ENI-orders-report-1a2b3c",
+                ["sg-client"],
+                "AROAEXAMPLE:orders-report"
+            )
+        );
+
+        var act = () =>
+            deployer.DestroyAsync(
+                AwsStackTemplateTests.File_(),
+                "production",
+                deleteData: false,
+                CancellationToken.None
+            );
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*orders-production-base*eni-lambda*");
+        aws.Calls.Should().BeEmpty("nothing is deleted or recorded");
+        aws.Parameters.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Destroy_in_an_existing_network_checks_only_what_uses_its_groups()
+    {
+        var (deployer, aws, _) = Deployer();
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning(ownsVpc: false);
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface("eni-other", "interface", "someone else's instance", ["sg-x"])
+        );
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-eks",
+                "interface",
+                "Amazon EKS node",
+                ["sg-eks", "sg-client"]
+            )
+        );
+
+        var act = () =>
+            deployer.DestroyAsync(
+                AwsStackTemplateTests.File_(),
+                "production",
+                deleteData: false,
+                CancellationToken.None
+            );
+
+        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
+        thrown.Which.Message.Should().Contain("eni-eks").And.NotContain("eni-other");
     }
 
     [Test]
     public async Task Destroy_keeps_a_production_user_pool_and_records_it()
     {
         var said = new List<string>();
-        var aws = new FakeAws { Existing = FakeAws.Running() };
+        var aws = new FakeAws
+        {
+            Existing = FakeAws.Running(),
+            Foundation = FakeAws.FoundationRunning(),
+        };
         aws.Pools["us-west-2_pool1"] = 42;
         var deployer = new AwsDeployer(aws, new FakeImages(), said.Add);
 
@@ -315,8 +669,8 @@ public class AwsDeployerTests
 
         await DeployAsync(deployer);
 
-        aws.Deploys.Should()
-            .AllSatisfy(d => d[AwsStack.UserPoolParameter].Should().Be("us-west-2_pool1"));
+        aws.Stacks[0].Should().Be("orders-production-base", "the pool lives in the foundation");
+        aws.Deploys[0][AwsStack.UserPoolParameter].Should().Be("us-west-2_pool1");
     }
 
     [Test]
@@ -327,7 +681,7 @@ public class AwsDeployerTests
 
         await DeployAsync(deployer);
 
-        aws.Deploys.Should().AllSatisfy(d => d[AwsStack.UserPoolParameter].Should().Be(""));
+        aws.Deploys[0][AwsStack.UserPoolParameter].Should().Be("");
     }
 
     [Test]
@@ -335,6 +689,7 @@ public class AwsDeployerTests
     {
         var (deployer, aws, _) = Deployer();
         aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
         aws.Pools["us-west-2_pool1"] = 42;
         aws.Parameters[AwsDeployer.UserPoolRecord("orders-production")] = "us-west-2_pool1";
 
@@ -370,19 +725,20 @@ public class AwsDeployerTests
     [TestCase(
         DeployEnvironment.Production,
         false,
-        "This deletes orders-production. Its user pool and every user in it are kept, and the next deploy signs in "
-            + "against them; --delete-data deletes them. Type orders-production to go on: "
+        "This deletes orders-production and orders-production-base. Its user pool and every user in it are kept, "
+            + "and the next deploy signs in against them; --delete-data deletes them. Type orders-production to go on: "
     )]
     [TestCase(
         DeployEnvironment.Production,
         true,
-        "This deletes orders-production, its user pool with every user in it, its images and its secrets. Type "
-            + "orders-production to go on: "
+        "This deletes orders-production and orders-production-base, its user pool with every user in it, its "
+            + "images and its secrets. Type orders-production to go on: "
     )]
     [TestCase(
         DeployEnvironment.Try,
         false,
-        "This deletes orders-production, its user pool with every user in it. Type orders-production to go on: "
+        "This deletes orders-production and orders-production-base, its user pool with every user in it. Type "
+            + "orders-production to go on: "
     )]
     public void Destroy_says_what_happens_to_the_users(
         string profile,
@@ -691,22 +1047,42 @@ public class AwsDeployerTests
 
     internal sealed class FakeAws : IAwsDeployClient
     {
+        /// <summary>
+        /// Each call, with <c>-base</c> appended when it went to the foundation stack: <c>deploy-base</c>,
+        /// <c>delete-stack</c>.
+        /// </summary>
         public List<string> Calls { get; } = [];
+
+        /// <summary>The stack each deploy went to, in order.</summary>
+        public List<string> Stacks { get; } = [];
         public List<IReadOnlyDictionary<string, string?>> Deploys { get; } = [];
         public List<string?> Templates { get; } = [];
+        public List<IReadOnlySet<string>> Unreplaceable { get; } = [];
         public HashSet<string> Secrets { get; } = [];
         public Dictionary<string, string> Parameters { get; } = new(StringComparer.Ordinal);
+        public List<AwsNetworkInterface> NetworkInterfaces { get; } = [];
 
         /// <summary>The user pools that exist, with how many users each holds.</summary>
         public Dictionary<string, long> Pools { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The runtime stack as it stands before the test acts; null when there is none.</summary>
         public AwsStackState? Existing { get; set; }
+
+        /// <summary>The foundation stack as it stands before the test acts; null when there is none.</summary>
+        public AwsStackState? Foundation { get; set; }
         public int? ExitCode { get; set; } = 0;
         public AwsTaskRequest? Task { get; private set; }
+
+        private static bool IsFoundation(string stack) =>
+            stack.EndsWith("-base", StringComparison.Ordinal);
+
+        private static string Call(string name, string stack) =>
+            IsFoundation(stack) ? $"{name}-base" : name;
 
         public static AwsStackState Running() =>
             new(
                 "UPDATE_COMPLETE",
-                Outputs(),
+                RuntimeOutputs(),
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["HubCount"] = "1",
@@ -714,7 +1090,6 @@ public class AwsDeployerTests
                     [AwsStack.MigrateImageParameter] = "old",
                     ["HubImage"] = "old",
                     ["WorkerImage"] = "old",
-                    [AwsStack.ProtectParameter] = "true",
                 }
             )
             {
@@ -722,19 +1097,61 @@ public class AwsDeployerTests
                 {
                     ["trax:app"] = "orders",
                     ["trax:environment"] = "production",
+                    ["trax:part"] = "runtime",
                 },
             };
 
-        private static Dictionary<string, string> Outputs() =>
+        public static AwsStackState FoundationRunning(
+            bool ownsVpc = true,
+            string pool = "",
+            string protect = "true",
+            string status = "UPDATE_COMPLETE"
+        ) =>
+            new(
+                status,
+                FoundationOutputs(ownsVpc),
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [AwsStack.ProtectParameter] = protect,
+                    [AwsStack.UserPoolParameter] = pool,
+                }
+            )
+            {
+                Tags = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["trax:app"] = "orders",
+                    ["trax:environment"] = "production",
+                    ["trax:part"] = "foundation",
+                },
+            };
+
+        private static Dictionary<string, string> RuntimeOutputs() =>
             new(StringComparer.Ordinal)
             {
                 ["ClusterName"] = "orders-production",
                 ["MigrateTaskDefinition"] = "migrate-td",
                 ["ServiceSubnets"] = "subnet-1,subnet-2",
-                ["TaskSecurityGroup"] = "sg-1",
+                ["TaskSecurityGroups"] = "sg-task,sg-client",
+                ["SecurityGroups"] = "sg-task,sg-lb",
                 ["AssignPublicIp"] = "DISABLED",
                 ["Url"] = "https://orders.example.com",
+            };
+
+        internal static Dictionary<string, string> FoundationOutputs(bool ownsVpc = true) =>
+            new(StringComparer.Ordinal)
+            {
+                ["VpcId"] = "vpc-1",
+                ["VpcCidr"] = "10.0.0.0/16",
+                ["OwnsVpc"] = ownsVpc ? "true" : "false",
+                ["PublicSubnets"] = "subnet-p1,subnet-p2",
+                ["ServiceSubnets"] = "subnet-1,subnet-2",
+                ["DatabaseClientSecurityGroup"] = "sg-client",
+                ["DatabaseAddress"] = "db.example",
+                ["DatabasePort"] = "5432",
+                ["DatabaseSecretArn"] = "arn:db",
+                ["SecurityGroups"] = "sg-client,sg-db",
                 ["UserPoolId"] = "us-west-2_pool1",
+                ["UserPoolClientId"] = "client1",
             };
 
         public string Region => "us-west-2";
@@ -754,27 +1171,35 @@ public class AwsDeployerTests
         public Task<RegistryLogin> RegistryLoginAsync(CancellationToken ct) =>
             System.Threading.Tasks.Task.FromResult(new RegistryLogin("repo", "AWS", "pw"));
 
-        public Task<AwsStackState?> DescribeStackAsync(string stack, CancellationToken ct) =>
-            System.Threading.Tasks.Task.FromResult(
-                Calls.Contains("deploy") && Existing is null or { Created: false }
+        public Task<AwsStackState?> DescribeStackAsync(string stack, CancellationToken ct)
+        {
+            var foundation = IsFoundation(stack);
+            var before = foundation ? Foundation : Existing;
+            var deployed = Calls.Contains(foundation ? "deploy-base" : "deploy");
+            return System.Threading.Tasks.Task.FromResult(
+                deployed && before is null or { Created: false }
                     ? new AwsStackState(
                         "CREATE_COMPLETE",
-                        Outputs(),
+                        foundation ? FoundationOutputs() : RuntimeOutputs(),
                         new Dictionary<string, string>(StringComparer.Ordinal)
                     )
-                    : Existing
+                    : before
             );
+        }
 
         public Task<bool> DeployAsync(
             string stack,
             string? template,
             IReadOnlyDictionary<string, string?> parameters,
             IReadOnlyDictionary<string, string> tags,
+            IReadOnlySet<string> unreplaceable,
             Action<string> progress,
             CancellationToken ct
         )
         {
-            Calls.Add("deploy");
+            Unreplaceable.Add(unreplaceable);
+            Calls.Add(Call("deploy", stack));
+            Stacks.Add(stack);
             Deploys.Add(parameters);
             Templates.Add(template);
             return System.Threading.Tasks.Task.FromResult(true);
@@ -795,7 +1220,7 @@ public class AwsDeployerTests
 
         public Task DeleteStackAsync(string stack, Action<string> progress, CancellationToken ct)
         {
-            Calls.Add("delete-stack");
+            Calls.Add(Call("delete-stack", stack));
             return System.Threading.Tasks.Task.CompletedTask;
         }
 
@@ -865,6 +1290,14 @@ public class AwsDeployerTests
             Pools.Remove(userPoolId);
             return System.Threading.Tasks.Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<AwsNetworkInterface>> NetworkInterfacesAsync(
+            string vpcId,
+            CancellationToken ct
+        ) =>
+            System.Threading.Tasks.Task.FromResult<IReadOnlyList<AwsNetworkInterface>>(
+                NetworkInterfaces
+            );
 
         public Task<IReadOnlyList<AwsServiceState>> DescribeServicesAsync(
             string cluster,

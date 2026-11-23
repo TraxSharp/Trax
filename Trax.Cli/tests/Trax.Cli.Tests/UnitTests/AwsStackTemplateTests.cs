@@ -75,10 +75,30 @@ public class AwsStackTemplateTests
             },
         };
 
-    private static JsonObject Build(
+    internal static AwsTemplates Templates(
         DeployFile? file = null,
         Dictionary<string, DeployManifest>? exports = null
     ) => AwsStack.Build(file ?? File_(), "production", exports ?? Exports(), PrefixList);
+
+    /// <summary>Both stacks' resources and outputs in one object, for the rules that hold across the two.</summary>
+    private static JsonObject Build(
+        DeployFile? file = null,
+        Dictionary<string, DeployManifest>? exports = null
+    )
+    {
+        var templates = Templates(file, exports);
+        var merged = new JsonObject
+        {
+            ["Parameters"] = new JsonObject(),
+            ["Resources"] = new JsonObject(),
+            ["Outputs"] = new JsonObject(),
+        };
+        foreach (var template in new[] { templates.Foundation, templates.Runtime })
+        foreach (var section in new[] { "Parameters", "Resources", "Outputs" })
+        foreach (var (key, value) in (JsonObject?)template[section] ?? new JsonObject())
+            merged[section].NotNull()[key] = value.NotNull().DeepClone();
+        return merged;
+    }
 
     private static IEnumerable<(string Id, JsonObject Resource)> Resources(
         JsonObject template,
@@ -362,7 +382,16 @@ public class AwsStackTemplateTests
             .GetValue<string>()
             .Should()
             .Be("--trax-migrate");
-        Env("HubTaskDefinition").Should().Contain("Trax__Proxy__KnownNetworks=10.0.0.0/16");
+        Env("HubTaskDefinition")
+            .Should()
+            .Contain("""Trax__Proxy__KnownNetworks={"Ref":"VpcCidr"}""");
+        template["Outputs"]
+            .NotNull()["VpcCidr"]
+            .NotNull()["Value"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("10.0.0.0/16");
     }
 
     [Test]
@@ -387,7 +416,7 @@ public class AwsStackTemplateTests
             .NotNull()
             .ToJsonString()
             .Should()
-            .Contain("cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}");
+            .Contain("cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}");
         env.Single(e =>
                 string.Equals(
                     e.NotNull()["Name"].NotNull().GetValue<string>(),
@@ -399,7 +428,7 @@ public class AwsStackTemplateTests
             .NotNull()
             .ToJsonString()
             .Should()
-            .Be("""{"Ref":"UserPoolClient"}""");
+            .Be("""{"Ref":"UserPoolClientId"}""");
     }
 
     [Test]
@@ -484,8 +513,19 @@ public class AwsStackTemplateTests
     }
 
     [Test]
-    public void It_fits_CloudFormations_inline_limit() =>
-        AwsStack.Compact(Build()).Length.Should().BeLessThan(AwsDeployer.InlineTemplateLimit);
+    public void Each_template_fits_CloudFormations_inline_limit()
+    {
+        var templates = Templates();
+
+        AwsStack
+            .Compact(templates.Foundation)
+            .Length.Should()
+            .BeLessThan(AwsDeployer.InlineTemplateLimit);
+        AwsStack
+            .Compact(templates.Runtime)
+            .Length.Should()
+            .BeLessThan(AwsDeployer.InlineTemplateLimit);
+    }
 
     [TestCase("eu-prod")]
     [TestCase("Prod")]
@@ -500,6 +540,21 @@ public class AwsStackTemplateTests
         act.Should()
             .Throw<InvalidOperationException>()
             .WithMessage($"*'{name}'*lower-case letters and digits only*");
+    }
+
+    [Test]
+    public void An_environment_named_base_is_refused_so_no_runtime_is_named_like_a_foundation()
+    {
+        // App "orders-prod" with environment "base" would run as orders-prod-base, the foundation of app "orders"
+        // in environment "prod".
+        var file = File_();
+        file.Environments["base"] = file.Environments["production"];
+
+        var act = () => file.Environment("base");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*'base'*another app's foundation*");
     }
 
     [Test]
@@ -562,10 +617,264 @@ public class AwsStackTemplateTests
     [Test]
     public void The_plan_summary_counts_resources_and_estimates_the_idle_cost()
     {
-        var lines = AwsPlanSummary.Lines(File_(), "production", Build()).ToList();
+        var lines = AwsPlanSummary.Lines(File_(), "production", Templates()).ToList();
 
-        lines[0].Should().StartWith("orders-production (production, us-west-2) has ");
+        lines[0].Should().StartWith("orders-production-base (production, us-west-2) has ");
+        lines
+            .Should()
+            .Contain(l =>
+                l.StartsWith(
+                    "orders-production (production, us-west-2) has ",
+                    StringComparison.Ordinal
+                )
+            );
         lines.Should().Contain(l => l.Contains("NAT gateway"));
         lines[^1].Should().EndWith("a month");
+    }
+
+    [Test]
+    public void The_foundation_holds_the_network_database_secrets_and_sign_in()
+    {
+        var templates = Templates();
+        var foundation = (JsonObject)templates.Foundation["Resources"].NotNull();
+        var runtime = (JsonObject)templates.Runtime["Resources"].NotNull();
+
+        foreach (
+            var id in new[]
+            {
+                "Vpc",
+                "NatGateway",
+                "Database",
+                "DatabaseSecret",
+                "DatabaseSecurityGroup",
+                "DatabaseClientSecurityGroup",
+                "UserPool",
+                "UserPoolClient",
+            }
+        )
+        {
+            foundation.Should().ContainKey(id);
+            runtime.Should().NotContainKey(id);
+        }
+        foreach (
+            var id in new[] { "Cluster", "LoadBalancer", "HubService", "MigrateTaskDefinition" }
+        )
+        {
+            runtime.Should().ContainKey(id);
+            foundation.Should().NotContainKey(id);
+        }
+    }
+
+    [Test]
+    public void Only_the_database_client_group_reaches_the_database()
+    {
+        var templates = Templates();
+        var foundation = templates.Foundation;
+        var runtime = templates.Runtime;
+
+        var ingress = Resources(foundation, "AWS::EC2::SecurityGroupIngress")
+            .Where(r =>
+                string.Equals(
+                    r.Resource["Properties"].NotNull()["GroupId"].NotNull().ToJsonString(),
+                    """{"Ref":"DatabaseSecurityGroup"}""",
+                    StringComparison.Ordinal
+                )
+            )
+            .ToList();
+        ingress.Should().ContainSingle();
+        ingress[0]
+            .Resource["Properties"]
+            .NotNull()["SourceSecurityGroupId"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("""{"Ref":"DatabaseClientSecurityGroup"}""");
+        foreach (var (id, service) in Resources(runtime, "AWS::ECS::Service"))
+            service["Properties"]
+                .NotNull()["NetworkConfiguration"]
+                .NotNull()["AwsvpcConfiguration"]
+                .NotNull()["SecurityGroups"]
+                .NotNull()
+                .ToJsonString()
+                .Should()
+                .Be(
+                    """[{"Ref":"TaskSecurityGroup"},{"Ref":"DatabaseClientSecurityGroup"}]""",
+                    $"{id} reaches the database through the foundation's client group"
+                );
+        Properties(runtime, "TaskSecurityGroup")["SecurityGroupEgress"]
+            .NotNull()
+            .AsArray()
+            .Should()
+            .NotContain(r => (int?)r.NotNull()["FromPort"] == 5432);
+    }
+
+    [Test]
+    public void The_runtime_reads_the_foundation_by_parameter_never_by_import()
+    {
+        var templates = Templates();
+        var foundationOutputs = (JsonObject)templates.Foundation["Outputs"].NotNull();
+        var runtimeParameters = (JsonObject)templates.Runtime["Parameters"].NotNull();
+
+        AwsStack.Compact(templates.Foundation).Should().NotContain("Fn::ImportValue");
+        AwsStack.Compact(templates.Runtime).Should().NotContain("Fn::ImportValue");
+        var read = runtimeParameters
+            .Select(p => p.Key)
+            .Where(AwsStack.FoundationValues.Contains)
+            .ToList();
+        read.Should()
+            .Contain([
+                "VpcId",
+                "VpcCidr",
+                "PublicSubnets",
+                "ServiceSubnets",
+                "DatabaseClientSecurityGroup",
+                "DatabaseAddress",
+                "DatabasePort",
+                "DatabaseSecretArn",
+                "UserPoolId",
+                "UserPoolClientId",
+            ]);
+        foreach (var name in read)
+            foundationOutputs.Should().ContainKey(name);
+    }
+
+    [Test]
+    public void The_foundation_names_nothing_the_runtime_creates()
+    {
+        var templates = Templates();
+        var foundation = AwsStack.Compact(templates.Foundation);
+
+        foreach (var (id, _) in (JsonObject)templates.Runtime["Resources"].NotNull())
+            foundation.Should().NotContain($"\"{id}\"", "the foundation is created first");
+    }
+
+    [Test]
+    public void The_app_secrets_and_the_database_secret_keep_the_environments_name()
+    {
+        var templates = Templates();
+
+        Properties(templates.Foundation, "DatabaseSecret")["Name"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("orders-production/database");
+        AwsStack.Compact(templates.Runtime).Should().Contain("secret:orders-production/app/*");
+    }
+
+    [Test]
+    public void An_existing_database_is_reached_through_the_client_group()
+    {
+        var file = File_();
+        file.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        var templates = Templates(file);
+
+        Resources(templates.Foundation, "AWS::RDS::DBInstance").Should().BeEmpty();
+        Properties(templates.Foundation, "DatabaseClientSecurityGroup")["SecurityGroupEgress"]
+            .NotNull()
+            .AsArray()
+            .Should()
+            .Contain(r =>
+                (int?)r.NotNull()["FromPort"] == 5432
+                && string.Equals((string?)r["CidrIp"], "0.0.0.0/0", StringComparison.Ordinal)
+            );
+        ((JsonObject)templates.Runtime["Parameters"].NotNull())
+            .Should()
+            .NotContainKey("DatabaseAddress");
+    }
+
+    [Test]
+    public void A_production_database_refuses_deletion_until_destroy_turns_it_off()
+    {
+        var foundation = Templates().Foundation;
+        var protect = (JsonObject)
+            foundation["Parameters"].NotNull()[AwsStack.ProtectParameter].NotNull();
+
+        Properties(foundation, "Database")["DeletionProtection"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("""{"Fn::If":["Protected",true,false]}""");
+        protect["Default"].NotNull().GetValue<string>().Should().Be("true");
+        foundation["Conditions"]
+            .NotNull()["Protected"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be($$"""{"Fn::Equals":[{"Ref":"{{AwsStack.ProtectParameter}}"},"true"]}""");
+    }
+
+    [Test]
+    public void A_try_database_and_an_existing_database_have_no_protection_to_turn_off()
+    {
+        var tried = Templates(File_(DeployEnvironment.Try)).Foundation;
+        var existing = File_();
+        existing.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        ((bool)Properties(tried, "Database")["DeletionProtection"].NotNull()).Should().BeFalse();
+        ((JsonObject?)tried["Parameters"] ?? []).Should().NotContainKey(AwsStack.ProtectParameter);
+        ((JsonObject?)Templates(existing).Foundation["Parameters"] ?? [])
+            .Should()
+            .NotContainKey(AwsStack.ProtectParameter);
+    }
+
+    private static string OutputOf(JsonObject template, string name) =>
+        template["Outputs"].NotNull()[name].NotNull()["Value"].NotNull().ToJsonString();
+
+    [Test]
+    public void Each_stack_lists_the_groups_it_creates_for_destroys_network_check()
+    {
+        var templates = Templates();
+        var existing = File_();
+        existing.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        OutputOf(templates.Foundation, "SecurityGroups")
+            .Should()
+            .Be(
+                """{"Fn::Join":[",",[{"Ref":"DatabaseClientSecurityGroup"},{"Ref":"DatabaseSecurityGroup"}]]}"""
+            );
+        OutputOf(Templates(existing).Foundation, "SecurityGroups")
+            .Should()
+            .Be("""{"Fn::Join":[",",[{"Ref":"DatabaseClientSecurityGroup"}]]}""");
+        OutputOf(templates.Runtime, "SecurityGroups")
+            .Should()
+            .Be(
+                """{"Fn::Join":[",",[{"Ref":"TaskSecurityGroup"},{"Ref":"LoadBalancerSecurityGroup"}]]}"""
+            );
+    }
+
+    [Test]
+    public void The_database_client_group_is_described_the_same_whichever_database_it_reaches()
+    {
+        // GroupDescription forces a replacement, and running tasks wear this group: switching an environment to an
+        // existing database, or back, must update the group in place.
+        var existing = File_();
+        existing.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        string Description(JsonObject foundation) =>
+            foundation["Resources"]
+                .NotNull()["DatabaseClientSecurityGroup"]
+                .NotNull()["Properties"]
+                .NotNull()["GroupDescription"]
+                .NotNull()
+                .ToJsonString();
+
+        Description(Templates(existing).Foundation)
+            .Should()
+            .Be(Description(Templates().Foundation));
+    }
+
+    [Test]
+    public void The_migrate_task_wears_the_database_client_group()
+    {
+        OutputOf(Templates().Runtime, "TaskSecurityGroups")
+            .Should()
+            .Be(
+                """{"Fn::Join":[",",[{"Ref":"TaskSecurityGroup"},{"Ref":"DatabaseClientSecurityGroup"}]]}"""
+            );
     }
 }

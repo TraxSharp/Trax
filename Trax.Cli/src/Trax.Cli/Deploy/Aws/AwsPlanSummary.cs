@@ -4,7 +4,10 @@ using Trax.Core.Extensions;
 
 namespace Trax.Cli.Deploy.Aws;
 
-/// <summary>What <c>trax deploy plan</c> says about a template: what it creates, and roughly what it costs idle.</summary>
+/// <summary>
+/// What <c>trax deploy plan</c> says about an environment's two templates: what each creates, and roughly what the
+/// two cost idle.
+/// </summary>
 internal static class AwsPlanSummary
 {
     // Approximate monthly prices, us-east-1 on-demand, 730 hours, October 2026. Other regions differ.
@@ -18,27 +21,28 @@ internal static class AwsPlanSummary
     public static IEnumerable<string> Lines(
         DeployFile file,
         string environment,
-        JsonObject template
+        AwsTemplates templates
     )
     {
         var env = file.Environment(environment);
-        var resources = (JsonObject)template["Resources"].NotNull();
-        yield return $"{file.StackName(environment)} ({env.Profile}, {env.Region}) has {resources.Count} resources:";
-        foreach (
-            var group in resources
-                .Select(r => r.Value.NotNull()["Type"].NotNull().GetValue<string>())
-                .GroupBy(t => t, StringComparer.Ordinal)
-                .OrderBy(g => g.Key, StringComparer.Ordinal)
-        )
-            yield return $"  {group.Count(), 3}  {group.Key}";
+        var stacks = new[]
+        {
+            (Name: file.FoundationStackName(environment), Template: templates.Foundation),
+            (Name: file.StackName(environment), Template: templates.Runtime),
+        };
+        foreach (var (name, template) in stacks)
+        foreach (var line in ResourceLines(name, env, template))
+            yield return line;
 
+        bool Has(string id) =>
+            stacks.Any(s => ((JsonObject)s.Template["Resources"].NotNull()).ContainsKey(id));
         var tasks = file.Services.Keys.Sum(s => file.Count(env, s));
         var costs = new List<(string What, decimal Monthly)>();
-        if (resources.ContainsKey("NatGateway"))
+        if (Has("NatGateway"))
             costs.Add(("NAT gateway and its address", NatGateway + PublicAddress));
-        if (resources.ContainsKey("LoadBalancer"))
+        if (Has("LoadBalancer"))
             costs.Add(("Load balancer", LoadBalancer));
-        if (resources.ContainsKey("Database"))
+        if (Has("Database"))
             costs.Add(
                 string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
                     ? ("Database, db.t4g.small Multi-AZ", SmallMultiAzDatabase)
@@ -68,6 +72,23 @@ internal static class AwsPlanSummary
         foreach (var (what, monthly) in costs)
             yield return $"  {Money(monthly), 9}  {what}";
         yield return $"  {Money(costs.Sum(c => c.Monthly)), 9}  a month";
+    }
+
+    private static IEnumerable<string> ResourceLines(
+        string name,
+        DeployEnvironment env,
+        JsonObject template
+    )
+    {
+        var resources = (JsonObject)template["Resources"].NotNull();
+        yield return $"{name} ({env.Profile}, {env.Region}) has {resources.Count} resources:";
+        foreach (
+            var group in resources
+                .Select(r => r.Value.NotNull()["Type"].NotNull().GetValue<string>())
+                .GroupBy(t => t, StringComparer.Ordinal)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+        )
+            yield return $"  {group.Count(), 3}  {group.Key}";
     }
 
     private static string Money(decimal amount) =>
