@@ -69,7 +69,7 @@ creates admits only users you invite; add the first in the Cognito console, and 
 group.
 
 Use the `try` profile for an environment you will throw away: no domain, no NAT gateway, a small database deleted
-with the stack. CloudFront serves it over HTTPS, but reaches the load balancer over plain HTTP inside AWS.
+with the environment's foundation. CloudFront serves it over HTTPS, but reaches the load balancer over plain HTTP inside AWS.
 
 ## One hub
 

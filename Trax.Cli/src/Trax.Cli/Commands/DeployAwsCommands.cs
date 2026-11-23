@@ -58,7 +58,8 @@ internal static class DeployAwsCommands
         var file = FileOption();
         var command = new Command(
             "plan",
-            "Write the environment's CloudFormation template under .trax/deploy/aws/ and say what it creates."
+            "Write the environment's two CloudFormation templates, the foundation and the runtime, under "
+                + ".trax/deploy/aws/ and say what they create."
         )
         {
             env,
@@ -84,7 +85,7 @@ internal static class DeployAwsCommands
         var file = FileOption();
         var command = new Command(
             "status",
-            "Show the environment's stack, its address and each service."
+            "Show the environment's two stacks, its address and each service."
         )
         {
             env,
@@ -155,7 +156,10 @@ internal static class DeployAwsCommands
         {
             Description = "Do not ask for the stack's name to be typed back.",
         };
-        var command = new Command("destroy", "Delete the environment's stack.")
+        var command = new Command(
+            "destroy",
+            "Delete the environment's two stacks, the runtime and then the foundation."
+        )
         {
             env,
             file,
