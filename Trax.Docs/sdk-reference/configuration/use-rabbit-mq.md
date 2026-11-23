@@ -83,8 +83,8 @@ constructed receiver throws `InvalidOperationException` from `StartAsync`, befor
 | `RabbitMq:UserName` | `RabbitMq__UserName` | The user, in place of any in the URI |
 | `RabbitMq:Password` | `RabbitMq__Password` | The password, in place of any in the URI |
 
-A host that keeps a full URI in `ConnectionStrings:RabbitMq` connects as it did. `trax deploy --target compose` sets
-the host, user and password apart and no URI, so a generated password holding a `/` reaches the broker intact. With
+A host that keeps a full URI in `ConnectionStrings:RabbitMq` connects as it did. `trax deploy` (compose, and
+Kubernetes when RabbitMQ runs in the cluster) sets the host, user and password apart and no URI, so a generated password holding a `/` reaches the broker intact. With
 neither the URI nor the host set, `UseRabbitMq` throws `ArgumentException` naming both. The persisted-operation
 invalidation reads the same settings through `UseRabbitMqInvalidation(configuration, ...)`.
 
