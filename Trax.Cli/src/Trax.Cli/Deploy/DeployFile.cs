@@ -275,8 +275,11 @@ internal sealed partial class DeployFile
             if (service.Memory < ServiceHardening.MinimumMemoryMiB)
                 throw new InvalidOperationException(
                     Problem(
-                        $"service '{name}' has memory {service.Memory}; it must be at least "
-                            + $"{ServiceHardening.MinimumMemoryMiB} (MiB)."
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"service '{name}' has memory {service.Memory}; it must be at least "
+                                + $"{ServiceHardening.MinimumMemoryMiB} (MiB)."
+                        )
                     )
                 );
             if (service.Count < 1)

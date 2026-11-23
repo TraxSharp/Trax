@@ -229,8 +229,8 @@ internal static class ComposeTarget
         y.AppendLine("    security_opt:");
         y.AppendLine("      - no-new-privileges:true");
         y.AppendLine("    userns_mode: nomap");
-        y.AppendLine($"    pids_limit: {ServiceHardening.Pids}");
-        y.AppendLine($"    mem_limit: {hardening.MemoryMiB}m");
+        y.AppendLine(CultureInfo.InvariantCulture, $"    pids_limit: {ServiceHardening.Pids}");
+        y.AppendLine(CultureInfo.InvariantCulture, $"    mem_limit: {hardening.MemoryMiB}m");
     }
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";
