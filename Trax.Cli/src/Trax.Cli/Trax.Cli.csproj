@@ -57,6 +57,12 @@
     <InternalsVisibleTo Include="Trax.Cli.Tests" />
   </ItemGroup>
 
+  <!-- The tool ships its dependencies' assemblies, so it carries their licences and copyrights. The file is
+       generated from the tool's runtime dependencies by ThirdPartyNoticesTests in Trax.Cli.Tests.Meta. -->
+  <ItemGroup>
+    <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
   <!-- The twin and corpus generators ship inside the package, bundled to plain JavaScript with the
        TypeScript engine compiled in, so an installed `trax` needs only node to write them
        (MachineGenerator.BundledToolsDir). They are bundled when the package is packed, from the

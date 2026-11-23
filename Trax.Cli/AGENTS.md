@@ -50,8 +50,12 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Cli.Tests.Meta/` holds eleven convention guards, and **all eleven are shared** with
-the other folders. This folder owns no convention guard of its own.
+`tests/Trax.Cli.Tests.Meta/` holds twelve guards. Eleven are convention guards **shared** with
+the other folders. The twelfth is this folder's own: `ThirdPartyNoticesTests` regenerates
+`src/Trax.Cli/THIRD-PARTY-NOTICES.txt`, which the tool's package carries, from the packages the tool
+ships, and fails until the rewritten file is committed. A dependency added, removed or relicensed
+fails it; one under a licence with no text in `tests/Trax.Cli.Tests.Meta/Licenses/` fails until
+the text is added there.
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is
