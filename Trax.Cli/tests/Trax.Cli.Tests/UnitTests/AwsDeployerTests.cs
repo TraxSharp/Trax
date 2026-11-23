@@ -136,7 +136,7 @@ public class AwsDeployerTests
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*orders-production*one stack*destroy*");
+            .WithMessage("*orders-production*one stack*destroy*starts empty*snapshot*by hand*");
         aws.Calls.Should().BeEmpty();
         images.Published.Should().BeEmpty();
     }

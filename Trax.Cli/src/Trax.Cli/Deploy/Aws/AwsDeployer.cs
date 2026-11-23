@@ -161,8 +161,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         throw new InvalidOperationException(
             found is null
                 ? $"{stack} was deployed as one stack by an earlier trax, which now keeps the network, database and "
-                    + "sign-in in a stack of their own. Run 'trax deploy destroy' for this environment (production "
-                    + "keeps a final snapshot of the database and its user pool), then deploy again."
+                    + "sign-in in a stack of their own. Run 'trax deploy destroy' for this environment, then deploy "
+                    + "again. The new database starts empty: production keeps a final snapshot of the old one, which "
+                    + "you restore by hand, and its user pool; a try environment loses its data and its users."
                 : $"{stack} is a {found} stack where trax expects the {part}. Rename this app or its environment."
         );
     }

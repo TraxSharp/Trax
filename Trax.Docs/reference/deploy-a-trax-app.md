@@ -89,7 +89,9 @@ trax deploy destroy --env production      # AWS; production's database leaves a 
 foundation's network holds something trax did not create there, such as an EKS cluster.
 
 An environment deployed by a trax from before the split is one stack. A deploy refuses it; destroy it and deploy
-again (production keeps the final snapshot and the user pool).
+again. The new database starts empty. Production keeps a final snapshot of the old one, which you restore into the
+new database by hand, and keeps its user pool, so its users still sign in. A `try` environment loses its data and its
+users.
 
 In production, `destroy` keeps the Cognito user pool and its users, and the next deploy of the environment signs in
 against it again. `destroy --delete-data` deletes the pool and every user in it.

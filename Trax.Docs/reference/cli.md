@@ -743,7 +743,8 @@ services). The runtime reads what the foundation creates through parameters trax
 outputs, not CloudFormation exports, so the foundation can change its database or network under a running app. An
 environment's name is lower-case letters and digits only, so no two apps share a stack name; trax also refuses a
 stack whose `trax:app` tag names another app, or that has none, and one deployed before the split into two stacks
-(destroy it and deploy again). Credentials come from the
+(destroy it and deploy again: the new database starts empty, production's final snapshot of the old one is restored
+by hand, and a `try` environment loses its data and its users). Credentials come from the
 standard AWS chain (a profile, SSO, the environment, a role); trax stores none. Nothing beyond the .NET SDK is
 needed: the stack is CloudFormation that trax generates, and the images are built and pushed with
 `dotnet publish -t:PublishContainer`.
