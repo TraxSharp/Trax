@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading.Channels;
 using k8s;
 using k8s.Autorest;
@@ -22,11 +23,18 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     private readonly TimeProvider _clock;
 
     public KubernetesDeployClient(TimeProvider clock)
+        : this(KubernetesClientConfiguration.BuildConfigFromConfigFile(), clock) { }
+
+    /// <summary>A client for <paramref name="config"/>; tests pass a handler that answers for the API server.</summary>
+    internal KubernetesDeployClient(
+        KubernetesClientConfiguration config,
+        TimeProvider clock,
+        params DelegatingHandler[] handlers
+    )
     {
         _clock = clock;
-        var config = KubernetesClientConfiguration.BuildConfigFromConfigFile();
         Context = config.CurrentContext ?? "(none)";
-        _client = new k8s.Kubernetes(config);
+        _client = new k8s.Kubernetes(config, handlers);
     }
 
     public string Context { get; }
@@ -399,32 +407,88 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 )
                 .ConfigureAwait(false)
         ).Items;
+        if (pods.Count == 0)
+            throw new InvalidOperationException(
+                $"No pod of '{service}' is in namespace {ns}. A migrate Job's pods go a day after it ends; "
+                    + "'trax deploy status' shows what is running."
+            );
         var lines = Channel.CreateUnbounded<string>();
-        var readers = pods.Select(async pod =>
-            {
-                var log = await OrNull(() =>
-                        _client.CoreV1.ReadNamespacedPodLogAsync(
-                            pod.Metadata.Name,
-                            ns,
-                            follow: follow,
-                            sinceSeconds: sinceMinutes * 60,
-                            cancellationToken: ct
-                        )
-                    )
-                    .ConfigureAwait(false);
-                if (log is null)
-                    return;
-                using var reader = new StreamReader(log);
-                while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
-                    await lines
-                        .Writer.WriteAsync($"[{pod.Metadata.Name}] {line}", ct)
-                        .ConfigureAwait(false);
-            })
+        var readers = pods.Select(pod => ReadPodLogAsync(pod, ns, follow, sinceMinutes, lines, ct))
             .ToList();
         _ = Task.WhenAll(readers)
-            .ContinueWith(t => lines.Writer.TryComplete(t.Exception), TaskScheduler.Default);
+            .ContinueWith(
+                t => lines.Writer.TryComplete(t.Exception?.InnerException),
+                TaskScheduler.Default
+            );
         await foreach (var line in lines.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return line;
+    }
+
+    /// <summary>
+    /// Copies one pod's log into <paramref name="lines"/>. A log the API will not give (the container has not
+    /// started, or reading logs is not allowed) becomes one line saying why, so the other pods are still read.
+    /// </summary>
+    private async Task ReadPodLogAsync(
+        V1Pod pod,
+        string ns,
+        bool follow,
+        int sinceMinutes,
+        Channel<string> lines,
+        CancellationToken ct
+    )
+    {
+        Stream log;
+        try
+        {
+            log = await _client
+                .CoreV1.ReadNamespacedPodLogAsync(
+                    pod.Metadata.Name,
+                    ns,
+                    follow: follow,
+                    sinceSeconds: sinceMinutes * 60,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
+        }
+        catch (HttpOperationException ex)
+        {
+            await lines
+                .Writer.WriteAsync(
+                    $"[{pod.Metadata.Name}] no log ({Waiting(pod)?.Reason ?? ex.Response.StatusCode.ToString()}: "
+                        + $"{ApiMessage(ex)})",
+                    ct
+                )
+                .ConfigureAwait(false);
+            return;
+        }
+        using var reader = new StreamReader(log);
+        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+            await lines
+                .Writer.WriteAsync($"[{pod.Metadata.Name}] {line}", ct)
+                .ConfigureAwait(false);
+    }
+
+    private static V1ContainerStateWaiting? Waiting(V1Pod pod) =>
+        pod.Status?.ContainerStatuses?.FirstOrDefault()?.State?.Waiting;
+
+    /// <summary>The message the API server gave with a refusal, or its status when it gave none.</summary>
+    private static string ApiMessage(HttpOperationException ex)
+    {
+        try
+        {
+            using var body = JsonDocument.Parse(ex.Response.Content ?? "");
+            if (
+                body.RootElement.ValueKind == JsonValueKind.Object
+                && body.RootElement.TryGetProperty("message", out var message)
+                && message.GetString() is { Length: > 0 } text
+            )
+                return text;
+            return ex.Response.StatusCode.ToString();
+        }
+        catch (JsonException)
+        {
+            return ex.Response.StatusCode.ToString();
+        }
     }
 
     public async Task DeleteAsync(string ns, KubernetesObjectState target, CancellationToken ct)
