@@ -78,6 +78,7 @@ public partial class DeployComposeTests
 
     private const string HubAndTwoWorkersCompose = """
         # Written by `trax deploy --target compose` from trax.deploy.json. Running it again overwrites this file.
+        # For rootless podman: every service runs with userns_mode nomap, which docker compose does not accept.
         # Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy
         # .env.example to .env and fill it in. Never commit the .env.
 
@@ -103,8 +104,20 @@ public partial class DeployComposeTests
             healthcheck:
               test: ["CMD", "pg_isready", "-U", "orders"]
               interval: 5s
+            cap_drop:
+              - ALL
+            cap_add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - FOWNER
+              - SETGID
+              - SETUID
             security_opt:
               - no-new-privileges:true
+            userns_mode: nomap
+            pids_limit: 512
+            mem_limit: 1024m
+            memswap_limit: 1024m
             restart: unless-stopped
 
           rabbitmq:
@@ -115,8 +128,19 @@ public partial class DeployComposeTests
             healthcheck:
               test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
               interval: 5s
+            cap_drop:
+              - ALL
+            cap_add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - SETGID
+              - SETUID
             security_opt:
               - no-new-privileges:true
+            userns_mode: nomap
+            pids_limit: 512
+            mem_limit: 512m
+            memswap_limit: 512m
             restart: unless-stopped
 
           # The new version migrates the database once, before any service of it starts.
@@ -128,6 +152,10 @@ public partial class DeployComposeTests
               - ALL
             security_opt:
               - no-new-privileges:true
+            userns_mode: nomap
+            pids_limit: 512
+            mem_limit: 1024m
+            memswap_limit: 1024m
             depends_on:
               database:
                 condition: service_healthy
@@ -144,6 +172,10 @@ public partial class DeployComposeTests
               - ALL
             security_opt:
               - no-new-privileges:true
+            userns_mode: nomap
+            pids_limit: 512
+            mem_limit: 1024m
+            memswap_limit: 1024m
             depends_on:
               migrate:
                 condition: service_completed_successfully
@@ -160,6 +192,10 @@ public partial class DeployComposeTests
               - ALL
             security_opt:
               - no-new-privileges:true
+            userns_mode: nomap
+            pids_limit: 512
+            mem_limit: 1024m
+            memswap_limit: 1024m
             deploy:
               replicas: 2
             depends_on:
@@ -544,11 +580,108 @@ public partial class DeployComposeTests
     [Test]
     public async Task The_file_reads_back_what_it_wrote()
     {
-        var path = await WriteAsync(File_()).ConfigureAwait(false);
+        var file = File_();
+        file.Services["worker"].Memory = 2048;
+        var path = await WriteAsync(file).ConfigureAwait(false);
 
         var read = await DeployFile.ReadAsync(path).ConfigureAwait(false);
 
-        read.Should().BeEquivalentTo(File_());
+        read.Should().BeEquivalentTo(file);
+        read.Services["worker"].Memory.Should().Be(2048);
+    }
+
+    [Test]
+    public void A_service_runs_in_the_memory_it_names()
+    {
+        var file = File_();
+        file.Services["hub"].Memory = 1536;
+        file.Services["worker"].Memory = 2048;
+
+        var compose = ComposeTarget.Render(file, Exports())[0].Content.ReplaceLineEndings("\n");
+
+        Block(compose, "worker")
+            .Should()
+            .Contain("    mem_limit: 2048m\n    memswap_limit: 2048m\n");
+        Block(compose, "hub").Should().Contain("    mem_limit: 1536m\n    memswap_limit: 1536m\n");
+        Block(compose, "migrate")
+            .Should()
+            .Contain("    mem_limit: 1536m\n    memswap_limit: 1536m\n");
+    }
+
+    [Test]
+    public void A_service_with_no_memory_runs_in_the_default()
+    {
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
+
+        Block(compose, "hub").Should().Contain("    mem_limit: 1024m\n");
+        Block(compose, "migrate").Should().Contain("    mem_limit: 1024m\n");
+    }
+
+    [Test]
+    public async Task A_service_may_name_the_least_memory()
+    {
+        var path = Path.Combine(_dir, DeployFile.FileName);
+        await File.WriteAllTextAsync(
+            path,
+            """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 128 } } }"""
+        );
+
+        var read = await DeployFile.ReadAsync(path).ConfigureAwait(false);
+
+        read.Services["hub"].Memory.Should().Be(128);
+    }
+
+    [Test]
+    public async Task A_memory_refusal_reads_the_same_in_any_culture()
+    {
+        var path = Path.Combine(_dir, DeployFile.FileName);
+        await File.WriteAllTextAsync(
+            path,
+            """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": -1 } } }"""
+        );
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(
+                "sv-SE"
+            );
+
+            var act = async () => await DeployFile.ReadAsync(path).ConfigureAwait(false);
+
+            (
+                await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+            ).WithMessage("*service 'hub' has memory -1;*at least 128 (MiB)*");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
+    }
+
+    [Test]
+    public void Every_service_drops_every_capability_and_adds_back_only_its_own()
+    {
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
+
+        foreach (var service in new[] { "database", "rabbitmq", "migrate", "hub", "worker" })
+        {
+            var block = Block(compose, service);
+            block.Should().Contain("    cap_drop:\n      - ALL\n", service);
+            block.Should().Contain("    userns_mode: nomap\n", service);
+            block.Should().Contain("    pids_limit: 512\n", service);
+            block.Should().MatchRegex(@"    mem_limit: (\d+)m\n    memswap_limit: \1m\n", service);
+        }
+        Block(compose, "hub").Should().NotContain("cap_add");
+        Block(compose, "worker").Should().NotContain("cap_add");
+    }
+
+    /// <summary>The lines of one service in a rendered compose file, up to the next service.</summary>
+    private static string Block(string compose, string service)
+    {
+        var start = compose.IndexOf($"\n  {service}:\n", StringComparison.Ordinal);
+        start.Should().BeGreaterThan(0, $"the stack has a {service} service");
+        var end = compose.IndexOf("\n\n", start + 1, StringComparison.Ordinal);
+        return compose[start..(end < 0 ? compose.Length : end)];
     }
 
     [TestCase(
@@ -571,6 +704,14 @@ public partial class DeployComposeTests
     [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "port": 8080 }, "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "port": 8080 } } }""",
         "*'worker'*port 8080*'hub'*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 32 } } }""",
+        "*service 'hub' has memory 32*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 127 } } }""",
+        "*service 'hub' has memory 127*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
     public async Task A_file_that_cannot_be_deployed_is_refused_naming_the_problem(

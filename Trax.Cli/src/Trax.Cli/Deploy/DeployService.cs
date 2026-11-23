@@ -20,4 +20,7 @@ internal sealed class DeployService
     /// no other service has.
     /// </summary>
     public int? Port { get; set; }
+
+    /// <summary>The memory each copy may use, in MiB. Without it, 1024.</summary>
+    public int? Memory { get; set; }
 }

@@ -8,7 +8,7 @@ nav_order: 6
 
 # Deploy a Trax app
 
-`trax deploy` deploys the Trax hosts in a solution: as a compose stack for any machine that runs docker or podman,
+`trax deploy` deploys the Trax hosts in a solution: as a compose stack for any machine that runs rootless podman,
 or as an AWS environment. You name the projects and the choices only you can make in `trax.deploy.json`; each host
 reports the rest itself when trax runs it once with `--trax-export-deploy`: its database, whether it serves the API
 or runs the scheduler, its endpoints and its sign-in. The [CLI reference](/docs/reference/cli#deployments-trax-deploy)
@@ -35,11 +35,14 @@ under `settings` (an issuer, an origin) and `secrets` (an API key, a password), 
 ```bash
 trax deploy --target compose --build
 cp .env.example .env                      # fill in every value; never commit it
-docker compose up -d                      # or: podman compose up -d
+podman compose up -d
 ```
 
 The stack is Postgres, RabbitMQ when a host uses it, one `migrate` run of the new version, then each service. The
-API service answers on port 8080.
+API service answers on port 8080. Every service drops all Linux capabilities (Postgres and RabbitMQ get back the
+few their entrypoints need), runs in a user namespace that leaves your own uid out of it (`userns_mode: nomap`,
+which docker does not accept), and is held to 512 processes and a memory limit: a service's `memory` in MiB,
+1024 when it names none.
 
 Passwords reach the hosts as values of their own, never inside a connection string or a URI: Postgres's as
 `PGPASSWORD`, RabbitMQ's as `RabbitMq__Password` beside `RabbitMq__Host` and `RabbitMq__UserName`. A host that
@@ -81,7 +84,7 @@ runs.
 ## Take it down
 
 ```bash
-docker compose down                       # compose; add -v to drop the database too
+podman compose down                       # compose; add -v to drop the database too
 trax deploy destroy --env production      # AWS; production's database leaves a final snapshot
 ```
 

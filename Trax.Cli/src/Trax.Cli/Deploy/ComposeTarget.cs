@@ -5,7 +5,7 @@ using Trax.Effect.Configuration.Deploy;
 namespace Trax.Cli.Deploy;
 
 /// <summary>
-/// Writes a compose stack for a Trax app, for any host that runs docker or podman compose: Postgres, RabbitMQ when a
+/// Writes a compose stack for a Trax app, for a host that runs rootless podman compose: Postgres, RabbitMQ when a
 /// host connects to it, a <c>migrate</c> service that runs the new version once with <c>--trax-migrate</c>, and each
 /// deployed service after it with <c>TRAX_MIGRATIONS=skip</c>. Every password, setting and secret comes from the
 /// environment and stops <c>compose up</c> when it is missing.
@@ -56,6 +56,9 @@ internal static class ComposeTarget
     {
         y.AppendLine(Header);
         y.AppendLine(
+            "# For rootless podman: every service runs with userns_mode nomap, which docker compose does not accept."
+        );
+        y.AppendLine(
             "# Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy"
         );
         y.AppendLine("# .env.example to .env and fill it in. Never commit the .env.");
@@ -95,8 +98,7 @@ internal static class ComposeTarget
         y.AppendLine("    healthcheck:");
         y.AppendLine($"      test: [\"CMD\", \"pg_isready\", \"-U\", \"{file.App}\"]");
         y.AppendLine("      interval: 5s");
-        y.AppendLine("    security_opt:");
-        y.AppendLine("      - no-new-privileges:true");
+        Hardened(y, ServiceHardening.Database);
         y.AppendLine("    restart: unless-stopped");
     }
 
@@ -111,8 +113,7 @@ internal static class ComposeTarget
         y.AppendLine("    healthcheck:");
         y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
         y.AppendLine("      interval: 5s");
-        y.AppendLine("    security_opt:");
-        y.AppendLine("      - no-new-privileges:true");
+        Hardened(y, ServiceHardening.Broker);
         y.AppendLine("    restart: unless-stopped");
     }
 
@@ -126,7 +127,7 @@ internal static class ComposeTarget
         y.AppendLine($"    image: {Image(file, migrator)}");
         y.AppendLine($"    command: [\"{TraxMigrate.Argument}\"]");
         y.AppendLine("    environment: *trax");
-        Hardened(y);
+        Hardened(y, ServiceHardening.Trax(file.Services[migrator]));
         y.AppendLine("    depends_on:");
         y.AppendLine("      database:");
         y.AppendLine("        condition: service_healthy");
@@ -169,7 +170,7 @@ internal static class ComposeTarget
                     $"      - \"127.0.0.1:{service.Port ?? FreePort()}:8080\""
                 );
             }
-            Hardened(y);
+            Hardened(y, ServiceHardening.Trax(service));
             if (service.Count > 1)
             {
                 y.AppendLine("    deploy:");
@@ -210,13 +211,28 @@ internal static class ComposeTarget
     private static string Image(DeployFile file, string service) =>
         $"{ImageName(file, service)}:${{TRAX_IMAGE_TAG:-latest}}";
 
-    /// <summary>A Trax service needs no Linux capability and never gains one.</summary>
-    private static void Hardened(StringBuilder y)
+    /// <summary>
+    /// Renders <paramref name="hardening"/>. <c>nomap</c> leaves the deploying user's own uid out of the container,
+    /// so an escape does not land as them; <c>auto</c> would give each service a range of its own, but fails on a
+    /// host whose existing containers already hold the user's whole subordinate range, which is the default.
+    /// </summary>
+    private static void Hardened(StringBuilder y, ServiceHardening hardening)
     {
         y.AppendLine("    cap_drop:");
         y.AppendLine("      - ALL");
+        if (hardening.AddCapabilities.Count > 0)
+        {
+            y.AppendLine("    cap_add:");
+            foreach (var capability in hardening.AddCapabilities)
+                y.AppendLine($"      - {capability}");
+        }
         y.AppendLine("    security_opt:");
         y.AppendLine("      - no-new-privileges:true");
+        y.AppendLine("    userns_mode: nomap");
+        y.AppendLine(CultureInfo.InvariantCulture, $"    pids_limit: {ServiceHardening.Pids}");
+        y.AppendLine(CultureInfo.InvariantCulture, $"    mem_limit: {hardening.MemoryMiB}m");
+        // Without it the runtime allows as much swap again, so a copy could hold twice its memory before the kill.
+        y.AppendLine(CultureInfo.InvariantCulture, $"    memswap_limit: {hardening.MemoryMiB}m");
     }
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";

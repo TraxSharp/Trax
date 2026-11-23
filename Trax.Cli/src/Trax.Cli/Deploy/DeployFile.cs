@@ -292,6 +292,16 @@ internal sealed partial class DeployFile
                         $"service '{name}' has port {port.ToString(CultureInfo.InvariantCulture)}, which service '{ports[port]}' has too."
                     )
                 );
+            if (service.Memory < ServiceHardening.MinimumMemoryMiB)
+                throw new InvalidOperationException(
+                    Problem(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"service '{name}' has memory {service.Memory}; it must be at least "
+                                + $"{ServiceHardening.MinimumMemoryMiB} (MiB)."
+                        )
+                    )
+                );
             if (service.Count < 1)
                 throw new InvalidOperationException(
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
