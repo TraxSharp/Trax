@@ -768,4 +768,76 @@ public class AwsStackTemplateTests
             .Should()
             .NotContainKey("DatabaseAddress");
     }
+
+    [Test]
+    public void A_production_database_refuses_deletion_until_destroy_turns_it_off()
+    {
+        var foundation = Templates().Foundation;
+        var protect = (JsonObject)
+            foundation["Parameters"].NotNull()[AwsStack.ProtectParameter].NotNull();
+
+        Properties(foundation, "Database")["DeletionProtection"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("""{"Fn::If":["Protected",true,false]}""");
+        protect["Default"].NotNull().GetValue<string>().Should().Be("true");
+        foundation["Conditions"]
+            .NotNull()["Protected"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be($$"""{"Fn::Equals":[{"Ref":"{{AwsStack.ProtectParameter}}"},"true"]}""");
+    }
+
+    [Test]
+    public void A_try_database_and_an_existing_database_have_no_protection_to_turn_off()
+    {
+        var tried = Templates(File_(DeployEnvironment.Try)).Foundation;
+        var existing = File_();
+        existing.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        ((bool)Properties(tried, "Database")["DeletionProtection"].NotNull()).Should().BeFalse();
+        ((JsonObject?)tried["Parameters"] ?? []).Should().NotContainKey(AwsStack.ProtectParameter);
+        ((JsonObject?)Templates(existing).Foundation["Parameters"] ?? [])
+            .Should()
+            .NotContainKey(AwsStack.ProtectParameter);
+    }
+
+    private static string OutputOf(JsonObject template, string name) =>
+        template["Outputs"].NotNull()[name].NotNull()["Value"].NotNull().ToJsonString();
+
+    [Test]
+    public void Each_stack_lists_the_groups_it_creates_for_destroys_network_check()
+    {
+        var templates = Templates();
+        var existing = File_();
+        existing.Environments["production"].DatabaseSecretArn =
+            "arn:aws:secretsmanager:us-west-2:123:secret:orders-db";
+
+        OutputOf(templates.Foundation, "SecurityGroups")
+            .Should()
+            .Be(
+                """{"Fn::Join":[",",[{"Ref":"DatabaseClientSecurityGroup"},{"Ref":"DatabaseSecurityGroup"}]]}"""
+            );
+        OutputOf(Templates(existing).Foundation, "SecurityGroups")
+            .Should()
+            .Be("""{"Fn::Join":[",",[{"Ref":"DatabaseClientSecurityGroup"}]]}""");
+        OutputOf(templates.Runtime, "SecurityGroups")
+            .Should()
+            .Be(
+                """{"Fn::Join":[",",[{"Ref":"TaskSecurityGroup"},{"Ref":"LoadBalancerSecurityGroup"}]]}"""
+            );
+    }
+
+    [Test]
+    public void The_migrate_task_wears_the_database_client_group()
+    {
+        OutputOf(Templates().Runtime, "TaskSecurityGroups")
+            .Should()
+            .Be(
+                """{"Fn::Join":[",",[{"Ref":"TaskSecurityGroup"},{"Ref":"DatabaseClientSecurityGroup"}]]}"""
+            );
+    }
 }
