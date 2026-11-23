@@ -143,9 +143,13 @@ public static class ServiceExtensions
                 }
             )
         );
-        builder.ServiceCollection.AddServiceTrainBus(
+        // Effects are configured before AddMediator, so whether a data provider was chosen is
+        // settled here (mediator/0006).
+        AddServiceTrainBusCore(
+            builder.ServiceCollection,
             configuration.TrainLifetime,
-            configuration.Assemblies
+            configuration.Assemblies,
+            withRunRecording: builder.HasDataProvider
         );
 
         return new TraxBuilderWithMediator(builder);
@@ -273,6 +277,23 @@ public static class ServiceExtensions
         this IServiceCollection serviceCollection,
         ServiceLifetime serviceTrainLifetime = ServiceLifetime.Transient,
         params Assembly[] assemblies
+    ) =>
+        AddServiceTrainBusCore(
+            serviceCollection,
+            serviceTrainLifetime,
+            assemblies,
+            withRunRecording: true
+        );
+
+    // withRunRecording: whether to register the services that read or write the run-record tables
+    // (the execution service, the run starters, the local run executor, work-queue promotion and the
+    // invoked-train launcher). Each needs an IDataContextProviderFactory, which only a data provider
+    // registers, so AddMediator passes HasDataProvider (mediator/0006).
+    private static IServiceCollection AddServiceTrainBusCore(
+        IServiceCollection serviceCollection,
+        ServiceLifetime serviceTrainLifetime,
+        Assembly[] assemblies,
+        bool withRunRecording
     )
     {
         RefuseSingletonTrainLifetime(
@@ -299,14 +320,41 @@ public static class ServiceExtensions
         serviceCollection.PrependHostedService<AuthorizationRegistrationValidator>();
         serviceCollection.PrependHostedService<Services.ChainVerification.TrainChainStartupValidator>();
 
-        return AddBusAndDiscoveryServices(serviceCollection, trainRegistry)
-            // Singletons, because a singleton the host registers may inject either one and
-            // ValidateScopes is on by default in Development, so scoped would fail such a host at
-            // startup. (Trains themselves are never singletons: the mediator refuses that
-            // lifetime.) Neither holds per-scope state: EnqueueContextAccessor keeps its value in
-            // a static AsyncLocal, so a singleton's accessor reads the current enqueue, and
-            // WorkQueuePromotion creates a context per call from a singleton factory.
-            .AddSingleton<IEnqueueContextAccessor, EnqueueContextAccessor>()
+        AddBusAndDiscoveryServices(serviceCollection, trainRegistry)
+            // A singleton, because a singleton the host registers may inject it and ValidateScopes
+            // is on by default in Development. It holds no per-scope state: EnqueueContextAccessor
+            // keeps its value in a static AsyncLocal, so a singleton's accessor reads the current
+            // enqueue. It needs no data provider: with none, nothing ever sets it.
+            .AddSingleton<IEnqueueContextAccessor, EnqueueContextAccessor>();
+
+        // Without a data provider these could not be constructed, and a host that validates its
+        // container (ValidateOnBuild, on by default in Development) would refuse to start even
+        // though it never queues a train (mediator/0006).
+        if (withRunRecording)
+            AddRunRecordingServices(serviceCollection);
+
+        return serviceCollection.RegisterServiceTrains(
+            trainRegistry.DiscoveredTrains,
+            serviceTrainLifetime
+        );
+    }
+
+    /// <summary>
+    /// The services that read or write the run-record tables, all of which need an
+    /// <see cref="IDataContextProviderFactory"/>.
+    /// </summary>
+    private static IServiceCollection AddRunRecordingServices(
+        IServiceCollection serviceCollection
+    ) =>
+        serviceCollection
+            .AddSingleton<Services.RunStarters.IRunStarters, Services.RunStarters.RunStarters>()
+            .AddScoped<IRunExecutor>(sp => new LocalRunExecutor(
+                sp.GetRequiredService<ITrainBus>(),
+                sp.GetRequiredService<IDataContextProviderFactory>(),
+                sp
+            ))
+            // A singleton for the same reason as the enqueue context accessor: it creates a context
+            // per call from a singleton factory, so it holds no per-scope state.
             .AddSingleton<IWorkQueuePromotion, WorkQueuePromotion>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
             // Queues the train a state machine's invoking state runs, through the execution service
@@ -316,9 +364,7 @@ public static class ServiceExtensions
             .AddScoped<
                 Trax.StateMachine.Persistence.IInvokedTrainLauncher,
                 Services.InvokedTrains.InvokedTrainLauncher
-            >()
-            .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
-    }
+            >();
 
     private static IServiceCollection AddBusAndDiscoveryServices(
         IServiceCollection serviceCollection,
@@ -338,11 +384,5 @@ public static class ServiceExtensions
             // pipeline replace this via AddTraxApi with an HttpContext-backed
             // implementation so per-principal concurrency caps activate.
             .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
-            .AddSingleton<Services.RunStarters.IRunStarters, Services.RunStarters.RunStarters>()
-            .AddScoped<ITrainBus, TrainBus>()
-            .AddScoped<IRunExecutor>(sp => new LocalRunExecutor(
-                sp.GetRequiredService<ITrainBus>(),
-                sp.GetRequiredService<IDataContextProviderFactory>(),
-                sp
-            ));
+            .AddScoped<ITrainBus, TrainBus>();
 }

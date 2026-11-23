@@ -65,10 +65,12 @@ interfaces, neither extending the other.
 
 ### Registered services
 
+`AddServiceTrainBus` registers every row below. `AddMediator` leaves out `IRunStarters`, `IWorkQueuePromotion`, `IRunExecutor`, `ITrainExecutionService` and `IInvokedTrainLauncher` when the effects have no data provider, since each needs one; see [AddMediator](/docs/sdk-reference/configuration/add-mediator#registered-services).
+
 | Service | Lifetime |
 |---------|----------|
 | `MediatorConfiguration`, with the defaults, when none is registered | Singleton |
-| `ITrainRegistry` (its `InputTypeToTrain` map is the first train scanned for each input type, which `ITrainBus.RunAsync` dispatches to), `ITrainDiscoveryService`, `ITrainChainGraphs`, `IConcurrencyLimiter`, `ITrustedExecutionScope`, `ICurrentPrincipalProvider` (returns `null`), `IEnqueueContextAccessor`, `IWorkQueuePromotion`, and the `IServiceCollection` itself, which discovery reads | Singleton |
+| `ITrainRegistry` (its `InputTypeToTrain` map is the first train scanned for each input type, which `ITrainBus.RunAsync` dispatches to), `ITrainDiscoveryService`, `ITrainChainGraphs`, `IConcurrencyLimiter`, `ITrustedExecutionScope`, `ICurrentPrincipalProvider` (returns `null`), `IEnqueueContextAccessor`, `IRunStarters`, `IWorkQueuePromotion`, and the `IServiceCollection` itself, which discovery reads | Singleton |
 | `ITrainBus`, `IRunExecutor` (`LocalRunExecutor`), `ITrainExecutionService`, `IInvokedTrainLauncher` (queues the train a state machine's invoking state runs) | Scoped |
 | The startup chain check and the authorization registration check | Hosted services, inserted ahead of every hosted service already registered |
 | Each discovered train, under its own interface, through `AddScopedTraxRoute` or `AddTransientTraxRoute` | The lifetime given |

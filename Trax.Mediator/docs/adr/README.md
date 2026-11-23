@@ -38,7 +38,7 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `auth` | [0001](./0001-authorization-is-fail-closed.md), [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md) |
-| `platform` | [0001](./0001-authorization-is-fail-closed.md), [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md), [0003](./0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md), [0004](./0004-an-onqueue-hook-runs-under-a-time-limit.md), [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md) |
+| `platform` | [0001](./0001-authorization-is-fail-closed.md), [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md), [0003](./0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md), [0004](./0004-an-onqueue-hook-runs-under-a-time-limit.md), [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md), [0006](./0006-without-a-data-provider-the-mediator-only-runs-trains.md) |
 
 ## All of them
 
@@ -49,3 +49,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0003](./0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md) | A nested enqueue joins the enqueue it runs inside | platform |
 | [0004](./0004-an-onqueue-hook-runs-under-a-time-limit.md) | An OnQueue hook runs under a time limit | platform |
 | [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md) | A train run by name is the train that runs | auth, platform |
+| [0006](./0006-without-a-data-provider-the-mediator-only-runs-trains.md) | Without a data provider, the mediator only runs trains | platform |

@@ -77,8 +77,9 @@ internal sealed class InvokesStartupValidator(
         var launcher = services.GetService<IInvokedTrainLauncher>();
         if (launcher is null)
             problems.Add(
-                $"The machine '{name}' invokes trains, but Trax.Mediator is not registered, so nothing can queue "
-                    + "their runs. Call AddMediator(...) after AddStateMachines(...)."
+                $"The machine '{name}' invokes trains, but Trax.Mediator is not registered with a data provider, so "
+                    + "nothing can queue their runs. Call AddMediator(...) after AddStateMachines(...), with "
+                    + "a data provider configured."
             );
 
         // InMemory registers no SQL dialect, and has no transactions to queue a run in with its advance.

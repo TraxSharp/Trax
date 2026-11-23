@@ -45,8 +45,9 @@ internal sealed class TraxOperationsServiceValidator(
             throw new InvalidOperationException(
                 "AddTraxGraphQL() exposes the operations surface, but ITrainExecutionService is not "
                     + "registered, so queueTrain and requeueExecution would throw at request time: "
-                    + "OperationsService enqueues through the mediator. Call AddMediator(...) before "
-                    + "the host starts."
+                    + "OperationsService enqueues through the mediator. Call AddMediator(...) after a data "
+                    + "provider (UsePostgres, UseSqlite or UseInMemory) before the host starts: without "
+                    + "one, AddMediator registers no execution service (mediator/0006)."
             );
 
         if (mutationsExposed && !isService.IsService(typeof(ITraxScheduler)))
