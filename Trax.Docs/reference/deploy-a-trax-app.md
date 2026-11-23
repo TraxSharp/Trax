@@ -8,7 +8,7 @@ nav_order: 6
 
 # Deploy a Trax app
 
-`trax deploy` deploys the Trax hosts in a solution: as a compose stack for any machine that runs rootless podman,
+`trax deploy` deploys the Trax hosts in a solution: as a compose stack for any machine that runs rootless podman or docker,
 as an AWS environment, or into a namespace of a Kubernetes cluster. You name the projects and the choices only you can make in `trax.deploy.json`; each host
 reports the rest itself when trax runs it once with `--trax-export-deploy`: its database, whether it serves the API
 or runs the scheduler, its endpoints and its sign-in. The [CLI reference](/docs/reference/cli#deployments-trax-deploy)
@@ -58,7 +58,7 @@ For docker compose, add an environment `{ "target": "compose", "engine": "docker
 An AWS stack keeps runs in Postgres and does not provide RabbitMQ yet, so a deploy refuses a host that keeps its
 runs anywhere else or broadcasts through RabbitMQ (`UseRabbitMq`). It also refuses more than
 one API service, an API with no health check, and more than one copy of the API or the scheduler. Deploy those with
-`--target compose`.
+`--target compose`, or to Kubernetes, whose `try` profile runs RabbitMQ in the cluster.
 
 Sign in to the account the usual way (`aws sso login`, a profile, or a role in CI), then:
 
@@ -132,7 +132,7 @@ trax deploy destroy --env production      # AWS; production's database leaves a 
 trax deploy destroy --env staging         # Kubernetes; keeps the namespace, the Secret and the database's volume
 ```
 
-`destroy` deletes the services' stack, then the foundation. It refuses, before deleting anything, when the
+On AWS, `destroy` deletes the services' stack, then the foundation. It refuses, before deleting anything, when the
 foundation's network holds something trax did not create there, such as an EKS cluster.
 
 An environment deployed by a trax from before the split is one stack. A deploy refuses it; destroy it and deploy
