@@ -453,9 +453,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var ours = mine.Concat(Split(runtime?.Outputs.GetValueOrDefault("SecurityGroups")))
             .ToHashSet(StringComparer.Ordinal);
         var foreign = (await aws.NetworkInterfacesAsync(vpc, ct).ConfigureAwait(false))
-            .Where(e => ownsVpc || e.SecurityGroups.Any(mine.Contains))
             .Where(e =>
-                !(ownsVpc && string.Equals(e.Type, "nat_gateway", StringComparison.Ordinal))
+                (ownsVpc || e.SecurityGroups.Any(mine.Contains))
+                && !(ownsVpc && string.Equals(e.Type, "nat_gateway", StringComparison.Ordinal))
                 && (e.SecurityGroups.Count == 0 || !e.SecurityGroups.All(ours.Contains))
             )
             .ToList();

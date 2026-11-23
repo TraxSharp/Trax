@@ -264,6 +264,40 @@ internal static class AwsStack
         }
 
         // ---- ECS -------------------------------------------------------------------------------------------
+        AddEcs(
+            resources,
+            outputs,
+            file,
+            stack,
+            env,
+            exports,
+            api,
+            new ServiceNetwork(serviceSubnets, taskGroups, assignPublicIp),
+            production
+        );
+        outputs["SecurityGroups"] = Output(Join(",", securityGroups));
+        return Template(
+            $"Trax app {file.App}, environment {environmentName} ({env.Profile}): the ECS services. Written by "
+                + "trax deploy; changes made outside it are reverted on the next deploy.",
+            parameters,
+            resources,
+            outputs
+        );
+    }
+
+    // The cluster, its roles, the migrate task and the services, with the outputs the deployer reads.
+    private static void AddEcs(
+        JsonObject resources,
+        JsonObject outputs,
+        DeployFile file,
+        string stack,
+        DeployEnvironment env,
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        string? api,
+        ServiceNetwork network,
+        bool production
+    )
+    {
         AddClusterAndExecutionRole(resources, file, env, stack);
         var environment = TaskEnvironment(file, env);
         var secrets = TaskSecrets(file, env, stack);
@@ -277,18 +311,15 @@ internal static class AwsStack
             api,
             environment,
             secrets,
-            new ServiceNetwork(serviceSubnets, taskGroups, assignPublicIp),
+            network,
             production
         );
-
-        AddClusterOutputs(outputs, serviceSubnets, taskGroups, assignPublicIp, migrator);
-        outputs["SecurityGroups"] = Output(Join(",", securityGroups));
-        return Template(
-            $"Trax app {file.App}, environment {environmentName} ({env.Profile}): the ECS services. Written by "
-                + "trax deploy; changes made outside it are reverted on the next deploy.",
-            parameters,
-            resources,
-            outputs
+        AddClusterOutputs(
+            outputs,
+            network.Subnets,
+            network.SecurityGroups,
+            network.AssignPublicIp,
+            migrator
         );
     }
 

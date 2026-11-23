@@ -335,17 +335,13 @@ internal static class DeployAwsCommands
                     var env = file.Environment(environment);
                     var aws = Client(env.Region);
                     var stack = file.StackName(environment);
-                    var foundation = await aws.DescribeStackAsync(
+                    await FoundationStatusAsync(
+                            aws,
                             file.FoundationStackName(environment),
+                            stdout,
                             ct
                         )
                         .ConfigureAwait(false);
-                    if (foundation is not null)
-                        await stdout
-                            .WriteLineAsync(
-                                $"{file.FoundationStackName(environment)}: {foundation.Status}"
-                            )
-                            .ConfigureAwait(false);
                     var state = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
                     if (state is null)
                     {
@@ -389,6 +385,19 @@ internal static class DeployAwsCommands
                 }
             )
             .ConfigureAwait(false);
+
+    // The foundation's status, when it exists: the runtime's line says when nothing is deployed.
+    private static async Task FoundationStatusAsync(
+        IAwsDeployClient aws,
+        string stack,
+        TextWriter stdout,
+        CancellationToken ct
+    )
+    {
+        var foundation = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        if (foundation is not null)
+            await stdout.WriteLineAsync($"{stack}: {foundation.Status}").ConfigureAwait(false);
+    }
 
     internal static async Task<int> LogsAsync(
         string filePath,
