@@ -580,23 +580,82 @@ public partial class DeployComposeTests
     [Test]
     public async Task The_file_reads_back_what_it_wrote()
     {
-        var path = await WriteAsync(File_()).ConfigureAwait(false);
+        var file = File_();
+        file.Services["worker"].Memory = 2048;
+        var path = await WriteAsync(file).ConfigureAwait(false);
 
         var read = await DeployFile.ReadAsync(path).ConfigureAwait(false);
 
-        read.Should().BeEquivalentTo(File_());
+        read.Should().BeEquivalentTo(file);
+        read.Services["worker"].Memory.Should().Be(2048);
     }
 
     [Test]
     public void A_service_runs_in_the_memory_it_names()
     {
         var file = File_();
+        file.Services["hub"].Memory = 1536;
         file.Services["worker"].Memory = 2048;
 
         var compose = ComposeTarget.Render(file, Exports())[0].Content.ReplaceLineEndings("\n");
 
-        Block(compose, "worker").Should().Contain("    mem_limit: 2048m\n");
+        Block(compose, "worker")
+            .Should()
+            .Contain("    mem_limit: 2048m\n    memswap_limit: 2048m\n");
+        Block(compose, "hub").Should().Contain("    mem_limit: 1536m\n    memswap_limit: 1536m\n");
+        Block(compose, "migrate")
+            .Should()
+            .Contain("    mem_limit: 1536m\n    memswap_limit: 1536m\n");
+    }
+
+    [Test]
+    public void A_service_with_no_memory_runs_in_the_default()
+    {
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
+
         Block(compose, "hub").Should().Contain("    mem_limit: 1024m\n");
+        Block(compose, "migrate").Should().Contain("    mem_limit: 1024m\n");
+    }
+
+    [Test]
+    public async Task A_service_may_name_the_least_memory()
+    {
+        var path = Path.Combine(_dir, DeployFile.FileName);
+        await File.WriteAllTextAsync(
+            path,
+            """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 128 } } }"""
+        );
+
+        var read = await DeployFile.ReadAsync(path).ConfigureAwait(false);
+
+        read.Services["hub"].Memory.Should().Be(128);
+    }
+
+    [Test]
+    public async Task A_memory_refusal_reads_the_same_in_any_culture()
+    {
+        var path = Path.Combine(_dir, DeployFile.FileName);
+        await File.WriteAllTextAsync(
+            path,
+            """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": -1 } } }"""
+        );
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(
+                "sv-SE"
+            );
+
+            var act = async () => await DeployFile.ReadAsync(path).ConfigureAwait(false);
+
+            (
+                await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+            ).WithMessage("*service 'hub' has memory -1;*at least 128 (MiB)*");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
     }
 
     [Test]
@@ -649,6 +708,10 @@ public partial class DeployComposeTests
     [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 32 } } }""",
         "*service 'hub' has memory 32*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 127 } } }""",
+        "*service 'hub' has memory 127*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
     public async Task A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
