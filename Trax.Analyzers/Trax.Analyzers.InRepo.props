@@ -1,0 +1,27 @@
+<Project>
+  <!-- The Trax.Analyzers profile, for this repository's own folders. Every .NET folder's
+       Directory.Build.props imports this file; it does what referencing the package does, with the
+       rules built from source (a Trax package is always a project reference, Trax.Docs/adr/0042).
+
+       A rule is turned off for the whole repository in the root .globalconfig, with its reason on
+       the line above; a folder turns off a ban group in its own Directory.Build.props, with its
+       reason in a comment above. AnalyzerProfileTests in Trax.Core.Tests.Meta holds both, and
+       refuses every other way to switch a rule off. -->
+  <Import Project="$(MSBuildThisFileDirectory)src/Trax.Analyzers.Package/build/Trax.Analyzers.props" />
+
+  <ItemGroup Condition="'$(TraxAnalyzers)' == 'true'">
+    <ProjectReference
+      Include="$(MSBuildThisFileDirectory)src/Trax.Analyzers/Trax.Analyzers.csproj"
+      ReferenceOutputAssembly="false"
+      OutputItemType="Analyzer"
+      PrivateAssets="all"
+    />
+    <ProjectReference
+      Include="$(MSBuildThisFileDirectory)src/Trax.Analyzers.CodeFixers/Trax.Analyzers.CodeFixers.csproj"
+      ReferenceOutputAssembly="false"
+      OutputItemType="Analyzer"
+      PrivateAssets="all"
+    />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

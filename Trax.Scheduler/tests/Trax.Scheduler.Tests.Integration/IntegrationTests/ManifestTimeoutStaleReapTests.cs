@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -23,25 +24,25 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class ManifestTimeoutStaleReapTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousStale;
     private TimeSpan _previousDefault;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousStale = _config.StaleInProgressTimeout;
-        _previousDefault = _config.DefaultJobTimeout;
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(60);
-        _config.DefaultJobTimeout = TimeSpan.FromMinutes(20);
+        _previousStale = _config.NotNull().StaleInProgressTimeout;
+        _previousDefault = _config.NotNull().DefaultJobTimeout;
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(60);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(20);
     }
 
     [TearDown]
     public void RestoreTimeouts()
     {
-        _config.StaleInProgressTimeout = _previousStale;
-        _config.DefaultJobTimeout = _previousDefault;
+        _config.NotNull().StaleInProgressTimeout = _previousStale;
+        _config.NotNull().DefaultJobTimeout = _previousDefault;
     }
 
     [LeavesStuckRuns(
@@ -107,8 +108,8 @@ public class ManifestTimeoutStaleReapTests : TestSetup
     {
         // The grace (stale minus default) would be -30 minutes; it counts as none, so a run is
         // never failed before its own manifest's timeout.
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(30);
-        _config.DefaultJobTimeout = TimeSpan.FromMinutes(60);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(60);
         var run = await CreateInProgressRun(TimeSpan.FromHours(3), startedMinutesAgo);
 
         await RunManifestManager();
@@ -118,7 +119,10 @@ public class ManifestTimeoutStaleReapTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -127,10 +131,8 @@ public class ManifestTimeoutStaleReapTests : TestSetup
 
     private async Task<Metadata> CreateInProgressRun(TimeSpan timeout, int startedMinutesAgo)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -145,22 +147,23 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
         manifest.TimeoutSeconds = (int)timeout.TotalSeconds;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "long" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.InProgress;
-        run.StartTime = DateTime.UtcNow.AddMinutes(-startedMinutesAgo);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        run.StartTime = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-startedMinutesAgo);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return run;
     }

@@ -63,14 +63,7 @@ public class ExtensionMethodNamingTests
                 )
                     continue;
 
-                var firstParam = method.ParameterList.Parameters.FirstOrDefault();
-                if (firstParam is null)
-                    continue;
-                if (!firstParam.Modifiers.Any(m => m.IsKind(SyntaxKind.ThisKeyword)))
-                    continue;
-
-                var paramType = firstParam.Type?.ToString();
-                if (paramType is null)
+                if (ExtendedType(method) is not { } paramType)
                     continue;
 
                 if (!HostingTypes.Contains(paramType))
@@ -95,5 +88,17 @@ public class ExtensionMethodNamingTests
                     + "ExtensionMethodNamingTests.KnownExceptions with a justification. Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
+    }
+
+    // The type an extension method extends, as written; null when it is not an extension method.
+    private static string? ExtendedType(MethodDeclarationSyntax method)
+    {
+        var firstParam = method.ParameterList.Parameters.FirstOrDefault();
+        if (firstParam is null)
+            return null;
+        if (!firstParam.Modifiers.Any(m => m.IsKind(SyntaxKind.ThisKeyword)))
+            return null;
+
+        return firstParam.Type?.ToString();
     }
 }

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -73,21 +74,26 @@ public class TriggerInputPropertyTests
                 input.Remove(field);
                 return input;
             case Mutation.ChangeKind:
-                input[field] = field == "tags" ? "not-a-list" : true;
+                input[field] = string.Equals(field, "tags", StringComparison.Ordinal)
+                    ? "not-a-list"
+                    : true;
                 return input;
             case Mutation.Stringify:
-                input[numeric] = input[numeric]!.GetValue<int>().ToString();
+                input[numeric] = input[numeric]
+                    .NotNull()
+                    .GetValue<int>()
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture);
                 return input;
             case Mutation.AddField:
                 input["extra"] = pick;
                 return input;
             case Mutation.PascalCase:
-                var value = input[field]!.DeepClone();
+                var value = input[field].NotNull().DeepClone();
                 input.Remove(field);
                 input[char.ToUpperInvariant(field[0]) + field[1..]] = value;
                 return input;
             case Mutation.Nest:
-                input[field] = new JsonObject { ["value"] = input[field]!.DeepClone() };
+                input[field] = new JsonObject { ["value"] = input[field].NotNull().DeepClone() };
                 return input;
             case Mutation.Null:
                 input[field] = null;
@@ -100,7 +106,7 @@ public class TriggerInputPropertyTests
                     _ => JsonValue.Create(pick),
                 };
             default:
-                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, null);
+                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, message: null);
         }
     }
 
@@ -108,77 +114,91 @@ public class TriggerInputPropertyTests
     private const int Inputs = 500;
 
     [Test]
-    public void Generated_inputs_get_the_same_verdict_in_both_engines()
+    public async Task Generated_inputs_get_the_same_verdict_in_both_engines()
     {
-        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RangeMachine.Built))!;
-        Gen.Select(AValidInput, AMutation, Gen.Int[0, 1_000])
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RangeMachine.Built)).NotNull();
+        await Gen.Select(AValidInput, AMutation, Gen.Int[0, 1_000])
             .Select(
                 (input, mutation, pick) => (Mutation: mutation, Sent: Apply(mutation, input, pick))
             )
             .Array[Inputs]
-            .Sample(
-                batch =>
-                {
-                    var twin = TwinEngine.Replay(
-                        new Dictionary<string, JsonObject> { ["range"] = ir },
-                        batch
-                            .Select(b => new TwinEngine.Sequence(
-                                "range",
-                                RangeMachine.Open(),
-                                [
-                                    new TwinEngine.Step(
-                                        "advance",
-                                        nameof(RangeTrigger.Build),
-                                        b.Sent?.DeepClone()
-                                    ),
-                                ]
-                            ))
-                            .ToList()
-                    );
+            .SampleAsync(batch => AgreeOn(ir, batch), iter: 1)
+            .ConfigureAwait(false);
+    }
 
-                    for (var i = 0; i < batch.Length; i++)
-                    {
-                        var (mutation, sent) = batch[i];
-                        var result = RangeMachine.Machine.Advance(
-                            RangeMachine.Open(),
-                            nameof(RangeTrigger.Build),
-                            sent?.DeepClone()
-                        );
+    // Sends one batch through both engines, and holds each input to its verdict and to the twin's.
+    private static async Task AgreeOn(JsonObject ir, (Mutation Mutation, JsonNode? Sent)[] batch)
+    {
+        var twin = await TwinEngine
+            .ReplayAsync(
+                new Dictionary<string, JsonObject>(StringComparer.Ordinal) { ["range"] = ir },
+                batch
+                    .Select(b => new TwinEngine.Sequence(
+                        "range",
+                        RangeMachine.Open(),
+                        [
+                            new TwinEngine.Step(
+                                "advance",
+                                nameof(RangeTrigger.Build),
+                                b.Sent?.DeepClone()
+                            ),
+                        ]
+                    ))
+                    .ToList()
+            )
+            .ConfigureAwait(false);
 
-                        if (mutation == Mutation.None)
-                            result
-                                .Should()
-                                .BeOfType<AdvanceResult.Transitioned>(
-                                    $"a valid input passes its schema ({sent?.ToJsonString()})"
-                                );
-                        else
-                            result
-                                .Should()
-                                .BeOfType<AdvanceResult.Rejected>(
-                                    $"{mutation} breaks the schema ({sent?.ToJsonString()})"
-                                )
-                                .Which.Reason.Should()
-                                .Be(
-                                    RefusalCode.InvalidInput,
-                                    $"{mutation} breaks the input's schema, and nothing else does ({Adr})"
-                                );
+        for (var i = 0; i < batch.Length; i++)
+        {
+            var (mutation, sent) = batch[i];
+            var result = RangeMachine.Machine.Advance(
+                RangeMachine.Open(),
+                nameof(RangeTrigger.Build),
+                sent?.DeepClone()
+            );
 
-                        var (outcome, reason) = result switch
-                        {
-                            AdvanceResult.Transitioned => ("transitioned", (string?)null),
-                            AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
-                            _ => ("unknown", null),
-                        };
-                        var answer = twin[i][0];
-                        (answer.Outcome, answer.Reason)
-                            .Should()
-                            .Be(
-                                (outcome, reason),
-                                $"the TypeScript twin gives {mutation} ({sent?.ToJsonString()}) the C# verdict ({Adr})"
-                            );
-                    }
-                },
-                iter: 1
+            AssertVerdict(mutation, sent, result, twin, i);
+        }
+    }
+
+    private static void AssertVerdict(
+        Mutation mutation,
+        JsonNode? sent,
+        AdvanceResult result,
+        IReadOnlyList<IReadOnlyList<TwinEngine.Answer>> twin,
+        int i
+    )
+    {
+        if (mutation == Mutation.None)
+            result
+                .Should()
+                .BeOfType<AdvanceResult.Transitioned>(
+                    $"a valid input passes its schema ({sent?.ToJsonString()})"
+                );
+        else
+            result
+                .Should()
+                .BeOfType<AdvanceResult.Rejected>(
+                    $"{mutation} breaks the schema ({sent?.ToJsonString()})"
+                )
+                .Which.Reason.Should()
+                .Be(
+                    RefusalCode.InvalidInput,
+                    $"{mutation} breaks the input's schema, and nothing else does ({Adr})"
+                );
+
+        var (outcome, reason) = result switch
+        {
+            AdvanceResult.Transitioned => ("transitioned", (string?)null),
+            AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
+            _ => ("unknown", null),
+        };
+        var answer = twin[i][0];
+        (answer.Outcome, answer.Reason)
+            .Should()
+            .Be(
+                (outcome, reason),
+                $"the TypeScript twin gives {mutation} ({sent?.ToJsonString()}) the C# verdict ({Adr})"
             );
     }
 }

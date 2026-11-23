@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
@@ -20,7 +21,7 @@ internal static class RunReportWriter
             "pretty" => Pretty(report),
             "json" => Json(report),
             "junit" => JUnit(report),
-            _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, message: null),
         };
 
     private static string Status(ScenarioStatus? status) =>
@@ -38,21 +39,33 @@ internal static class RunReportWriter
         foreach (var scenario in report.Scenarios)
         {
             var s = scenario.Scenario;
-            text.Append($"{s.File}:{s.Line} {s.Name}  {Status(scenario.Status)}\n");
+            text.Append(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{s.File}:{s.Line} {s.Name}  {Status(scenario.Status)}\n"
+            );
             if (scenario.Failure is { } failure)
                 text.Append(
+                        System.Globalization.CultureInfo.InvariantCulture,
                         $"  {s.File}:{failure.Step.Line} {failure.Step.Kind} {failure.Step.Text}\n"
                     )
                     .Append($"    {failure.Message}\n");
         }
         var counts = report
-            .Scenarios.GroupBy(s => Status(s.Status))
+            .Scenarios.GroupBy(s => Status(s.Status), StringComparer.Ordinal)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => $"{g.Count()} {g.Key}");
-        text.Append($"{report.Scenarios.Count} scenario(s): {string.Join(", ", counts)}\n");
-        var skipped = report.Scenarios.Sum(s => s.Skipped.Count(x => x.Message != "not run"));
+        text.Append(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{report.Scenarios.Count} scenario(s): {string.Join(", ", counts)}\n"
+        );
+        var skipped = report.Scenarios.Sum(s =>
+            s.Skipped.Count(x => !string.Equals(x.Message, "not run", StringComparison.Ordinal))
+        );
         if (skipped > 0)
-            text.Append($"{skipped} step(s) about the UI, not checked here\n");
+            text.Append(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{skipped} step(s) about the UI, not checked here\n"
+            );
         return text.ToString();
     }
 
@@ -90,14 +103,19 @@ internal static class RunReportWriter
             );
         }
         return new JsonObject { ["scenarios"] = scenarios }.ToJsonString(
-                new JsonSerializerOptions { WriteIndented = true }
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                }
             ) + "\n";
     }
 
     private static string JUnit(RunReport report)
     {
         var suites = new XElement("testsuites");
-        foreach (var file in report.Scenarios.GroupBy(s => s.Scenario.File))
+        foreach (var file in report.Scenarios.GroupBy(s => s.Scenario.File, StringComparer.Ordinal))
         {
             var suite = new XElement(
                 "testsuite",
@@ -113,7 +131,12 @@ internal static class RunReportWriter
                     new XAttribute("classname", Xml(file.Key)),
                     new XAttribute(
                         "name",
-                        Xml($"{scenario.Scenario.Name} (line {scenario.Scenario.Line})")
+                        Xml(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{scenario.Scenario.Name} (line {scenario.Scenario.Line})"
+                            )
+                        )
                     )
                 );
                 if (scenario.Failure is { } failure)
@@ -122,7 +145,10 @@ internal static class RunReportWriter
                             scenario.Status == ScenarioStatus.Undefined ? "error" : "failure",
                             new XAttribute("message", Xml(failure.Message ?? "")),
                             Xml(
-                                $"{file.Key}:{failure.Step.Line} {failure.Step.Kind} {failure.Step.Text}"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"{file.Key}:{failure.Step.Line} {failure.Step.Kind} {failure.Step.Text}"
+                                )
                             )
                         )
                     );
@@ -130,7 +156,7 @@ internal static class RunReportWriter
             }
             suites.Add(suite);
         }
-        return new XDocument(new XDeclaration("1.0", "utf-8", null), suites).Declaration
+        return new XDocument(new XDeclaration("1.0", "utf-8", standalone: null), suites).Declaration
             + "\n"
             + suites
             + "\n";

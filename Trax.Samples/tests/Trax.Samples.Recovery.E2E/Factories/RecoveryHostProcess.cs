@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
 
@@ -13,7 +14,7 @@ namespace Trax.Samples.Recovery.E2E.Factories;
 /// <c>Cancelled</c>; a killed process records nothing, and its runs stay <c>InProgress</c> until a host
 /// that starts afterwards reaps them.
 /// </summary>
-public sealed class RecoveryHostProcess : IAsyncDisposable
+public sealed partial class RecoveryHostProcess : IAsyncDisposable
 {
     public const string DefaultConnectionString =
         "Host=localhost;Port=5432;Database=recovery_restart_e2e_tests;Username=trax;Password=trax123;"
@@ -75,28 +76,12 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         TimeSpan? machineSweepInterval = null
     )
     {
-        var assembly = HostAssembly();
-
-        var start = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = Path.GetDirectoryName(assembly)!,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        start.ArgumentList.Add(assembly);
-        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
-        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString ?? ConnectionString;
-        start.Environment["Kestrel__Endpoints__Http__Url"] = "http://127.0.0.1:0";
-        start.Environment["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information";
-        start.Environment["Recovery__StepDelay"] = stepDelay.ToString("c");
-        start.Environment["Recovery__ModelLatencyMin"] = "00:00:00";
-        start.Environment["Recovery__ModelLatencyMax"] = "00:00:00";
-        start.Environment["Recovery__RequirePersistedOperations"] = requirePersistedOperations
-            ? "true"
-            : "false";
-        if (machineSweepInterval is { } sweep)
-            start.Environment["Recovery__MachineSweepInterval"] = sweep.ToString("c");
+        var start = StartInfo(
+            stepDelay,
+            connectionString,
+            requirePersistedOperations,
+            machineSweepInterval
+        );
 
         var output = new StringBuilder();
         var listening = new TaskCompletionSource<Uri>(
@@ -121,13 +106,15 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         Uri address;
         try
         {
-            address = await listening.Task.WaitAsync(StartTimeout);
+            address = await listening
+                .Task.WaitAsync(StartTimeout, TimeProvider.System)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
         {
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
+            await process.WaitForExitAsync().ConfigureAwait(false);
             process.Dispose();
             string wrote;
             lock (output)
@@ -138,28 +125,76 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
             );
         }
 
+        return await WaitHealthyAsync(process, output, address).ConfigureAwait(false);
+    }
+
+    // The dotnet process that runs the built host, configured through its environment.
+    private static ProcessStartInfo StartInfo(
+        TimeSpan stepDelay,
+        string? connectionString,
+        bool requirePersistedOperations,
+        TimeSpan? machineSweepInterval
+    )
+    {
+        var assembly = HostAssembly();
+
+        var start = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = Path.GetDirectoryName(assembly).NotNull(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add(assembly);
+        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString ?? ConnectionString;
+        start.Environment["Kestrel__Endpoints__Http__Url"] = "http://127.0.0.1:0";
+        start.Environment["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information";
+        start.Environment["Recovery__StepDelay"] = stepDelay.ToString("c");
+        start.Environment["Recovery__ModelLatencyMin"] = "00:00:00";
+        start.Environment["Recovery__ModelLatencyMax"] = "00:00:00";
+        start.Environment["Recovery__RequirePersistedOperations"] = requirePersistedOperations
+            ? "true"
+            : "false";
+        if (machineSweepInterval is { } sweep)
+            start.Environment["Recovery__MachineSweepInterval"] = sweep.ToString("c");
+
+        return start;
+    }
+
+    // Waits for the listening host to answer its health check; a host that never does is disposed.
+    private static async Task<RecoveryHostProcess> WaitHealthyAsync(
+        Process process,
+        StringBuilder output,
+        Uri address
+    )
+    {
         var host = new RecoveryHostProcess(process, output, address);
-        var healthy = await Polling.WaitUntilAsync(
-            async () =>
-            {
-                if (process.HasExited)
-                    return true;
-                try
+        var healthy = await Polling
+            .WaitUntilAsync(
+                async () =>
                 {
-                    using var response = await host.Http.GetAsync("/trax/health");
-                    return response.StatusCode == HttpStatusCode.OK;
-                }
-                catch (HttpRequestException)
-                {
-                    return false;
-                }
-            },
-            StartTimeout,
-            TimeSpan.FromMilliseconds(250)
-        );
+                    if (process.HasExited)
+                        return true;
+                    try
+                    {
+                        using var response = await host
+                            .Http.GetAsync("/trax/health")
+                            .ConfigureAwait(false);
+                        return response.StatusCode == HttpStatusCode.OK;
+                    }
+                    catch (HttpRequestException)
+                    {
+                        return false;
+                    }
+                },
+                StartTimeout,
+                TimeSpan.FromMilliseconds(250)
+            )
+            .ConfigureAwait(false);
         if (!healthy || process.HasExited)
         {
-            await host.DisposeAsync();
+            await host.DisposeAsync().ConfigureAwait(false);
             throw new InvalidOperationException(
                 $"The Recovery host did not start on {address}. It wrote:\n{host.Output}"
             );
@@ -172,12 +207,12 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     {
         if (!_process.HasExited)
             _process.Kill(entireProcessTree: true);
-        await _process.WaitForExitAsync();
+        await _process.WaitForExitAsync().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await KillAsync();
+        await KillAsync().ConfigureAwait(false);
         _process.Dispose();
         Http.Dispose();
     }
@@ -191,11 +226,6 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     }
 
     // Kestrel's line once it is bound, e.g. "Now listening on: http://127.0.0.1:61234".
-    private static readonly Regex ListeningOn = new(
-        @"Now listening on: (?<address>http://127\.0\.0\.1:\d+)",
-        RegexOptions.Compiled
-    );
-
     // The host project's own build output, which carries its runtime config and dependencies. The test
     /// <summary>
     /// Runs the host's build output with <c>--trax-export-client &lt;path&gt;</c> in the production configuration
@@ -211,7 +241,7 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         var assembly = HostAssembly();
         var start = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = Path.GetDirectoryName(assembly)!,
+            WorkingDirectory = Path.GetDirectoryName(assembly).NotNull(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -236,12 +266,12 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         using var cancel = new CancellationTokenSource(timeout);
         try
         {
-            await process.WaitForExitAsync(cancel.Token);
+            await process.WaitForExitAsync(cancel.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
+            await process.WaitForExitAsync(cancel.Token).ConfigureAwait(false);
             lock (output)
                 return (-1, $"Killed after {timeout}.\n{output}");
         }
@@ -256,7 +286,7 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
             AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)
         );
         var framework = testBin.Name;
-        var configuration = testBin.Parent!.Name;
+        var configuration = testBin.Parent.NotNull().Name;
         var samples = testBin;
         while (
             samples is not null && !File.Exists(Path.Combine(samples.FullName, "Trax.Samples.slnx"))
@@ -281,4 +311,11 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
             ? assembly
             : throw new InvalidOperationException($"The host is not built at {assembly}.");
     }
+
+    [GeneratedRegex(
+        @"Now listening on: (?<address>http://127\.0\.0\.1:\d+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ListeningOn { get; }
 }

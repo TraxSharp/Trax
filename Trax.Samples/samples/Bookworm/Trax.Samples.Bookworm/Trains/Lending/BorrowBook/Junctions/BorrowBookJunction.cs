@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Trax.Core.Exceptions;
@@ -18,27 +19,24 @@ public class BorrowBookJunction(
     ILendingDbContext lending,
     ICatalogDbContext catalog,
     ILendingCaller caller,
-    ILoanPolicy loanPolicy
+    ILoanPolicy loanPolicy,
+    TimeProvider clock
 ) : Junction<BorrowBookInput, BorrowBookOutput>
 {
     public override async Task<BorrowBookOutput> Run(BorrowBookInput input)
     {
         var member =
-            await lending.Members.FirstOrDefaultAsync(m => m.PrincipalId == caller.PrincipalId)
+            await lending
+                .Members.FirstOrDefaultAsync(
+                    m => m.PrincipalId == caller.PrincipalId,
+                    cancellationToken: CancellationToken
+                )
+                .ConfigureAwait(false)
             ?? throw new TrainException("Your credential is not linked to a library member.");
 
-        if (!await catalog.Books.AnyAsync(b => b.Id == input.BookId))
-            throw new TrainException($"Book {input.BookId} is not in the catalog.");
+        await EnsureBookCanBeLent(input).ConfigureAwait(false);
 
-        // Availability depends on every member's loans, not only the caller's, so this one read
-        // steps outside the owner filter. It returns a yes or no and no row.
-        var onLoan = await lending
-            .Loans.IgnoreQueryFilters()
-            .AnyAsync(l => l.BookId == input.BookId && l.ReturnedAt == null);
-        if (onLoan)
-            throw new TrainException($"Book {input.BookId} is already on loan.");
-
-        var borrowedAt = DateTime.UtcNow;
+        var borrowedAt = clock.GetUtcNow().UtcDateTime;
         var loan = new Loan
         {
             MemberId = member.Id,
@@ -47,9 +45,54 @@ public class BorrowBookJunction(
         };
         lending.Loans.Add(loan);
 
+        await SaveLoan(input).ConfigureAwait(false);
+
+        return new BorrowBookOutput
+        {
+            LoanId = loan.Id,
+            BorrowedAt = borrowedAt,
+            DueAt = loanPolicy.DueDate(borrowedAt),
+        };
+    }
+
+    // The book is in the catalog and nobody has it out.
+    private async Task EnsureBookCanBeLent(BorrowBookInput input)
+    {
+        if (
+            !await catalog
+                .Books.AnyAsync(b => b.Id == input.BookId, cancellationToken: CancellationToken)
+                .ConfigureAwait(false)
+        )
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Book {input.BookId} is not in the catalog."
+                )
+            );
+
+        // Availability depends on every member's loans, not only the caller's, so this one read
+        // steps outside the owner filter. It returns a yes or no and no row.
+        var onLoan = await lending
+            .Loans.IgnoreQueryFilters()
+            .AnyAsync(
+                l => l.BookId == input.BookId && l.ReturnedAt == null,
+                cancellationToken: CancellationToken
+            )
+            .ConfigureAwait(false);
+        if (onLoan)
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Book {input.BookId} is already on loan."
+                )
+            );
+    }
+
+    private async Task SaveLoan(BorrowBookInput input)
+    {
         try
         {
-            await lending.SaveChangesAsync();
+            await lending.SaveChangesAsync(CancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex)
             when (ex.InnerException
@@ -58,14 +101,12 @@ public class BorrowBookJunction(
         {
             // Another borrow of the same book committed between the check and this insert; the
             // partial unique index on open loans refused the second one.
-            throw new TrainException($"Book {input.BookId} is already on loan.");
+            throw new TrainException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Book {input.BookId} is already on loan."
+                )
+            );
         }
-
-        return new BorrowBookOutput
-        {
-            LoanId = loan.Id,
-            BorrowedAt = borrowedAt,
-            DueAt = loanPolicy.DueDate(borrowedAt),
-        };
     }
 }

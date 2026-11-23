@@ -12,33 +12,29 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// is how the broker works rather than a choice between alternatives.</para>
 /// </summary>
 [TestFixture]
-public class RabbitMqExchangePerSampleTests
+public partial class RabbitMqExchangePerSampleTests
 {
     private const string DefaultExchange = "trax.lifecycle";
 
-    private static readonly Regex UseRabbitMqCall = new(@"\bUseRabbitMq\(", RegexOptions.Compiled);
-
-    private static readonly Regex DeclaredName = new(
-        @"ExchangeName\s*=\s*""(?<name>[^""]+)""",
-        RegexOptions.Compiled
-    );
-
     [Test]
-    public void Every_rabbitmq_sample_names_an_exchange_no_other_sample_uses()
+    public async Task Every_rabbitmq_sample_names_an_exchange_no_other_sample_uses()
     {
         var samples = Path.Combine(RepoRoot.Path, "samples");
         var offenders = new List<string>();
         var foldersByName = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var callers = 0;
 
-        foreach (var folder in Directory.EnumerateDirectories(samples).OrderBy(f => f))
+        foreach (
+            var folder in Directory.EnumerateDirectories(samples).Order(StringComparer.Ordinal)
+        )
         {
             var sample = Path.GetFileName(folder);
-            var files = SourceFiles
-                .CSharp(Path.Combine("samples", sample))
-                .Select(f => (File: f, Text: File.ReadAllText(f)))
-                .Select(f => (f.File, f.Text, Code: SourceText.StripCommentsAndStrings(f.Text)))
-                .ToList();
+            var files = new List<(string File, string Text, string Code)>();
+            foreach (var f in SourceFiles.CSharp(Path.Combine("samples", sample)))
+            {
+                var text = await File.ReadAllTextAsync(f).ConfigureAwait(false);
+                files.Add((f, text, SourceText.StripCommentsAndStrings(text)));
+            }
 
             var calls = files
                 .SelectMany(f =>
@@ -58,24 +54,7 @@ public class RabbitMqExchangePerSampleTests
                             + $"the shared default {DefaultExchange}"
                     );
 
-            var names = files
-                .SelectMany(f => DeclaredName.Matches(f.Text).Select(m => m.Groups["name"].Value))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            if (names.Count != 1)
-                offenders.Add(
-                    $"samples/{sample}: declares {names.Count} exchange names "
-                        + $"({string.Join(", ", names)}); its processes must share exactly one"
-                );
-
-            foreach (var name in names)
-            {
-                if (name == DefaultExchange)
-                    offenders.Add($"samples/{sample}: uses the shared default {DefaultExchange}");
-                if (!foldersByName.TryGetValue(name, out var folders))
-                    foldersByName[name] = folders = [];
-                folders.Add(sample);
-            }
+            AddExchangeNames(sample, files, foldersByName, offenders);
         }
 
         foreach (var (name, folders) in foldersByName.Where(kv => kv.Value.Count > 1))
@@ -89,6 +68,35 @@ public class RabbitMqExchangePerSampleTests
                     + "Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
+    }
+
+    // Records the exchange names one sample folder declares; it must declare exactly one, and not
+    // the shared default.
+    private static void AddExchangeNames(
+        string sample,
+        List<(string File, string Text, string Code)> files,
+        Dictionary<string, List<string>> foldersByName,
+        List<string> offenders
+    )
+    {
+        var names = files
+            .SelectMany(f => DeclaredName.Matches(f.Text).Select(m => m.Groups["name"].Value))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (names.Count != 1)
+            offenders.Add(
+                $"samples/{sample}: declares {names.Count} exchange names "
+                    + $"({string.Join(", ", names)}); its processes must share exactly one"
+            );
+
+        foreach (var name in names)
+        {
+            if (string.Equals(name, DefaultExchange, StringComparison.Ordinal))
+                offenders.Add($"samples/{sample}: uses the shared default {DefaultExchange}");
+            if (!foldersByName.TryGetValue(name, out var folders))
+                foldersByName[name] = folders = [];
+            folders.Add(sample);
+        }
     }
 
     /// <summary>The text of the call starting at <paramref name="start"/>, to its closing parenthesis.</summary>
@@ -105,4 +113,14 @@ public class RabbitMqExchangePerSampleTests
         }
         return source[start..];
     }
+
+    [GeneratedRegex(
+        @"ExchangeName\s*=\s*""(?<name>[^""]+)""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DeclaredName { get; }
+
+    [GeneratedRegex(@"\bUseRabbitMq\(", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex UseRabbitMqCall { get; }
 }

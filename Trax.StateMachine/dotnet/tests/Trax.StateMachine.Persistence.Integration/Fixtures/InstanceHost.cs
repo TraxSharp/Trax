@@ -1,6 +1,8 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Sqlite.Extensions;
@@ -9,13 +11,6 @@ using Trax.Effect.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 
 namespace Trax.StateMachine.Persistence.Integration.Fixtures;
-
-/// <summary>The two providers that store drafts in a real database.</summary>
-public enum StoreProvider
-{
-    Postgres,
-    Sqlite,
-}
 
 /// <summary>
 /// A host with <c>AddStateMachines</c> over Postgres (the shared throwaway database) or a fresh SQLite file, built
@@ -105,11 +100,15 @@ public sealed class InstanceHost : IDisposable
         using var scope = Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
-            .Start<TMachine>(key, context);
+            .Start<TMachine>(key, context)
+            .ConfigureAwait(false);
     }
 
     public ISnapshotDraftService Service(IServiceScope scope, string machine) =>
-        scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>().Service(machine)!;
+        scope
+            .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+            .Service(machine)
+            .NotNull();
 
     /// <summary>
     /// Creates <paramref name="user"/>'s draft from <paramref name="json"/> as host code does, through the public
@@ -118,19 +117,20 @@ public sealed class InstanceHost : IDisposable
     /// </summary>
     public async Task SeedDraft(string user, Guid id, string json)
     {
-        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json).NotNull();
         var snapshot = new Snapshot
         {
-            Machine = node["machine"]!.GetValue<string>(),
-            Version = node["version"]!.GetValue<int>(),
-            State = node["state"]!.GetValue<string>(),
-            Context = (System.Text.Json.Nodes.JsonObject)node["context"]!.DeepClone(),
+            Machine = node["machine"].NotNull().GetValue<string>(),
+            Version = node["version"].NotNull().GetValue<int>(),
+            State = node["state"].NotNull().GetValue<string>(),
+            Context = (System.Text.Json.Nodes.JsonObject)node["context"].NotNull().DeepClone(),
         };
         using var scope = Scope();
         if (
             !await scope
                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                 .Upsert(user, id, snapshot)
+                .ConfigureAwait(false)
         )
             throw new InvalidOperationException($"The draft {id} could not be seeded.");
     }
@@ -139,15 +139,19 @@ public sealed class InstanceHost : IDisposable
         scope.ServiceProvider.GetRequiredService<IMachineInstanceStore>();
 
     /// <summary>Every row under <paramref name="id"/>, whoever owns it, read straight from the table.</summary>
-    public async Task<List<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> Rows(Guid id)
+    public async Task<IReadOnlyList<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> Rows(Guid id)
     {
         using var scope = Scope();
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await db.SnapshotDrafts.AsNoTracking().Where(x => x.Id == id).ToListAsync();
+        return await db
+            .SnapshotDrafts.AsNoTracking()
+            .Where(x => x.Id == id)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>Every row of <paramref name="machine"/> that <paramref name="userKey"/> owns, read straight from the table.</summary>
-    public async Task<List<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> UserRows(
+    public async Task<IReadOnlyList<Trax.Effect.Models.SnapshotDraft.SnapshotDraft>> UserRows(
         string userKey,
         string machine
     )
@@ -161,7 +165,8 @@ public sealed class InstanceHost : IDisposable
                 && x.UserKey == userKey
                 && x.Machine == machine
             )
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>Writes <paramref name="snapshot"/> as <paramref name="userKey"/>'s draft straight through the store.</summary>
@@ -172,19 +177,23 @@ public sealed class InstanceHost : IDisposable
             !await scope
                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                 .Upsert(userKey, id, snapshot)
+                .ConfigureAwait(false)
         )
             throw new InvalidOperationException($"Could not seed draft {id} for {userKey}.");
     }
 
     /// <summary>Every work queue entry with <paramref name="externalId"/>, read straight from the table.</summary>
-    public async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> Entries(string externalId)
+    public async Task<IReadOnlyList<Trax.Effect.Models.WorkQueue.WorkQueue>> Entries(
+        string externalId
+    )
     {
         using var scope = Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.AsNoTracking()
             .Where(x => x.ExternalId == externalId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>The draft table as raw SQL names it on this host's provider.</summary>
@@ -197,30 +206,33 @@ public sealed class InstanceHost : IDisposable
     public async Task<int> Execute(string sql, params object?[] parameters)
     {
         using var scope = Scope();
-        await using var command = await Command(scope, sql, parameters);
-        return await command.ExecuteNonQueryAsync();
+        var command = await Command(scope, sql, parameters).ConfigureAwait(false);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        return await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     /// <summary>The first column of the first row <paramref name="sql"/> reads, as <see cref="Execute"/> binds it.</summary>
     public async Task<object?> Scalar(string sql, params object?[] parameters)
     {
         using var scope = Scope();
-        await using var command = await Command(scope, sql, parameters);
-        var value = await command.ExecuteScalarAsync();
+        var command = await Command(scope, sql, parameters).ConfigureAwait(false);
+        await using var commandDisposal = command.ConfigureAwait(false);
+        var value = await command.ExecuteScalarAsync().ConfigureAwait(false);
         return value is DBNull ? null : value;
     }
 
     /// <summary>The surrogate key of the row <paramref name="kind"/> holds under <paramref name="id"/>.</summary>
     public async Task<long> RowId(Guid id, SnapshotOwnerKind kind = SnapshotOwnerKind.User) =>
-        (await Rows(id)).Single(x => x.OwnerKind == kind).RowId;
+        (await Rows(id).ConfigureAwait(false)).Single(x => x.OwnerKind == kind).RowId;
 
     /// <summary>The <c>revision</c> column of the row <paramref name="kind"/> holds under <paramref name="id"/>, read with raw SQL.</summary>
     public async Task<long> Revision(Guid id, SnapshotOwnerKind kind = SnapshotOwnerKind.User) =>
         Convert.ToInt64(
             await Scalar(
-                $"SELECT revision FROM {DraftTable} WHERE row_id = @p0",
-                await RowId(id, kind)
-            ),
+                    $"SELECT revision FROM {DraftTable} WHERE row_id = @p0",
+                    await RowId(id, kind).ConfigureAwait(false)
+                )
+                .ConfigureAwait(false),
             System.Globalization.CultureInfo.InvariantCulture
         );
 
@@ -234,13 +246,13 @@ public sealed class InstanceHost : IDisposable
             (DbContext)scope.ServiceProvider.GetRequiredService<IDataContext>()
         ).Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync();
+            await connection.OpenAsync().ConfigureAwait(false);
         var command = connection.CreateCommand();
         command.CommandText = sql;
         for (var i = 0; i < parameters.Length; i++)
         {
             var parameter = command.CreateParameter();
-            parameter.ParameterName = $"@p{i}";
+            parameter.ParameterName = string.Create(CultureInfo.InvariantCulture, $"@p{i}");
             parameter.Value = parameters[i] ?? DBNull.Value;
             command.Parameters.Add(parameter);
         }
@@ -252,7 +264,8 @@ public sealed class InstanceHost : IDisposable
         using var scope = Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
-            .WorkQueues.CountAsync();
+            .WorkQueues.CountAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>Makes a row look idle since <paramref name="updatedAt"/> (the store always stamps "now").</summary>
@@ -262,7 +275,8 @@ public sealed class InstanceHost : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
         await db
             .SnapshotDrafts.Where(x => x.Id == id && x.OwnerKind == kind)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.UpdatedAt, updatedAt));
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.UpdatedAt, updatedAt))
+            .ConfigureAwait(false);
     }
 
     public void Dispose()

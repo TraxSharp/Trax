@@ -11,7 +11,7 @@ public class ManifestConfigurationTests : HubTestFixture
     public async Task Startup_CreatesAllExpectedManifests()
     {
         var manifests = await DataContext.Manifests.AsNoTracking().ToListAsync();
-        var externalIds = manifests.Select(m => m.ExternalId).ToHashSet();
+        var externalIds = manifests.Select(m => m.ExternalId).ToHashSet(StringComparer.Ordinal);
 
         externalIds.Should().Contain(ManifestNames.MonitorSolarProduction);
         externalIds.Should().Contain(ManifestNames.ManageBatteryStorage);

@@ -1,8 +1,11 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Extensions;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
@@ -65,7 +68,7 @@ public class TraxMediatorBuilderSettingsTests
     [Test]
     public void WithMaxInputJsonBytes_ZeroOrNegative_Throws()
     {
-        var builder = new TraxMediatorBuilder(null!);
+        var builder = new TraxMediatorBuilder(Null.Of<TraxBuilderWithEffects>());
 
         Action zero = () => builder.WithMaxInputJsonBytes(0);
         Action negative = () => builder.WithMaxInputJsonBytes(-1);
@@ -112,7 +115,7 @@ public class TraxMediatorBuilderSettingsTests
     [Test]
     public void WithMaxQueueHookDuration_AcceptsInfiniteAndRefusesZeroOrNegative()
     {
-        var builder = new TraxMediatorBuilder(null!);
+        var builder = new TraxMediatorBuilder(Null.Of<TraxBuilderWithEffects>());
 
         Action infinite = () => builder.WithMaxQueueHookDuration(Timeout.InfiniteTimeSpan);
         Action zero = () => builder.WithMaxQueueHookDuration(TimeSpan.Zero);
@@ -145,7 +148,7 @@ public class TraxMediatorBuilderSettingsTests
     [Test]
     public void PerPrincipalMaxConcurrentRun_ZeroOrNegative_Throws()
     {
-        var builder = new TraxMediatorBuilder(null!);
+        var builder = new TraxMediatorBuilder(Null.Of<TraxBuilderWithEffects>());
 
         Action zero = () => builder.PerPrincipalMaxConcurrentRun(0);
         Action negative = () => builder.PerPrincipalMaxConcurrentRun(-3);

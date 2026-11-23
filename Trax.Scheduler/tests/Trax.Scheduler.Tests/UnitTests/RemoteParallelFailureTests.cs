@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -38,7 +39,7 @@ public class RemoteParallelFailureTests
 
         // The worker runs the train and catches its failure, as TraxRequestHandler does.
         BranchesFailedException failure;
-        using (var scope = worker.CreateScope())
+        await using (var scope = worker.CreateAsyncScope())
             failure = (
                 await FluentActions
                     .Awaiting(() =>
@@ -49,18 +50,19 @@ public class RemoteParallelFailureTests
             ).Which;
 
         var response = TraxRequestHandler.BuildErrorResponse(failure);
-        var wire = JsonSerializer.Deserialize<RemoteRunResponse>(
-            JsonSerializer.Serialize(response)
-        )!;
+        var wire = JsonSerializer
+            .Deserialize<RemoteRunResponse>(JsonSerializer.Serialize(response))
+            .NotNull();
         var rebuilt = HttpRunExecutor.BuildExceptionFromErrorResponse(wire);
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IRemoteBranchesTrain).FullName!,
+                Name = typeof(IRemoteBranchesTrain).FullName.NotNull(),
                 ExternalId = "remote",
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         metadata.AddException(rebuilt);
 
@@ -76,63 +78,4 @@ public class RemoteParallelFailureTests
             );
         metadata.FailureReason.Should().Contain("2 branches failed");
     }
-}
-
-internal sealed class RemoteBranchClassifier : IFailureClassifier
-{
-    public FailureClass? Classify(Exception exception) =>
-        exception switch
-        {
-            TimeoutException => FailureClass.Transient,
-            InvalidOperationException => FailureClass.Permanent,
-            _ => null,
-        };
-}
-
-public sealed record RemoteLeft(string Value);
-
-public sealed record RemoteRight(string Value);
-
-public class RemoteBreakTransient : EffectJunction<string, RemoteLeft>
-{
-    public override async Task<RemoteLeft> Run(string input)
-    {
-        await Task.Yield();
-        throw new TimeoutException("left timed out");
-    }
-}
-
-public class RemoteBreakPermanent : EffectJunction<string, RemoteRight>
-{
-    public override async Task<RemoteRight> Run(string input)
-    {
-        await Task.Yield();
-        throw new InvalidOperationException("right broke");
-    }
-}
-
-public class RemoteEcho : EffectJunction<string, string>
-{
-    public override Task<string> Run(string input) => Task.FromResult(input);
-}
-
-public class RemoteJoin : EffectJunction<(RemoteLeft, RemoteRight), Unit>
-{
-    public override Task<Unit> Run((RemoteLeft, RemoteRight) input) =>
-        Task.FromResult(Unit.Default);
-}
-
-public interface IRemoteBranchesTrain : IServiceTrain<string, Unit>;
-
-public class RemoteBranchesTrain : ServiceTrain<string, Unit>, IRemoteBranchesTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Chain<RemoteEcho>()
-            .Parallel(p =>
-                p.Branch("transient", b => b.Chain<RemoteBreakTransient>())
-                    .Branch("permanent", b => b.Chain<RemoteBreakPermanent>())
-                    .OnFailure(BranchFailurePolicy.WaitForAll)
-            )
-            .Chain<RemoteJoin>()
-            .Resolve();
 }

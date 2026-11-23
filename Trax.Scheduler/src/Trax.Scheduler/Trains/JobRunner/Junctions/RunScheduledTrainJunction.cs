@@ -26,11 +26,12 @@ namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 /// that check, so the update and its save run here, on an uncancellable token. See
 /// scheduler/0005.
 /// </remarks>
-internal class RunScheduledTrainJunction(
+internal sealed class RunScheduledTrainJunction(
     ITrainBus trainBus,
     IDataContext dataContext,
     DormantDependentContext dormantDependentContext,
-    ILogger<RunScheduledTrainJunction> logger
+    ILogger<RunScheduledTrainJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<(Metadata, ResolvedTrainInput), Unit>
 {
     public override async Task<Unit> Run((Metadata, ResolvedTrainInput) input)
@@ -56,30 +57,14 @@ internal class RunScheduledTrainJunction(
         // inject as InvokedRun. Set on this flow, since the bus runs the train in a scope of its
         // own; a run no machine invoked clears it, so it cannot see another run's.
         using var invokedRun = InvokedRunScope.Use(
-            await InvokedRunScope.Resolve(dataContext, metadata, CancellationToken)
+            await InvokedRunScope
+                .Resolve(dataContext, metadata, CancellationToken)
+                .ConfigureAwait(false)
         );
 
         try
         {
-            logger.LogDebug(
-                "Executing train {TrainName} for Metadata {MetadataId}",
-                metadata.Name,
-                metadata.Id
-            );
-
-            // By name: the train the row names runs, even when another train takes the same input type.
-            await trainBus.RunByNameAsync(
-                resolvedInput.TrainName,
-                resolvedInput.Value,
-                CancellationToken,
-                metadata
-            );
-
-            logger.LogDebug(
-                "Successfully executed train {TrainName} for Metadata {MetadataId}",
-                metadata.Name,
-                metadata.Id
-            );
+            await RunNamedTrainAsync(metadata, resolvedInput).ConfigureAwait(false);
         }
         catch (TrainAlreadyStartedException started) when (started.MetadataId == metadata.Id)
         {
@@ -97,10 +82,35 @@ internal class RunScheduledTrainJunction(
 
         // The scheduled work is done. From here on this is bookkeeping for it, not work a
         // cancellation can still usefully stop (effect/0005 applies the same rule to the outcome).
-        await RecordManifestSuccessAsync(metadata);
-        await dataContext.SaveChanges(CancellationToken.None);
+        await RecordManifestSuccessAsync(metadata).ConfigureAwait(false);
+        await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         return Unit.Default;
+    }
+
+    private async Task RunNamedTrainAsync(Metadata metadata, ResolvedTrainInput resolvedInput)
+    {
+        logger.LogDebug(
+            "Executing train {TrainName} for Metadata {MetadataId}",
+            metadata.Name,
+            metadata.Id
+        );
+
+        // By name: the train the row names runs, even when another train takes the same input type.
+        await trainBus
+            .RunByNameAsync(
+                resolvedInput.TrainName,
+                resolvedInput.Value,
+                CancellationToken,
+                metadata
+            )
+            .ConfigureAwait(false);
+
+        logger.LogDebug(
+            "Successfully executed train {TrainName} for Metadata {MetadataId}",
+            metadata.Name,
+            metadata.Id
+        );
     }
 
     private void LogOwnedElsewhere(Metadata metadata) =>
@@ -126,10 +136,13 @@ internal class RunScheduledTrainJunction(
         // By the database's clock: a dependent compares this with when its own run was
         // dispatched, which another machine stamped (see DatabaseClock).
         var manifestId = metadata.Manifest.Id;
-        metadata.Manifest.LastSuccessfulRun = await DatabaseClock.UtcNowAsync(
-            dataContext.Manifests.Where(m => m.Id == manifestId),
-            CancellationToken.None
-        );
+        metadata.Manifest.LastSuccessfulRun = await DatabaseClock
+            .UtcNowAsync(
+                dataContext.Manifests.Where(m => m.Id == manifestId),
+                timeProvider,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
         metadata.Manifest.NextScheduledRun = SchedulingHelpers.ComputeNextScheduledRun(
             metadata.Manifest
         );

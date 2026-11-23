@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
@@ -118,7 +119,11 @@ public class MediatorServiceExtensionsTests
 
         var marker = hosted.Single(e => e.descriptor.ImplementationType == typeof(MarkerWorker));
         var chainCheck = hosted.Single(e =>
-            e.descriptor.ImplementationType?.Name == "TrainChainStartupValidator"
+            string.Equals(
+                e.descriptor.ImplementationType?.Name,
+                "TrainChainStartupValidator",
+                StringComparison.Ordinal
+            )
         );
 
         chainCheck
@@ -221,7 +226,7 @@ public class MediatorServiceExtensionsTests
 
         var config = provider.GetService<MediatorConfiguration>();
         config.Should().NotBeNull();
-        config!.Assemblies.Should().HaveCount(1);
+        config.NotNull().Assemblies.Should().HaveCount(1);
         config.TrainLifetime.Should().Be(ServiceLifetime.Transient);
     }
 
@@ -280,9 +285,10 @@ public class MediatorServiceExtensionsTests
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
         services.AddServiceTrainBus(ServiceLifetime.Transient, typeof(ITrainBus).Assembly);
 
-        await using var provider = services.BuildServiceProvider(
+        var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
         );
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var config = provider.GetRequiredService<MediatorConfiguration>();
         config.TrainLifetime.Should().Be(ServiceLifetime.Transient);
@@ -295,7 +301,8 @@ public class MediatorServiceExtensionsTests
         foreach (var hosted in provider.GetServices<IHostedService>())
             await hosted.StartAsync(CancellationToken.None);
 
-        await using var scope = provider.CreateAsyncScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         scope
             .ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
             .Should()
@@ -379,7 +386,7 @@ public class MediatorServiceExtensionsTests
         var serviceTrain =
             train as ServiceTrain<Fakes.Models.MemoryTestInput, Fakes.Models.MemoryTestOutput>;
         serviceTrain.Should().NotBeNull();
-        serviceTrain!.CanonicalName.Should().Be(typeof(IMemoryTestTrain).FullName);
+        serviceTrain.NotNull().CanonicalName.Should().Be(typeof(IMemoryTestTrain).FullName);
     }
 
     [Test]
@@ -463,7 +470,8 @@ public class MediatorServiceExtensionsTests
 
         var serviceTrain = train as ServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>;
         serviceTrain.Should().NotBeNull();
-        serviceTrain!
+        serviceTrain
+            .NotNull()
             .CanonicalName.Should()
             .Be(typeof(IServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>).FullName);
     }
@@ -480,7 +488,8 @@ public class MediatorServiceExtensionsTests
         var provider = services.BuildServiceProvider();
 
         // Resolve the interfaceless train so DI tracks it
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             scope.ServiceProvider.GetRequiredService<
                 IServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>
@@ -491,7 +500,7 @@ public class MediatorServiceExtensionsTests
         var disposeTask = provider.DisposeAsync();
         var completed = await Task.WhenAny(
             disposeTask.AsTask(),
-            Task.Delay(TimeSpan.FromSeconds(10))
+            Task.Delay(TimeSpan.FromSeconds(10), TimeProvider.System)
         );
 
         completed.Should().Be(disposeTask.AsTask(), "ServiceProvider disposal should not hang");

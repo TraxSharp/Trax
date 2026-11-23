@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
 
@@ -35,8 +36,8 @@ public class RetryReplayTests : RecoveryTestFixture
         // Attempt 1 asked both questions, paid, checkpointed the outcome and failed emailing.
         Questions(attempt1).Should().HaveCount(2);
         Names(attempt1).Should().Contain("IssuePayment");
-        attempt1.Last().GetProperty("name").GetString().Should().Be("NotifyCustomer");
-        attempt1.Last().GetProperty("state").GetString().Should().Be("FAILED");
+        attempt1[^1].GetProperty("name").GetString().Should().Be("NotifyCustomer");
+        attempt1[^1].GetProperty("state").GetString().Should().Be("FAILED");
 
         // Attempt 2 started from the checkpoint: it paid nothing again and asked nothing.
         Names(attempt2)
@@ -68,8 +69,8 @@ public class RetryReplayTests : RecoveryTestFixture
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
 
         var attempt1 = await Run.TimelineAsync(first);
-        attempt1.Last().GetProperty("name").GetString().Should().Be("IssuePayment");
-        attempt1.Last().GetProperty("state").GetString().Should().Be("FAILED");
+        attempt1[^1].GetProperty("name").GetString().Should().Be("IssuePayment");
+        attempt1[^1].GetProperty("state").GetString().Should().Be("FAILED");
 
         var attempt2 = await Run.TimelineAsync(second);
         Questions(attempt2)
@@ -123,8 +124,8 @@ public class RetryReplayTests : RecoveryTestFixture
         // Attempt 1 asked both questions and crashed paying, before the checkpoint.
         var attempt1 = await Run.TimelineAsync(first);
         Questions(attempt1).Should().OnlyContain(q => !q.GetProperty("replayed").GetBoolean());
-        attempt1.Last().GetProperty("name").GetString().Should().Be("IssuePayment");
-        attempt1.Last().GetProperty("state").GetString().Should().Be("FAILED");
+        attempt1[^1].GetProperty("name").GetString().Should().Be("IssuePayment");
+        attempt1[^1].GetProperty("state").GetString().Should().Be("FAILED");
 
         // Attempt 2 had no checkpoint to start from: it ran from the top, replayed both answers, paid,
         // stored the outcome and crashed emailing.
@@ -134,8 +135,8 @@ public class RetryReplayTests : RecoveryTestFixture
             .HaveCount(2)
             .And.OnlyContain(q => q.GetProperty("replayed").GetBoolean());
         Names(attempt2).Should().StartWith("LoadRefundCase").And.Contain("IssuePayment");
-        attempt2.Last().GetProperty("name").GetString().Should().Be("NotifyCustomer");
-        attempt2.Last().GetProperty("state").GetString().Should().Be("FAILED");
+        attempt2[^1].GetProperty("name").GetString().Should().Be("NotifyCustomer");
+        attempt2[^1].GetProperty("state").GetString().Should().Be("FAILED");
 
         // Attempt 3 started from attempt 2's checkpoint: it paid nothing again and asked nothing.
         Names(await Run.TimelineAsync(third)).Should().Equal(["NotifyCustomer"]);
@@ -167,8 +168,8 @@ public class RetryReplayTests : RecoveryTestFixture
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
 
         var attempt1 = await Run.TimelineAsync(first);
-        attempt1.Last().GetProperty("name").GetString().Should().Be(track);
-        attempt1.Last().GetProperty("state").GetString().Should().Be("FAILED");
+        attempt1[^1].GetProperty("name").GetString().Should().Be(track);
+        attempt1[^1].GetProperty("state").GetString().Should().Be("FAILED");
 
         var attempt2 = await Run.TimelineAsync(second);
         Questions(attempt2)
@@ -189,7 +190,10 @@ public class RetryReplayTests : RecoveryTestFixture
             );
 
         var detail = await GraphQL.SendAsync(
-            $$"""{ operations { executionDetail(id: {{second}}) { output } } }""",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{ operations { executionDetail(id: {{second}}) { output } } }"""
+            ),
             OperatorKey
         );
         detail.HasErrors.Should().BeFalse(detail.FirstErrorMessage);
@@ -212,10 +216,15 @@ public class RetryReplayTests : RecoveryTestFixture
         var disabled = await Polling.WaitUntilAsync(
             async () =>
             {
-                var response = await GraphQL.SendAsync(
-                    $$"""{ operations { manifestDetail(id: {{Run.ManifestId}}) { isEnabled } } }""",
-                    OperatorKey
-                );
+                var response = await GraphQL
+                    .SendAsync(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $$"""{ operations { manifestDetail(id: {{Run.ManifestId}}) { isEnabled } } }"""
+                        ),
+                        OperatorKey
+                    )
+                    .ConfigureAwait(false);
                 return !response.GetData("operations", "manifestDetail", "isEnabled").GetBoolean();
             },
             TimeSpan.FromSeconds(30),

@@ -11,8 +11,8 @@ namespace Trax.Api.Auth;
 ///
 /// <list type="bullet">
 /// <item><see cref="IsAuthenticated"/> — an authenticated Trax principal exists on the current HTTP request.</item>
-/// <item><see cref="IsTrusted"/> — execution is inside an <see cref="ITrustedExecutionScope.BeginTrusted"/> block. Trax opens one only around the authorization of a remote run's named train and of a system-owned state machine's invoked train, so a train's own code sees <c>false</c>.</item>
-/// <item><see cref="Principal"/> — the resolved <see cref="TraxPrincipal"/>, or <c>null</c> when <see cref="IsAuthenticated"/> is false.</item>
+/// <item><see cref="IsTrusted"/> — execution is inside an <see cref="ITrustedExecutionScope.BeginTrusted"/> block. Trax opens one only around the authorization of a remote run's named train and of a system-owned state machine's invoked train, so a train's own code sees <see langword="false"/>.</item>
+/// <item><see cref="Principal"/> — the resolved <see cref="TraxPrincipal"/>, or <see langword="null"/> when <see cref="IsAuthenticated"/> is false.</item>
 /// </list>
 ///
 /// <para>
@@ -33,7 +33,7 @@ namespace Trax.Api.Auth;
 /// endpoints (<c>UseTraxRunEndpoint</c>, the Lambda runner's run path) open one only while
 /// they authorize the train a request names, because the scheduler already authorized
 /// it; the train then runs outside it, so its junctions, and any train it queues or runs,
-/// see <c>false</c> and are checked as they would be on the scheduler's own host. Whoever
+/// see <see langword="false"/> and are checked as they would be on the scheduler's own host. Whoever
 /// the runner's authorization posture admits (a request signed with its key, a caller its
 /// policy accepts, or anyone when the host allowed unsigned requests) can still run any
 /// train the runner hosts, so give the runner a posture that admits only the scheduler.
@@ -88,7 +88,7 @@ public sealed class TraxCaller
     public bool IsTrusted => _trustedScope.IsTrusted;
 
     /// <summary>
-    /// The current authenticated principal, or <c>null</c> when the current scope
+    /// The current authenticated principal, or <see langword="null"/> when the current scope
     /// is anonymous (no HTTP context, no authenticated user, or an authenticated
     /// user whose claims do not include a Trax principal id).
     /// <para>

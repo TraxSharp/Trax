@@ -32,17 +32,60 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// This junction runs before LoadManifestsJunction so that newly-failed metadata is counted in
 /// the same ManifestManager cycle (enabling dead-lettering if retries are exhausted).
 /// </remarks>
-internal class ReapStalePendingMetadataJunction(
+internal sealed class ReapStalePendingMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     DeferredOutcomeEvents outcomeEvents,
-    ILogger<ReapStalePendingMetadataJunction> logger
+    ILogger<ReapStalePendingMetadataJunction> logger,
+    TimeProvider timeProvider
 ) : EffectJunction<Unit, Unit>
 {
     public override async Task<Unit> Run(Unit input)
     {
-        var cutoff = DateTime.UtcNow - config.StalePendingTimeout;
+        var cutoff = timeProvider.GetUtcNow().UtcDateTime - config.StalePendingTimeout;
 
+        var staleIds = await StalePendingIdsAsync(cutoff).ConfigureAwait(false);
+
+        if (staleIds.Count == 0)
+        {
+            logger.LogDebug("ReapStalePendingMetadataJunction: no stale pending metadata found");
+            return Unit.Default;
+        }
+
+        // One conditional write for every run, which also tells the runs it moved to Failed: a run
+        // a runner claimed meanwhile, or that another pass reaped, matches nothing and is not
+        // published again.
+        var reaped = await ReapedRuns
+            .FailAsync(
+                dataContext,
+                dataContext.Metadatas.Where(m =>
+                    staleIds.Contains(m.Id)
+                    && m.TrainState == TrainState.Pending
+                    && !dataContext.BackgroundJobs.Any(j => j.MetadataId == m.Id)
+                ),
+                staleIds,
+                "Job was not picked up within the configured stale pending timeout",
+                "StalePendingTimeout",
+                nameof(ReapStalePendingMetadataJunction),
+                timeProvider,
+                CancellationToken
+            )
+            .ConfigureAwait(false);
+
+        logger.LogInformation(
+            "ReapStalePendingMetadataJunction completed: {Count} stale pending job(s) marked as failed",
+            reaped.Count
+        );
+
+        // No train ran to publish these outcomes; published once the write commits.
+        await outcomeEvents.FailedAsync(dataContext, reaped).ConfigureAwait(false);
+
+        return Unit.Default;
+    }
+
+    // The runs Pending since before the cutoff that no background job holds, each logged.
+    private async Task<List<long>> StalePendingIdsAsync(DateTime cutoff)
+    {
         var staleMetadata = await dataContext
             .Metadatas.Where(m =>
                 m.TrainState == TrainState.Pending
@@ -58,13 +101,8 @@ internal class ReapStalePendingMetadataJunction(
                 m.ManifestId,
             })
             .AsNoTracking()
-            .ToListAsync(CancellationToken);
-
-        if (staleMetadata.Count == 0)
-        {
-            logger.LogDebug("ReapStalePendingMetadataJunction: no stale pending metadata found");
-            return Unit.Default;
-        }
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         var staleIds = new List<long>(staleMetadata.Count);
 
@@ -81,31 +119,6 @@ internal class ReapStalePendingMetadataJunction(
             );
         }
 
-        // One conditional write for every run, which also tells the runs it moved to Failed: a run
-        // a runner claimed meanwhile, or that another pass reaped, matches nothing and is not
-        // published again.
-        var reaped = await ReapedRuns.FailAsync(
-            dataContext,
-            dataContext.Metadatas.Where(m =>
-                staleIds.Contains(m.Id)
-                && m.TrainState == TrainState.Pending
-                && !dataContext.BackgroundJobs.Any(j => j.MetadataId == m.Id)
-            ),
-            staleIds,
-            "Job was not picked up within the configured stale pending timeout",
-            "StalePendingTimeout",
-            nameof(ReapStalePendingMetadataJunction),
-            CancellationToken
-        );
-
-        logger.LogInformation(
-            "ReapStalePendingMetadataJunction completed: {Count} stale pending job(s) marked as failed",
-            reaped.Count
-        );
-
-        // No train ran to publish these outcomes; published once the write commits.
-        await outcomeEvents.FailedAsync(dataContext, reaped);
-
-        return Unit.Default;
+        return staleIds;
     }
 }

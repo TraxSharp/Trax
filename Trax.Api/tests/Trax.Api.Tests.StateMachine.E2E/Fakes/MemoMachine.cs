@@ -5,28 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
 
-public enum MemoState
-{
-    Open,
-    Filed,
-}
-
-public enum MemoTrigger
-{
-    File,
-    Reopen,
-}
-
-public sealed record MemoContext
-{
-    public string? Text { get; init; }
-}
-
-public sealed record MemoStartInput
-{
-    public string Text { get; init; } = "";
-}
-
 /// <summary>
 /// A second declarative machine with every rule declared. It is registered wherever <see cref="WizardMachine"/> is
 /// and, unless a host serves it (<see cref="E2EHostOptions.Served"/>), must get no typed operations of its own; a test

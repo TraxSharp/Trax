@@ -35,12 +35,12 @@ public class DataContextLoggerMemoryTests
                     logger.LogInformation("Log message {Index}", i);
 
                 // Give the flush loop time to drain
-                await Task.Delay(500);
+                await Task.Delay(500).ConfigureAwait(false);
             },
             "DataContextLogger_ChannelBatching"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Memory should be bounded — not accumulating unbounded state machines
         result
@@ -69,14 +69,15 @@ public class DataContextLoggerMemoryTests
         logger.LogInformation("Warm up {Index}", 0);
 
         // This should complete near-instantly since writes are non-blocking
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var start = TimeProvider.System.GetTimestamp();
 
         for (int i = 0; i < 10_000; i++)
             logger.LogInformation("High volume log {Index}", i);
 
-        sw.Stop();
+        var elapsed = TimeProvider.System.GetElapsedTime(start);
 
-        sw.ElapsedMilliseconds.Should()
+        ((long)elapsed.TotalMilliseconds)
+            .Should()
             .BeLessThan(1000, "Log writes should be non-blocking (channel enqueue only)");
     }
 

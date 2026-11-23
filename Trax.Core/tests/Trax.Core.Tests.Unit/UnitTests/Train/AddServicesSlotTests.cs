@@ -93,7 +93,7 @@ public class AddServicesSlotTests : TestSetup
         string Write();
     }
 
-    public interface IValue { }
+    public interface IValue;
 
     private sealed class Store : IReader, IWriter
     {
@@ -107,7 +107,7 @@ public class AddServicesSlotTests : TestSetup
         public string Read() => "read";
     }
 
-    private readonly struct StructValue : IValue { }
+    private readonly struct StructValue : IValue;
 
     private sealed class UseBoth(IReader reader, IWriter writer) : Junction<string, string>
     {

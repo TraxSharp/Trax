@@ -10,7 +10,7 @@ public class CountSharedReferences(DemoPace pace) : EffectJunction<CorpusSlice, 
 {
     public override async Task<CoCitationEvidence> Run(CorpusSlice slice)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var pairs = PaperPairs
             .Of(slice.Papers)
@@ -22,7 +22,10 @@ public class CountSharedReferences(DemoPace pace) : EffectJunction<CorpusSlice, 
             .Where(pair => pair.Value > 0)
             .ToList();
 
-        var linked = pairs.SelectMany(p => new[] { p.WorkA, p.WorkB }).Distinct().Count();
+        var linked = pairs
+            .SelectMany(p => new[] { p.WorkA, p.WorkB })
+            .Distinct(StringComparer.Ordinal)
+            .Count();
         return new CoCitationEvidence(slice.RunId, slice.Papers.Count, linked, pairs);
     }
 }

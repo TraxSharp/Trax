@@ -48,7 +48,7 @@ internal static class CronParser
     }
 
     /// <summary>
-    /// Why the scheduler could not use <paramref name="expression"/>, or <c>null</c> when it can:
+    /// Why the scheduler could not use <paramref name="expression"/>, or <see langword="null"/> when it can:
     /// it needs 5 or 6 fields, each field in range, and at least one future occurrence. Checked
     /// before a manifest is saved, since the scheduler skips a schedule it cannot evaluate on
     /// every poll and so never runs it.

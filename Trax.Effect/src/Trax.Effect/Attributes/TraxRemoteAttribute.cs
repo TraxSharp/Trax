@@ -14,4 +14,4 @@ namespace Trax.Effect.Attributes;
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/trax-remote">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
-public class TraxRemoteAttribute : Attribute { }
+public class TraxRemoteAttribute : Attribute;

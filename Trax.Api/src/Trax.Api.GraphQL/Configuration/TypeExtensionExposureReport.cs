@@ -1,13 +1,6 @@
 namespace Trax.Api.GraphQL.Configuration;
 
 /// <summary>
-/// One field the census rejected, carried from the type interceptor that found it to the
-/// startup validator that reports it. The message is built where the violation is found, because
-/// not every rejection is one of <see cref="ExposureViolation"/>'s three answers.
-/// </summary>
-internal sealed record TypeExtensionExposureViolation(string FieldPath, string Message);
-
-/// <summary>
 /// Collects what <see cref="TypeExtensionExposureInterceptor"/> finds while HotChocolate builds
 /// the schema, so <see cref="Startup.TypeExtensionExposureValidator"/> can report every offending
 /// field at once instead of failing on the first.

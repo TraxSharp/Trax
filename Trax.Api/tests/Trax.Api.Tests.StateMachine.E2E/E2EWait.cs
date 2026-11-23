@@ -15,9 +15,9 @@ public static class E2EWait
         using var deadline = new CancellationTokenSource(timeout ?? DefaultTimeout);
         try
         {
-            while (!await condition())
+            while (!await condition().ConfigureAwait(false))
                 // determinism: the poll interval of a wait bounded by the timeout above.
-                await Task.Delay(25, deadline.Token);
+                await Task.Delay(25, deadline.Token).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested)

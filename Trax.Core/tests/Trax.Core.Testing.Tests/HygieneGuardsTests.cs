@@ -65,7 +65,10 @@ public class HygieneGuardsTests
 
         var options = OptionsFor(repo) with
         {
-            NoIgnoreKnownExceptions = new HashSet<string> { "tests/Sample/FooTests.cs" },
+            NoIgnoreKnownExceptions = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "tests/Sample/FooTests.cs",
+            },
         };
 
         HygieneGuards.NoIgnoreAttribute(options).Passed.Should().BeTrue();
@@ -198,7 +201,8 @@ public class HygieneGuardsTests
                 .Replace(
                     "        await service.StartAsync",
                     "        // synchronous-start: the gate checks inside the awaited StartAsync.\n"
-                        + "        await service.StartAsync"
+                        + "        await service.StartAsync",
+                    StringComparison.Ordinal
                 )
         );
 

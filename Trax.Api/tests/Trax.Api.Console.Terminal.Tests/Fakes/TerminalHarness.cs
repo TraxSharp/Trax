@@ -4,6 +4,8 @@ using Terminal.Gui.Input;
 using Terminal.Gui.Testing;
 using Terminal.Gui.Time;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Checks;
+using Trax.Api.Console.Terminal.Screens;
 
 namespace Trax.Api.Console.Terminal.Tests.Fakes;
 
@@ -52,7 +54,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
             try
             {
                 app.Init("ansi");
-                app.Driver!.SetScreenSize(140, 40);
+                app.Driver.NotNull().SetScreenSize(140, 40);
                 window = build(app);
             }
             catch (Exception ex)
@@ -65,7 +67,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
                 if (e.Value)
                     started.TrySetResult(window);
             };
-            app.Run(window);
+            Ui.RunModal(app, window);
             stopped.TrySetResult();
             window.Dispose();
         })
@@ -74,7 +76,9 @@ internal sealed class TerminalHarness : IAsyncDisposable
             Name = "terminal-harness",
         };
         loop.Start();
-        var window = await started.Task.WaitAsync(Deadline);
+        var window = await started
+            .Task.WaitAsync(Deadline, TimeProvider.System)
+            .ConfigureAwait(false);
         return (new TerminalHarness(app, time, loop, stopped.Task), window);
     }
 
@@ -101,7 +105,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
                 done.TrySetException(ex);
             }
         });
-        return await done.Task.WaitAsync(Deadline);
+        return await done.Task.WaitAsync(Deadline, TimeProvider.System).ConfigureAwait(false);
     }
 
     /// <summary>Presses <paramref name="key"/> and waits until the UI thread has handled it.</summary>
@@ -111,11 +115,11 @@ internal sealed class TerminalHarness : IAsyncDisposable
     public Task<string> Screen() =>
         OnUi(() =>
         {
-            App.LayoutAndDraw(true);
-            var driver = App.Driver!;
-            var cells = driver.Contents!;
+            App.LayoutAndDraw(forceRedraw: true);
+            var driver = App.Driver.NotNull();
+            var cells = driver.Contents.NotNull();
             return string.Join(
-                "\n",
+                '\n',
                 Enumerable
                     .Range(0, driver.Rows)
                     .Select(r =>
@@ -134,19 +138,21 @@ internal sealed class TerminalHarness : IAsyncDisposable
     /// <summary>Waits until <paramref name="condition"/>, checked on the UI thread, holds.</summary>
     public async Task Until(Func<bool> condition, string because)
     {
-        var clock = Stopwatch.StartNew();
-        while (!await OnUi(condition))
-            if (clock.Elapsed > Deadline)
+        var clock = TimeProvider.System.GetTimestamp();
+        while (!await OnUi(condition).ConfigureAwait(false))
+            if (TimeProvider.System.GetElapsedTime(clock) > Deadline)
                 Assert.Fail($"Timed out waiting until {because}.");
     }
 
     /// <summary>Waits until the screen shows <paramref name="text"/>.</summary>
     public async Task UntilShown(string text)
     {
-        var clock = Stopwatch.StartNew();
-        while (!(await Screen()).Contains(text, StringComparison.Ordinal))
-            if (clock.Elapsed > Deadline)
-                Assert.Fail($"Timed out waiting for '{text}' on the screen:\n{await Screen()}");
+        var clock = TimeProvider.System.GetTimestamp();
+        while (!(await Screen().ConfigureAwait(false)).Contains(text, StringComparison.Ordinal))
+            if (TimeProvider.System.GetElapsedTime(clock) > Deadline)
+                Assert.Fail(
+                    $"Timed out waiting for '{text}' on the screen:\n{await Screen().ConfigureAwait(false)}"
+                );
     }
 
     public async ValueTask DisposeAsync()
@@ -154,7 +160,7 @@ internal sealed class TerminalHarness : IAsyncDisposable
         try
         {
             if (!Stopped.IsCompleted)
-                await OnUi(() => App.RequestStop());
+                await OnUi(() => App.RequestStop()).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {

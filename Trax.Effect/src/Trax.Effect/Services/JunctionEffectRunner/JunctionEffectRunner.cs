@@ -12,7 +12,7 @@ namespace Trax.Effect.Services.JunctionEffectRunner;
 /// Default <see cref="IJunctionEffectRunner"/>, registered as transient so each train run gets its own providers.
 /// Infrastructure; not intended to be constructed or called directly.
 /// </summary>
-internal class JunctionEffectRunner : IJunctionEffectRunner
+internal sealed class JunctionEffectRunner : IJunctionEffectRunner
 {
     private List<IJunctionEffectProvider> ActiveJunctionEffectProviders { get; init; }
 
@@ -56,7 +56,9 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
     )
     {
         foreach (var provider in ActiveJunctionEffectProviders)
-            await provider.BeforeJunctionExecution(effectJunction, serviceTrain, cancellationToken);
+            await provider
+                .BeforeJunctionExecution(effectJunction, serviceTrain, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -73,7 +75,9 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
     )
     {
         foreach (var provider in ActiveJunctionEffectProviders)
-            await provider.AfterJunctionExecution(effectJunction, serviceTrain, cancellationToken);
+            await provider
+                .AfterJunctionExecution(effectJunction, serviceTrain, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -87,7 +91,7 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
         {
             try
             {
-                await provider.Settle();
+                await provider.Settle().ConfigureAwait(false);
             }
             catch (Exception ex)
             {

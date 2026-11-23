@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Core.Decisions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -119,7 +120,14 @@ public class ResumeCheckTests : TestSetup
         string[] written = ["Checkpoint<Findings>#0"];
 
         ChainVerification
-            .CheckResume(chain, typeof(string), typeof(Report), t => t.IsInterface, written, null)
+            .CheckResume(
+                chain,
+                typeof(string),
+                typeof(Report),
+                t => t.IsInterface,
+                written,
+                resumeAt: null
+            )
             .CanResume.Should()
             .BeTrue("the checkpoint holds the route when the store keeps it");
 
@@ -129,7 +137,7 @@ public class ResumeCheckTests : TestSetup
             typeof(Report),
             t => t.IsInterface,
             written,
-            null,
+            resumeAt: null,
             withheld: key => key == typeof(Source)
         );
 
@@ -144,11 +152,13 @@ public class ResumeCheckTests : TestSetup
         var fingerprint = CheckpointState.Fingerprint(typeof(Checked));
 
         ChainVerification
-            .CheckStored(Checkpoint, "a", "b", fingerprint, typeof(Checked))!
+            .CheckStored(Checkpoint, "a", "b", fingerprint, typeof(Checked))
+            .NotNull()
             .RefusalCode.Should()
             .Be(ResumeRefusals.ChainChanged, Adr);
         ChainVerification
-            .CheckStored(Checkpoint, "a", "a", "old", typeof(Checked))!
+            .CheckStored(Checkpoint, "a", "a", "old", typeof(Checked))
+            .NotNull()
             .RefusalCode.Should()
             .Be(ResumeRefusals.StateChanged, Adr);
         ChainVerification

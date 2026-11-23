@@ -22,6 +22,9 @@ namespace Trax.Api.Auth;
 /// securing systems that use it. See SECURITY-DISCLAIMER.md.
 /// </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class TraxSchemeRequirement
     : AuthorizationHandler<TraxSchemeRequirement>,
         IAuthorizationRequirement

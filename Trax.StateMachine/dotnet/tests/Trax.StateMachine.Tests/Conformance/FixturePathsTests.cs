@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Conformance;
@@ -26,7 +27,7 @@ public class FixturePathsTests
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(start)!, recursive: true);
+            Directory.Delete(Path.GetDirectoryName(start).NotNull(), recursive: true);
         }
     }
 

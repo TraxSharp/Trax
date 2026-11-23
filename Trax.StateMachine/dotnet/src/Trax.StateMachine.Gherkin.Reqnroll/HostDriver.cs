@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Features;
@@ -25,6 +27,13 @@ internal sealed class HostDriver(
     string scenarioId
 ) : IScenarioDriver
 {
+    // Time passing on a host, and the slack that bounds its lag, are real time, as the host runs in it, so they are
+    // waited out on the real clock.
+    private static TimeProvider RealTime => TimeProvider.System;
+
+    // What is due is due on the host's clock: the one its container registered.
+    private TimeProvider HostClock => options.Host.GetRequiredService<TimeProvider>();
+
     private readonly HostFile _host = options.Host.GetRequiredService<HostFile>();
     private readonly Dictionary<InstanceKey, Guid> _ids = [];
 
@@ -49,40 +58,46 @@ internal sealed class HostDriver(
         _actors[person.Name] = person.Actor;
         var requestId = RequestId();
         var answer = await Send(
-            person,
-            new Operation(
-                machine,
-                "start",
-                $"mutation {{ machines {{ {FieldOf(machine)} {{ start(requestId: \"{requestId}\") {{ id state problem {{ code message }} }} }} }} }}",
-                new JsonObject { ["requestId"] = requestId }
-            ),
-            ["machines", FieldOf(machine), "start"]
-        );
+                person,
+                new Operation(
+                    machine,
+                    "start",
+                    $"mutation {{ machines {{ {FieldOf(machine)} {{ start(requestId: \"{requestId}\") {{ id state problem {{ code message }} }} }} }} }}",
+                    new JsonObject { ["requestId"] = requestId }
+                ),
+                ["machines", FieldOf(machine), "start"]
+            )
+            .ConfigureAwait(false);
         // A refused start answers a problem and no id.
         if (answer is { Answer: Answer.Moved, Result: { } result })
             _ids[new InstanceKey(machine, person.Name)] = Guid.Parse(
-                result["id"]!.GetValue<string>()
+                result["id"].NotNull().GetValue<string>()
             );
         return answer.Answer;
     }
 
     public async ValueTask Seed(InstanceKey key, string state, JsonObject? context)
     {
-        var id = await IdOf(key);
-        await using var scope = options.Host.CreateAsyncScope();
+        var id = await IdOf(key).ConfigureAwait(false);
+        var scope = options.Host.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var row =
-            await ServerFire.RowOf(data, key.Machine, id, CancellationToken.None)
+            await ServerFire
+                .RowOf(data, key.Machine, id, CancellationToken.None)
+                .ConfigureAwait(false)
             ?? throw new InvalidOperationException($"{Describe(key)} has no row to arrange.");
-        var seeded = await ServerFire.Seed(
-            scope.ServiceProvider,
-            data,
-            Machines,
-            row,
-            state,
-            context,
-            CancellationToken.None
-        );
+        var seeded = await ServerFire
+            .Seed(
+                scope.ServiceProvider,
+                data,
+                Machines,
+                row,
+                state,
+                context,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
         var why = seeded switch
         {
             ServerFire.Fired.Failed failed => failed.Why,
@@ -97,30 +112,37 @@ internal sealed class HostDriver(
 
     public async ValueTask BeginWhen()
     {
-        await using var scope = options.Host.CreateAsyncScope();
+        var scope = options.Host.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        _when = await data.SnapshotTransitions.MaxAsync(t => (long?)t.Id) ?? 0;
+        _when =
+            await data.SnapshotTransitions.MaxAsync(t => (long?)t.Id).ConfigureAwait(false) ?? 0;
     }
 
     public async ValueTask<IReadOnlyList<string>> Cascaded(InstanceKey key)
     {
         if (!_ids.ContainsKey(key) && (key.Owner is not null || key.Key is not null))
             return [];
-        return EnteredAfter(await History(key, await IdOf(key)), _when);
+        return EnteredAfter(
+            await History(key, await IdOf(key).ConfigureAwait(false)).ConfigureAwait(false),
+            _when
+        );
     }
 
     public async ValueTask<(string State, JsonObject Context)?> Read(InstanceKey key)
     {
         if (!_ids.ContainsKey(key) && (key.Owner is not null || key.Key is not null))
             return null;
-        var id = await IdOf(key);
-        await using var scope = options.Host.CreateAsyncScope();
+        var id = await IdOf(key).ConfigureAwait(false);
+        var scope = options.Host.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var row = await data
             .SnapshotDrafts.AsNoTracking()
             .Where(d => d.Machine == key.Machine && d.Id == id)
             .Select(d => new { d.State, d.Context })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
         return row is null ? null : (row.State, JsonNode.Parse(row.Context)?.AsObject() ?? []);
     }
 
@@ -132,11 +154,11 @@ internal sealed class HostDriver(
     )
     {
         if (person is null)
-            return await FireAsServer(key, trigger, input);
+            return await FireAsServer(key, trigger, input).ConfigureAwait(false);
         _actors[person.Name] = person.Actor;
         if (key.Owner is not null && !_ids.ContainsKey(key))
             return new Answer.Refused(RefusalCode.NotFound, "No draft with that id.");
-        var id = await IdOf(key);
+        var id = await IdOf(key).ConfigureAwait(false);
         var field = FieldOf(key.Machine);
         var operation = char.ToLowerInvariant(trigger[0]) + trigger[1..];
         var inputArgument = input is null ? "" : $"input: {Literal(input)}, ";
@@ -145,16 +167,17 @@ internal sealed class HostDriver(
         if (input is not null)
             variables["input"] = input.DeepClone();
         var answer = await Send(
-            person,
-            new Operation(
-                key.Machine,
-                operation,
-                $"mutation {{ machines {{ {field} {{ {operation}(id: \"{id}\", {inputArgument}requestId: \"{requestId}\") {{ state problem {{ code message }} }} }} }} }}",
-                variables
-            ),
-            ["machines", field, operation]
-        );
-        await Settle();
+                person,
+                new Operation(
+                    key.Machine,
+                    operation,
+                    $"mutation {{ machines {{ {field} {{ {operation}(id: \"{id}\", {inputArgument}requestId: \"{requestId}\") {{ state problem {{ code message }} }} }} }} }}",
+                    variables
+                ),
+                ["machines", field, operation]
+            )
+            .ConfigureAwait(false);
+        await Settle().ConfigureAwait(false);
         return answer.Answer;
     }
 
@@ -168,25 +191,28 @@ internal sealed class HostDriver(
         // The host's own train runs and says how it ended: the first move out of the state after the instance last entered
         // it, from its history, so a state it passed through on the way, or the move out of an earlier visit to the same
         // state, is not mistaken for where this outcome took it.
-        var id = await IdOf(key);
-        var deadline = DateTimeOffset.UtcNow + options.Slack;
-        var entered = Entered(await History(key, id), state);
+        var id = await IdOf(key).ConfigureAwait(false);
+        var deadline = RealTime.GetUtcNow() + options.Slack;
+        var entered = Entered(await History(key, id).ConfigureAwait(false), state);
         while (true)
         {
-            if (LeftBy(await History(key, id), state, entered) is { } left)
+            if (LeftBy(await History(key, id).ConfigureAwait(false), state, entered) is { } left)
             {
                 // The host may have applied the outcome before this When began: its move and what it set off are
                 // still this When's cascade.
                 _when = Math.Min(_when, left.Id - 1);
-                await Settle();
+                await Settle().ConfigureAwait(false);
                 return new Answer.Moved(left.To);
             }
-            if (DateTimeOffset.UtcNow > deadline)
+            if (RealTime.GetUtcNow() > deadline)
                 return new Answer.Refused(
                     RefusalCode.InternalError,
-                    $"The train {state} invokes did not end within {options.Slack.TotalSeconds:0.#} seconds."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The train {state} invokes did not end within {options.Slack.TotalSeconds:0.#} seconds."
+                    )
                 );
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
         }
     }
 
@@ -215,7 +241,11 @@ internal sealed class HostDriver(
 
     /// <summary>The revision at which the instance last entered <paramref name="state"/>, or 0 if it never did.</summary>
     internal static long Entered(IReadOnlyList<Move> history, string state) =>
-        history.Where(m => m.To == state).Select(m => m.Revision).DefaultIfEmpty(0).Max();
+        history
+            .Where(m => string.Equals(m.To, state, StringComparison.Ordinal))
+            .Select(m => m.Revision)
+            .DefaultIfEmpty(0)
+            .Max();
 
     /// <summary>
     /// Where the instance went when it left <paramref name="state"/> after <paramref name="entered"/>, or null if it has
@@ -226,16 +256,23 @@ internal sealed class HostDriver(
 
     private static Move? LeftBy(IReadOnlyList<Move> history, string state, long entered) =>
         history
-            .Where(m => m.Revision > entered && m.From == state && m.To != state)
+            .Where(m =>
+                m.Revision > entered
+                && string.Equals(m.From, state, StringComparison.Ordinal)
+                && !string.Equals(m.To, state, StringComparison.Ordinal)
+            )
             .OrderBy(m => m.Revision)
-            .Select(m => (Move?)m)
+            .Cast<Move?>()
             .FirstOrDefault();
 
     private async Task<List<Move>> History(InstanceKey key, Guid id)
     {
-        await using var scope = options.Host.CreateAsyncScope();
+        var scope = options.Host.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var row = await ServerFire.RowOf(data, key.Machine, id, CancellationToken.None);
+        var row = await ServerFire
+            .RowOf(data, key.Machine, id, CancellationToken.None)
+            .ConfigureAwait(false);
         return await data
             .SnapshotTransitions.AsNoTracking()
             .Where(t => t.DraftRowId == row)
@@ -246,7 +283,8 @@ internal sealed class HostDriver(
                 t.Id,
                 t.Kind == SnapshotTransitionKind.Start || t.Kind == SnapshotTransitionKind.Save
             ))
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -261,8 +299,8 @@ internal sealed class HostDriver(
             throw new InvalidOperationException(
                 $"{time} cannot pass against a host: time passing is waited for in real time, and a step may wait at most {MaxPass}. Run this scenario in memory."
             );
-        await Task.Delay(time);
-        await Settle();
+        await Task.Delay(time, RealTime).ConfigureAwait(false);
+        await Settle().ConfigureAwait(false);
     }
 
     public async ValueTask<(IReadOnlyList<string>? Values, Answer? Refused)> View(
@@ -274,19 +312,22 @@ internal sealed class HostDriver(
         _actors[person.Name] = person.Actor;
         if (!_host.Views.TryGetValue(view, out var served))
             return (null, new Answer.NotServed($"no view {view}"));
-        var shown = served.Fields.First(f => f.Name == field);
+        var shown = served.Fields.First(f =>
+            string.Equals(f.Name, field, StringComparison.Ordinal)
+        );
         var viewField = ViewFieldOf(view);
         var machineField = FieldOf(shown.Machine);
         var answer = await Send(
-            person,
-            new Operation(
-                null,
-                viewField,
-                $"{{ views {{ {viewField} {{ {machineField} {{ {field} }} }} }} }}",
-                []
-            ),
-            ["views", viewField, machineField]
-        );
+                person,
+                new Operation(
+                    Machine: null,
+                    viewField,
+                    $"{{ views {{ {viewField} {{ {machineField} {{ {field} }} }} }} }}",
+                    []
+                ),
+                ["views", viewField, machineField]
+            )
+            .ConfigureAwait(false);
         if (answer.Answer is not Answer.Moved)
             return (null, answer.Answer);
         var node = answer.Node;
@@ -302,48 +343,53 @@ internal sealed class HostDriver(
     // Waits for the host to fire what is due and the policies it owes, within the slack.
     private async Task Settle()
     {
-        var deadline = DateTimeOffset.UtcNow + options.Slack;
-        while (DateTimeOffset.UtcNow < deadline)
+        var deadline = RealTime.GetUtcNow() + options.Slack;
+        while (RealTime.GetUtcNow() < deadline)
         {
-            await using var scope = options.Host.CreateAsyncScope();
+            var scope = options.Host.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-            var now = DateTimeOffset.UtcNow;
+            var now = HostClock.GetUtcNow();
             var ids = _ids.Values.ToList();
-            var due = await data.SnapshotDrafts.AnyAsync(d =>
-                ids.Contains(d.Id) && d.DueAt != null && d.DueAt <= now
-            );
-            var owed = _host.Policies.Count > 0 && await data.MachinePolicyFires.AnyAsync();
+            var due = await data
+                .SnapshotDrafts.AnyAsync(d =>
+                    ids.Contains(d.Id) && d.DueAt != null && d.DueAt <= now
+                )
+                .ConfigureAwait(false);
+            var owed =
+                _host.Policies.Count > 0
+                && await data.MachinePolicyFires.AnyAsync().ConfigureAwait(false);
             if (!due && !owed)
                 return;
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
         }
     }
 
     private async Task<Answer> FireAsServer(InstanceKey key, string trigger, JsonObject? input)
     {
-        var id = await IdOf(key);
-        await using var scope = options.Host.CreateAsyncScope();
+        var id = await IdOf(key).ConfigureAwait(false);
+        var scope = options.Host.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var data = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var row = await Persistence.FromIr.ServerFire.RowOf(
-            data,
-            key.Machine,
-            id,
-            CancellationToken.None
-        );
+        var row = await ServerFire
+            .RowOf(data, key.Machine, id, CancellationToken.None)
+            .ConfigureAwait(false);
         if (row is null)
             return new Answer.Refused(RefusalCode.NotFound, "No draft with that id.");
-        var fired = await Persistence.FromIr.ServerFire.Fire(
-            scope.ServiceProvider,
-            data,
-            Machines,
-            row.Value,
-            trigger,
-            input,
-            TransitionNote.Command(DraftOwner.System, trigger),
-            null,
-            CancellationToken.None
-        );
-        await Settle();
+        var fired = await ServerFire
+            .Fire(
+                scope.ServiceProvider,
+                data,
+                Machines,
+                row.Value,
+                trigger,
+                input,
+                TransitionNote.Command(DraftOwner.System, trigger),
+                beforeFiring: null,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        await Settle().ConfigureAwait(false);
         return fired switch
         {
             Persistence.FromIr.ServerFire.Fired.Moved moved => new Answer.Moved(moved.State),
@@ -371,10 +417,12 @@ internal sealed class HostDriver(
         if (key.Key is not null)
         {
             // A keyed system machine's instance is started by host code, as the host's own trains start one.
-            await using var scope = options.Host.CreateAsyncScope();
+            var scope = options.Host.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var started = await scope
                 .ServiceProvider.GetRequiredService<IMachineInstances>()
-                .Start(key.Machine, MachineKey.Of([.. key.Parts]));
+                .Start(key.Machine, MachineKey.Of([.. key.Parts]))
+                .ConfigureAwait(false);
             return _ids[key] = started.Id;
         }
         if (key.Owner is null)
@@ -385,7 +433,7 @@ internal sealed class HostDriver(
             return _ids[key] = SystemInstanceStarter.IdOf(key.Machine, systemKey);
         }
         var owner = new Person(key.Owner, Actor(key.Owner, key.Machine));
-        if (await Start(owner, key.Machine) is not Answer.Moved)
+        if (await Start(owner, key.Machine).ConfigureAwait(false) is not Answer.Moved)
             throw new InvalidOperationException(
                 $"{key.Owner} could not start their {key.Machine} to arrange it."
             );
@@ -398,7 +446,7 @@ internal sealed class HostDriver(
     {
         if (_actors.TryGetValue(person, out var actor))
             return actor;
-        var ownedBy = glossary.Machines[machine].OwnedBy!;
+        var ownedBy = glossary.Machines[machine].OwnedBy.NotNull();
         if (ownedBy.Count == 1)
             return glossary.Actors[ownedBy[0]];
         throw new InvalidOperationException(
@@ -453,19 +501,29 @@ internal sealed class HostDriver(
     private string? PersistedId(ClientManifest manifest, Operation operation)
     {
         if (operation.Machine is null)
-            return manifest.Views.FirstOrDefault(v => v.Operation == operation.Name)?.Id;
-        var machine = manifest.Machines.FirstOrDefault(m => m.Id == operation.Machine);
+            return manifest
+                .Views.FirstOrDefault(v =>
+                    string.Equals(v.Operation, operation.Name, StringComparison.Ordinal)
+                )
+                ?.Id;
+        var machine = manifest.Machines.FirstOrDefault(m =>
+            string.Equals(m.Id, operation.Machine, StringComparison.Ordinal)
+        );
         if (machine is null)
             return null;
         if (
             Machines.TryGetValue(operation.Machine, out var served)
             && ((IMachine)served).SchemaHash is { } hash
-            && hash != machine.IrHash
+            && !string.Equals(hash, machine.IrHash, StringComparison.Ordinal)
         )
             throw new InvalidOperationException(
                 $"The client manifest was exported from another version of {operation.Machine} than the host serves: export it again."
             );
-        return machine.Documents.FirstOrDefault(d => d.Operation == operation.Name)?.Id;
+        return machine
+            .Documents.FirstOrDefault(d =>
+                string.Equals(d.Operation, operation.Name, StringComparison.Ordinal)
+            )
+            ?.Id;
     }
 
     // Sends the operation as the person, by its persisted id when a manifest is set and as its document when not; the
@@ -480,8 +538,8 @@ internal sealed class HostDriver(
                     new Answer.NotServed(
                         $"the client manifest has no document for {operation.Machine ?? "the view"} {operation.Name}"
                     ),
-                    null,
-                    null
+                    Result: null,
+                    Node: null
                 );
             sent = new JsonObject { ["id"] = id, ["variables"] = operation.Variables };
         }
@@ -493,11 +551,22 @@ internal sealed class HostDriver(
         };
         foreach (var (name, value) in CredentialOf(person.Name, person.Actor).Headers)
             request.Headers.TryAddWithoutValidation(name, value);
-        using var response = await options.Client.SendAsync(request);
-        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())?.AsObject() ?? [];
+        using var response = await options.Client.SendAsync(request).ConfigureAwait(false);
+        var body =
+            JsonNode
+                .Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))
+                ?.AsObject()
+            ?? [];
+        return Answered(body, operation, path);
+    }
+
+    // What the host answered: a refusal, an operation it does not serve, or the state the answer at path is in. A
+    // posture refusal is the host not running the operation at all, and throws.
+    private Sent Answered(JsonObject body, Operation operation, string[] path)
+    {
         if (body["errors"] is JsonArray { Count: > 0 } errors)
         {
-            var error = errors[0]!;
+            var error = errors[0].NotNull();
             var code = error["extensions"]?["code"]?.GetValue<string>();
             if (code is not null && PostureCodes.Contains(code))
                 throw new InvalidOperationException(
@@ -511,16 +580,16 @@ internal sealed class HostDriver(
             if (body["data"] is null && code is not ("FORBIDDEN" or "UNAUTHENTICATED"))
                 return new Sent(
                     new Answer.NotServed(error["message"]?.GetValue<string>() ?? "refused"),
-                    null,
-                    null
+                    Result: null,
+                    Node: null
                 );
             return new Sent(
                 new Answer.Refused(
                     RefusalCodes.TryParse(code, out var parsed) ? parsed : RefusalCode.Forbidden,
                     error["message"]?.GetValue<string>() ?? ""
                 ),
-                null,
-                null
+                Result: null,
+                Node: null
             );
         }
         JsonNode? node = body["data"];

@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Browser.Factories;
 using Trax.Samples.Recovery.Browser.Fixtures;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -18,15 +19,27 @@ public class BrowserSetup
     private static IPlaywright? _playwright;
 
     /// <summary>The built page's folder.</summary>
-    public static string Dist { get; private set; } = null!;
+    public static string Dist
+    {
+        get => field.NotNull(nameof(Dist));
+        private set;
+    }
 
     /// <summary>The host the page talks to. A test that kills it starts the next one with <see cref="RestartHostAsync"/>.</summary>
-    public static RecoveryHostProcess Host { get; private set; } = null!;
+    public static RecoveryHostProcess Host
+    {
+        get => field.NotNull(nameof(Host));
+        private set;
+    }
 
-    public static IBrowser Browser { get; private set; } = null!;
+    public static IBrowser Browser
+    {
+        get => field.NotNull(nameof(Browser));
+        private set;
+    }
 
     /// <summary>The address the page's API calls are forwarded to.</summary>
-    public static Uri HostAddress => Host.Http.BaseAddress!;
+    public static Uri HostAddress => Host.Http.BaseAddress.NotNull();
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -45,13 +58,17 @@ public class BrowserSetup
 
     /// <summary>A fresh browser context on the built page, forwarding to the current host.</summary>
     public static async Task<OpenPage> NewPageAsync(Func<string, string, string>? replace = null) =>
-        new(await RecoveryPage.OpenAsync(Browser, Dist, () => HostAddress, replace));
+        new(
+            await RecoveryPage
+                .OpenAsync(Browser, Dist, () => HostAddress, replace)
+                .ConfigureAwait(false)
+        );
 
     /// <summary>Starts a new host on the same database, after a test killed the last one.</summary>
     public static async Task RestartHostAsync()
     {
-        await Host.DisposeAsync();
-        Host = await RecoveryBrowserHost.StartAsync();
+        await Host.DisposeAsync().ConfigureAwait(false);
+        Host = await RecoveryBrowserHost.StartAsync().ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
@@ -64,14 +81,4 @@ public class BrowserSetup
             await Host.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
-}
-
-/// <summary>A <see cref="RecoveryPage"/> whose context closes when it is disposed.</summary>
-public sealed class OpenPage(RecoveryPage page) : IAsyncDisposable
-{
-    public RecoveryPage Recovery { get; } = page;
-
-    public Task OpenTheWizardAsync() => Recovery.OpenTheWizardAsync();
-
-    public ValueTask DisposeAsync() => new(Recovery.Context.CloseAsync());
 }

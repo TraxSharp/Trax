@@ -13,11 +13,11 @@ public class NotifyCustomer(FaultInjector faults, DemoPace pace)
 {
     public override async Task<RefundResult> Run(RefundOutcome outcome)
     {
-        await Task.Delay(pace.StepDelay);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         if (faults.TryFire(outcome.RunId, CrashPoint.RefundEmail))
         {
-            await Task.Delay(pace.StepDelay);
+            await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
             throw new TimeoutException(
                 "The email service did not answer in time (timeout injected by the demo)."
             );

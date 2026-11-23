@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -25,7 +26,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsRunInMemoryWorkerTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
@@ -44,24 +45,28 @@ public class OperationsRunInMemoryWorkerTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _provider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.NotNull().CreateAsyncScope();
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
     [Test]
     public async Task A_failing_train_is_a_successful_submit_with_a_failed_run()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.NotNull().CreateAsyncScope();
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var result = await operations.RunTrainAsync(
             new RunTrainInput(
-                typeof(IFailingSchedulerTestTrain).FullName!,
+                typeof(IFailingSchedulerTestTrain).FullName.NotNull(),
                 """{"failureMessage":"the train failed"}"""
             ),
             CancellationToken.None
@@ -69,7 +74,7 @@ public class OperationsRunInMemoryWorkerTests
 
         result.Success.Should().BeTrue(result.Message);
 
-        using var check = _provider.CreateScope();
+        await using var check = _provider.NotNull().CreateAsyncScope();
         var db = check.ServiceProvider.GetRequiredService<IDataContext>();
         var run = await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == result.Id);
         run.TrainState.Should().Be(TrainState.Failed, "the run records the train's failure");

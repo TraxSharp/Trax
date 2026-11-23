@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Models.SnapshotDraft;
 /// package's table, mapped on the core data context like
 /// <see cref="Trax.Effect.Data.Models.RunnerNonce.PersistentRunnerNonce"/>.
 /// </summary>
-internal class PersistentSnapshotDraft : BaseModel
+internal sealed class PersistentSnapshotDraft : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

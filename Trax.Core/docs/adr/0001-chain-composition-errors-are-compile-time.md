@@ -80,8 +80,9 @@ behaviour the analyzer exists to avoid.
 
 ## Exemplars
 
-- `TrainChainAnalyzerTests` drives the analyzer over source fixtures and asserts the two
-  diagnostics fire where expected and stay quiet where the chain is sound.
+**Unenforced:** the decision is deprecated and the analyzer is no longer built
+(`Trax.Docs/adr/0061`); its tests (TrainChainAnalyzerTests) went with it. Startup chain verification
+holds what the analyzer used to.
 - [Analyzer](/docs/core/analyzer) documents the two diagnostics for users.
 
 Not covered: nothing asserts the analyzer is packed into the NuGet output at the right path,
@@ -92,6 +93,8 @@ the analyzer cannot resolve either, so the skip path above and the false positiv
 follow from it go unasserted.
 
 ## Changelog
+
+- **2026-11-23**: The analyzer and its tests are no longer built; the exemplar is gone with them.
 
 - **2026-09-23**: Deprecated. `Junctions()` chains never start with `Activate()`, so the
   analyzer checks nothing; startup chain verification replaced it.

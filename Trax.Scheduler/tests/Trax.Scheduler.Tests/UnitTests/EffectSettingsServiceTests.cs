@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
@@ -40,14 +41,18 @@ public class EffectSettingsServiceTests
 
         public TimeSpan? Timeout { get; set; }
 
-        public List<string>? Tags { get; set; } = ["a"];
+        public IList<string>? Tags { get; set; } = ["a"];
 
         private int _exploding;
 
         public int Exploding
         {
             get => _exploding;
-            set => _exploding = value == 13 ? throw new ArgumentException("13 is unlucky") : value;
+            set =>
+                _exploding =
+                    value == 13
+                        ? throw new ArgumentException("13 is unlucky", nameof(value))
+                        : value;
         }
     }
 
@@ -64,24 +69,24 @@ public class EffectSettingsServiceTests
 
     public sealed class FixedFactory;
 
-    private ConfigurableFactory _factory = null!;
-    private EffectRegistry _registry = null!;
-    private IEffectSettingsService _service = null!;
+    private ConfigurableFactory? _factory;
+    private EffectRegistry? _registry;
+    private IEffectSettingsService? _service;
 
-    private static string FullName<T>() => typeof(T).FullName!;
+    private static string FullName<T>() => typeof(T).FullName.NotNull();
 
     [SetUp]
     public void SetUp()
     {
         _factory = new ConfigurableFactory();
         _registry = new EffectRegistry();
-        _registry.Register(typeof(ConfigurableFactory));
-        _registry.Register(typeof(PlainFactory), enabled: false);
-        _registry.Register(typeof(FixedFactory), toggleable: false);
+        _registry.NotNull().Register(typeof(ConfigurableFactory));
+        _registry.NotNull().Register(typeof(PlainFactory), enabled: false);
+        _registry.NotNull().Register(typeof(FixedFactory), toggleable: false);
 
         var services = new ServiceCollection()
-            .AddSingleton<IEffectRegistry>(_registry)
-            .AddSingleton(_factory)
+            .AddSingleton<IEffectRegistry>(_registry.NotNull())
+            .AddSingleton(_factory.NotNull())
             .BuildServiceProvider();
         _service = new EffectSettingsService(services);
     }
@@ -89,21 +94,28 @@ public class EffectSettingsServiceTests
     [Test]
     public void Effects_are_listed_by_full_name_with_their_state()
     {
-        var effects = _service.GetEffects();
+        var effects = _service.NotNull().GetEffects();
 
         effects.Select(e => e.FullName).Should().BeInAscendingOrder(StringComparer.Ordinal);
-        var plain = effects.Single(e => e.FullName == FullName<PlainFactory>());
+        var plain = effects.Single(e =>
+            string.Equals(e.FullName, FullName<PlainFactory>(), StringComparison.Ordinal)
+        );
         plain.Enabled.Should().BeFalse();
         plain.IsConfigurable.Should().BeFalse();
         plain.Fields.Should().BeEmpty();
-        effects.Single(e => e.FullName == FullName<FixedFactory>()).Toggleable.Should().BeFalse();
+        effects
+            .Single(e =>
+                string.Equals(e.FullName, FullName<FixedFactory>(), StringComparison.Ordinal)
+            )
+            .Toggleable.Should()
+            .BeFalse();
     }
 
     [Test]
     public void A_configurable_effect_describes_each_setting()
     {
-        var effect = _service.GetEffects().Single(e => e.IsConfigurable);
-        var fields = effect.Fields.ToDictionary(f => f.Name);
+        var effect = _service.NotNull().GetEffects().Single(e => e.IsConfigurable);
+        var fields = effect.Fields.ToDictionary(f => f.Name, StringComparer.Ordinal);
 
         effect.ConfigurationTypeName.Should().Be(typeof(Settings).FullName);
         fields["BatchSize"].Kind.Should().Be(EffectFieldKind.Text);
@@ -127,8 +139,10 @@ public class EffectSettingsServiceTests
     [Test]
     public void A_sensitive_setting_is_never_read_back()
     {
-        var effect = _service.GetEffects().Single(e => e.IsConfigurable);
-        var apiKey = effect.Fields.Single(f => f.Name == "ApiKey");
+        var effect = _service.NotNull().GetEffects().Single(e => e.IsConfigurable);
+        var apiKey = effect.Fields.Single(f =>
+            string.Equals(f.Name, "ApiKey", StringComparison.Ordinal)
+        );
 
         apiKey.Sensitive.Should().BeTrue();
         apiKey.HasValue.Should().BeTrue();
@@ -140,36 +154,46 @@ public class EffectSettingsServiceTests
     [Test]
     public void Toggling_refuses_an_unknown_or_fixed_effect_and_sets_a_toggleable_one()
     {
-        _service.SetEffectEnabled("No.Such.Factory", false).Success.Should().BeFalse();
-        _service.SetEffectEnabled(FullName<FixedFactory>(), false).Success.Should().BeFalse();
-        _registry.IsEnabled(typeof(FixedFactory)).Should().BeTrue();
+        _service
+            .NotNull()
+            .SetEffectEnabled("No.Such.Factory", enabled: false)
+            .Success.Should()
+            .BeFalse();
+        _service
+            .NotNull()
+            .SetEffectEnabled(FullName<FixedFactory>(), enabled: false)
+            .Success.Should()
+            .BeFalse();
+        _registry.NotNull().IsEnabled(typeof(FixedFactory)).Should().BeTrue();
 
-        var result = _service.SetEffectEnabled(FullName<PlainFactory>(), true);
+        var result = _service.NotNull().SetEffectEnabled(FullName<PlainFactory>(), enabled: true);
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(1);
-        _registry.IsEnabled(typeof(PlainFactory)).Should().BeTrue();
+        _registry.NotNull().IsEnabled(typeof(PlainFactory)).Should().BeTrue();
     }
 
     [Test]
     public void Configuring_reads_each_value_as_its_type_and_writes_only_those_named()
     {
-        var result = _service.ConfigureEffect(
-            FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?>
-            {
-                ["BatchSize"] = "42",
-                ["Verbose"] = "true",
-                ["Mode"] = "Fast",
-                ["Timeout"] = "00:00:05",
-                ["Endpoint"] = " ",
-                ["ApiKey"] = "new-secret",
-            }
-        );
+        var result = _service
+            .NotNull()
+            .ConfigureEffect(
+                FullName<ConfigurableFactory>(),
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["BatchSize"] = "42",
+                    ["Verbose"] = "true",
+                    ["Mode"] = "Fast",
+                    ["Timeout"] = "00:00:05",
+                    ["Endpoint"] = " ",
+                    ["ApiKey"] = "new-secret",
+                }
+            );
 
         result.Success.Should().BeTrue(result.Message);
         result.Count.Should().Be(6);
-        var settings = _factory.Settings;
+        var settings = _factory.NotNull().Settings;
         settings.BatchSize.Should().Be(42);
         settings.Verbose.Should().BeTrue();
         settings.Mode.Should().Be(Mode.Fast);
@@ -183,18 +207,21 @@ public class EffectSettingsServiceTests
     public void Blank_is_null_for_a_nullable_setting_and_refused_for_a_value_type()
     {
         _service
+            .NotNull()
             .ConfigureEffect(
                 FullName<ConfigurableFactory>(),
-                new Dictionary<string, string?> { ["Note"] = null }
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["Note"] = null }
             )
             .Success.Should()
             .BeTrue();
-        _factory.Settings.Note.Should().BeNull();
+        _factory.NotNull().Settings.Note.Should().BeNull();
 
-        var refused = _service.ConfigureEffect(
-            FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?> { ["BatchSize"] = "" }
-        );
+        var refused = _service
+            .NotNull()
+            .ConfigureEffect(
+                FullName<ConfigurableFactory>(),
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["BatchSize"] = "" }
+            );
 
         refused.Success.Should().BeFalse();
         refused.Errors.Should().ContainKey("BatchSize");
@@ -207,42 +234,62 @@ public class EffectSettingsServiceTests
     [TestCase("Nope", "1", TestName = "An_unknown_setting_writes_nothing")]
     public void A_refused_value_writes_none_of_the_others(string name, string value)
     {
-        var result = _service.ConfigureEffect(
-            FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?> { ["Verbose"] = "true", [name] = value }
-        );
+        var result = _service
+            .NotNull()
+            .ConfigureEffect(
+                FullName<ConfigurableFactory>(),
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["Verbose"] = "true",
+                    [name] = value,
+                }
+            );
 
         result.Success.Should().BeFalse();
         result.Count.Should().Be(0);
         result.Errors.Keys.Should().Equal(name);
-        _factory.Settings.Verbose.Should().BeFalse("every value is checked before any is written");
+        _factory
+            .NotNull()
+            .Settings.Verbose.Should()
+            .BeFalse("every value is checked before any is written");
     }
 
     [Test]
     public void A_setter_that_throws_puts_back_the_settings_already_written()
     {
-        var result = _service.ConfigureEffect(
-            FullName<ConfigurableFactory>(),
-            new Dictionary<string, string?> { ["BatchSize"] = "50", ["Exploding"] = "13" }
-        );
+        var result = _service
+            .NotNull()
+            .ConfigureEffect(
+                FullName<ConfigurableFactory>(),
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["BatchSize"] = "50",
+                    ["Exploding"] = "13",
+                }
+            );
 
         result.Success.Should().BeFalse();
         result.Errors["Exploding"].Should().Contain("unlucky");
-        _factory.Settings.BatchSize.Should().Be(10, "the write is all or none");
+        _factory.NotNull().Settings.BatchSize.Should().Be(10, "the write is all or none");
     }
 
     [Test]
     public void Configuring_refuses_an_effect_without_settings_and_an_empty_list()
     {
         _service
+            .NotNull()
             .ConfigureEffect(
                 FullName<PlainFactory>(),
-                new Dictionary<string, string?> { ["A"] = "1" }
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["A"] = "1" }
             )
             .Success.Should()
             .BeFalse();
         _service
-            .ConfigureEffect(FullName<ConfigurableFactory>(), new Dictionary<string, string?>())
+            .NotNull()
+            .ConfigureEffect(
+                FullName<ConfigurableFactory>(),
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+            )
             .Success.Should()
             .BeFalse();
     }
@@ -254,11 +301,14 @@ public class EffectSettingsServiceTests
 
         service.IsAvailable.Should().BeFalse();
         service.GetEffects().Should().BeEmpty();
-        service.SetEffectEnabled(FullName<PlainFactory>(), true).Success.Should().BeFalse();
+        service
+            .SetEffectEnabled(FullName<PlainFactory>(), enabled: true)
+            .Success.Should()
+            .BeFalse();
         service
             .ConfigureEffect(
                 FullName<ConfigurableFactory>(),
-                new Dictionary<string, string?> { ["Verbose"] = "true" }
+                new Dictionary<string, string?>(StringComparer.Ordinal) { ["Verbose"] = "true" }
             )
             .Success.Should()
             .BeFalse();

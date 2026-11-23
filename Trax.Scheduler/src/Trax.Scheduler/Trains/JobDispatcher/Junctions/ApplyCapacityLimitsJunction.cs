@@ -10,9 +10,9 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// </summary>
 /// <remarks>
 /// Per-group limits prevent starvation: when a high-priority group hits its cap, lower-priority
-/// groups can still dispatch (using <c>continue</c> instead of <c>break</c>).
+/// groups can still dispatch (using <see langword="continue"/> instead of <see langword="break"/>).
 /// </remarks>
-internal class ApplyCapacityLimitsJunction(
+internal sealed class ApplyCapacityLimitsJunction(
     SchedulerConfiguration config,
     ILogger<ApplyCapacityLimitsJunction> logger
 ) : EffectJunction<DispatchContext, List<WorkQueue>>

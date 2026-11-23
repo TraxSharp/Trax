@@ -4,13 +4,15 @@ namespace Trax.Adr.Guard.Guards;
 /// The frontmatter contract: the fields that are read by machines. Everything else about
 /// a decision stays prose.
 /// </summary>
-public static class FrontmatterGuards
+public static partial class FrontmatterGuards
 {
     /// <summary>The four shapes <c>status</c> may take. <c>superseded-by</c> carries the number that replaced it.</summary>
-    public static readonly Regex StatusPattern = new(
+    [GeneratedRegex(
         @"^(proposed|accepted|deprecated|superseded-by-\d{4})$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    public static partial Regex StatusPattern { get; }
 
     public static GuardResult Parseable(IReadOnlyList<Adr> adrs) =>
         Check(
@@ -202,7 +204,7 @@ public static class FrontmatterGuards
     private static string Vocabulary(IReadOnlySet<string> values) =>
         values.Count == 0
             ? "(none configured)"
-            : string.Join(", ", values.OrderBy(v => v, StringComparer.Ordinal));
+            : string.Join(", ", values.Order(StringComparer.Ordinal));
 
     private static GuardResult Check(
         IReadOnlyList<Adr> adrs,

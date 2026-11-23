@@ -5,18 +5,6 @@ using Trax.Api.Console.Terminal.Lists;
 
 namespace Trax.Api.Console.Terminal.Connection;
 
-/// <summary>A credential the host's operations gate checks: an API key or a bearer token.</summary>
-internal abstract record Credential
-{
-    private Credential() { }
-
-    /// <summary>Sent as <c>X-Api-Key</c>, and as <c>apiKey</c> in the socket's <c>connection_init</c>.</summary>
-    public sealed record ApiKey(string Key) : Credential;
-
-    /// <summary>Sent as <c>Authorization: Bearer</c>, and as <c>authToken</c> in the socket's <c>connection_init</c>.</summary>
-    public sealed record Bearer(string Token) : Credential;
-}
-
 /// <summary>Where the console talks to and as whom.</summary>
 /// <param name="Endpoint">The host's GraphQL endpoint over HTTP(S).</param>
 /// <param name="Socket">The same endpoint over WS(S), for the operator streams.</param>
@@ -42,13 +30,14 @@ internal sealed record ConsoleTarget(
     /// </summary>
     /// <exception cref="InvalidOperationException">The host is not an http(s) URL, two credentials are given, a file
     /// cannot be read or is empty, or a credential would go over plain HTTP to another machine.</exception>
-    public static ConsoleTarget Resolve(
+    public static async Task<ConsoleTarget> ResolveAsync(
         string? host,
         string graphQLPath,
         FileInfo? apiKeyFile,
         FileInfo? tokenFile,
         bool sendText,
-        Func<string, string?> environment
+        Func<string, string?> environment,
+        CancellationToken cancellationToken
     )
     {
         host ??= environment(HostVariable);
@@ -60,7 +49,7 @@ internal sealed record ConsoleTarget(
         if (
             Uri.TryCreate(host, UriKind.Absolute, out var root)
                 ? root.UserInfo.Length > 0
-                : host.Contains('@')
+                : host.Contains('@', StringComparison.Ordinal)
         )
             throw new InvalidOperationException(
                 "--host carries a user name or password. Give the URL alone, and the credential with "
@@ -88,16 +77,60 @@ internal sealed record ConsoleTarget(
                     + $"{DefaultGraphQLPath}."
             );
 
-        var socket = new UriBuilder(endpoint)
+        var socket = SocketOf(endpoint);
+
+        var credential = await ReadCredentialAsync(
+                apiKeyFile,
+                tokenFile,
+                environment,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (
+            credential is not null
+            && string.Equals(endpoint.Scheme, "http", StringComparison.Ordinal)
+            && !IsThisMachine(endpoint)
+        )
+            throw new InvalidOperationException(
+                $"{endpoint} is plain HTTP to another machine, and the credential would cross the network in "
+                    + "the clear. Use https."
+            );
+        return new ConsoleTarget(endpoint, socket, credential, sendText);
+    }
+
+    // The endpoint's WebSocket address: wss for https, ws for http.
+    private static Uri SocketOf(Uri endpoint) =>
+        new UriBuilder(endpoint)
         {
-            Scheme = endpoint.Scheme == "https" ? "wss" : "ws",
+            Scheme = string.Equals(endpoint.Scheme, "https", StringComparison.Ordinal)
+                ? "wss"
+                : "ws",
         }.Uri;
 
+    // The one credential given, from the files named or else the environment, or null when none is.
+    private static async Task<Credential?> ReadCredentialAsync(
+        FileInfo? apiKeyFile,
+        FileInfo? tokenFile,
+        Func<string, string?> environment,
+        CancellationToken cancellationToken
+    )
+    {
         var credentials = new List<Credential>();
         if (apiKeyFile is not null)
-            credentials.Add(new Credential.ApiKey(Read(apiKeyFile, "--api-key-file")));
+            credentials.Add(
+                new Credential.ApiKey(
+                    await ReadAsync(apiKeyFile, "--api-key-file", cancellationToken)
+                        .ConfigureAwait(false)
+                )
+            );
         if (tokenFile is not null)
-            credentials.Add(new Credential.Bearer(Read(tokenFile, "--token-file")));
+            credentials.Add(
+                new Credential.Bearer(
+                    await ReadAsync(tokenFile, "--token-file", cancellationToken)
+                        .ConfigureAwait(false)
+                )
+            );
         // A file named on the command line wins over the environment.
         if (credentials.Count == 0)
         {
@@ -111,14 +144,7 @@ internal sealed record ConsoleTarget(
                 $"Give one credential: an API key ({ApiKeyVariable} or --api-key-file) or a bearer token "
                     + $"({TokenVariable} or --token-file), not both."
             );
-        var credential = credentials.SingleOrDefault();
-
-        if (credential is not null && endpoint.Scheme == "http" && !IsThisMachine(endpoint))
-            throw new InvalidOperationException(
-                $"{endpoint} is plain HTTP to another machine, and the credential would cross the network in "
-                    + "the clear. Use https."
-            );
-        return new ConsoleTarget(endpoint, socket, credential, sendText);
+        return credentials.SingleOrDefault();
     }
 
     /// <summary>The largest credential file read; a key or a token is far smaller.</summary>
@@ -128,7 +154,11 @@ internal sealed record ConsoleTarget(
     // refused rather than warned of. A link, a device, a pipe or anything longer than a credential is refused too.
     // The file is looked at before it is opened, and opened without waiting, so naming a pipe cannot hang the
     // console until something writes to it.
-    private static string Read(FileInfo file, string option)
+    private static async Task<string> ReadAsync(
+        FileInfo file,
+        string option,
+        CancellationToken cancellationToken
+    )
     {
         var path = file.FullName;
         string text;
@@ -143,7 +173,8 @@ internal sealed record ConsoleTarget(
                 throw new InvalidOperationException(
                     $"{option}: cannot read {path} (it does not exist, or is not a file)."
                 );
-            using var stream = OpenWithoutWaiting(path);
+            var stream = OpenWithoutWaiting(path);
+            await using var streamDisposal = stream.ConfigureAwait(false);
             // A pipe, a socket or a terminal cannot seek; a regular file can.
             if (!stream.CanSeek)
                 throw new InvalidOperationException($"{option}: {path} is not a regular file.");
@@ -156,34 +187,18 @@ internal sealed record ConsoleTarget(
             var read = 0;
             int got;
             while (
-                read < buffer.Length && (got = stream.Read(buffer, read, buffer.Length - read)) > 0
+                read < buffer.Length
+                && (
+                    got = await stream
+                        .ReadAsync(buffer.AsMemory(read, buffer.Length - read), cancellationToken)
+                        .ConfigureAwait(false)
+                ) > 0
             )
                 read += got;
             // A regular file holds as much as its length says; a device such as /dev/zero says 0 and holds more.
             if (read > length)
                 throw new InvalidOperationException($"{option}: {path} is not a regular file.");
-            if (OperatingSystem.IsWindows())
-            {
-                if (CredentialFile.SharedWith(CredentialFile.AllowRules(stream)) is { } others)
-                    throw new InvalidOperationException(
-                        $"{option}: {others} can read or change {path}. Remove them from its "
-                            + "permissions (Properties, Security) so only you have access."
-                    );
-            }
-            else
-            {
-                var mode = File.GetUnixFileMode(stream.SafeFileHandle);
-                const UnixFileMode others =
-                    UnixFileMode.GroupRead
-                    | UnixFileMode.GroupWrite
-                    | UnixFileMode.OtherRead
-                    | UnixFileMode.OtherWrite;
-                if ((mode & others) != 0)
-                    throw new InvalidOperationException(
-                        $"{option}: other users can read or change {path}. Make it yours alone with "
-                            + $"chmod 600 {path}."
-                    );
-            }
+            RefuseSharedFile(stream, option, path);
             text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
         }
         catch (Exception ex)
@@ -195,6 +210,34 @@ internal sealed record ConsoleTarget(
             );
         }
         return Value(text) ?? throw new InvalidOperationException($"{option}: {path} is empty.");
+    }
+
+    // Other users' access to the file is as good as the credential itself, so a file they can read or write is
+    // refused.
+    private static void RefuseSharedFile(FileStream stream, string option, string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            if (CredentialFile.SharedWith(CredentialFile.AllowRules(stream)) is { } others)
+                throw new InvalidOperationException(
+                    $"{option}: {others} can read or change {path}. Remove them from its "
+                        + "permissions (Properties, Security) so only you have access."
+                );
+        }
+        else
+        {
+            var mode = File.GetUnixFileMode(stream.SafeFileHandle);
+            const UnixFileMode others =
+                UnixFileMode.GroupRead
+                | UnixFileMode.GroupWrite
+                | UnixFileMode.OtherRead
+                | UnixFileMode.OtherWrite;
+            if ((mode & others) != UnixFileMode.None)
+                throw new InvalidOperationException(
+                    $"{option}: other users can read or change {path}. Make it yours alone with "
+                        + $"chmod 600 {path}."
+                );
+        }
     }
 
     // On Unix the file is opened with O_NONBLOCK, so a pipe with no writer answers at once instead of blocking the

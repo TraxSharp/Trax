@@ -57,7 +57,8 @@ public partial class OperationsMutations
                 new BulkOperationRequest(kind, filter, expectedCount, askAfresh, note),
                 ActorOf(user),
                 ct
-            );
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// Who the caller is, as a bulk operation records it: the Trax principal id when the caller
@@ -75,6 +76,10 @@ public partial class OperationsMutations
         var name = user?.Identity is { IsAuthenticated: true, Name: { Length: > 0 } signedIn }
             ? signedIn
             : null;
-        return new BulkOperationActor(name ?? BulkOperationActor.Anonymous, null, null);
+        return new BulkOperationActor(
+            name ?? BulkOperationActor.Anonymous,
+            PrincipalId: null,
+            PrincipalType: null
+        );
     }
 }

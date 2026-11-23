@@ -1,59 +1,9 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Npgsql;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Stress.Utils;
-
-/// <summary>
-/// Row counts for a stress run. Defaults target genuine millions; override any value
-/// with the matching <c>TRAX_STRESS_*</c> environment variable for smaller/larger runs.
-/// </summary>
-/// <remarks>
-/// FK-bearing columns are wired by modular arithmetic against these counts (e.g. a
-/// metadata row's <c>manifest_id</c> is <c>1 + (g % Manifests)</c>), which is valid
-/// because every table is truncated with <c>RESTART IDENTITY</c> before seeding, so
-/// identity/serial ids run 1..N with no gaps.
-/// </remarks>
-public sealed record StressProfile(
-    long Metadata,
-    long Log,
-    long WorkQueue,
-    long DeadLetter,
-    int Manifests,
-    int Groups,
-    int TrainNames,
-    int PersistedOperations,
-    long Decisions
-)
-{
-    public static StressProfile FromEnvironment() =>
-        new(
-            Metadata: EnvLong("TRAX_STRESS_METADATA", 3_000_000),
-            Log: EnvLong("TRAX_STRESS_LOG", 3_000_000),
-            WorkQueue: EnvLong("TRAX_STRESS_WORKQUEUE", 1_500_000),
-            DeadLetter: EnvLong("TRAX_STRESS_DEADLETTER", 1_000_000),
-            Manifests: (int)EnvLong("TRAX_STRESS_MANIFEST", 5_000),
-            Groups: (int)EnvLong("TRAX_STRESS_GROUP", 200),
-            TrainNames: (int)EnvLong("TRAX_STRESS_NAMES", 50),
-            // Persisted operations grow with releases, not with traffic, so they get a large
-            // catalog rather than millions: many tenants' documents, most of them retired.
-            PersistedOperations: (int)EnvLong("TRAX_STRESS_PERSISTED_OPS", 100_000),
-            // Only runs whose trains ask deciders record decisions, a few each, so the table is a
-            // fraction of the run table's size.
-            Decisions: EnvLong("TRAX_STRESS_DECISIONS", 1_000_000)
-        )
-        {
-            SnapshotDrafts = EnvLong("TRAX_STRESS_SNAPSHOT_DRAFTS", 2_000_000),
-        };
-
-    /// <summary>
-    /// State-machine instances (<c>trax.snapshot_draft</c> rows) to seed. A profile built by hand
-    /// seeds none unless it says so.
-    /// </summary>
-    public long SnapshotDrafts { get; init; }
-
-    private static long EnvLong(string name, long fallback) =>
-        long.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
-}
 
 /// <summary>
 /// Seeds the admin-facing tables (manifest_group, manifest, metadata, dead_letter,
@@ -61,7 +11,7 @@ public sealed record StressProfile(
 /// This is orders of magnitude faster than EF <c>SaveChanges</c> loops: the data never
 /// leaves Postgres. Idempotent — re-running with the same profile skips reseeding.
 /// </summary>
-public static class BulkSeeder
+public static partial class BulkSeeder
 {
     private const long ChunkSize = 500_000;
 
@@ -75,11 +25,11 @@ public static class BulkSeeder
 
     public static void EnsureDatabaseExists(string connectionString)
     {
-        var database = new NpgsqlConnectionStringBuilder(connectionString).Database!;
-        if (!Regex.IsMatch(database, "^[a-z_][a-z0-9_]*$"))
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database.NotNull();
+        if (!DatabaseName.IsMatch(database))
             throw new ArgumentException(
                 $"Database name '{database}' must be a snake_case ASCII identifier.",
-                nameof(database)
+                nameof(connectionString)
             );
 
         // Maintenance connection on the same server + credentials as the target, switched to the
@@ -98,7 +48,8 @@ public static class BulkSeeder
         {
             command.ExecuteNonQuery();
         }
-        catch (PostgresException ex) when (ex.SqlState == "42P04")
+        catch (PostgresException ex)
+            when (string.Equals(ex.SqlState, "42P04", StringComparison.Ordinal))
         {
             // Already exists — idempotent no-op.
         }
@@ -112,60 +63,122 @@ public static class BulkSeeder
     public static async Task SeedAsync(
         string connectionString,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct = default
     )
     {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync(ct);
-
-        if (await AlreadySeeded(conn, profile, ct))
+        var conn = new NpgsqlConnection(connectionString);
+        await using (conn.ConfigureAwait(false))
         {
-            log(
-                $"Already seeded (metadata≈{profile.Metadata:N0}, log≈{profile.Log:N0}); skipping."
-            );
-            // A seed from before decisions were seeded gets them without reseeding the rest.
-            await SeedDecisionsAsync(conn, profile, log, ct);
-            await SeedSnapshotDraftsAsync(conn, profile, log, ct);
-            await SeedSnapshotTransitionsAsync(conn, profile, log, ct);
-            return;
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+
+            if (await AlreadySeeded(conn, profile, ct).ConfigureAwait(false))
+            {
+                await log(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Already seeded (metadata≈{profile.Metadata:N0}, log≈{profile.Log:N0}); skipping."
+                        )
+                    )
+                    .ConfigureAwait(false);
+                // A seed from before decisions were seeded gets them without reseeding the rest.
+                await SeedDecisionsAsync(conn, profile, log, ct).ConfigureAwait(false);
+                await SeedSnapshotDraftsAsync(conn, profile, log, ct).ConfigureAwait(false);
+                await SeedSnapshotTransitionsAsync(conn, profile, log, ct).ConfigureAwait(false);
+                return;
+            }
+
+            await log("Truncating tables (RESTART IDENTITY CASCADE)...").ConfigureAwait(false);
+            await Exec(
+                    conn,
+                    "TRUNCATE trax.log, trax.work_queue, trax.dead_letter, trax.metadata, "
+                        + "trax.manifest, trax.manifest_group, trax.persisted_operation, "
+                        + "trax.persisted_operation_history RESTART IDENTITY CASCADE",
+                    ct
+                )
+                .ConfigureAwait(false);
+
+            var sw = TimeProvider.System.GetTimestamp();
+
+            await SeedManifestTablesAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await SeedMetadataTableAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await SeedDeadLetterTableAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await SeedWorkQueueTableAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await SeedLogTableAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await SeedPersistedOperationTablesAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await SeedDecisionsAsync(conn, profile, log, ct).ConfigureAwait(false);
+            await SeedSnapshotDraftsAsync(conn, profile, log, ct).ConfigureAwait(false);
+            await SeedSnapshotTransitionsAsync(conn, profile, log, ct).ConfigureAwait(false);
+
+            await VacuumAndReportAsync(conn, log, sw, ct).ConfigureAwait(false);
         }
+    }
 
-        log("Truncating tables (RESTART IDENTITY CASCADE)...");
-        await Exec(
-            conn,
-            "TRUNCATE trax.log, trax.work_queue, trax.dead_letter, trax.metadata, "
-                + "trax.manifest, trax.manifest_group, trax.persisted_operation, "
-                + "trax.persisted_operation_history RESTART IDENTITY CASCADE",
-            ct
-        );
-
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
+    private static async Task SeedManifestTablesAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Func<string, Task> log,
+        CancellationToken ct
+    )
+    {
         // ── manifest_group (serial id 1..Groups) ─────────────────────────────
-        log($"Seeding {profile.Groups:N0} manifest_group...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.Groups:N0} manifest_group..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.Groups,
-            "INSERT INTO trax.manifest_group (name) "
-                + "SELECT 'stress-group-' || g FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.Groups,
+                "INSERT INTO trax.manifest_group (name) "
+                    + "SELECT 'stress-group-' || g FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
 
         // ── manifest (identity id 1..Manifests) ──────────────────────────────
-        log($"Seeding {profile.Manifests:N0} manifest...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.Manifests:N0} manifest..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.Manifests,
-            "INSERT INTO trax.manifest (external_id, name, manifest_group_id, schedule_type) "
-                + "SELECT 'stress-manifest-' || g, "
-                + $"       '{TrainName}' || (g % {profile.TrainNames}), "
-                + $"       1 + (g % {profile.Groups}), "
-                + "       (ARRAY['cron','interval','none','on_demand','once']::trax.schedule_type[])[1 + (g % 5)] "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.Manifests,
+                "INSERT INTO trax.manifest (external_id, name, manifest_group_id, schedule_type) "
+                    + "SELECT 'stress-manifest-' || g, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"       '{TrainName}' || (g % {profile.TrainNames}), "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"       1 + (g % {profile.Groups}), "
+                    )
+                    + "       (ARRAY['cron','interval','none','on_demand','once']::trax.schedule_type[])[1 + (g % 5)] "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+    }
 
+    private static async Task SeedMetadataTableAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Func<string, Task> log,
+        CancellationToken ct
+    )
+    {
         // ── metadata (identity id 1..Metadata) ───────────────────────────────
         // 9-way state mix: 4 completed, 2 failed, in_progress, pending, cancelled.
         // Terminal states (completed/failed/cancelled) get an end_time; the rest are null.
@@ -173,145 +186,249 @@ public static class BulkSeeder
         // failureClass filter has a real share of the table to count; every other run keeps the
         // column's default, unclassified. A failed run names the junction it failed in and a
         // reason: see FailureReasonSql for the terms the failure text searches find.
-        log($"Seeding {profile.Metadata:N0} metadata...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.Metadata:N0} metadata..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.Metadata,
-            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment, failure_class, failure_junction, failure_reason) "
-                + "SELECT lpad(g::text, 32, '0'), "
-                + $"       '{TrainName}' || (g % {profile.TrainNames}), "
-                + "       (ARRAY['completed','completed','completed','completed','failed','failed','in_progress','pending','cancelled']::trax.train_state[])[1 + (g % 9)], "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
-                + "       CASE WHEN (g % 9) IN (0,1,2,3,4,5,8) "
-                + $"            THEN now() - ((g % {MinuteSpread}) * interval '1 minute') + interval '30 seconds' "
-                + "            ELSE NULL END, "
-                + $"       1 + (g % {profile.Manifests}), "
-                // ~1% of rows are children of metadata id 1, so the parent/child query has a
-                // large but partial-indexed set to page (ix_metadata_parent_id).
-                + "       CASE WHEN g > 1 AND (g % 100) = 0 THEN 1 ELSE NULL END, "
-                // A few host instances so the cluster (hosts) rollup aggregates the whole table
-                // into a handful of groups — the real shape of that endpoint at scale.
-                + $"       'stress-instance-' || (g % {HostInstances}), "
-                + $"       'stress-host-' || (g % {HostInstances}), "
-                + "       'Production', "
-                + "       CASE WHEN (g % 9) IN (4,5) "
-                + "            THEN (ARRAY['transient','conflict','permanent']::trax.failure_class[])[1 + ((g / 9) % 3)] "
-                + "            ELSE 'unclassified'::trax.failure_class END, "
-                + "       CASE WHEN (g % 9) IN (4,5) "
-                + $"            THEN '{FailureJunctionPrefix}' || ((g / 9) % {FailureJunctions}) END, "
-                + "       CASE WHEN (g % 9) IN (4,5) THEN "
-                + FailureReasonSql
-                + " END "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.Metadata,
+                "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment, failure_class, failure_junction, failure_reason) "
+                    + "SELECT lpad(g::text, 32, '0'), "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"       '{TrainName}' || (g % {profile.TrainNames}), "
+                    )
+                    + "       (ARRAY['completed','completed','completed','completed','failed','failed','in_progress','pending','cancelled']::trax.train_state[])[1 + (g % 9)], "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                    + "       CASE WHEN (g % 9) IN (0,1,2,3,4,5,8) "
+                    + $"            THEN now() - ((g % {MinuteSpread}) * interval '1 minute') + interval '30 seconds' "
+                    + "            ELSE NULL END, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"       1 + (g % {profile.Manifests}), "
+                    )
+                    // ~1% of rows are children of metadata id 1, so the parent/child query has a
+                    // large but partial-indexed set to page (ix_metadata_parent_id).
+                    + "       CASE WHEN g > 1 AND (g % 100) = 0 THEN 1 ELSE NULL END, "
+                    // A few host instances so the cluster (hosts) rollup aggregates the whole table
+                    // into a handful of groups — the real shape of that endpoint at scale.
+                    + $"       'stress-instance-' || (g % {HostInstances}), "
+                    + $"       'stress-host-' || (g % {HostInstances}), "
+                    + "       'Production', "
+                    + "       CASE WHEN (g % 9) IN (4,5) "
+                    + "            THEN (ARRAY['transient','conflict','permanent']::trax.failure_class[])[1 + ((g / 9) % 3)] "
+                    + "            ELSE 'unclassified'::trax.failure_class END, "
+                    + "       CASE WHEN (g % 9) IN (4,5) "
+                    + $"            THEN '{FailureJunctionPrefix}' || ((g / 9) % {FailureJunctions}) END, "
+                    + "       CASE WHEN (g % 9) IN (4,5) THEN "
+                    + FailureReasonSql
+                    + " END "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+    }
 
+    private static async Task SeedDeadLetterTableAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Func<string, Task> log,
+        CancellationToken ct
+    )
+    {
         // ── dead_letter (identity id 1..DeadLetter) ──────────────────────────
-        log($"Seeding {profile.DeadLetter:N0} dead_letter...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.DeadLetter:N0} dead_letter..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.DeadLetter,
-            "INSERT INTO trax.dead_letter (manifest_id, dead_lettered_at, status, reason, retry_count_at_dead_letter) "
-                + $"SELECT 1 + (g % {profile.Manifests}), "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
-                + "       (ARRAY['awaiting_intervention','awaiting_intervention','retried','acknowledged']::trax.dead_letter_status[])[1 + (g % 4)], "
-                + "       'stress dead letter ' || g, "
-                + "       (g % 5) "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.DeadLetter,
+                "INSERT INTO trax.dead_letter (manifest_id, dead_lettered_at, status, reason, retry_count_at_dead_letter) "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"SELECT 1 + (g % {profile.Manifests}), "
+                    )
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                    + "       (ARRAY['awaiting_intervention','awaiting_intervention','retried','acknowledged']::trax.dead_letter_status[])[1 + (g % 4)], "
+                    + "       'stress dead letter ' || g, "
+                    + "       (g % 5) "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+    }
 
+    private static async Task SeedWorkQueueTableAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Func<string, Task> log,
+        CancellationToken ct
+    )
+    {
         // ── work_queue (serial id 1..WorkQueue) ──────────────────────────────
         // status mix: dispatched, dispatched, cancelled, queued. Queued rows get a NULL
         // manifest_id to avoid the unique partial index ix_work_queue_unique_queued_manifest.
-        log($"Seeding {profile.WorkQueue:N0} work_queue...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.WorkQueue:N0} work_queue..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.WorkQueue,
-            "INSERT INTO trax.work_queue (external_id, train_name, status, created_at, priority, dispatch_attempts, manifest_id) "
-                + "SELECT 'wq-' || g, "
-                + $"       '{TrainName}' || (g % {profile.TrainNames}), "
-                + "       (ARRAY['dispatched','dispatched','cancelled','queued']::trax.work_queue_status[])[1 + (g % 4)], "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
-                + "       (g % 32), "
-                + "       (g % 5), "
-                + $"       CASE WHEN (g % 4) = 3 THEN NULL ELSE 1 + (g % {profile.Manifests}) END "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.WorkQueue,
+                "INSERT INTO trax.work_queue (external_id, train_name, status, created_at, priority, dispatch_attempts, manifest_id) "
+                    + "SELECT 'wq-' || g, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"       '{TrainName}' || (g % {profile.TrainNames}), "
+                    )
+                    + "       (ARRAY['dispatched','dispatched','cancelled','queued']::trax.work_queue_status[])[1 + (g % 4)], "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                    + "       (g % 32), "
+                    + "       (g % 5), "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"       CASE WHEN (g % 4) = 3 THEN NULL ELSE 1 + (g % {profile.Manifests}) END "
+                    )
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+    }
 
+    private static async Task SeedLogTableAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Func<string, Task> log,
+        CancellationToken ct
+    )
+    {
         // ── log (identity id 1..Log) ─────────────────────────────────────────
         // Concentrate logs onto ~1/1000 of the metadata ids so a metadata_id filter
         // returns a realistic page (a chatty train), not ~1 row under a uniform spread.
         var logMetaSpread = (int)Math.Max(1, Math.Min(profile.Metadata / 1000, profile.Metadata));
-        log($"Seeding {profile.Log:N0} log (metadata_id spread over {logMetaSpread:N0} ids)...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.Log:N0} log (metadata_id spread over {logMetaSpread:N0} ids)..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.Log,
-            "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
-                + $"SELECT 1 + (g % {logMetaSpread}), "
-                + "       (g % 1000), "
-                + "       (ARRAY['information','information','information','information','warning','error','debug','trace']::trax.log_level[])[1 + (g % 8)], "
-                + "       'stress log message ' || g, "
-                + $"       'Trax.Stress.Category' || (g % 20) "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.Log,
+                "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"SELECT 1 + (g % {logMetaSpread}), "
+                    )
+                    + "       (g % 1000), "
+                    + "       (ARRAY['information','information','information','information','warning','error','debug','trace']::trax.log_level[])[1 + (g % 8)], "
+                    + "       'stress log message ' || g, "
+                    + $"       'Trax.Stress.Category' || (g % 20) "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+    }
 
+    private static async Task SeedPersistedOperationTablesAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Func<string, Task> log,
+        CancellationToken ct
+    )
+    {
         // ── persisted_operation (+ one history row each) ─────────────────────
         // Ten tenants plus the no-tenant set, ids in the name_vN form HotChocolate accepts as a document id, one in
         // four retired, updated_at spread like the other tables so the list's newest-first
         // order has a real sort to do.
-        log($"Seeding {profile.PersistedOperations:N0} persisted_operation...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.PersistedOperations:N0} persisted_operation..."
+                )
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.PersistedOperations,
-            "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
-                + "shape_fingerprint, is_active, description, created_at, updated_at) "
-                + "SELECT CASE WHEN g % 11 = 0 THEN '' ELSE 'tenant-' || (g % 11) END, "
-                + "       'StressOp' || g || '_v1', 'StressOp' || g, 1, "
-                + "       'query StressOp' || g || ' { operations { health { status } } }', "
-                + "       md5(g::text), (g % 4) <> 0, 'stress persisted operation ' || g, "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.PersistedOperations,
+                "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
+                    + "shape_fingerprint, is_active, description, created_at, updated_at) "
+                    + "SELECT CASE WHEN g % 11 = 0 THEN '' ELSE 'tenant-' || (g % 11) END, "
+                    + "       'StressOp' || g || '_v1', 'StressOp' || g, 1, "
+                    + "       'query StressOp' || g || ' { operations { health { status } } }', "
+                    + "       md5(g::text), (g % 4) <> 0, 'stress persisted operation ' || g, "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.PersistedOperations,
-            "INSERT INTO trax.persisted_operation_history (tenant_key, id, document, "
-                + "shape_fingerprint, change_type, changed_at, changed_reason) "
-                + "SELECT CASE WHEN g % 11 = 0 THEN '' ELSE 'tenant-' || (g % 11) END, "
-                + "       'StressOp' || g || '_v1', "
-                + "       'query StressOp' || g || ' { operations { health { status } } }', "
-                + "       md5(g::text), 'Upsert', "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), NULL "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                profile.PersistedOperations,
+                "INSERT INTO trax.persisted_operation_history (tenant_key, id, document, "
+                    + "shape_fingerprint, change_type, changed_at, changed_reason) "
+                    + "SELECT CASE WHEN g % 11 = 0 THEN '' ELSE 'tenant-' || (g % 11) END, "
+                    + "       'StressOp' || g || '_v1', "
+                    + "       'query StressOp' || g || ' { operations { health { status } } }', "
+                    + "       md5(g::text), 'Upsert', "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), NULL "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+    }
 
-        await SeedDecisionsAsync(conn, profile, log, ct);
-        await SeedSnapshotDraftsAsync(conn, profile, log, ct);
-        await SeedSnapshotTransitionsAsync(conn, profile, log, ct);
-
+    private static async Task VacuumAndReportAsync(
+        NpgsqlConnection conn,
+        Func<string, Task> log,
+        long sw,
+        CancellationToken ct
+    )
+    {
         // VACUUM (not just ANALYZE) so the visibility map is set and the metrics
         // covering indexes serve heap-free Index Only Scans immediately, the way
         // autovacuum keeps them in production. PARALLEL 0 keeps VACUUM off the shared-
         // memory segment so it works regardless of the container's /dev/shm size.
-        log($"Inserts done in {sw.Elapsed.TotalSeconds:F0}s. Running VACUUM ANALYZE...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Inserts done in {TimeProvider.System.GetElapsedTime(sw).TotalSeconds:F0}s. Running VACUUM ANALYZE..."
+                )
+            )
+            .ConfigureAwait(false);
         await Exec(
-            conn,
-            "VACUUM (ANALYZE, PARALLEL 0) trax.manifest_group, trax.manifest, trax.metadata",
-            ct
-        );
+                conn,
+                "VACUUM (ANALYZE, PARALLEL 0) trax.manifest_group, trax.manifest, trax.metadata",
+                ct
+            )
+            .ConfigureAwait(false);
         await Exec(
-            conn,
-            "VACUUM (ANALYZE, PARALLEL 0) trax.dead_letter, trax.work_queue, trax.log, "
-                + "trax.persisted_operation, trax.persisted_operation_history",
-            ct
-        );
-        log($"Seed complete in {sw.Elapsed.TotalSeconds:F0}s.");
+                conn,
+                "VACUUM (ANALYZE, PARALLEL 0) trax.dead_letter, trax.work_queue, trax.log, "
+                    + "trax.persisted_operation, trax.persisted_operation_history",
+                ct
+            )
+            .ConfigureAwait(false);
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seed complete in {TimeProvider.System.GetElapsedTime(sw).TotalSeconds:F0}s."
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     private const string TrainName = "Trax.Stress.Trains.IStressTrain";
@@ -370,49 +487,58 @@ public static class BulkSeeder
     private static async Task SeedDecisionsAsync(
         NpgsqlConnection conn,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct
     )
     {
         var bulk = Math.Min(profile.Decisions, (profile.Metadata - 1) / 3 * DecisionsPerRun);
-        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.decision", ct);
+        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.decision", ct)
+            .ConfigureAwait(false);
         if (existing >= (bulk + ChattyDecisionCount) * 0.95)
             return;
 
-        log($"Seeding {bulk + ChattyDecisionCount:N0} decision...");
-        await Exec(conn, "TRUNCATE trax.decision RESTART IDENTITY", ct);
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {bulk + ChattyDecisionCount:N0} decision..."
+                )
+            )
+            .ConfigureAwait(false);
+        await Exec(conn, "TRUNCATE trax.decision RESTART IDENTITY", ct).ConfigureAwait(false);
         await SeedTable(
-            conn,
-            bulk,
-            "INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, "
-                + "question, answer, model, decider, replayed, routes, state_hash, decided_at) "
-                + $"SELECT 1 + ((g - 1) / {DecisionsPerRun}) * 3, "
-                + $"       'Stress.Question' || ((g - 1) % {DecisionsPerRun}), 0, md5(g::text) || md5(g::text), 'choice', "
-                + "       jsonb_build_object('instructions', 'Pick a track', 'options', jsonb_build_array('Express', 'Standard')), "
-                + "       to_jsonb((ARRAY['Express','Standard'])[1 + (g % 2)]), "
-                + "       CASE WHEN g % 10 = 0 THEN NULL ELSE 'stress-model' END, "
-                + "       CASE WHEN g % 10 = 0 THEN NULL ELSE 'Trax.Stress.Deciders.StressDecider' END, "
-                + "       g % 10 = 0, "
-                + "       jsonb_build_array(jsonb_build_object('track', (ARRAY['Express','Standard'])[1 + (g % 2)], 'fallback_reason', NULL)), "
-                + "       'k1:' || md5(g::text) || md5(g::text), "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
+                conn,
+                bulk,
+                "INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, "
+                    + "question, answer, model, decider, replayed, routes, state_hash, decided_at) "
+                    + $"SELECT 1 + ((g - 1) / {DecisionsPerRun}) * 3, "
+                    + $"       'Stress.Question' || ((g - 1) % {DecisionsPerRun}), 0, md5(g::text) || md5(g::text), 'choice', "
+                    + "       jsonb_build_object('instructions', 'Pick a track', 'options', jsonb_build_array('Express', 'Standard')), "
+                    + "       to_jsonb((ARRAY['Express','Standard'])[1 + (g % 2)]), "
+                    + "       CASE WHEN g % 10 = 0 THEN NULL ELSE 'stress-model' END, "
+                    + "       CASE WHEN g % 10 = 0 THEN NULL ELSE 'Trax.Stress.Deciders.StressDecider' END, "
+                    + "       g % 10 = 0, "
+                    + "       jsonb_build_array(jsonb_build_object('track', (ARRAY['Express','Standard'])[1 + (g % 2)], 'fallback_reason', NULL)), "
+                    + "       'k1:' || md5(g::text) || md5(g::text), "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            ChattyDecisionCount,
-            "INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, "
-                + "question, answer, model, decider, replayed, routes, state_hash, decided_at) "
-                + $"SELECT {ChattyDecisionRun}, 'Stress.Loop', g - 1, md5(g::text) || md5(g::text), 'yes_no', "
-                + "       jsonb_build_object('instructions', 'Go round again?'), "
-                + "       to_jsonb(g % 7 <> 0), 'stress-model', 'Trax.Stress.Deciders.StressDecider', false, "
-                + "       jsonb_build_array(jsonb_build_object('track', CASE WHEN g % 7 <> 0 THEN 'Again' ELSE 'Done' END, 'fallback_reason', NULL)), "
-                + "       'k1:' || md5(g::text) || md5(g::text), now() - interval '1 hour' + g * interval '1 second' "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
-        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.decision", ct);
+                conn,
+                ChattyDecisionCount,
+                "INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, "
+                    + "question, answer, model, decider, replayed, routes, state_hash, decided_at) "
+                    + $"SELECT {ChattyDecisionRun}, 'Stress.Loop', g - 1, md5(g::text) || md5(g::text), 'yes_no', "
+                    + "       jsonb_build_object('instructions', 'Go round again?'), "
+                    + "       to_jsonb(g % 7 <> 0), 'stress-model', 'Trax.Stress.Deciders.StressDecider', false, "
+                    + "       jsonb_build_array(jsonb_build_object('track', CASE WHEN g % 7 <> 0 THEN 'Again' ELSE 'Done' END, 'fallback_reason', NULL)), "
+                    + "       'k1:' || md5(g::text) || md5(g::text), now() - interval '1 hour' + g * interval '1 second' "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.decision", ct).ConfigureAwait(false);
     }
 
     /// <summary>The machines the seeded instances belong to; the first two are system-owned.</summary>
@@ -422,10 +548,12 @@ public static class BulkSeeder
     public const int SnapshotStates = 8;
 
     /// <summary>The id of the <c>g</c>th seeded machine.</summary>
-    public static string SnapshotMachine(int g) => $"Stress.Machines.Machine{g}";
+    public static string SnapshotMachine(int g) =>
+        string.Create(CultureInfo.InvariantCulture, $"Stress.Machines.Machine{g}");
 
     /// <summary>The name of the <c>g</c>th seeded state.</summary>
-    public static string SnapshotState(int g) => $"State{g}";
+    public static string SnapshotState(int g) =>
+        string.Create(CultureInfo.InvariantCulture, $"State{g}");
 
     /// <summary>
     /// Seeds <see cref="StressProfile.SnapshotDrafts"/> state-machine instances over
@@ -438,40 +566,50 @@ public static class BulkSeeder
     private static async Task SeedSnapshotDraftsAsync(
         NpgsqlConnection conn,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct
     )
     {
         if (profile.SnapshotDrafts <= 0)
             return;
-        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.snapshot_draft", ct);
+        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.snapshot_draft", ct)
+            .ConfigureAwait(false);
         if (existing >= profile.SnapshotDrafts * 0.95)
             return;
 
-        log($"Seeding {profile.SnapshotDrafts:N0} snapshot_draft...");
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {profile.SnapshotDrafts:N0} snapshot_draft..."
+                )
+            )
+            .ConfigureAwait(false);
         // The row_id sequence is never restarted: a row_id names one incarnation of an instance, and a reused one
         // would look to a client still watching the old row like the row it holds. TRUNCATE sends no change notices,
         // so this runs before any host watches the table.
         // An instance's history references its row, so the two go together.
-        await Exec(conn, "TRUNCATE trax.snapshot_transition, trax.snapshot_draft", ct);
+        await Exec(conn, "TRUNCATE trax.snapshot_transition, trax.snapshot_draft", ct)
+            .ConfigureAwait(false);
         await SeedTable(
-            conn,
-            profile.SnapshotDrafts,
-            "INSERT INTO trax.snapshot_draft (id, user_key, owner_kind, machine, version, state, "
-                + "context, concurrency_token, created_at, updated_at, invoke_token) "
-                + "SELECT md5(g::text)::uuid, "
-                + $"       CASE WHEN g % {SnapshotMachines} < 2 THEN NULL ELSE 'stress-user-' || (g % 1000) END, "
-                + $"       CASE WHEN g % {SnapshotMachines} < 2 THEN 'system'::trax.snapshot_owner_kind ELSE 'user'::trax.snapshot_owner_kind END, "
-                + $"       'Stress.Machines.Machine' || (g % {SnapshotMachines}), 1, "
-                + $"       'State' || ((g / {SnapshotMachines}) % {SnapshotStates}), "
-                + "       jsonb_build_object('secret', 'stress-context-' || g), md5(g::text || 'token')::uuid, "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') - interval '1 hour', "
-                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
-                + "       CASE WHEN g % 100 = 0 THEN 'stress-run-' || g ELSE NULL END "
-                + "FROM generate_series(@lo, @hi) g",
-            ct
-        );
-        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_draft", ct);
+                conn,
+                profile.SnapshotDrafts,
+                "INSERT INTO trax.snapshot_draft (id, user_key, owner_kind, machine, version, state, "
+                    + "context, concurrency_token, created_at, updated_at, invoke_token) "
+                    + "SELECT md5(g::text)::uuid, "
+                    + $"       CASE WHEN g % {SnapshotMachines} < 2 THEN NULL ELSE 'stress-user-' || (g % 1000) END, "
+                    + $"       CASE WHEN g % {SnapshotMachines} < 2 THEN 'system'::trax.snapshot_owner_kind ELSE 'user'::trax.snapshot_owner_kind END, "
+                    + $"       'Stress.Machines.Machine' || (g % {SnapshotMachines}), 1, "
+                    + $"       'State' || ((g / {SnapshotMachines}) % {SnapshotStates}), "
+                    + "       jsonb_build_object('secret', 'stress-context-' || g), md5(g::text || 'token')::uuid, "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') - interval '1 hour', "
+                    + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                    + "       CASE WHEN g % 100 = 0 THEN 'stress-run-' || g ELSE NULL END "
+                    + "FROM generate_series(@lo, @hi) g",
+                ct
+            )
+            .ConfigureAwait(false);
+        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_draft", ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>How many rows of history each instance that has one is seeded with.</summary>
@@ -485,58 +623,82 @@ public static class BulkSeeder
     private static async Task SeedSnapshotTransitionsAsync(
         NpgsqlConnection conn,
         StressProfile profile,
-        Action<string> log,
+        Func<string, Task> log,
         CancellationToken ct
     )
     {
         if (profile.SnapshotDrafts <= 0)
             return;
         var expected = profile.SnapshotDrafts / 2 * TransitionsPerInstance;
-        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.snapshot_transition", ct);
+        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.snapshot_transition", ct)
+            .ConfigureAwait(false);
         // Every machine's rows are spread over row ids modulo 6, so the modulo-12 split gives each machine histories.
         var spread = await ScalarLong(
-            conn,
-            "SELECT count(*) FROM (SELECT 1 FROM trax.snapshot_transition WHERE draft_row_id % 12 = 1 LIMIT 1) s",
-            ct
-        );
+                conn,
+                "SELECT count(*) FROM (SELECT 1 FROM trax.snapshot_transition WHERE draft_row_id % 12 = 1 LIMIT 1) s",
+                ct
+            )
+            .ConfigureAwait(false);
         if (existing >= expected * 0.95 && spread > 0)
             return;
 
-        log($"Seeding {expected:N0} snapshot_transition...");
-        await Exec(conn, "TRUNCATE trax.snapshot_transition", ct);
+        await log(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Seeding {expected:N0} snapshot_transition..."
+                )
+            )
+            .ConfigureAwait(false);
+        await Exec(conn, "TRUNCATE trax.snapshot_transition", ct).ConfigureAwait(false);
         var low = await ScalarLong(
-            conn,
-            "SELECT coalesce(min(row_id), 0) FROM trax.snapshot_draft",
-            ct
-        );
+                conn,
+                "SELECT coalesce(min(row_id), 0) FROM trax.snapshot_draft",
+                ct
+            )
+            .ConfigureAwait(false);
         var high = await ScalarLong(
-            conn,
-            "SELECT coalesce(max(row_id), 0) FROM trax.snapshot_draft",
-            ct
-        );
+                conn,
+                "SELECT coalesce(max(row_id), 0) FROM trax.snapshot_draft",
+                ct
+            )
+            .ConfigureAwait(false);
+        await InsertSnapshotTransitionsAsync(conn, low, high, ct).ConfigureAwait(false);
+        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_transition", ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task InsertSnapshotTransitionsAsync(
+        NpgsqlConnection conn,
+        long low,
+        long high,
+        CancellationToken ct
+    )
+    {
         for (var lo = low; lo <= high; lo += ChunkSize)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText =
-                "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, "
-                + "from_state, to_state, occurred_at, invoke_token) "
-                + "SELECT d.row_id, r, "
-                + "       CASE WHEN r = 1 THEN 'start'::trax.snapshot_transition_kind ELSE 'command'::trax.snapshot_transition_kind END, "
-                + "       CASE WHEN r = 1 THEN NULL ELSE 'Step' || r END, "
-                + "       CASE WHEN d.owner_kind = 'system' THEN 'host'::trax.snapshot_transition_actor ELSE 'owner'::trax.snapshot_transition_actor END, "
-                + "       CASE WHEN r = 1 THEN NULL ELSE 'State' || (r - 1) END, "
-                + $"       CASE WHEN r = {TransitionsPerInstance} THEN d.state ELSE 'State' || r END, "
-                + $"       d.updated_at - (({TransitionsPerInstance} - r) * interval '15 minutes'), "
-                + "       CASE WHEN (d.row_id + r) % 50 = 0 THEN 'stress-history-run-' || d.row_id || '-' || r ELSE NULL END "
-                + "FROM trax.snapshot_draft d "
-                + $"CROSS JOIN generate_series(1, {TransitionsPerInstance}) r "
-                + "WHERE d.row_id BETWEEN @lo AND @hi AND d.row_id % 12 < 6";
-            cmd.CommandTimeout = 1200;
-            cmd.Parameters.AddWithValue("lo", lo);
-            cmd.Parameters.AddWithValue("hi", lo + ChunkSize - 1);
-            await cmd.ExecuteNonQueryAsync(ct);
+            var cmd = conn.CreateCommand();
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.CommandText =
+                    "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, "
+                    + "from_state, to_state, occurred_at, invoke_token) "
+                    + "SELECT d.row_id, r, "
+                    + "       CASE WHEN r = 1 THEN 'start'::trax.snapshot_transition_kind ELSE 'command'::trax.snapshot_transition_kind END, "
+                    + "       CASE WHEN r = 1 THEN NULL ELSE 'Step' || r END, "
+                    + "       CASE WHEN d.owner_kind = 'system' THEN 'host'::trax.snapshot_transition_actor ELSE 'owner'::trax.snapshot_transition_actor END, "
+                    + "       CASE WHEN r = 1 THEN NULL ELSE 'State' || (r - 1) END, "
+                    + $"       CASE WHEN r = {TransitionsPerInstance} THEN d.state ELSE 'State' || r END, "
+                    + $"       d.updated_at - (({TransitionsPerInstance} - r) * interval '15 minutes'), "
+                    + "       CASE WHEN (d.row_id + r) % 50 = 0 THEN 'stress-history-run-' || d.row_id || '-' || r ELSE NULL END "
+                    + "FROM trax.snapshot_draft d "
+                    + $"CROSS JOIN generate_series(1, {TransitionsPerInstance}) r "
+                    + "WHERE d.row_id BETWEEN @lo AND @hi AND d.row_id % 12 < 6";
+                cmd.CommandTimeout = 1200;
+                cmd.Parameters.AddWithValue("lo", lo);
+                cmd.Parameters.AddWithValue("hi", lo + ChunkSize - 1);
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
         }
-        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_transition", ct);
     }
 
     private static async Task<bool> AlreadySeeded(
@@ -545,23 +707,28 @@ public static class BulkSeeder
         CancellationToken ct
     )
     {
-        var metadata = await ScalarLong(conn, "SELECT count(*) FROM trax.metadata", ct);
-        var logs = await ScalarLong(conn, "SELECT count(*) FROM trax.log", ct);
-        var persisted = await ScalarLong(conn, "SELECT count(*) FROM trax.persisted_operation", ct);
+        var metadata = await ScalarLong(conn, "SELECT count(*) FROM trax.metadata", ct)
+            .ConfigureAwait(false);
+        var logs = await ScalarLong(conn, "SELECT count(*) FROM trax.log", ct)
+            .ConfigureAwait(false);
+        var persisted = await ScalarLong(conn, "SELECT count(*) FROM trax.persisted_operation", ct)
+            .ConfigureAwait(false);
         // A seed from before failed runs were classified leaves them all unclassified, and one
         // from before they had reasons leaves those null; reseed either.
         var classified = await ScalarLong(
-            conn,
-            "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
-                + "WHERE failure_class <> 'unclassified' LIMIT 1) c",
-            ct
-        );
+                conn,
+                "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
+                    + "WHERE failure_class <> 'unclassified' LIMIT 1) c",
+                ct
+            )
+            .ConfigureAwait(false);
         var reasons = await ScalarLong(
-            conn,
-            "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
-                + "WHERE failure_reason IS NOT NULL LIMIT 1) r",
-            ct
-        );
+                conn,
+                "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
+                    + "WHERE failure_reason IS NOT NULL LIMIT 1) r",
+                ct
+            )
+            .ConfigureAwait(false);
         return metadata >= profile.Metadata * 0.95
             && logs >= profile.Log * 0.95
             && persisted >= profile.PersistedOperations * 0.95
@@ -579,21 +746,27 @@ public static class BulkSeeder
         for (long lo = 1; lo <= total; lo += ChunkSize)
         {
             var hi = Math.Min(lo + ChunkSize - 1, total);
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = insertSql;
-            cmd.CommandTimeout = 1200;
-            cmd.Parameters.AddWithValue("lo", lo);
-            cmd.Parameters.AddWithValue("hi", hi);
-            await cmd.ExecuteNonQueryAsync(ct);
+            var cmd = conn.CreateCommand();
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.CommandText = insertSql;
+                cmd.CommandTimeout = 1200;
+                cmd.Parameters.AddWithValue("lo", lo);
+                cmd.Parameters.AddWithValue("hi", hi);
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
         }
     }
 
     private static async Task Exec(NpgsqlConnection conn, string sql, CancellationToken ct)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.CommandTimeout = 1200;
-        await cmd.ExecuteNonQueryAsync(ct);
+        var cmd = conn.CreateCommand();
+        await using (cmd.ConfigureAwait(false))
+        {
+            cmd.CommandText = sql;
+            cmd.CommandTimeout = 1200;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
     }
 
     private static async Task<long> ScalarLong(
@@ -602,10 +775,18 @@ public static class BulkSeeder
         CancellationToken ct
     )
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.CommandTimeout = 1200;
-        var result = await cmd.ExecuteScalarAsync(ct);
-        return result is long l ? l : Convert.ToInt64(result);
+        var cmd = conn.CreateCommand();
+        await using (cmd.ConfigureAwait(false))
+        {
+            cmd.CommandText = sql;
+            cmd.CommandTimeout = 1200;
+            var result = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            return result is long l
+                ? l
+                : Convert.ToInt64(result, System.Globalization.CultureInfo.InvariantCulture);
+        }
     }
+
+    [GeneratedRegex("^[a-z_][a-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DatabaseName { get; }
 }

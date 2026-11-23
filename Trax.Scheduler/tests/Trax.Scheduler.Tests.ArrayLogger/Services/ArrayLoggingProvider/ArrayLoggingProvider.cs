@@ -10,14 +10,14 @@ namespace Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 /// </summary>
 public class ArrayLoggingProvider : IArrayLoggingProvider
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed = false;
 
     /// <summary>
     /// Every logger created so far, in creation order; one per <see cref="CreateLogger"/> call, so
     /// the same category can appear more than once. Emptied on dispose.
     /// </summary>
-    public List<ArrayLoggerEffect> Loggers { get; } = [];
+    public IList<ArrayLoggerEffect> Loggers { get; } = [];
 
     /// <summary>
     /// Disposes every logger, which empties its <see cref="ArrayLoggerEffect.Logs"/>, and clears

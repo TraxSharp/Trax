@@ -98,33 +98,11 @@ internal static class IntrospectionSdlBuilder
                 break;
 
             case "ENUM":
-                sb.Append("enum ").Append(type.Name).Append(" {\n");
-                if (type.EnumValues is not null)
-                {
-                    foreach (var ev in type.EnumValues)
-                    {
-                        sb.Append("  ").Append(ev.Name);
-                        if (ev.IsDeprecated)
-                            WriteDeprecation(sb, ev.DeprecationReason);
-                        sb.Append('\n');
-                    }
-                }
-                sb.Append("}\n");
+                WriteEnum(sb, type);
                 break;
 
             case "INPUT_OBJECT":
-                sb.Append("input ").Append(type.Name).Append(" {\n");
-                if (type.InputFields is not null)
-                {
-                    foreach (var f in type.InputFields)
-                    {
-                        sb.Append("  ").Append(f.Name).Append(": ").Append(WriteTypeRef(f.Type));
-                        if (f.DefaultValue is not null)
-                            sb.Append(" = ").Append(f.DefaultValue);
-                        sb.Append('\n');
-                    }
-                }
-                sb.Append("}\n");
+                WriteInputObject(sb, type);
                 break;
 
             default:
@@ -132,6 +110,38 @@ internal static class IntrospectionSdlBuilder
                     $"Unrecognized introspection type kind '{type.Kind}' for type '{type.Name}'."
                 );
         }
+    }
+
+    private static void WriteEnum(StringBuilder sb, IntrospectionType type)
+    {
+        sb.Append("enum ").Append(type.Name).Append(" {\n");
+        if (type.EnumValues is not null)
+        {
+            foreach (var ev in type.EnumValues)
+            {
+                sb.Append("  ").Append(ev.Name);
+                if (ev.IsDeprecated)
+                    WriteDeprecation(sb, ev.DeprecationReason);
+                sb.Append('\n');
+            }
+        }
+        sb.Append("}\n");
+    }
+
+    private static void WriteInputObject(StringBuilder sb, IntrospectionType type)
+    {
+        sb.Append("input ").Append(type.Name).Append(" {\n");
+        if (type.InputFields is not null)
+        {
+            foreach (var f in type.InputFields)
+            {
+                sb.Append("  ").Append(f.Name).Append(": ").Append(WriteTypeRef(f.Type));
+                if (f.DefaultValue is not null)
+                    sb.Append(" = ").Append(f.DefaultValue);
+                sb.Append('\n');
+            }
+        }
+        sb.Append("}\n");
     }
 
     private static void WriteFieldBlock(StringBuilder sb, List<IntrospectionField>? fields)

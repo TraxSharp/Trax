@@ -5,7 +5,8 @@ public class ExemplarGuardTests
 {
     private const string GuardPath = "tests/Some.Tests.Meta/Tests/MigrationsIntegrityTests.cs";
 
-    private static IReadOnlyList<Adr> Load(TempAdrRepo repo) => AdrCorpus.Discover(repo.Options());
+    private static async Task<IReadOnlyList<Adr>> LoadAsync(TempAdrRepo repo) =>
+        await AdrCorpus.DiscoverAsync(repo.Options()).ConfigureAwait(false);
 
     /// <summary>A corpus whose single ADR names a guard class, with that class on disk.</summary>
     private static TempAdrRepo WithGuard(
@@ -53,21 +54,27 @@ public class ExemplarGuardTests
     #region Section shape
 
     [Test]
-    public void SectionPresent_WithAnUnenforcedAdmission_Passes()
+    public async Task SectionPresent_WithAnUnenforcedAdmission_Passes()
     {
         using var repo = TempAdrRepo.Valid();
 
-        ExemplarGuards.SectionPresent(Load(repo)).Passed.Should().BeTrue();
+        ExemplarGuards
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void SectionPresent_Missing_Fails()
+    public async Task SectionPresent_Missing_Fails()
     {
         using var repo = TempAdrRepo.Valid();
-        repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr().Replace("## Exemplars", "## Notes"));
+        repo.Adr(
+            Sample.DefaultSpec.FileName,
+            Sample.Adr().Replace("## Exemplars", "## Notes", StringComparison.Ordinal)
+        );
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -75,13 +82,13 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void SectionPresent_NamingNoGuardAndNotOptingOut_Fails_BecauseSilenceReadsAsEnforcement()
+    public async Task SectionPresent_NamingNoGuardAndNotOptingOut_Fails_BecauseSilenceReadsAsEnforcement()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(exemplars: "- [a doc](/docs/effect)"));
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -89,7 +96,7 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void SectionPresent_NamingGuardsAndAlsoOptingOut_Fails_BecauseItIsAContradiction()
+    public async Task SectionPresent_NamingGuardsAndAlsoOptingOut_Fails_BecauseItIsAContradiction()
     {
         using var repo = WithGuard(
             GuardCiting(Sample.DefaultSpec.FileName),
@@ -97,7 +104,7 @@ public class ExemplarGuardTests
         );
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -105,13 +112,13 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void SectionPresent_UnenforcedWithNoReason_Fails()
+    public async Task SectionPresent_UnenforcedWithNoReason_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(exemplars: "**Unenforced:**"));
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -119,13 +126,13 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void SectionPresent_UnenforcedWithAShortReason_Fails()
+    public async Task SectionPresent_UnenforcedWithAShortReason_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(exemplars: "**Unenforced:** it is hard."));
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -135,13 +142,13 @@ public class ExemplarGuardTests
     [TestCase("we have not written the guard yet, and it is a large piece of work to do properly")]
     [TestCase("a TODO: the census that would cover this is a separate and much larger change")]
     [TestCase("this will be enforced later, once the surrounding refactor has actually landed")]
-    public void SectionPresent_UnenforcedWithADeferral_Fails_EvenWhenLongEnough(string reason)
+    public async Task SectionPresent_UnenforcedWithADeferral_Fails_EvenWhenLongEnough(string reason)
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(Sample.DefaultSpec.FileName, Sample.Adr(exemplars: $"**Unenforced:** {reason}"));
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -158,7 +165,7 @@ public class ExemplarGuardTests
     /// "unenforced" admission would be true.
     /// </summary>
     [Test]
-    public void SectionPresent_EnforcedElsewhere_Passes_WithoutNamingALocalClass()
+    public async Task SectionPresent_EnforcedElsewhere_Passes_WithoutNamingALocalClass()
     {
         using var repo = TempAdrRepo.Valid(central: true);
         repo.Adr(
@@ -170,17 +177,16 @@ public class ExemplarGuardTests
             )
         );
         var options = repo.Options(requireReposKey: true);
-        var adrs = AdrCorpus.Discover(options);
+        var adrs = await AdrCorpus.DiscoverAsync(options).ConfigureAwait(false);
 
         ExemplarGuards.SectionPresent(adrs).Passed.Should().BeTrue();
-        ExemplarGuards
-            .NamedGuardsResolve(adrs, options)
+        (await ExemplarGuards.NamedGuardsResolveAsync(adrs, options).ConfigureAwait(false))
             .Offenders.Should()
             .BeEmpty("a class named inside the elsewhere marker is not claimed as local");
     }
 
     [Test]
-    public void SectionPresent_EnforcedElsewhereWithAThinReason_Fails()
+    public async Task SectionPresent_EnforcedElsewhereWithAThinReason_Fails()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -189,7 +195,7 @@ public class ExemplarGuardTests
         );
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -197,7 +203,7 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void SectionPresent_EnforcedElsewhereAndUnenforced_Fails_BecauseItIsAContradiction()
+    public async Task SectionPresent_EnforcedElsewhereAndUnenforced_Fails_BecauseItIsAContradiction()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -208,7 +214,7 @@ public class ExemplarGuardTests
         );
 
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -220,11 +226,20 @@ public class ExemplarGuardTests
     #region Named guards
 
     [Test]
-    public void NamedGuardsResolve_WhenTheClassExists_Passes()
+    public async Task NamedGuardsResolve_WhenTheClassExists_Passes()
     {
         using var repo = WithGuard(GuardCiting(Sample.DefaultSpec.FileName));
 
-        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Passed.Should()
+            .BeTrue();
     }
 
     /// <summary>
@@ -232,11 +247,13 @@ public class ExemplarGuardTests
     /// the scan reached first, and deleting the one doing the work left the ADR green.
     /// </summary>
     [Test]
-    public void NamedGuardsResolve_WhenAClassSharesTheNameButDoesNotClaimTheAdr_Fails()
+    public async Task NamedGuardsResolve_WhenAClassSharesTheNameButDoesNotClaimTheAdr_Fails()
     {
         using var repo = WithGuard(GuardCitingNothing);
 
-        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+        var result = await ExemplarGuards
+            .NamedGuardsResolveAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .ConfigureAwait(false);
 
         result.Passed.Should().BeFalse();
         result.Offenders[0].Should().Contain("does not claim this ADR back");
@@ -248,7 +265,7 @@ public class ExemplarGuardTests
     /// "does not claim this ADR back" and an ADR slug had to be shortened to fit on one line.
     /// </summary>
     [Test]
-    public void NamedGuardsResolve_WhenTheAttributeIsWrappedAcrossLines_Passes()
+    public async Task NamedGuardsResolve_WhenTheAttributeIsWrappedAcrossLines_Passes()
     {
         using var repo = WithGuard(
             $$"""
@@ -267,11 +284,20 @@ public class ExemplarGuardTests
             """
         );
 
-        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Offenders.Should()
+            .BeEmpty();
     }
 
     [Test]
-    public void NamedGuardsResolve_WhenAWrappedAttributeIsCommentedOut_Fails()
+    public async Task NamedGuardsResolve_WhenAWrappedAttributeIsCommentedOut_Fails()
     {
         using var repo = WithGuard(
             $$"""
@@ -290,8 +316,14 @@ public class ExemplarGuardTests
             """
         );
 
-        ExemplarGuards
-            .NamedGuardsResolve(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -299,7 +331,7 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void NamedGuardsResolve_WhenAWrappedAttributeIsSeparatedFromTheClass_Fails()
+    public async Task NamedGuardsResolve_WhenAWrappedAttributeIsSeparatedFromTheClass_Fails()
     {
         using var repo = WithGuard(
             $$"""
@@ -320,8 +352,14 @@ public class ExemplarGuardTests
             """
         );
 
-        ExemplarGuards
-            .NamedGuardsResolve(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -329,7 +367,7 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void NamedGuardsResolve_WhenTwoClassesClaimTheSameAdr_Fails()
+    public async Task NamedGuardsResolve_WhenTwoClassesClaimTheSameAdr_Fails()
     {
         using var repo = WithGuard(GuardCiting(Sample.DefaultSpec.FileName));
         repo.Write(
@@ -337,20 +375,28 @@ public class ExemplarGuardTests
             GuardCiting(Sample.DefaultSpec.FileName)
         );
 
-        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+        var result = await ExemplarGuards
+            .NamedGuardsResolveAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .ConfigureAwait(false);
 
         result.Passed.Should().BeFalse();
         result.Offenders[0].Should().Contain("2 classes claim it back");
     }
 
     [Test]
-    public void NamedGuardsResolve_WhenTheClassIsGone_Fails()
+    public async Task NamedGuardsResolve_WhenTheClassIsGone_Fails()
     {
         using var repo = WithGuard(GuardCiting(Sample.DefaultSpec.FileName));
         repo.Delete(GuardPath);
 
-        ExemplarGuards
-            .NamedGuardsResolve(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -358,7 +404,7 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void NamedGuardsResolve_QualifiedNameInAnotherRepo_IsProse_NotAClaim()
+    public async Task NamedGuardsResolve_QualifiedNameInAnotherRepo_IsProse_NotAClaim()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -369,32 +415,49 @@ public class ExemplarGuardTests
             )
         );
 
-        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+        var result = await ExemplarGuards
+            .NamedGuardsResolveAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .ConfigureAwait(false);
 
         result
             .Offenders.Should()
             .BeEmpty("a dotted name lives in another repo and cannot be resolved here");
         ExemplarGuards
-            .SectionPresent(Load(repo))
+            .SectionPresent((await LoadAsync(repo).ConfigureAwait(false)))
             .Passed.Should()
             .BeTrue("so it does not count as a guard claim either");
     }
 
     [Test]
-    public void NamedGuardsCiteBack_WhenTheGuardNamesTheAdr_Passes()
+    public async Task NamedGuardsCiteBack_WhenTheGuardNamesTheAdr_Passes()
     {
         using var repo = WithGuard(GuardCiting(Sample.DefaultSpec.FileName));
 
-        ExemplarGuards.NamedGuardsCiteBack(Load(repo), repo.Options()).Passed.Should().BeTrue();
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Passed.Should()
+            .BeTrue();
     }
 
     [Test]
-    public void NamedGuardsCiteBack_WhenTheGuardIsSilent_Fails()
+    public async Task NamedGuardsCiteBack_WhenTheGuardIsSilent_Fails()
     {
         using var repo = WithGuard(GuardCitingNothing);
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
@@ -402,12 +465,18 @@ public class ExemplarGuardTests
     }
 
     [Test]
-    public void NamedGuardsCiteBack_WhenTheGuardCitesADifferentAdr_Fails()
+    public async Task NamedGuardsCiteBack_WhenTheGuardCitesADifferentAdr_Fails()
     {
         using var repo = WithGuard(GuardCiting("0009-some-other-decision.md"));
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle();
     }
@@ -461,7 +530,7 @@ public class ExemplarGuardTests
     /// the class carried it, and a class that already claimed two ADRs silently lost one.
     /// </summary>
     [Test]
-    public void NamedGuardsResolve_WhenAClassClaimsTwoAdrsInTwoAttributes_BothResolve()
+    public async Task NamedGuardsResolve_WhenAClassClaimsTwoAdrsInTwoAttributes_BothResolve()
     {
         using var repo = WithTwoAdrsNamingTheGuard(
             GuardCitingBoth(
@@ -472,14 +541,16 @@ public class ExemplarGuardTests
             )
         );
 
-        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+        var result = await ExemplarGuards
+            .NamedGuardsResolveAsync((await LoadAsync(repo).ConfigureAwait(false)), repo.Options())
+            .ConfigureAwait(false);
 
         result.Offenders.Should().BeEmpty();
         result.Inspected.Should().Be(2);
     }
 
     [Test]
-    public void NamedGuardsResolve_WhenAClassClaimsTwoAdrsInOneAttributeList_BothResolve()
+    public async Task NamedGuardsResolve_WhenAClassClaimsTwoAdrsInOneAttributeList_BothResolve()
     {
         using var repo = WithTwoAdrsNamingTheGuard(
             GuardCitingBoth(
@@ -489,7 +560,16 @@ public class ExemplarGuardTests
             )
         );
 
-        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
+        (
+            await ExemplarGuards
+                .NamedGuardsResolveAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
+            .Offenders.Should()
+            .BeEmpty();
     }
 
     /// <summary>
@@ -499,7 +579,7 @@ public class ExemplarGuardTests
     /// does not, and cite-back must still fail.
     /// </summary>
     [Test]
-    public void NamedGuardsCiteBack_ReadsTheClassCarryingTheAttribute_NotAnotherOfTheSameName()
+    public async Task NamedGuardsCiteBack_ReadsTheClassCarryingTheAttribute_NotAnotherOfTheSameName()
     {
         using var repo = TempAdrRepo.Valid();
         repo.Adr(
@@ -509,7 +589,11 @@ public class ExemplarGuardTests
         repo.Write(
             "tests/A.Tests.Meta/Tests/MigrationsIntegrityTests.cs",
             GuardCiting(Sample.DefaultSpec.FileName)
-                .Replace($"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n", "")
+                .Replace(
+                    $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n",
+                    "",
+                    StringComparison.Ordinal
+                )
         );
         repo.Write(
             "tests/B.Tests.Meta/Tests/MigrationsIntegrityTests.cs",
@@ -526,8 +610,14 @@ public class ExemplarGuardTests
             """
         );
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
+        (
+            await ExemplarGuards
+                .NamedGuardsCiteBackAsync(
+                    (await LoadAsync(repo).ConfigureAwait(false)),
+                    repo.Options()
+                )
+                .ConfigureAwait(false)
+        )
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()

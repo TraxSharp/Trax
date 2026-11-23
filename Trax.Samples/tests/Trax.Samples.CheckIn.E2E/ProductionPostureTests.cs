@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Hosting;
+using Trax.Core.Extensions;
 using Trax.Samples.CheckIn.Api.Auth;
 using Trax.Samples.CheckIn.E2E.Fixtures;
 
@@ -26,8 +27,8 @@ public class ProductionPostureTests
         }
     }
 
-    private CheckInApiFactory _development = null!;
-    private ProductionFactory _production = null!;
+    private CheckInApiFactory? _development;
+    private ProductionFactory? _production;
 
     [OneTimeSetUp]
     public void Start()
@@ -39,8 +40,10 @@ public class ProductionPostureTests
     [OneTimeTearDown]
     public async Task Stop()
     {
-        await _production.DisposeAsync();
-        await _development.DisposeAsync();
+        if (_production is not null)
+            await _production.DisposeAsync().ConfigureAwait(false);
+        if (_development is not null)
+            await _development.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -49,11 +52,13 @@ public class ProductionPostureTests
         var signIn = new { name = "Ada", role = "passenger" };
 
         using var development = await _development
+            .NotNull()
             .CreateClient()
             .PostAsJsonAsync("/dev/token", signIn);
         development.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var production = await _production
+            .NotNull()
             .CreateClient()
             .PostAsJsonAsync("/dev/token", signIn);
         production.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -62,13 +67,19 @@ public class ProductionPostureTests
     [Test]
     public async Task A_demo_token_reads_no_view_in_Production()
     {
-        var body = new { id = BookingsViewId(), variables = new { } };
-        var token = DemoTokens.Issuer.Mint("Ada", "passenger");
+        var body = new
+        {
+            id = await BookingsViewIdAsync().ConfigureAwait(false),
+            variables = new { },
+        };
+        var token = DemoTokens.Issuer.Mint("Ada", "passenger", TimeProvider.System);
 
-        using var development = await PostAsync(_development, body, token);
+        using var development = await PostAsync(_development.NotNull(), body, token)
+            .ConfigureAwait(false);
         development.RootElement.TryGetProperty("errors", out _).Should().BeFalse(Show(development));
 
-        using var production = await PostAsync(_production, body, token);
+        using var production = await PostAsync(_production.NotNull(), body, token)
+            .ConfigureAwait(false);
         production.RootElement.TryGetProperty("errors", out _).Should().BeTrue(Show(production));
         Bookings(production).Should().BeNull(Show(production));
     }
@@ -79,7 +90,7 @@ public class ProductionPostureTests
         // Anyone may ask for __typename, so only the document's being hand-written can refuse it.
         var body = new { query = "{ __typename }" };
 
-        foreach (var factory in new[] { _development, _production })
+        foreach (var factory in new[] { _development.NotNull(), _production.NotNull() })
         {
             using var answer = await PostAsync(factory, body, token: null);
             answer.RootElement.TryGetProperty("data", out _).Should().BeFalse(Show(answer));
@@ -93,17 +104,27 @@ public class ProductionPostureTests
         }
     }
 
-    private static string BookingsViewId()
+    private static async Task<string> BookingsViewIdAsync()
     {
         using var manifest = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
+            await File.ReadAllTextAsync(
+                    Path.Combine(AppContext.BaseDirectory, "client", "manifest.json")
+                )
+                .ConfigureAwait(false)
         );
         return manifest
             .RootElement.GetProperty("views")
             .EnumerateArray()
-            .Single(v => v.GetProperty("operation").GetString() == "bookings")
+            .Single(v =>
+                string.Equals(
+                    v.GetProperty("operation").GetString(),
+                    "bookings",
+                    StringComparison.Ordinal
+                )
+            )
             .GetProperty("id")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     private static async Task<JsonDocument> PostAsync(
@@ -119,8 +140,8 @@ public class ProductionPostureTests
         };
         if (token is not null)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     private static JsonElement? Bookings(JsonDocument answer) =>

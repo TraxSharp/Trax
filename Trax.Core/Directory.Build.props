@@ -58,18 +58,13 @@
     <PackageValidationBaselineVersion>1.69.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
-  <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
-  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Trax.Core.Analyzers'">
-    <ProjectReference
-      Include="$(MSBuildThisFileDirectory)src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
-      ReferenceOutputAssembly="false"
-      OutputItemType="Analyzer"
-    />
-  </ItemGroup>
-
   <!-- Deterministic/reproducible builds. CI source-path normalization
        (ContinuousIntegrationBuild) is turned on by the package only when CI is detected. -->
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- The Trax.Analyzers profile: every rule rules.txt turns on is an error here, in src and
+       tests alike (Trax.Docs/adr/0061). -->
+  <Import Project="$(MSBuildThisFileDirectory)../Trax.Analyzers/Trax.Analyzers.InRepo.props" />
 </Project>

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Decisions;
@@ -73,7 +74,7 @@ public static class QuestionKey
     private static string Name(Type type, Type[] arguments)
     {
         if (type.IsArray)
-            return For(type.GetElementType()!) + "[]";
+            return For(type.GetElementType().NotNull()) + "[]";
 
         if (type.IsGenericParameter)
             return type.Name;
@@ -91,7 +92,7 @@ public static class QuestionKey
         }
 
         var name = type.Name;
-        var tick = name.IndexOf('`');
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
 
         if (tick >= 0)
             name = name[..tick];
@@ -100,6 +101,6 @@ public static class QuestionKey
 
         return own.Length == 0
             ? prefix + name
-            : $"{prefix}{name}<{string.Join(",", own.Select(For))}>";
+            : $"{prefix}{name}<{string.Join(',', own.Select(For))}>";
     }
 }

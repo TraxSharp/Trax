@@ -1,10 +1,11 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Shopfront.Staff;
 using Shopfront.Trains.LowStockCheck;
 using Shopfront.Trains.LowStockCheck.Junctions;
 using Shopfront.Trains.StockReport;
 using Shopfront.Trains.StockReport.Junctions;
 using Shopfront.Trains.StockReport.Models;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Shopfront.Tests.UnitTests;
 
@@ -30,11 +31,15 @@ public class StockJunctionTests
     {
         await using var db = TestDatabase.NewContext();
 
-        var report = await new CountStockJunction(db, NullLogger<CountStockJunction>.Instance).Run(
-            new StockReportInput()
-        );
+        var report = await new CountStockJunction(
+            db,
+            NullLogger<CountStockJunction>.Instance,
+            new FakeTimeProvider()
+        ).Run(new StockReportInput());
 
-        report.Lines.Should().Equal(new StockLine("CAP", 0), new StockLine("MUG", 10), new StockLine("TEE", 3));
+        report
+            .Lines.Should()
+            .Equal(new StockLine("CAP", 0), new StockLine("MUG", 10), new StockLine("TEE", 3));
         report.Units.Should().Be(13);
     }
 

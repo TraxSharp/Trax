@@ -30,7 +30,7 @@ internal sealed class SnapshotWriteSignal
     {
         try
         {
-            await _written.WaitAsync(delay, stoppingToken);
+            await _written.WaitAsync(delay, stoppingToken).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)

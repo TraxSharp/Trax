@@ -7,6 +7,7 @@ using HotChocolate.Language;
 using HotChocolate.Validation;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 
@@ -21,7 +22,9 @@ public sealed class HotChocolateSchemaValidator : IPersistedOperationValidator
     private readonly IServiceProvider _services;
     private readonly string _schemaName;
 
-    private readonly ConcurrentDictionary<string, ExecutorCacheEntry> _executorCache = new();
+    private readonly ConcurrentDictionary<string, ExecutorCacheEntry> _executorCache = new(
+        StringComparer.Ordinal
+    );
 
     /// <summary>
     /// Build the validator. <paramref name="schemaName"/> defaults to the
@@ -65,29 +68,37 @@ public sealed class HotChocolateSchemaValidator : IPersistedOperationValidator
         // resolved through a per-call scope and handed to the validation rules as a
         // feature. GetService (not GetRequiredService) keeps the validator usable for
         // hosts that never wire @authorize.
-        await using var scope = _services.CreateAsyncScope();
-        var features = new FeatureCollection();
-        var authorizationHandler = scope.ServiceProvider.GetService<IAuthorizationHandler>();
-        if (authorizationHandler is not null)
+        var scope = _services.CreateAsyncScope();
+
+        // IAuthorizationHandler is registered as scoped by AddAuthorization, so it is
+        // resolved through a per-call scope and handed to the validation rules as a
+        // feature. GetService (not GetRequiredService) keeps the validator usable for
+        // hosts that never wire @authorize.
+        await using (scope.ConfigureAwait(false))
         {
-            features.Set(authorizationHandler);
+            var features = new FeatureCollection();
+            var authorizationHandler = scope.ServiceProvider.GetService<IAuthorizationHandler>();
+            if (authorizationHandler is not null)
+            {
+                features.Set(authorizationHandler);
+            }
+
+            ct.ThrowIfCancellationRequested();
+
+            var result = entry.Validator.Validate(
+                entry.Schema,
+                new OperationDocumentId("trax-po-validator"),
+                parsed,
+                features,
+                onlyNonCacheable: false
+            );
+
+            if (!result.HasErrors)
+                return;
+
+            var failures = result.Errors.Select(ToFailure).ToArray();
+            throw new PersistedOperationValidationException(failures);
         }
-
-        ct.ThrowIfCancellationRequested();
-
-        var result = entry.Validator.Validate(
-            entry.Schema,
-            new OperationDocumentId("trax-po-validator"),
-            parsed,
-            features,
-            onlyNonCacheable: false
-        );
-
-        if (!result.HasErrors)
-            return;
-
-        var failures = result.Errors.Select(ToFailure).ToArray();
-        throw new PersistedOperationValidationException(failures);
     }
 
     private async ValueTask<ExecutorCacheEntry> GetExecutorAsync(CancellationToken ct)
@@ -114,7 +125,7 @@ public sealed class HotChocolateSchemaValidator : IPersistedOperationValidator
             : Array.Empty<ValidationFailureLocation>();
 
         var path =
-            error.Path?.ToList()?.Where(p => p is not null).Select(p => p!).ToArray()
+            error.Path?.ToList()?.Where(p => p is not null).Select(p => p.NotNull()).ToArray()
             ?? Array.Empty<object>();
 
         return new ValidationFailure(error.Message, locations, path);

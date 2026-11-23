@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.ChatService.Auth;
@@ -11,15 +12,31 @@ namespace Trax.Samples.ChatService.E2E.Fixtures;
 [TestFixture]
 public abstract class ChatApiTestFixture
 {
-    protected HttpClient HttpClient { get; private set; } = null!;
+    protected HttpClient HttpClient
+    {
+        get => field.NotNull(nameof(HttpClient));
+        private set;
+    }
 
-    protected GraphQLClient GraphQL { get; private set; } = null!;
+    protected GraphQLClient GraphQL
+    {
+        get => field.NotNull(nameof(GraphQL));
+        private set;
+    }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
-    protected ChatDbContext ChatDb { get; private set; } = null!;
+    protected ChatDbContext ChatDb
+    {
+        get => field.NotNull(nameof(ChatDb));
+        private set;
+    }
 
-    private IServiceScope Scope { get; set; } = null!;
+    private AsyncServiceScope Scope { get; set; }
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -37,7 +54,7 @@ public abstract class ChatApiTestFixture
     [SetUp]
     public virtual async Task SetUp()
     {
-        Scope = SharedChatApiSetup.Factory.Services.CreateScope();
+        Scope = SharedChatApiSetup.Factory.Services.CreateAsyncScope();
 
         var dataContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
@@ -49,14 +66,14 @@ public abstract class ChatApiTestFixture
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
-        ChatDb.Dispose();
+        await ChatDb.DisposeAsync();
 
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        Scope.Dispose();
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected static string AliceKey => ApiKeyDefaults.AliceKey;
@@ -66,28 +83,33 @@ public abstract class ChatApiTestFixture
     /// <summary>Creates a room as the caller holding <paramref name="apiKey"/> and returns its id.</summary>
     protected async Task<string> CreateRoomAsAsync(string apiKey, string name = "Room")
     {
-        var created = await GraphQL.SendAsync(
-            $$"""
-            mutation { dispatch { createChatRoom(input: { name: "{{name}}" }) { output { chatRoomId } } } }
-            """,
-            apiKey: apiKey
-        );
+        var created = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation { dispatch { createChatRoom(input: { name: "{{name}}" }) { output { chatRoomId } } } }
+                """,
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         created.HasErrors.Should().BeFalse(created.FirstErrorMessage);
         return created
             .GetData("dispatch", "createChatRoom", "output")
             .GetProperty("chatRoomId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     /// <summary>Joins a room as the caller holding <paramref name="apiKey"/>.</summary>
     protected async Task JoinRoomAsAsync(string apiKey, string chatRoomId)
     {
-        var joined = await GraphQL.SendAsync(
-            $$"""
-            mutation { dispatch { joinChatRoom(input: { chatRoomId: "{{chatRoomId}}" }) { output { joinedAt } } } }
-            """,
-            apiKey: apiKey
-        );
+        var joined = await GraphQL
+            .SendAsync(
+                $$"""
+                mutation { dispatch { joinChatRoom(input: { chatRoomId: "{{chatRoomId}}" }) { output { joinedAt } } } }
+                """,
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         joined.HasErrors.Should().BeFalse(joined.FirstErrorMessage);
     }
 
@@ -107,15 +129,15 @@ public abstract class ChatApiTestFixture
     private async Task CleanData()
     {
         // Clean chat domain data (FK order: messages → participants → rooms)
-        await ChatDb.ChatMessages.ExecuteDeleteAsync();
-        await ChatDb.ChatParticipants.ExecuteDeleteAsync();
-        await ChatDb.ChatRooms.ExecuteDeleteAsync();
+        await ChatDb.ChatMessages.ExecuteDeleteAsync().ConfigureAwait(false);
+        await ChatDb.ChatParticipants.ExecuteDeleteAsync().ConfigureAwait(false);
+        await ChatDb.ChatRooms.ExecuteDeleteAsync().ConfigureAwait(false);
 
         // Clean Trax execution data
-        await DataContext.Logs.ExecuteDeleteAsync();
-        await DataContext.WorkQueues.ExecuteDeleteAsync();
-        await DataContext.DeadLetters.ExecuteDeleteAsync();
-        await DataContext.Metadatas.ExecuteDeleteAsync();
+        await DataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
         DataContext.Reset();
     }
 }

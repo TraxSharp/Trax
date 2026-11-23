@@ -87,7 +87,8 @@ public static class SqsSchedulerExtensions
             {
                 CreateSubmitter = services => new SqsJobSubmitter(
                     services.GetRequiredKeyedService<IAmazonSQS>(clientKey),
-                    options
+                    options,
+                    services.GetRequiredService<TimeProvider>()
                 ),
                 Description = $"UseSqsWorkers({options.QueueUrl})",
             }

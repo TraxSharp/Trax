@@ -16,7 +16,9 @@ namespace Trax.Samples.Recovery.E2E.Utilities;
 public sealed class CountingDecider : IDecider
 {
     private readonly ConcurrentDictionary<(string RunId, string Key), int> _asked = new();
-    private readonly ConcurrentDictionary<string, TaskCompletionSource> _holds = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _holds = new(
+        StringComparer.Ordinal
+    );
 
     public async Task<DecisionResult> Decide(
         DecisionRequest request,
@@ -37,7 +39,7 @@ public sealed class CountingDecider : IDecider
 
         foreach (var question in request.Questions)
             if (_holds.TryGetValue(question.Key, out var hold))
-                await hold.Task.WaitAsync(cancellationToken);
+                await hold.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         return DemoDecider.Answer(request);
     }

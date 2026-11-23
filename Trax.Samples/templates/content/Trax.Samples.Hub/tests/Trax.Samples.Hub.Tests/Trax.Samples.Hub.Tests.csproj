@@ -14,6 +14,7 @@
   <!-- Versions live in Directory.Packages.props, at the root of the project. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
@@ -21,4 +22,12 @@
     <PackageReference Include="Microsoft.Testing.Extensions.VSTestBridge" />
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" />
   </ItemGroup>
+
+  <!--#if (strict) -->
+  <!-- Trax.Analyzers: the analyzer profile Trax builds its own code under, every rule an error.
+       https://traxsharp.net/docs/reference/templates#the-strict-option -->
+  <ItemGroup>
+    <PackageReference Include="Trax.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+  <!--#endif -->
 </Project>

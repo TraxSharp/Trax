@@ -72,6 +72,7 @@ Either way, an exception from the hook is logged and never fails the run.
 Override the method on the train. `TrainInput` and `TrainOutput` are typed by the train's own generic arguments:
 
 ```csharp compile=override
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectJunction;
@@ -94,13 +95,18 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
 
     protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
-        logger.LogInformation("Banned {PlayerId}: {Reason}", TrainInput.PlayerId, TrainInput.Reason);
+        var input = TrainInput.NotNull();
+        logger.LogInformation("Banned {PlayerId}: {Reason}", input.PlayerId, input.Reason);
         return Task.CompletedTask;
     }
 
     protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        logger.LogWarning("Could not ban {PlayerId}: {Message}", TrainInput.PlayerId, exception.Message);
+        logger.LogWarning(
+            "Could not ban {PlayerId}: {Message}",
+            TrainInput.NotNull().PlayerId,
+            exception.Message
+        );
         return Task.CompletedTask;
     }
 }

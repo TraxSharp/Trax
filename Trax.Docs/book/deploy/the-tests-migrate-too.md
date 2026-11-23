@@ -42,15 +42,25 @@ internal static class TestDatabase
     // orders or runs.
     public static async Task Reset()
     {
-        await using var db = NewContext();
-        await db.Database.EnsureDeletedAsync();
-        await db.Database.MigrateAsync();
+        var db = NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            await db.Database.EnsureDeletedAsync().ConfigureAwait(false);
+            await db.Database.MigrateAsync().ConfigureAwait(false);
+        }
     }
 
     public static async Task<int> StockOf(string sku)
     {
-        await using var db = NewContext();
-        return await db.Products.Where(p => p.Sku == sku).Select(p => p.Stock).SingleAsync();
+        var db = NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .Products.Where(p => p.Sku == sku)
+                .Select(p => p.Stock)
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 }
 ```
@@ -66,6 +76,7 @@ using Microsoft.EntityFrameworkCore;
 using Reqnroll;
 using Shopfront.Auth;
 using Shopfront.Data;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
@@ -87,10 +98,11 @@ public sealed class FeatureHooks
     [BeforeTestRun]
     public static async Task StartTheHub()
     {
-        await using (var db = Context())
+        var db = Context();
+        await using (db.ConfigureAwait(false))
         {
-            await db.Database.EnsureDeletedAsync();
-            await db.Database.MigrateAsync();
+            await db.Database.EnsureDeletedAsync().ConfigureAwait(false);
+            await db.Database.MigrateAsync().ConfigureAwait(false);
         }
 
         hub = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
@@ -100,26 +112,36 @@ public sealed class FeatureHooks
         var features = Path.Combine(AppContext.BaseDirectory, "features");
         // The hub runs only the documents it registered, so the bindings send each step by the
         // persisted id the storefront's client manifest holds for it.
-        var manifest = Path.Combine(AppContext.BaseDirectory, "manifest.json");
+        var manifest = ClientManifest.Read(
+            await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "manifest.json"))
+                .ConfigureAwait(false)
+        );
 
         // The lexicon is read with the trains' records, as the hub reads them.
-        var lexicon = Lexicon.ReadDirectory(
-            features,
-            [typeof(Shopfront.Trains.ReturnOrder.IReturnOrderTrain).Assembly]
-        )!;
+        var lexicon = Lexicon
+            .ReadDirectory(
+                features,
+                [typeof(Shopfront.Trains.ReturnOrder.IReturnOrderTrain).Assembly]
+            )
+            .NotNull();
 
         TraxFeatures.Configure(trax =>
         {
             trax.Host = hub.Services;
             trax.Client = client;
             trax.Glossary = lexicon.GlossaryOrThrow();
-            trax.Manifest = ClientManifest.Read(File.ReadAllText(manifest));
+            trax.Manifest = manifest;
             trax.Credential = (actor, person, scenario) =>
                 new FeatureCredential(
-                    new Dictionary<string, string>
+                    new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["Authorization"] =
-                            "Bearer " + DevJwt.Mint($"{person}-{scenario}", actor.Roles[0]),
+                            "Bearer "
+                            + DevJwt.Mint(
+                                $"{person}-{scenario}",
+                                actor.Roles[0],
+                                TimeProvider.System
+                            ),
                     }
                 );
         });
@@ -128,14 +150,14 @@ public sealed class FeatureHooks
     // The hub hands every job to the worker, and these tests start none: a scenario that waits for
     // the check's answer runs in memory only (ReturnFeaturesTests).
     [BeforeScenario("in-memory")]
-    public static void InMemoryOnly() =>
+    public void InMemoryOnly() =>
         Assert.Ignore("Runs in memory only: no worker answers the check here.");
 
     [AfterTestRun]
     public static async Task StopTheHub()
     {
         if (hub is not null)
-            await hub.DisposeAsync();
+            await hub.DisposeAsync().ConfigureAwait(false);
     }
 
     private static ShopfrontDbContext Context() =>
@@ -167,47 +189,54 @@ using Trax.Mediator.Testing;
 
 namespace Shopfront.Tests;
 
-[TestFixture]
-public sealed class ShopfrontTrainGuards : TrainGuardFixture
+// The guard fixtures this project adopts, one nested class each, so the file holds one type.
+public static class ArchitectureGuards
 {
-    protected override IReadOnlyList<Assembly> TrainAssemblies =>
-        [typeof(IPlaceOrderTrain).Assembly];
-}
-
-[TestFixture]
-public sealed class ShopfrontHygieneGuards : HygieneGuardFixture;
-
-[TestFixture]
-public sealed class ShopfrontDataLayerGuards : DomainDataLayerGuardFixture
-{
-    protected override ArchitectureGuardOptions Options =>
-        new() { SourceScanRoots = ["Shopfront.Core/Data"] };
-
-    protected override IReadOnlyList<Type> DomainContexts => [typeof(ShopfrontDbContext)];
-
-    // The contexts EF migrations keep: each model must match its latest migration.
-    protected override IReadOnlyList<Type> MigrationContexts => [typeof(ShopfrontDbContext)];
-
-    // The model, built with no database and no caller, for the census to read.
-    protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
+    [TestFixture]
+    public sealed class ShopfrontTrainGuards : TrainGuardFixture
     {
-        get
-        {
-            var options = new DbContextOptionsBuilder<ShopfrontDbContext>()
-                .UseNpgsql("Host=localhost;Database=model_only")
-                .Options;
-            using var context = new ShopfrontDbContext(options, NoShopfrontCaller.Instance);
-            return [context.Model];
-        }
+        protected override IReadOnlyList<Assembly> TrainAssemblies =>
+            [typeof(IPlaceOrderTrain).Assembly];
     }
 
-    protected override OwnerScopeCensusOptions OwnerScope =>
-        new()
+    [TestFixture]
+    public sealed class ShopfrontHygieneGuards : HygieneGuardFixture;
+
+    [TestFixture]
+    public sealed class ShopfrontDataLayerGuards : DomainDataLayerGuardFixture
+    {
+        protected override ArchitectureGuardOptions Options =>
+            new() { SourceScanRoots = ["Shopfront.Core/Data"] };
+
+        protected override IReadOnlyList<Type> DomainContexts => [typeof(ShopfrontDbContext)];
+
+        // The contexts EF migrations keep: each model must match its latest migration.
+        protected override IReadOnlyList<Type> MigrationContexts => [typeof(ShopfrontDbContext)];
+
+        // The model, built with no database and no caller, for the census to read.
+        protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
         {
-            OwnerType = typeof(Order),
-            PrincipalAccessorType = typeof(IShopfrontCaller),
-            OwnerIdProperties = new HashSet<string> { nameof(Order.CustomerId) },
-        };
+            get
+            {
+                var options = new DbContextOptionsBuilder<ShopfrontDbContext>()
+                    .UseNpgsql("Host=localhost;Database=model_only")
+                    .Options;
+                using var context = new ShopfrontDbContext(options, NoShopfrontCaller.Instance);
+                return [context.Model];
+            }
+        }
+
+        protected override OwnerScopeCensusOptions OwnerScope =>
+            new()
+            {
+                OwnerType = typeof(Order),
+                PrincipalAccessorType = typeof(IShopfrontCaller),
+                OwnerIdProperties = new HashSet<string>(StringComparer.Ordinal)
+                {
+                    nameof(Order.CustomerId),
+                },
+            };
+    }
 }
 ```
 

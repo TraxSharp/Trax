@@ -80,46 +80,51 @@ public sealed class TraxJwtDispatcherSocketInterceptor : DefaultSocketSessionInt
         // A scheme AddTraxJwtAuth did not register has no Trax principal resolution in its
         // handler, and the socket has no resolver for it either.
         var registry = _applicationServices.Services.GetService<JwtResolverRegistry>();
-        if (registry is null || !registry.SchemeNames.Contains(scheme))
+        if (registry is null || !registry.SchemeNames.Contains(scheme, StringComparer.Ordinal))
             return ConnectionStatus.Reject(
                 $"No principal resolver is registered for scheme '{scheme}'."
             );
 
-        await using var scope = _applicationServices.Services.CreateAsyncScope();
-
-        AuthenticateResult result;
-        try
+        var scope = _applicationServices.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            result = await JwtSocketAuthentication.AuthenticateAsync(
-                scope.ServiceProvider,
-                session.Connection.HttpContext,
-                scheme,
-                token,
-                cancellationToken
+            AuthenticateResult result;
+            try
+            {
+                result = await JwtSocketAuthentication
+                    .AuthenticateAsync(
+                        scope.ServiceProvider,
+                        session.Connection.HttpContext,
+                        scheme,
+                        token,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Trax dispatcher subscription JWT authentication threw for scheme {Scheme}.",
+                    scheme
+                );
+                return ConnectionStatus.Reject("JWT validation failed.");
+            }
+
+            if (!result.Succeeded || result.Principal is not { } principal)
+                return ConnectionStatus.Reject(JwtSocketAuthentication.RejectedMessage);
+
+            JwtSocketAuthentication.AttachPrincipal(session, principal);
+            JwtSocketAuthentication.CloseAtExpiry(
+                session,
+                JwtSocketAuthentication.ExpiresAt(result, token),
+                _applicationServices.Services,
+                _logger
             );
+
+            return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken)
+                .ConfigureAwait(false);
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Trax dispatcher subscription JWT authentication threw for scheme {Scheme}.",
-                scheme
-            );
-            return ConnectionStatus.Reject("JWT validation failed.");
-        }
-
-        if (!result.Succeeded || result.Principal is not { } principal)
-            return ConnectionStatus.Reject(JwtSocketAuthentication.RejectedMessage);
-
-        JwtSocketAuthentication.AttachPrincipal(session, principal);
-        JwtSocketAuthentication.CloseAtExpiry(
-            session,
-            JwtSocketAuthentication.ExpiresAt(result, token),
-            _applicationServices.Services,
-            _logger
-        );
-
-        return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
     }
 
     private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload) =>

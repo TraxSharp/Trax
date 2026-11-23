@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -24,7 +25,7 @@ public class StackTracePreservationTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input");
+            await train.Run("input", CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -33,7 +34,7 @@ public class StackTracePreservationTests : TestSetup
 
         // Assert — the stack trace should contain the original throw site
         caught.Should().NotBeNull();
-        caught!.StackTrace.Should().Contain(nameof(AlwaysThrowsJunction));
+        caught.NotNull().StackTrace.Should().Contain(nameof(AlwaysThrowsJunction));
     }
 
     [Theory]
@@ -46,7 +47,7 @@ public class StackTracePreservationTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input");
+            await train.Run("input", CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -55,7 +56,7 @@ public class StackTracePreservationTests : TestSetup
 
         // Assert — the first frame should NOT be ResolveOrThrow
         caught.Should().NotBeNull();
-        var firstLine = caught!.StackTrace!.Split('\n')[0];
+        var firstLine = caught.NotNull().StackTrace.NotNull().Split('\n')[0];
         firstLine.Should().NotContain("ResolveOrThrow");
     }
 
@@ -92,7 +93,7 @@ public class StackTracePreservationTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input");
+            await train.Run("input", CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -101,7 +102,7 @@ public class StackTracePreservationTests : TestSetup
 
         // Assert — the message should be the original, not JSON
         caught.Should().NotBeNull();
-        caught!.Message.Should().Be("something went wrong");
+        caught.NotNull().Message.Should().Be("something went wrong");
         caught.Should().BeOfType<InvalidOperationException>();
     }
 
@@ -115,7 +116,7 @@ public class StackTracePreservationTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input");
+            await train.Run("input", CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -124,9 +125,9 @@ public class StackTracePreservationTests : TestSetup
 
         // Assert — structured data available via Exception.Data
         caught.Should().NotBeNull();
-        var data = caught!.Data["TrainExceptionData"] as TrainExceptionData;
+        var data = caught.NotNull().Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.Junction.Should().Be(nameof(AlwaysThrowsJunction));
+        data.NotNull().Junction.Should().Be(nameof(AlwaysThrowsJunction));
         data.Type.Should().Be("InvalidOperationException");
         data.Message.Should().Be("something went wrong");
         data.StackTrace.Should().Contain(nameof(AlwaysThrowsJunction));
@@ -146,7 +147,7 @@ public class StackTracePreservationTests : TestSetup
         Exception? caught = null;
         try
         {
-            await train.Run("input");
+            await train.Run("input", CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -156,32 +157,32 @@ public class StackTracePreservationTests : TestSetup
         // Assert — the exception type should be the original, not TrainException
         caught.Should().NotBeNull();
         caught.Should().BeOfType<ArgumentException>();
-        caught!.Message.Should().Be("bad argument");
+        caught.NotNull().Message.Should().Be("bad argument (Parameter 'input')");
     }
 
     #endregion
 
     #region Test Helpers
 
-    private class AlwaysThrowsJunction : Junction<string, string>
+    private sealed class AlwaysThrowsJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("something went wrong");
     }
 
-    private class ArgumentThrowsJunction : Junction<string, string>
+    private sealed class ArgumentThrowsJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
-            throw new ArgumentException("bad argument");
+            throw new ArgumentException("bad argument", nameof(input));
     }
 
-    private class ThrowingTrain : Train<string, string>
+    private sealed class ThrowingTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<AlwaysThrowsJunction>().Resolve();
     }
 
-    private class ArgumentThrowingTrain : Train<string, string>
+    private sealed class ArgumentThrowingTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<ArgumentThrowsJunction>().Resolve();

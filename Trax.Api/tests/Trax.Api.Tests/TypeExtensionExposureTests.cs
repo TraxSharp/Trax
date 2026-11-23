@@ -11,6 +11,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Startup;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -44,61 +45,14 @@ public class TypeExtensionExposureTests
     {
         var host = new HostBuilder()
             .ConfigureServices(services =>
-            {
-                services.AddLogging();
-
-                // RequireAuthorization() gates on the combined Trax policy, which only exists once
-                // a scheme has contributed to it.
-                if (gateEndpoint)
-                    services.AddTraxApiKeyAuth(keys =>
-                        keys.Add("census-key-0123456789abcdefghijklmnopqrs", id: "census")
-                    );
-
-                services.AddSingleton<TraxMarker>();
-                var discovery = Substitute.For<ITrainDiscoveryService>();
-                discovery.DiscoverTrains().Returns([]);
-                services.AddSingleton(discovery);
-                services.AddSingleton(Substitute.For<IEffectRegistry>());
-
-                services.AddDbContextFactory<CensusDbContext>(o =>
-                    o.UseInMemoryDatabase("census-" + Guid.NewGuid())
-                );
-                services.AddDbContextFactory<GatedOnlyDbContext>(o =>
-                    o.UseInMemoryDatabase("census-gated-" + Guid.NewGuid())
-                );
-
-                services.AddTraxGraphQL(graphql =>
-                {
-                    // A gated endpoint cannot carry a [TraxAllowAnonymous] entity: that pairing is
-                    // itself a violation of the entity rule, so those hosts get a context holding
-                    // only the gated entity.
-                    if (gateEndpoint)
-                        graphql.AddDbContext<GatedOnlyDbContext>().RequireAuthorization();
-                    else
-                        graphql.AddDbContext<CensusDbContext>();
-
-                    if (exposeOperations)
-                        graphql.ExposeOperationMutations().AllowAnonymousOperations();
-                    configure(graphql);
-                    return graphql;
-                });
-
-                // Backing services for the operations resolvers, so exposing the namespace does
-                // not fail for an unrelated reason.
-                services.AddScoped(_ => Substitute.For<ITraxHealthService>());
-                services.AddScoped(_ => Substitute.For<IOperationsService>());
-                services.AddScoped(_ =>
-                    Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
-                );
-                services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                services.AddScoped(_ => Substitute.For<IJobSubmitter>());
-            })
+                AddCensusServices(services, configure, exposeOperations, gateEndpoint)
+            )
             .Build();
 
         try
         {
-            await host.StartAsync();
-            await host.StopAsync();
+            await host.StartAsync().ConfigureAwait(false);
+            await host.StopAsync().ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -109,6 +63,62 @@ public class TypeExtensionExposureTests
         {
             host.Dispose();
         }
+    }
+
+    private static void AddCensusServices(
+        IServiceCollection services,
+        Action<TraxGraphQLBuilder> configure,
+        bool exposeOperations,
+        bool gateEndpoint
+    )
+    {
+        services.AddLogging();
+
+        // RequireAuthorization() gates on the combined Trax policy, which only exists once
+        // a scheme has contributed to it.
+        if (gateEndpoint)
+            services.AddTraxApiKeyAuth(keys =>
+                keys.Add("census-key-0123456789abcdefghijklmnopqrs", id: "census")
+            );
+
+        services.AddSingleton<TraxMarker>();
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+
+        services.AddDbContextFactory<CensusDbContext>(o =>
+            o.UseInMemoryDatabase("census-" + Guid.NewGuid())
+        );
+        services.AddDbContextFactory<GatedOnlyDbContext>(o =>
+            o.UseInMemoryDatabase("census-gated-" + Guid.NewGuid())
+        );
+
+        services.AddTraxGraphQL(graphql =>
+        {
+            // A gated endpoint cannot carry a [TraxAllowAnonymous] entity: that pairing is
+            // itself a violation of the entity rule, so those hosts get a context holding
+            // only the gated entity.
+            if (gateEndpoint)
+                graphql.AddDbContext<GatedOnlyDbContext>().RequireAuthorization();
+            else
+                graphql.AddDbContext<CensusDbContext>();
+
+            if (exposeOperations)
+                graphql.ExposeOperationMutations().AllowAnonymousOperations();
+            configure(graphql);
+            return graphql;
+        });
+
+        // Backing services for the operations resolvers, so exposing the namespace does
+        // not fail for an unrelated reason.
+        services.AddScoped(_ => Substitute.For<ITraxHealthService>());
+        services.AddScoped(_ => Substitute.For<IOperationsService>());
+        services.AddScoped(_ =>
+            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+        );
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        services.AddScoped(_ => Substitute.For<IJobSubmitter>());
     }
 
     // ── A field on a [TraxAllowAnonymous] parent inherits nothing ────────
@@ -123,7 +133,7 @@ public class TypeExtensionExposureTests
                 "a field on an anonymous parent inherits no gate, per "
                     + "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md"
             );
-        ex!.Message.Should().Contain("PublicThing.undeclared");
+        ex.NotNull().Message.Should().Contain("PublicThing.undeclared");
         ex.Message.Should().Contain(nameof(UndeclaredOnPublicThing));
         ex.Message.Should().Contain("[TraxAllowAnonymous]");
     }
@@ -146,7 +156,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ConflictedOnPublicThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("PublicThing.conflicted");
+        ex.NotNull().Message.Should().Contain("PublicThing.conflicted");
         ex.Message.Should().Contain("Pick one");
     }
 
@@ -212,7 +222,7 @@ public class TypeExtensionExposureTests
                 "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md: every exposed "
                     + "parent type's extension fields declare their posture"
             );
-        ex!.Message.Should().Contain("OperationsMutations.undeclaredOperationsField");
+        ex.NotNull().Message.Should().Contain("OperationsMutations.undeclaredOperationsField");
         ex.Message.Should().Contain("AllowAnonymousOperations()");
     }
 
@@ -258,7 +268,7 @@ public class TypeExtensionExposureTests
                 "a field on a [TraxAllowAnonymous] navigation target inherits no gate, per "
                     + "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md"
             );
-        ex!.Message.Should().Contain("CensusAuthor.undeclaredAuthorField");
+        ex.NotNull().Message.Should().Contain("CensusAuthor.undeclaredAuthorField");
         ex.Message.Should().Contain("[TraxAllowAnonymous]");
     }
 
@@ -282,7 +292,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<UndeclaredOnRootQuery>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("RootQuery.undeclaredRootQueryField");
+        ex.NotNull().Message.Should().Contain("RootQuery.undeclaredRootQueryField");
         ex.Message.Should().Contain("schema root type");
     }
 
@@ -297,7 +307,7 @@ public class TypeExtensionExposureTests
             .BeOfType<InvalidOperationException>(
                 "DiscoverQueries is reached straight from the root on an ungated endpoint"
             );
-        ex!.Message.Should().Contain("undeclaredDiscoverField");
+        ex.NotNull().Message.Should().Contain("undeclaredDiscoverField");
     }
 
     [Test]
@@ -309,7 +319,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("RootMutation.undeclaredRootMutationField");
+        ex.NotNull().Message.Should().Contain("RootMutation.undeclaredRootMutationField");
     }
 
     /// <summary>
@@ -324,7 +334,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<UndeclaredSubscription>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("LifecycleSubscriptions.undeclaredStream");
+        ex.NotNull().Message.Should().Contain("LifecycleSubscriptions.undeclaredStream");
         ex.Message.Should().Contain("schema root type");
     }
 
@@ -347,7 +357,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ForeignGatedOnPublicThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("PublicThing.foreignGated");
+        ex.NotNull().Message.Should().Contain("PublicThing.foreignGated");
         ex.Message.Should().Contain("[Authorize]");
         ex.Message.Should().Contain("[TraxAuthorize]");
     }
@@ -358,7 +368,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ForeignAnonymousOnPublicThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("[TraxAllowAnonymous]");
+        ex.NotNull().Message.Should().Contain("[TraxAllowAnonymous]");
     }
 
     /// <summary>
@@ -372,7 +382,7 @@ public class TypeExtensionExposureTests
         var ex = await StartAsync(g => g.AddTypeExtension<ForeignGatedOnGatedThing>());
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("which Trax does not read");
+        ex.NotNull().Message.Should().Contain("which Trax does not read");
     }
 
     // ── Endpoint posture ─────────────────────────────────────────────────
@@ -403,7 +413,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("Pick one");
+        ex.NotNull().Message.Should().Contain("Pick one");
     }
 
     // ── Completeness ─────────────────────────────────────────────────────
@@ -421,7 +431,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("PublicThing.viaConfigureSchema");
+        ex.NotNull().Message.Should().Contain("PublicThing.viaConfigureSchema");
     }
 
     [Test]
@@ -434,7 +444,7 @@ public class TypeExtensionExposureTests
         );
 
         ex.Should().BeOfType<InvalidOperationException>();
-        ex!.Message.Should().Contain("3 GraphQL field(s)");
+        ex.NotNull().Message.Should().Contain("3 GraphQL field(s)");
         ex.Message.Should().Contain("PublicThing.undeclared");
         ex.Message.Should().Contain("PublicThing.secondUndeclared");
         ex.Message.Should().Contain("RootQuery.undeclaredRootQueryField");
@@ -526,230 +536,4 @@ public class TypeExtensionExposureTests
         );
         return services;
     }
-}
-
-// ── Fixtures ────────────────────────────────────────────────────────────
-
-public abstract class CensusEntityBase
-{
-    public string InheritedNote { get; set; } = string.Empty;
-}
-
-[TraxQueryModel]
-[TraxAllowAnonymous]
-public class PublicThing : CensusEntityBase
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public CensusAuthor? Author { get; set; }
-    public CensusAccount? Account { get; set; }
-}
-
-/// <summary>A navigation target of <see cref="PublicThing"/>, open to anonymous callers.</summary>
-[TraxAllowAnonymous]
-public class CensusAuthor
-{
-    public int Id { get; set; }
-    public string Handle { get; set; } = string.Empty;
-}
-
-/// <summary>A navigation target of <see cref="PublicThing"/>, gated.</summary>
-[TraxAuthorize(Roles = "admin")]
-public class CensusAccount
-{
-    public int Id { get; set; }
-    public string Email { get; set; } = string.Empty;
-}
-
-[TraxQueryModel]
-[TraxAuthorize(Roles = "admin")]
-public class GatedThing
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-}
-
-public class CensusDbContext(DbContextOptions<CensusDbContext> options) : DbContext(options)
-{
-    public DbSet<PublicThing> PublicThings => Set<PublicThing>();
-    public DbSet<GatedThing> GatedThings => Set<GatedThing>();
-}
-
-/// <summary>
-/// Holds no <c>[TraxAllowAnonymous]</c> entity, so it can be used under a gated endpoint.
-/// </summary>
-public class GatedOnlyDbContext(DbContextOptions<GatedOnlyDbContext> options) : DbContext(options)
-{
-    public DbSet<GatedThing> GatedThings => Set<GatedThing>();
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class UndeclaredOnPublicThing
-{
-    public string Undeclared([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class SecondUndeclaredOnPublicThing
-{
-    public string SecondUndeclared([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class GatedOnPublicThing
-{
-    [TraxAuthorize(Roles = "subscriber")]
-    public string Gated([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class AnonymousOnPublicThing
-{
-    [TraxAllowAnonymous]
-    public string Anonymous([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class ConflictedOnPublicThing
-{
-    [TraxAuthorize]
-    [TraxAllowAnonymous]
-    public string Conflicted([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-[TraxAuthorize(Roles = "subscriber")]
-public sealed class ClassGatedOnPublicThing
-{
-    public string ClassGated([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class ForeignGatedOnPublicThing
-{
-    [HotChocolate.Authorization.Authorize(Roles = ["subscriber"])]
-    public string ForeignGated([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class ForeignAnonymousOnPublicThing
-{
-    [HotChocolate.Authorization.AllowAnonymous]
-    public string ForeignAnonymous([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(GatedThing))]
-public sealed class ForeignGatedOnGatedThing
-{
-    [HotChocolate.Authorization.Authorize]
-    public string ForeignOnGated([Parent] GatedThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(PublicThing))]
-public sealed class UndeclaredViaConfigureSchema
-{
-    public string ViaConfigureSchema([Parent] PublicThing thing) => thing.Name;
-}
-
-[ExtendObjectType(typeof(GatedThing))]
-public sealed class UndeclaredOnGatedThing
-{
-    public string Undeclared([Parent] GatedThing thing) => thing.Name;
-}
-
-[ExtendObjectType("RootQuery")]
-public sealed class UndeclaredOnRootQuery
-{
-    public string UndeclaredRootQueryField() => "open";
-}
-
-/// <summary>
-/// Targets RootMutation rather than RootQuery on purpose. A class-level attribute lands on the
-/// type being extended, so on RootQuery it would gate every root field of every host in this
-/// assembly that scans for type extensions. RootMutation exists only where a host asked for it.
-/// </summary>
-[ExtendObjectType("RootMutation")]
-[TraxAuthorize]
-public sealed class ClassGatedOnRootMutation
-{
-    public string ClassGatedRootField() => "gated";
-}
-
-[ExtendObjectType("RootQuery")]
-public sealed class ConflictedOnRootQuery
-{
-    [TraxAuthorize]
-    [TraxAllowAnonymous]
-    public string ConflictedRootField() => "conflicted";
-}
-
-[ExtendObjectType(typeof(Trax.Api.GraphQL.Queries.DiscoverQueries))]
-public sealed class UndeclaredOnDiscoverQueries
-{
-    public string UndeclaredDiscoverField() => "open";
-}
-
-[ExtendObjectType("RootMutation")]
-public sealed class UndeclaredOnRootMutation
-{
-    public bool UndeclaredRootMutationField() => true;
-}
-
-[ExtendObjectType("LifecycleSubscriptions")]
-public sealed class UndeclaredSubscription
-{
-    [Subscribe(With = nameof(SubscribeAsync))]
-    public string UndeclaredStream([EventMessage] string message) => message;
-
-    public async IAsyncEnumerable<string> SubscribeAsync()
-    {
-        await Task.CompletedTask;
-        yield break;
-    }
-}
-
-[ExtendObjectType("LifecycleSubscriptions")]
-public sealed class AnonymousSubscription
-{
-    [TraxAllowAnonymous]
-    [Subscribe(With = nameof(SubscribeAsync))]
-    public string AnonymousStream([EventMessage] string message) => message;
-
-    public async IAsyncEnumerable<string> SubscribeAsync()
-    {
-        await Task.CompletedTask;
-        yield break;
-    }
-}
-
-[ExtendObjectType(typeof(Trax.Api.GraphQL.Mutations.OperationsMutations))]
-public sealed class UndeclaredOnOperationsMutations
-{
-    public bool UndeclaredOperationsField() => true;
-}
-
-[ExtendObjectType(typeof(Trax.Api.GraphQL.Mutations.OperationsMutations))]
-public sealed class AnonymousOnOperationsMutations
-{
-    [TraxAllowAnonymous]
-    public bool DeclaredOperationsField() => true;
-}
-
-[ExtendObjectType(typeof(CensusAuthor))]
-public sealed class UndeclaredOnCensusAuthor
-{
-    public string UndeclaredAuthorField([Parent] CensusAuthor author) => author.Handle;
-}
-
-[ExtendObjectType(typeof(CensusAuthor))]
-public sealed class AnonymousOnCensusAuthor
-{
-    [TraxAllowAnonymous]
-    public string DeclaredAuthorField([Parent] CensusAuthor author) => author.Handle;
-}
-
-[ExtendObjectType(typeof(CensusAccount))]
-public sealed class UndeclaredOnCensusAccount
-{
-    public string UndeclaredAccountField([Parent] CensusAccount account) => account.Email;
 }

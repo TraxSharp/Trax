@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -33,7 +35,7 @@ public class SavedInputRoundTripTests
 {
     private const int MaxBytes = 262_144;
 
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -64,12 +66,13 @@ public class SavedInputRoundTripTests
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private TrainRegistration RegistrationOf<TTrain>() =>
         _serviceProvider
+            .NotNull()
             .GetRequiredService<ITrainDiscoveryService>()
             .DiscoverTrains()
             .Single(r => r.ServiceType == typeof(TTrain));
@@ -77,15 +80,17 @@ public class SavedInputRoundTripTests
     /// <summary>The input as the parameter effect of a host that preserves references saves it.</summary>
     private async Task<string> SaveAsync(object input)
     {
-        var factory = _serviceProvider.GetRequiredService<ParameterEffectProviderFactory>();
+        var factory = _serviceProvider
+            .NotNull()
+            .GetRequiredService<ParameterEffectProviderFactory>();
         using var effect = factory.Create();
 
         var metadata = new Metadata { Name = "saved-input" };
         metadata.SetInputObject(input);
-        await effect.Track(metadata);
-        await effect.SaveChanges(CancellationToken.None);
+        await effect.Track(metadata).ConfigureAwait(false);
+        await effect.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
-        return metadata.Input!;
+        return metadata.Input.NotNull();
     }
 
     private object ReadSaved<TTrain>(string saved)
@@ -133,8 +138,8 @@ public class SavedInputRoundTripTests
 
         read.Counts.Should().Equal(3, 1, 4, 1, 5);
         read.Tags.Should().Equal("alpha", "beta");
-        read.Nested!.Label.Should().Be("outer");
-        read.Nested.Places.Should().BeEquivalentTo(original.Nested!.Places);
+        read.Nested.NotNull().Label.Should().Be("outer");
+        read.Nested.Places.Should().BeEquivalentTo(original.Nested.NotNull().Places);
         read.Nested.Matrix.Should().HaveCount(2);
         read.Nested.Matrix[0].Should().Equal(1, 2);
         read.Nested.Matrix[1].Should().Equal(3);
@@ -197,15 +202,17 @@ public class SavedInputRoundTripTests
         var saved = await SaveAsync(Shapes());
         var registration = RegistrationOf<IShapesTrain>();
 
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
         var queued = await execution.QueueAsync(
-            typeof(IShapesTrain).FullName!,
+            typeof(IShapesTrain).FullName.NotNull(),
             TrainInputReader.ResolveSavedInput(saved, registration, MaxBytes)
         );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -322,12 +329,17 @@ public class SavedInputRoundTripTests
     {
         // Saved at exactly the cap, then handed back the way a jsonb column prints it: a space
         // after every colon and comma, which alone puts it over the cap.
-        var tags = string.Join(",", Enumerable.Range(0, 200).Select(i => $"\"t{i}\""));
+        var tags = string.Join(
+            ',',
+            Enumerable
+                .Range(0, 200)
+                .Select(i => string.Create(CultureInfo.InvariantCulture, $"\"t{i}\""))
+        );
         var compact =
             "{\"counts\":[1,2,3],\"tags\":[" + tags + "],\"home\":{\"city\":\"Lyon\",\"zip\":1}}";
         var spaced =
             "{\"counts\": [1, 2, 3], \"tags\": ["
-            + tags.Replace(",", ", ")
+            + tags.Replace(",", ", ", StringComparison.Ordinal)
             + "], \"home\": {\"city\": \"Lyon\", \"zip\": 1}}";
         var cap = Encoding.UTF8.GetByteCount(compact);
         Encoding.UTF8.GetByteCount(spaced).Should().BeGreaterThan(cap);
@@ -338,7 +350,7 @@ public class SavedInputRoundTripTests
         resolved.Should().Be(compact);
         var read = (ShapesInput)TrainInputReader.Read(resolved, registration, cap);
         read.Tags.Should().HaveCount(200);
-        read.Home!.City.Should().Be("Lyon");
+        read.Home.NotNull().City.Should().Be("Lyon");
     }
 
     [Test]
@@ -355,8 +367,8 @@ public class SavedInputRoundTripTests
     [Test]
     public void SavedInput_WhoseReferencesCopyOneValueManyTimes_IsRefusedAtTheCap()
     {
-        var row = string.Join(",", Enumerable.Repeat("1", 500));
-        var refs = string.Join(",", Enumerable.Repeat("""{"$ref":"3"}""", 2_000));
+        var row = string.Join(',', Enumerable.Repeat("1", 500));
+        var refs = string.Join(',', Enumerable.Repeat("""{"$ref":"3"}""", 2_000));
         var saved =
             """{"$id":"1","matrix":{"$id":"2","$values":[{"$id":"3","$values":["""
             + row
@@ -429,18 +441,18 @@ public class SavedInputRoundTripTests
     public class Nested
     {
         public string? Label { get; set; }
-        public List<Place> Places { get; set; } = [];
-        public List<List<int>> Matrix { get; set; } = [];
+        public IList<Place> Places { get; set; } = [];
+        public IList<List<int>> Matrix { get; set; } = [];
     }
 
     public class ShapesInput
     {
-        public List<int> Counts { get; set; } = [];
+        public IList<int> Counts { get; set; } = [];
         public string[] Tags { get; set; } = [];
         public Nested? Nested { get; set; }
         public Place? Home { get; set; }
         public Place? Billing { get; set; }
-        public List<List<int>> Matrix { get; set; } = [];
+        public IList<List<int>> Matrix { get; set; } = [];
     }
 
     public interface IShapesTrain : IServiceTrain<ShapesInput, Unit>;
@@ -476,7 +488,7 @@ public class SavedInputRoundTripTests
         public int Id { get; set; }
         public Spot? Home { get; set; }
         public Spot? Work { get; set; }
-        public List<Spot> Stops { get; set; } = [];
+        public IList<Spot> Stops { get; set; } = [];
     }
 
     public interface ISpotsTrain : IServiceTrain<SpotsInput, Unit>;
@@ -489,7 +501,7 @@ public class SavedInputRoundTripTests
 
     public record RecordInput(
         string Id,
-        List<int> Values,
+        IList<int> Values,
         string[] Labels,
         Place Primary,
         Place Secondary

@@ -22,14 +22,24 @@ internal static class TestDatabase
     // orders or runs.
     public static async Task Reset()
     {
-        await using var db = NewContext();
-        await db.Database.EnsureDeletedAsync();
-        await db.Database.MigrateAsync();
+        var db = NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            await db.Database.EnsureDeletedAsync().ConfigureAwait(false);
+            await db.Database.MigrateAsync().ConfigureAwait(false);
+        }
     }
 
     public static async Task<int> StockOf(string sku)
     {
-        await using var db = NewContext();
-        return await db.Products.Where(p => p.Sku == sku).Select(p => p.Stock).SingleAsync();
+        var db = NewContext();
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .Products.Where(p => p.Sku == sku)
+                .Select(p => p.Stock)
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 }

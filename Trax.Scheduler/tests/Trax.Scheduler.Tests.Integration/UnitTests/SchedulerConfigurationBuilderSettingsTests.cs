@@ -15,6 +15,17 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulerConfigurationBuilderSettingsTests
 {
+    // Disposed after each test, asynchronously, so the helper that builds them stays synchronous.
+    private readonly List<ServiceProvider> _providers = [];
+
+    [TearDown]
+    public async Task DisposeProviders()
+    {
+        foreach (var provider in _providers)
+            await provider.DisposeAsync().ConfigureAwait(false);
+        _providers.Clear();
+    }
+
     private SchedulerConfiguration ResolveConfiguration(
         Action<SchedulerConfigurationBuilder> configure
     )
@@ -31,7 +42,8 @@ public class SchedulerConfigurationBuilderSettingsTests
                     return scheduler;
                 })
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
         return provider.GetRequiredService<SchedulerConfiguration>();
     }
 
@@ -90,7 +102,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void MaxActiveJobs_Null_DisablesLimit()
     {
         // Act
-        var config = ResolveConfiguration(b => b.MaxActiveJobs(null));
+        var config = ResolveConfiguration(b => b.MaxActiveJobs(maxJobs: null));
 
         // Assert
         config.MaxActiveJobs.Should().BeNull();
@@ -172,7 +184,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void RecoverStuckJobsOnStartup_False_SetsValue()
     {
         // Act
-        var config = ResolveConfiguration(b => b.RecoverStuckJobsOnStartup(false));
+        var config = ResolveConfiguration(b => b.RecoverStuckJobsOnStartup(recover: false));
 
         // Assert
         config.RecoverStuckJobsOnStartup.Should().BeFalse();
@@ -186,7 +198,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void PromoteStaleStagedEntries_False_SetsValue()
     {
         // Act
-        var config = ResolveConfiguration(b => b.PromoteStaleStagedEntries(false));
+        var config = ResolveConfiguration(b => b.PromoteStaleStagedEntries(promote: false));
 
         // Assert
         config
@@ -278,7 +290,7 @@ public class SchedulerConfigurationBuilderSettingsTests
     public void MaxQueuedJobsPerCycle_Null_DisablesLimit()
     {
         // Act
-        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(null));
+        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(limit: null));
 
         // Assert
         config.MaxQueuedJobsPerCycle.Should().BeNull();
@@ -370,7 +382,3 @@ public class SchedulerConfigurationBuilderSettingsTests
 
     #endregion
 }
-
-internal interface ISettingsTestTrain;
-
-internal interface ISettingsTestTrainB;

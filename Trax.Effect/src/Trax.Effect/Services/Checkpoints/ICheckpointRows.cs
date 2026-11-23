@@ -39,37 +39,3 @@ internal interface ICheckpointRows
     /// </summary>
     bool HasUncommittedWork(IServiceProvider scope);
 }
-
-/// <summary>One run in a resume lineage, with the checkpoints it wrote.</summary>
-/// <param name="Id">The run's id.</param>
-/// <param name="ResumeFrom">The run it resumed, or null.</param>
-/// <param name="ResumeAt">The node it resumed at, or null for after its source's latest checkpoint.</param>
-/// <param name="Rows">The checkpoints it wrote.</param>
-internal sealed record ResumedRun(
-    long Id,
-    long? ResumeFrom,
-    string? ResumeAt,
-    IReadOnlyList<Models.Checkpoint.Checkpoint> Rows
-);
-
-/// <summary>The run a resume names, as the resumed run checks it before restoring anything.</summary>
-/// <param name="Name">Its train's name.</param>
-/// <param name="Input">Its stored input, or null.</param>
-/// <param name="State">How it ended, or that it has not.</param>
-/// <param name="ResumedToCompletion">True when a run that resumed it already completed.</param>
-internal sealed record ResumeSource(
-    string Name,
-    string? Input,
-    Enums.TrainState State,
-    bool ResumedToCompletion
-);
-
-/// <summary>How large a checkpoint's state may be.</summary>
-internal sealed class CheckpointOptions
-{
-    /// <summary>
-    /// The largest state a checkpoint stores, in bytes of JSON: 1 MiB unless the mediator sets it
-    /// to the cap a requeue's stored input uses. A larger one fails the step, classified permanent.
-    /// </summary>
-    public int MaxStateBytes { get; set; } = 1024 * 1024;
-}

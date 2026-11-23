@@ -22,7 +22,7 @@ public class RabbitMqBroadcasterFlowTests
         );
 
         Ambient.Value = "the creating run";
-        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
             new RabbitMqBroadcasterOptions
             {
                 ConnectionString = "amqp://localhost/unused",
@@ -37,6 +37,7 @@ public class RabbitMqBroadcasterFlowTests
             },
             firstRetryDelay: TimeSpan.FromMilliseconds(10)
         );
+        await using var broadcasterDisposal = broadcaster.ConfigureAwait(false);
         Ambient.Value = null;
 
         await broadcaster.PublishAsync(
@@ -45,7 +46,7 @@ public class RabbitMqBroadcasterFlowTests
                 ExternalId: "e",
                 TrainName: "Flow.ITrain",
                 TrainState: "InProgress",
-                Timestamp: DateTime.UtcNow,
+                Timestamp: TestTime.UtcDateTime,
                 FailureJunction: null,
                 FailureReason: null,
                 EventType: "Started",
@@ -55,6 +56,8 @@ public class RabbitMqBroadcasterFlowTests
             CancellationToken.None
         );
 
-        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull();
+        (await seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System))
+            .Should()
+            .BeNull();
     }
 }

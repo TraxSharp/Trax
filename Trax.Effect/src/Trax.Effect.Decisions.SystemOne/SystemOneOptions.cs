@@ -78,9 +78,15 @@ public sealed class SystemOneOptions
             yield return "Endpoint is required.";
         else if (!Endpoint.IsAbsoluteUri)
             yield return $"Endpoint '{Endpoint}' is not an absolute URL.";
-        else if (Endpoint.Scheme != Uri.UriSchemeHttp && Endpoint.Scheme != Uri.UriSchemeHttps)
+        else if (
+            !string.Equals(Endpoint.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+            && !string.Equals(Endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+        )
             yield return $"Endpoint '{Endpoint}' is not an http or https URL.";
-        else if (Endpoint.Scheme != Uri.UriSchemeHttps && !Endpoint.IsLoopback)
+        else if (
+            !string.Equals(Endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            && !Endpoint.IsLoopback
+        )
             yield return $"Endpoint '{Endpoint}' is not HTTPS. Only a loopback address may use HTTP, "
                 + "because the request carries the train's state and the API key.";
 
@@ -121,7 +127,7 @@ public sealed class SystemOneOptions
     {
         if (Problems().ToList() is { Count: > 0 } problems)
             throw new ArgumentException(
-                $"SystemOneDecider cannot be used: {string.Join(" ", problems)}",
+                $"SystemOneDecider cannot be used: {string.Join(' ', problems)}",
                 paramName
             );
     }

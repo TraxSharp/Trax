@@ -22,7 +22,7 @@ public partial class OperationsQueries
     ) => applicationServices.Services.GetRequiredService<BulkOperationJobs>().List();
 
     /// <summary>
-    /// One bulk operation by id, or <c>null</c> when this node does not know it: it was started on
+    /// One bulk operation by id, or <see langword="null"/> when this node does not know it: it was started on
     /// another node, this node has restarted since, or it finished more than 24 hours ago.
     /// </summary>
     /// <param name="id">The operation's id, as <c>startBulkOperation</c> returned it.</param>

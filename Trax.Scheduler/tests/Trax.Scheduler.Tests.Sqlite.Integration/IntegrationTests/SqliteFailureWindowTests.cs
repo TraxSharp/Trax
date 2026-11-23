@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -25,7 +26,11 @@ public class SqliteFailureWindowTests : TestSetup
     {
         // The scheduler counts a day of failures; this manifest counts only its last hour.
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromHours(1));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -42,7 +47,11 @@ public class SqliteFailureWindowTests : TestSetup
     public async Task A_failure_inside_the_manifests_own_window_still_counts()
     {
         var manifest = await CreateDueManifest(maxRetries: 0, failureWindow: TimeSpan.FromHours(3));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
 
         await RunManifestManager();
 
@@ -55,10 +64,26 @@ public class SqliteFailureWindowTests : TestSetup
     public async Task A_success_after_failures_in_the_window_does_not_delay_the_next_run()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-4));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-3));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-2));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-4)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -78,9 +103,21 @@ public class SqliteFailureWindowTests : TestSetup
     public async Task A_failure_after_a_success_backs_off_by_every_failure_in_the_window()
     {
         var manifest = await CreateDueManifest(maxRetries: 3);
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-3));
-        await CreateRun(manifest, TrainState.Completed, DateTime.UtcNow.AddHours(-2));
-        await CreateRun(manifest, TrainState.Failed, DateTime.UtcNow.AddHours(-1));
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
+        );
+        await CreateRun(
+            manifest,
+            TrainState.Failed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
 
         await RunManifestManager();
 
@@ -92,17 +129,18 @@ public class SqliteFailureWindowTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
     /// <summary>An interval manifest whose next run is due now.</summary>
     private async Task<Manifest> CreateDueManifest(int maxRetries, TimeSpan? failureWindow = null)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -115,10 +153,10 @@ public class SqliteFailureWindowTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        manifest.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-5);
+        manifest.LastSuccessfulRun = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5);
         manifest.FailureWindowSeconds = (int?)failureWindow?.TotalSeconds;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -128,17 +166,18 @@ public class SqliteFailureWindowTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "window" },
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = state;
         run.StartTime = startTime;
         run.EndTime = startTime.AddMinutes(1);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

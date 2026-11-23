@@ -12,7 +12,15 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL/Mutations/OperationsMutations.BulkOperations.cs
   - Trax.Api/src/Trax.Api.GraphQL/Queries/OperationsQueries.BulkOperations.cs
   - Trax.Api/src/Trax.Api/DTOs/BulkOperation.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkOperationKind.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkOperationStatus.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkOperationFailure.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkOperationFailureReason.cs
+  - Trax.Api/src/Trax.Api/DTOs/StartBulkOperationResponse.cs
   - Trax.Api/src/Trax.Api/DTOs/BulkOperationFilter.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkExecutionFilter.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkDeadLetterFilter.cs
+  - Trax.Api/src/Trax.Api/DTOs/BulkManifestFilter.cs
 ---
 
 # operations: bulk operations

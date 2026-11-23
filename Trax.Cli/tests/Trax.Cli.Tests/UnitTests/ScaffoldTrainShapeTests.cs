@@ -6,6 +6,7 @@ using Trax.Cli.Generator;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -25,7 +26,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [Property("adr", "Trax.Docs/adr/0016-a-junction-chain-is-a-declaration-not-a-step-of-the-work.md")]
 public class ScaffoldTrainShapeTests
 {
-    private string _outputDir = null!;
+    private string _outputDir = "";
 
     [SetUp]
     public void SetUp() =>
@@ -45,17 +46,23 @@ public class ScaffoldTrainShapeTests
             )
             .Select(Path.GetFileName)
             .Cast<string>()
-            .Order();
+            .Order(StringComparer.Ordinal);
 
     [TestCaseSource(nameof(FixtureSchemas))]
-    public void Every_scaffolded_train_declares_its_chain_in_Junctions(string fixture)
+    public async Task Every_scaffolded_train_declares_its_chain_in_Junctions(string fixture)
     {
-        var schema = Parse(fixture);
-        new TraxProjectGenerator().GenerateTrainsLibrary(schema, _outputDir, "Shape");
+        var schema = await ParseAsync(fixture).ConfigureAwait(false);
+        await new TraxProjectGenerator()
+            .GenerateTrainsLibraryAsync(schema, _outputDir, "Shape")
+            .ConfigureAwait(false);
 
         var sources = Directory
             .EnumerateFiles(_outputDir, "*.cs", SearchOption.AllDirectories)
-            .ToDictionary(f => Path.GetRelativePath(_outputDir, f), File.ReadAllText);
+            .ToDictionary(
+                f => Path.GetRelativePath(_outputDir, f),
+                File.ReadAllText,
+                StringComparer.Ordinal
+            );
 
         // Where the generator writes each operation's train implementation. Named per operation
         // rather than matched on "*Train.cs", which would also match the I*Train.cs interfaces.
@@ -76,44 +83,63 @@ public class ScaffoldTrainShapeTests
 
         foreach (var (path, source) in trains)
         {
-            var trainClass = CSharpSyntaxTree
-                .ParseText(source)
-                .GetRoot()
-                .DescendantNodes()
-                .OfType<ClassDeclarationSyntax>()
-                .SingleOrDefault(c =>
-                    c.Identifier.ValueText == Path.GetFileNameWithoutExtension(path)
-                );
-
-            trainClass.Should().NotBeNull($"{path} must declare the train class it is named for");
-
-            trainClass!
-                .Members.OfType<MethodDeclarationSyntax>()
-                .Should()
-                .Contain(
-                    m =>
-                        m.Identifier.ValueText == "Junctions"
-                        && m.Modifiers.Any(SyntaxKind.OverrideKeyword),
-                    $"{path} must declare its chain by overriding Junctions(), which current Trax requires"
-                );
+            await AssertOverridesJunctionsAsync(path, source).ConfigureAwait(false);
         }
 
         foreach (var (path, source) in sources)
         {
-            var root = CSharpSyntaxTree.ParseText(source).GetRoot();
-
-            root.DescendantNodes()
-                .OfType<MemberDeclarationSyntax>()
-                .Where(m => MemberName(m) == "RunInternal")
-                .Should()
-                .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
-
-            root.DescendantNodes()
-                .OfType<InvocationExpressionSyntax>()
-                .Where(i => InvokedName(i.Expression) == "Activate")
-                .Should()
-                .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
+            await AssertUsesNoOldTemplateApiAsync(path, source).ConfigureAwait(false);
         }
+    }
+
+    // The train class the file at path is named for overrides Junctions().
+    private static async Task AssertOverridesJunctionsAsync(string path, string source)
+    {
+        var trainClass = (
+            await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false)
+        )
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .SingleOrDefault(c =>
+                string.Equals(
+                    c.Identifier.ValueText,
+                    Path.GetFileNameWithoutExtension(path),
+                    StringComparison.Ordinal
+                )
+            );
+
+        trainClass.Should().NotBeNull($"{path} must declare the train class it is named for");
+
+        trainClass
+            .NotNull()
+            .Members.OfType<MethodDeclarationSyntax>()
+            .Should()
+            .Contain(
+                m =>
+                    m.Identifier.ValueText == "Junctions"
+                    && m.Modifiers.Any(SyntaxKind.OverrideKeyword),
+                $"{path} must declare its chain by overriding Junctions(), which current Trax requires"
+            );
+    }
+
+    // Nothing in the file declares RunInternal or calls Activate(.
+    private static async Task AssertUsesNoOldTemplateApiAsync(string path, string source)
+    {
+        var root = await CSharpSyntaxTree.ParseText(source).GetRootAsync().ConfigureAwait(false);
+
+        root.DescendantNodes()
+            .OfType<MemberDeclarationSyntax>()
+            .Where(m => string.Equals(MemberName(m), "RunInternal", StringComparison.Ordinal))
+            .Should()
+            .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
+
+        root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(i =>
+                string.Equals(InvokedName(i.Expression), "Activate", StringComparison.Ordinal)
+            )
+            .Should()
+            .BeEmpty($"{path} would not compile against the Trax a new scaffold references");
     }
 
     private static string? MemberName(MemberDeclarationSyntax member) =>
@@ -138,10 +164,12 @@ public class ScaffoldTrainShapeTests
         };
 
     [Test]
-    public void The_fixtures_include_a_Unit_output_train()
+    public async Task The_fixtures_include_a_Unit_output_train()
     {
-        FixtureSchemas()
-            .SelectMany(f => Parse(f).Operations)
+        var operations = new List<ApiOperation>();
+        foreach (var fixture in FixtureSchemas())
+            operations.AddRange((await ParseAsync(fixture).ConfigureAwait(false)).Operations);
+        operations
             .Should()
             .Contain(
                 o => o.OutputType.Name == "Unit",
@@ -149,7 +177,7 @@ public class ScaffoldTrainShapeTests
             );
     }
 
-    private static ApiSchema Parse(string fixture)
+    private static async Task<ApiSchema> ParseAsync(string fixture)
     {
         var path = Path.Combine(
             TestContext.CurrentContext.TestDirectory,
@@ -158,7 +186,7 @@ public class ScaffoldTrainShapeTests
             fixture
         );
         return fixture.EndsWith(".graphql", StringComparison.Ordinal)
-            ? new GraphQLSchemaParser().Parse(path)
-            : new OpenApiSchemaParser().Parse(path);
+            ? (await new GraphQLSchemaParser().ParseAsync(path).ConfigureAwait(false))
+            : (await new OpenApiSchemaParser().ParseAsync(path).ConfigureAwait(false));
     }
 }

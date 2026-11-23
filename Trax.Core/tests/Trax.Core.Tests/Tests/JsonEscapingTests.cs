@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
@@ -15,7 +16,7 @@ namespace Trax.Core.Tests.Tests;
 /// </summary>
 public class JsonEscapingTests
 {
-    private class DummyTrain : Train<string, string>
+    private sealed class DummyTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_963>().Resolve();
@@ -30,7 +31,7 @@ public class JsonEscapingTests
     /// Test junction that throws an exception with JSON content in the message.
     /// This simulates the scenario where an API exception contains JSON in its message.
     /// </summary>
-    private class TestJunctionWithJsonException : Junction<string, string>
+    private sealed class TestJunctionWithJsonException : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {
@@ -72,7 +73,7 @@ public class JsonEscapingTests
 
         var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.Junction.Should().Be("TestJunctionWithJsonException");
+        data.NotNull().Junction.Should().Be("TestJunctionWithJsonException");
         data.Type.Should().Be("InvalidOperationException");
         data.Message.Should().Contain("\"success\":false");
     }
@@ -106,7 +107,7 @@ public class JsonEscapingTests
 
         var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
         data.Should().NotBeNull();
-        data!.Junction.Should().Be("TestJunctionWithSpecialCharacters");
+        data.NotNull().Junction.Should().Be("TestJunctionWithSpecialCharacters");
         data.Type.Should().Be("InvalidOperationException");
 
         data.Message.Should().Contain("quotes");
@@ -134,13 +135,13 @@ public class JsonEscapingTests
 
         var roundTripped = JsonSerializer.Deserialize<TrainExceptionData>(json);
         roundTripped.Should().NotBeNull();
-        roundTripped!.Message.Should().Contain("\"success\":false");
+        roundTripped.NotNull().Message.Should().Contain("\"success\":false");
     }
 
     /// <summary>
     /// Test junction that throws an exception with special characters that need JSON escaping.
     /// </summary>
-    private class TestJunctionWithSpecialCharacters : Junction<string, string>
+    private sealed class TestJunctionWithSpecialCharacters : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {

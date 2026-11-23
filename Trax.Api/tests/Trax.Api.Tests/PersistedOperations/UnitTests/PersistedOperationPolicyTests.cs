@@ -30,7 +30,7 @@ public class PersistedOperationPolicyTests
     [Test]
     public void InlineDocument_RequirePersisted_IsRejected()
     {
-        Decide(Build(b => b.RequirePersisted(true)), "{ user { id } }")
+        Decide(Build(b => b.RequirePersisted(require: true)), "{ user { id } }")
             .Should()
             .Be(PersistedOperationDecision.Reject);
     }
@@ -39,7 +39,7 @@ public class PersistedOperationPolicyTests
     public void InlineDocument_ShadowMode_IsLogged()
     {
         Decide(
-                Build(b => b.RequirePersisted(false).LogNonPersistedRequests(true)),
+                Build(b => b.RequirePersisted(require: false).LogNonPersistedRequests(log: true)),
                 "{ user { id } }"
             )
             .Should()
@@ -50,7 +50,7 @@ public class PersistedOperationPolicyTests
     public void InlineDocument_AllowlistedByName_PassesThrough()
     {
         Decide(
-                Build(b => b.RequirePersisted(true).AllowOperations("DevExplore")),
+                Build(b => b.RequirePersisted(require: true).AllowOperations("DevExplore")),
                 "query DevExplore { user { id } }",
                 operationName: "DevExplore"
             )
@@ -63,7 +63,10 @@ public class PersistedOperationPolicyTests
     {
         Decide(
                 Build(b =>
-                    b.RequirePersisted(true).AllowOperationsMatching(s => s.StartsWith("dev_"))
+                    b.RequirePersisted(require: true)
+                        .AllowOperationsMatching(s =>
+                            s.StartsWith("dev_", StringComparison.Ordinal)
+                        )
                 ),
                 "query dev_something { user { id } }",
                 operationName: "dev_something"
@@ -76,7 +79,7 @@ public class PersistedOperationPolicyTests
     public void InlineDocument_AllowlistedByDocumentId_WhenNoNameIsGiven_PassesThrough()
     {
         Decide(
-                Build(b => b.RequirePersisted(true).AllowOperations("dev_doc")),
+                Build(b => b.RequirePersisted(require: true).AllowOperations("dev_doc")),
                 "{ user { id } }",
                 documentId: "dev_doc"
             )
@@ -89,7 +92,7 @@ public class PersistedOperationPolicyTests
     {
         // Persisting the upload mutation by id would be a chicken-and-egg.
         Decide(
-                Build(b => b.RequirePersisted(true).GateManagement(roles: "admin")),
+                Build(b => b.RequirePersisted(require: true).GateManagement(roles: "admin")),
                 """
                 mutation {
                   persistedOperations {
@@ -106,7 +109,7 @@ public class PersistedOperationPolicyTests
     public void ManagementQuery_PassesThrough()
     {
         Decide(
-                Build(b => b.RequirePersisted(true).GateManagement(roles: "admin")),
+                Build(b => b.RequirePersisted(require: true).GateManagement(roles: "admin")),
                 "query { persistedOperations { persistedOperations { totalCount } } }"
             )
             .Should()
@@ -119,7 +122,7 @@ public class PersistedOperationPolicyTests
         // The management fields are not served, so a root field of that name is the host's own
         // and gets no pass from this package.
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 "query { persistedOperations { persistedOperations { totalCount } } }"
             )
             .Should()
@@ -130,7 +133,7 @@ public class PersistedOperationPolicyTests
     public void ManagementUnderTheOperationsNamespace_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 "query { operations { persistedOperations { persistedOperations { totalCount } } } }"
             )
             .Should()
@@ -144,7 +147,7 @@ public class PersistedOperationPolicyTests
     public void AnInlineOperationsRead_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 "query { operations { machineDocuments { id } } }"
             )
             .Should()
@@ -159,7 +162,7 @@ public class PersistedOperationPolicyTests
     public void ManagementMixedWithAnOperationsRead_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 """
                 query {
                   persistedOperations { persistedOperations { totalCount } }
@@ -175,7 +178,7 @@ public class PersistedOperationPolicyTests
     public void ManagementFieldNamedInAnArgument_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 """query { user(name: "persistedOperations") { id } }"""
             )
             .Should()
@@ -189,7 +192,7 @@ public class PersistedOperationPolicyTests
     public void FieldAliasedToTheManagementName_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 "query { persistedOperations: __typename user { id } }"
             )
             .Should()
@@ -200,7 +203,7 @@ public class PersistedOperationPolicyTests
     public void ManagementMixedWithAnotherRootField_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 """
                 mutation {
                   persistedOperations {
@@ -217,7 +220,7 @@ public class PersistedOperationPolicyTests
     [Test]
     public void DocumentThatDoesNotParse_IsRejected()
     {
-        Decide(Build(b => b.RequirePersisted(true)), "query { persistedOperations {")
+        Decide(Build(b => b.RequirePersisted(require: true)), "query { persistedOperations {")
             .Should()
             .Be(PersistedOperationDecision.Reject);
     }
@@ -226,7 +229,7 @@ public class PersistedOperationPolicyTests
     public void Introspection_PassesThroughByDefault()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 "query IntrospectionQuery { __schema { types { name } } }",
                 operationName: "IntrospectionQuery"
             )
@@ -237,7 +240,7 @@ public class PersistedOperationPolicyTests
     [Test]
     public void UnnamedIntrospection_PassesThroughByDefault()
     {
-        Decide(Build(b => b.RequirePersisted(true)), "{ __schema { types { name } } }")
+        Decide(Build(b => b.RequirePersisted(require: true)), "{ __schema { types { name } } }")
             .Should()
             .Be(PersistedOperationDecision.PassThrough);
     }
@@ -246,7 +249,7 @@ public class PersistedOperationPolicyTests
     public void DocumentNamedIntrospectionQuery_SelectingData_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(require: true)),
                 "query IntrospectionQuery { users { id } }",
                 operationName: "IntrospectionQuery"
             )
@@ -258,7 +261,7 @@ public class PersistedOperationPolicyTests
     public void Introspection_WithDisableIntrospection_IsRejected()
     {
         Decide(
-                Build(b => b.RequirePersisted(true).DisableIntrospection()),
+                Build(b => b.RequirePersisted(require: true).DisableIntrospection()),
                 "{ __schema { types { name } } }"
             )
             .Should()

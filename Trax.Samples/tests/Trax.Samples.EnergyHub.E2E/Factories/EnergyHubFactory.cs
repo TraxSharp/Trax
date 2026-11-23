@@ -32,7 +32,8 @@ public class EnergyHubFactory : WebApplicationFactory<Trax.Samples.EnergyHub.Hub
         });
     }
 
-    private class ConfigureSchedulerForTestsService(SchedulerConfiguration config) : IHostedService
+    private sealed class ConfigureSchedulerForTestsService(SchedulerConfiguration config)
+        : IHostedService
     {
         public Task StartAsync(CancellationToken cancellationToken)
         {

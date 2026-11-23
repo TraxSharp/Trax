@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -30,21 +31,22 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
     public async Task An_hourly_manifest_whose_run_was_cancelled_is_not_queued_again_on_the_next_cycle()
     {
         var manifest = await CreateHourlyManifest(
-            lastSuccessfulRun: DateTime.UtcNow.AddMinutes(-61)
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-61)
         );
 
         // This hour's run started a minute ago and was cancelled (a timeout, or an operator).
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.Cancelled;
-        run.EndTime = DateTime.UtcNow;
+        run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
         await DataContext.Track(run);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -73,9 +75,9 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         var manifest = await CreateManifest(
             ScheduleType.Cron,
             cronExpression: "0 * * * *",
-            lastSuccessfulRun: DateTime.UtcNow.AddHours(-2)
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2)
         );
-        await CreateCancelledRun(manifest, endTime: DateTime.UtcNow);
+        await CreateCancelledRun(manifest, endTime: TimeProvider.System.GetUtcNow().UtcDateTime);
 
         await RunManifestManager();
 
@@ -87,8 +89,13 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
     [Test]
     public async Task An_hourly_manifest_is_due_again_an_interval_after_its_cancelled_run()
     {
-        var manifest = await CreateHourlyManifest(lastSuccessfulRun: DateTime.UtcNow.AddHours(-3));
-        await CreateCancelledRun(manifest, endTime: DateTime.UtcNow.AddMinutes(-61));
+        var manifest = await CreateHourlyManifest(
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
+        await CreateCancelledRun(
+            manifest,
+            endTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-61)
+        );
 
         await RunManifestManager();
 
@@ -101,9 +108,12 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
     public async Task A_cancelled_run_older_than_the_last_success_does_not_hold_back_the_schedule()
     {
         var manifest = await CreateHourlyManifest(
-            lastSuccessfulRun: DateTime.UtcNow.AddMinutes(-61)
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-61)
         );
-        await CreateCancelledRun(manifest, endTime: DateTime.UtcNow.AddHours(-3));
+        await CreateCancelledRun(
+            manifest,
+            endTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-3)
+        );
 
         await RunManifestManager();
 
@@ -117,10 +127,13 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
     {
         var manifest = await CreateManifest(
             ScheduleType.Once,
-            scheduledAt: DateTime.UtcNow.AddMinutes(-10),
+            scheduledAt: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10),
             lastSuccessfulRun: null
         );
-        await CreateCancelledRun(manifest, endTime: DateTime.UtcNow.AddMinutes(-5));
+        await CreateCancelledRun(
+            manifest,
+            endTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
 
         await RunManifestManager();
 
@@ -130,15 +143,24 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
     [Test]
     public async Task A_dependent_whose_run_was_cancelled_waits_for_the_parents_next_success()
     {
-        var parent = await CreateHourlyManifest(lastSuccessfulRun: DateTime.UtcNow.AddMinutes(-10));
+        var parent = await CreateHourlyManifest(
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+        );
         // The parent's success is backed by a completed run, as the dependent check requires.
-        await CreateRun(parent, TrainState.Completed, DateTime.UtcNow.AddMinutes(-10));
+        await CreateRun(
+            parent,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+        );
         var dependent = await CreateManifest(
             ScheduleType.Dependent,
-            lastSuccessfulRun: DateTime.UtcNow.AddHours(-2),
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2),
             dependsOn: parent.Id
         );
-        await CreateCancelledRun(dependent, endTime: DateTime.UtcNow.AddMinutes(-5));
+        await CreateCancelledRun(
+            dependent,
+            endTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
 
         await RunManifestManager();
 
@@ -150,14 +172,23 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
     [Test]
     public async Task A_dependent_whose_cancelled_run_predates_its_last_success_counts_from_the_success()
     {
-        var parent = await CreateHourlyManifest(lastSuccessfulRun: DateTime.UtcNow.AddMinutes(-15));
-        await CreateRun(parent, TrainState.Completed, DateTime.UtcNow.AddMinutes(-15));
+        var parent = await CreateHourlyManifest(
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-15)
+        );
+        await CreateRun(
+            parent,
+            TrainState.Completed,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-15)
+        );
         var dependent = await CreateManifest(
             ScheduleType.Dependent,
-            lastSuccessfulRun: DateTime.UtcNow.AddMinutes(-10),
+            lastSuccessfulRun: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10),
             dependsOn: parent.Id
         );
-        await CreateCancelledRun(dependent, endTime: DateTime.UtcNow.AddMinutes(-20));
+        await CreateCancelledRun(
+            dependent,
+            endTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-20)
+        );
 
         await RunManifestManager();
 
@@ -172,7 +203,10 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -194,17 +228,18 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = state;
         run.StartTime = startTime;
         run.EndTime = endTime ?? startTime.AddSeconds(30);
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -216,10 +251,8 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         long? dependsOn = null
     )
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -237,18 +270,16 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = lastSuccessfulRun;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
 
     private async Task<Manifest> CreateHourlyManifest(DateTime lastSuccessfulRun)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -264,8 +295,8 @@ public class CancelledOccurrenceIsNotRerunTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.LastSuccessfulRun = lastSuccessfulRun;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

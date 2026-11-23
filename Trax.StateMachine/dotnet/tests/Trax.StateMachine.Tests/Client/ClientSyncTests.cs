@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -15,7 +16,13 @@ public class ClientSyncTests
     // How long a test waits for the controller before it fails; every wait here is on a signal, never a duration.
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
-    private static readonly ClientManifestMachine Wizard = Manifest();
+    // Read once for the fixture, before any test runs.
+    private static ClientManifestMachine? _wizard;
+
+    private static ClientManifestMachine Wizard => _wizard.NotNull();
+
+    [OneTimeSetUp]
+    public async Task ReadWizard() => _wizard = await Manifest().ConfigureAwait(false);
 
     private static readonly PlannedEvent Fill = new(
         "Update",
@@ -24,14 +31,17 @@ public class ClientSyncTests
 
     private static readonly string[] Navigation = ["Begin", "Next", "Back"];
 
-    private static ClientManifestMachine Manifest()
+    private static async Task<ClientManifestMachine> Manifest()
     {
         var ir = (JsonObject)
-            JsonNode.Parse(
-                File.ReadAllText(
-                    Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
+            JsonNode
+                .Parse(
+                    await File.ReadAllTextAsync(
+                            Path.Combine(FixturePaths.ConformanceRoot, "plan", "wizard.ir.json")
+                        )
+                        .ConfigureAwait(false)
                 )
-            )!;
+                .NotNull();
         var manifest = new ClientManifestMachine
         {
             Id = "wizard",
@@ -64,7 +74,9 @@ public class ClientSyncTests
         var first = await Next(server);
         first.Trigger.Should().Be("Begin");
         first.Answer.SetResult(ServerAnswer.Of(At(2, "Details")));
-        (await begin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await begin.WaitAsync(Wait, TimeProvider.System))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
 
         var update = await Next(server);
         update.Trigger.Should().Be("Update");
@@ -73,7 +85,7 @@ public class ClientSyncTests
         next.Trigger.Should().Be("Next");
         next.Answer.SetResult(ServerAnswer.Of(At(4, "Review", Filled())));
 
-        var outcome = await sync.WaitAsync(Wait);
+        var outcome = await sync.WaitAsync(Wait, TimeProvider.System);
         outcome.Should().BeOfType<SyncOutcome.Synced>().Which.Snapshot.Revision.Should().Be(4);
         controller.View.Unsaved.Should().BeFalse();
     }
@@ -94,7 +106,7 @@ public class ClientSyncTests
             sent.Answer.SetResult(ServerAnswer.Of(At(revision, "Start")));
         }
 
-        (await sync.WaitAsync(Wait)).Should().BeOfType<SyncOutcome.Exceeded>();
+        (await sync.WaitAsync(Wait, TimeProvider.System)).Should().BeOfType<SyncOutcome.Exceeded>();
         server.Events.Reader.TryRead(out _).Should().BeFalse();
         controller.View.Unsaved.Should().BeTrue();
     }
@@ -115,7 +127,7 @@ public class ClientSyncTests
         next.Trigger.Should().Be("Next");
         next.Answer.SetResult(ServerAnswer.Of(At(3, "Review", Filled())));
 
-        (await sync.WaitAsync(Wait)).Should().BeOfType<SyncOutcome.Synced>();
+        (await sync.WaitAsync(Wait, TimeProvider.System)).Should().BeOfType<SyncOutcome.Synced>();
     }
 
     [Test]
@@ -125,9 +137,11 @@ public class ClientSyncTests
         using var controller = Open(server, MachinePredictor.FromIr(Wizard));
         await server.Answer(controller, ServerAnswer.Of(At(1, "Review", Filled())));
 
-        var outcome = await controller.SyncToAsync("Sent", null, ["Next", "Send"]).WaitAsync(Wait);
+        var outcome = await controller
+            .SyncToAsync("Sent", fields: null, ["Next", "Send"])
+            .WaitAsync(Wait, TimeProvider.System);
 
-        outcome.Should().Be(new SyncOutcome.Invalid("Send", null));
+        outcome.Should().Be(new SyncOutcome.Invalid("Send", Target: null));
         server.Events.Reader.TryRead(out _).Should().BeFalse();
         controller.View.Unsaved.Should().BeTrue();
     }
@@ -143,7 +157,7 @@ public class ClientSyncTests
         (await Next(server)).Trigger.Should().Be("Begin");
         controller.Dispose();
 
-        (await sync.WaitAsync(Wait))
+        (await sync.WaitAsync(Wait, TimeProvider.System))
             .Should()
             .BeOfType<SyncOutcome.Failed>()
             .Which.Problem.Code.Should()
@@ -151,7 +165,11 @@ public class ClientSyncTests
     }
 
     private static async Task<HandServer.Sent> Next(HandServer server) =>
-        await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System)
+            .ConfigureAwait(false);
 
     private static ServerMachineController Open(HandServer server, IMachinePredictor? predictor) =>
         new(

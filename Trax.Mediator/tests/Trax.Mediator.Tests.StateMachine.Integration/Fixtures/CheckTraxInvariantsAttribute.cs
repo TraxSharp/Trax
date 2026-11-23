@@ -23,7 +23,12 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 
     public ActionTargets Targets => ActionTargets.Test;
 
-    public void BeforeTest(ITest test) => _before = Find();
+    // ITestAction is synchronous, and the check runs between tests, never inside one.
+    public void BeforeTest(ITest test) =>
+        _before = TraxInvariants
+            .FindViolationsAsync(PostgresSetup.ConnectionString)
+            .GetAwaiter()
+            .GetResult();
 
     public void AfterTest(ITest test)
     {
@@ -33,12 +38,13 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         )
             return;
 
-        var added = Find().Except(_before).ToList();
+        var added = TraxInvariants
+            .FindViolationsAsync(PostgresSetup.ConnectionString)
+            .GetAwaiter()
+            .GetResult()
+            .Except(_before)
+            .ToList();
         if (added.Count > 0)
             Assert.Fail(TraxInvariants.Describe(added));
     }
-
-    // ITestAction is synchronous, and the check runs between tests, never inside one.
-    private static IReadOnlyList<TraxInvariantViolation> Find() =>
-        TraxInvariants.FindViolationsAsync(PostgresSetup.ConnectionString).GetAwaiter().GetResult();
 }

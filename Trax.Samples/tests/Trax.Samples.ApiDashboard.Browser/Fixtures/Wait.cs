@@ -1,3 +1,5 @@
+using System.Globalization;
+using Trax.Core.Extensions;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
@@ -9,8 +11,15 @@ public static class Wait
 
     public static async Task UntilAsync(Func<Task<bool>> condition, TimeSpan timeout, string what)
     {
-        var reached = await Polling.WaitUntilAsync(condition, timeout, Poll);
-        reached.Should().BeTrue($"{what} within {timeout.TotalSeconds:0} s");
+        var reached = await Polling.WaitUntilAsync(condition, timeout, Poll).ConfigureAwait(false);
+        reached
+            .Should()
+            .BeTrue(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{what} within {timeout.TotalSeconds:0} s"
+                )
+            );
     }
 
     /// <summary>Waits until <paramref name="read"/> returns a value, and returns it.</summary>
@@ -18,7 +27,12 @@ public static class Wait
         where T : class
     {
         T? found = null;
-        await UntilAsync(async () => (found = await read()) is not null, timeout, what);
-        return found!;
+        await UntilAsync(
+                async () => (found = await read().ConfigureAwait(false)) is not null,
+                timeout,
+                what
+            )
+            .ConfigureAwait(false);
+        return found.NotNull();
     }
 }

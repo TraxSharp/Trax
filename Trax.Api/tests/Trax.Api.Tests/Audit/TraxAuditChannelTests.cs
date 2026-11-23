@@ -22,7 +22,7 @@ public class TraxAuditChannelTests
             Document: "{ x }",
             Variables: null,
             DurationMs: 1,
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow(),
             Success: true,
             ErrorText: null
         );

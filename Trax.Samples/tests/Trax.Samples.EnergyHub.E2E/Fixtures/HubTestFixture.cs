@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.TrainBus;
@@ -15,21 +16,29 @@ public abstract class HubTestFixture
     /// <summary>The operator demo key the hub registers in Development.</summary>
     protected const string OperatorKey = Hub.DemoKeys.OperatorKey;
 
-    protected IServiceScope Scope { get; private set; } = null!;
+    protected AsyncServiceScope Scope { get; private set; }
 
-    protected IServiceScope WorkerScope { get; private set; } = null!;
+    protected AsyncServiceScope WorkerScope { get; private set; }
 
-    protected ITrainBus TrainBus { get; private set; } = null!;
+    protected ITrainBus TrainBus
+    {
+        get => field.NotNull(nameof(TrainBus));
+        private set;
+    }
 
-    protected IDataContext DataContext { get; private set; } = null!;
+    protected IDataContext DataContext
+    {
+        get => field.NotNull(nameof(DataContext));
+        private set;
+    }
 
     [SetUp]
     public virtual async Task SetUp()
     {
-        Scope = SharedHubSetup.Factory.Services.CreateScope();
+        Scope = SharedHubSetup.Factory.Services.CreateAsyncScope();
 
         // Trains run on the worker, so a test that runs one directly does it there.
-        WorkerScope = SharedHubSetup.Worker.Services.CreateScope();
+        WorkerScope = SharedHubSetup.Worker.Services.CreateAsyncScope();
         TrainBus = WorkerScope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var dataContextFactory =
@@ -40,13 +49,13 @@ public abstract class HubTestFixture
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
-        WorkerScope.Dispose();
-        Scope.Dispose();
+        await WorkerScope.DisposeAsync().ConfigureAwait(false);
+        await Scope.DisposeAsync().ConfigureAwait(false);
     }
 
     protected void EnableManifestManager()
@@ -78,11 +87,11 @@ public abstract class HubTestFixture
 
     private async Task CleanExecutionData()
     {
-        await DataContext.BackgroundJobs.ExecuteDeleteAsync();
-        await DataContext.Logs.ExecuteDeleteAsync();
-        await DataContext.WorkQueues.ExecuteDeleteAsync();
-        await DataContext.DeadLetters.ExecuteDeleteAsync();
-        await DataContext.Metadatas.ExecuteDeleteAsync();
+        await DataContext.BackgroundJobs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Logs.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.WorkQueues.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.DeadLetters.ExecuteDeleteAsync().ConfigureAwait(false);
+        await DataContext.Metadatas.ExecuteDeleteAsync().ConfigureAwait(false);
         DataContext.Reset();
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.EnergyHub.E2E.Factories;
@@ -10,9 +11,17 @@ namespace Trax.Samples.EnergyHub.E2E.HubTests;
 [SetUpFixture]
 public class SharedHubSetup
 {
-    public static EnergyHubFactory Factory { get; private set; } = null!;
+    public static EnergyHubFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
-    public static EnergyWorkerFactory Worker { get; private set; } = null!;
+    public static EnergyWorkerFactory Worker
+    {
+        get => field.NotNull(nameof(Worker));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -51,18 +60,19 @@ public class SharedHubSetup
 
     private async Task WaitForManifestsSeeded()
     {
-        using var scope = Factory.Services.CreateScope();
+        var scope = Factory.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var dc = (IDataContext)factory.Create();
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             dc.Reset();
-            var count = await dc.Manifests.AsNoTracking().CountAsync();
+            var count = await dc.Manifests.AsNoTracking().CountAsync().ConfigureAwait(false);
             if (count > 0)
                 return;
-            await Task.Delay(250);
+            await Task.Delay(250).ConfigureAwait(false);
         }
 
         throw new TimeoutException("Manifests were not seeded within 15 seconds.");

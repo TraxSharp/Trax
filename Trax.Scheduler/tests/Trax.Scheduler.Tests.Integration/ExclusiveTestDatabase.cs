@@ -1,3 +1,4 @@
+using System.Globalization;
 using Npgsql;
 
 namespace Trax.Scheduler.Tests.Integration;
@@ -54,7 +55,10 @@ public sealed class ExclusiveTestDatabase
 
         await using (var setTimeout = connection.CreateCommand())
         {
-            setTimeout.CommandText = $"SET lock_timeout = '{(int)LockWait.TotalMilliseconds}ms'";
+            setTimeout.CommandText = string.Create(
+                CultureInfo.InvariantCulture,
+                $"SET lock_timeout = '{(int)LockWait.TotalMilliseconds}ms'"
+            );
             await setTimeout.ExecuteNonQueryAsync();
         }
 
@@ -68,12 +72,21 @@ public sealed class ExclusiveTestDatabase
         {
             await command.ExecuteNonQueryAsync();
         }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+        catch (PostgresException ex)
+            when (string.Equals(
+                    ex.SqlState,
+                    PostgresErrorCodes.LockNotAvailable,
+                    StringComparison.Ordinal
+                )
+            )
         {
             await connection.DisposeAsync();
             throw new InvalidOperationException(
                 $"Another test run has held the {connection.Database} database for over "
-                    + $"{LockWait.TotalMinutes} minutes. The suite deletes every row in it before each "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{LockWait.TotalMinutes} minutes. The suite deletes every row in it before each "
+                    )
                     + "test, so two runs against one server cannot share it: wait for the other run, "
                     + "or point this one at its own server with TRAX_TEST_PG_PORT.",
                 ex

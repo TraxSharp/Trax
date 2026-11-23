@@ -1,0 +1,24 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using AwesomeAssertions;
+using HotChocolate;
+using HotChocolate.Data.Filters;
+using HotChocolate.Data.Sorting;
+using HotChocolate.Execution;
+using HotChocolate.Types;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Api.GraphQL.Configuration;
+using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.TypeModules;
+using Trax.Effect.Attributes;
+
+namespace Trax.Api.Tests;
+
+public class ExplicitImplDbContext : DbContext
+{
+    public DbSet<ExplicitImplBook> Books => Set<ExplicitImplBook>();
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.UseInMemoryDatabase("ExplicitImplDb_" + Guid.NewGuid());
+}

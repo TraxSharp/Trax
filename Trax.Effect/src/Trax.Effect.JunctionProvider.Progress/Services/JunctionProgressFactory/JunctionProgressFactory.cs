@@ -11,7 +11,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressFactory
 /// registry key for junction progress. Not intended for direct use.
 /// </summary>
 /// <param name="serviceProvider">The provider junction progress is resolved from.</param>
-internal class JunctionProgressFactory(IServiceProvider serviceProvider)
+internal sealed class JunctionProgressFactory(IServiceProvider serviceProvider)
     : IJunctionEffectProviderFactory
 {
     /// <inheritdoc/>

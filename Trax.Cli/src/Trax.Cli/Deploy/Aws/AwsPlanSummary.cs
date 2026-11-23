@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Deploy.Aws;
 
@@ -30,20 +31,11 @@ internal static class AwsPlanSummary
             (Name: file.StackName(environment), Template: templates.Runtime),
         };
         foreach (var (name, template) in stacks)
-        {
-            var resources = (JsonObject)template["Resources"]!;
-            yield return $"{name} ({env.Profile}, {env.Region}) has {resources.Count} resources:";
-            foreach (
-                var group in resources
-                    .Select(r => (string)r.Value!["Type"]!)
-                    .GroupBy(t => t)
-                    .OrderBy(g => g.Key, StringComparer.Ordinal)
-            )
-                yield return $"  {group.Count(), 3}  {group.Key}";
-        }
+        foreach (var line in ResourceLines(name, env, template))
+            yield return line;
 
         bool Has(string id) =>
-            stacks.Any(s => ((JsonObject)s.Template["Resources"]!).ContainsKey(id));
+            stacks.Any(s => ((JsonObject)s.Template["Resources"].NotNull()).ContainsKey(id));
         var tasks = file.Services.Keys.Sum(s => file.Count(env, s));
         var costs = new List<(string What, decimal Monthly)>();
         if (Has("NatGateway"))
@@ -52,18 +44,51 @@ internal static class AwsPlanSummary
             costs.Add(("Load balancer", LoadBalancer));
         if (Has("Database"))
             costs.Add(
-                env.Profile == DeployEnvironment.Production
+                string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
                     ? ("Database, db.t4g.small Multi-AZ", SmallMultiAzDatabase)
                     : ("Database, db.t4g.micro", MicroDatabase)
             );
-        costs.Add(($"{tasks} Fargate task(s), 0.5 vCPU and 1 GB each", tasks * Task));
-        if (env.Profile == DeployEnvironment.Try && env.Network is null)
-            costs.Add(($"{tasks} public task address(es)", tasks * PublicAddress));
+        costs.Add(
+            (
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{tasks} Fargate task(s), 0.5 vCPU and 1 GB each"
+                ),
+                tasks * Task
+            )
+        );
+        if (
+            string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
+            && env.Network is null
+        )
+            costs.Add(
+                (
+                    string.Create(CultureInfo.InvariantCulture, $"{tasks} public task address(es)"),
+                    tasks * PublicAddress
+                )
+            );
 
         yield return "Idle cost, roughly (us-east-1 on-demand prices; traffic, storage growth and CloudFront extra):";
         foreach (var (what, monthly) in costs)
             yield return $"  {Money(monthly), 9}  {what}";
         yield return $"  {Money(costs.Sum(c => c.Monthly)), 9}  a month";
+    }
+
+    private static IEnumerable<string> ResourceLines(
+        string name,
+        DeployEnvironment env,
+        JsonObject template
+    )
+    {
+        var resources = (JsonObject)template["Resources"].NotNull();
+        yield return $"{name} ({env.Profile}, {env.Region}) has {resources.Count} resources:";
+        foreach (
+            var group in resources
+                .Select(r => r.Value.NotNull()["Type"].NotNull().GetValue<string>())
+                .GroupBy(t => t, StringComparer.Ordinal)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+        )
+            yield return $"  {group.Count(), 3}  {group.Key}";
     }
 
     private static string Money(decimal amount) =>

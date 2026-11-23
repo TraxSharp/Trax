@@ -1,0 +1,1438 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.UseConfigureAwaitAnalyzer,
+    Trax.Analyzers.Rules.UseConfigureAwaitFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class UseConfigureAwaitAnalyzerTests
+{
+    private static CodeFixTest CreateTest()
+    {
+        var test = new CodeFixTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetStandard.NetStandard21;
+        return test;
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    {|TRX0004:await Task.Delay(1)|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(false);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_ShouldReportError_FixWithConfigureAwaitTrue()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    {|TRX0004:await Task.Delay(1)|};
+                }
+            }
+            """;
+        test.CodeActionIndex = 1;
+        test.CodeActionEquivalenceKey = "Use ConfigureAwait(true)";
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(true);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    await foreach(var item in {|TRX0004:Enumerable()|})
+                    {
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    await foreach(var item in Enumerable().ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_ShouldReportError_ConfigureAwait()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            using System.Runtime.CompilerServices;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    Task<IAsyncEnumerable<int>> Enumerable() => throw null;
+
+                    await foreach(var item in {|TRX0004:await Enumerable().ConfigureAwait(false)|})
+                    {
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            using System.Runtime.CompilerServices;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    Task<IAsyncEnumerable<int>> Enumerable() => throw null;
+
+                    await foreach(var item in (await Enumerable().ConfigureAwait(false)).ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_WithCancellation_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    CancellationToken ct = default;
+                    await foreach(var item in {|TRX0004:Enumerable().WithCancellation(ct)|})
+                    {
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    CancellationToken ct = default;
+                    await foreach(var item in Enumerable().WithCancellation(ct).ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_WithConfigureAwait()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    CancellationToken ct = default;
+                    await foreach(var item in Enumerable().ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_WithConfigureAwaitOnConcreteType()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await foreach(var item in Enumerable().ConfigureAwait(false))
+                    {
+                    }
+                }
+
+                static AsyncEnumerable Enumerable() => throw null;
+            }
+
+            class AsyncEnumerable : IAsyncEnumerable<int>
+            {
+                public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken cancellationToken = default) => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_WithCancellationAndConfigureAwait()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    CancellationToken ct = default;
+                    await foreach(var item in Enumerable().WithCancellation(ct).ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_ConfigureAwaitThenWithCancellation()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    CancellationToken ct = default;
+                    await foreach(var item in Enumerable().ConfigureAwait(false).WithCancellation(ct))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitForeach_ConfigureAwaitOnTaskOnly_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Runtime.CompilerServices;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    Task<ConfiguredCancelableAsyncEnumerable<int>> Enumerable() => throw null;
+
+                    // The ConfigureAwait call configures the Task, not the async enumerable
+                    await foreach(var item in {|TRX0004:await Enumerable().ConfigureAwait(false)|})
+                    {
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Collections.Generic;
+            using System.Runtime.CompilerServices;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    Task<ConfiguredCancelableAsyncEnumerable<int>> Enumerable() => throw null;
+
+                    // The ConfigureAwait call configures the Task, not the async enumerable
+                    await foreach(var item in (await Enumerable().ConfigureAwait(false)).ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using var {|TRX0004:a = new AsyncDisposable()|};
+                    Console.WriteLine();
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    var a = new AsyncDisposable();
+                    await using (a.ConfigureAwait(false))
+                    {
+                        Console.WriteLine();
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_Block_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using (var {|TRX0004:a = new AsyncDisposable()|})
+                    {
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    var a = new AsyncDisposable();
+                    await using (a.ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_TopLevelStatement_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+
+            await using var {|TRX0004:a = new AsyncDisposable()|};
+            Console.WriteLine();
+
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+
+            var a = new AsyncDisposable();
+
+            await using (a.ConfigureAwait(false))
+            {
+                Console.WriteLine();
+            }
+
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_Block_TopLevelStatement_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            await using (var {|TRX0004:a = new AsyncDisposable()|})
+            {
+            }
+
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            var a = new AsyncDisposable();
+
+            await using (a.ConfigureAwait(false))
+            {
+            }
+
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_Block_SameVariableNameInSiblingUsing_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using (var {|TRX0004:a = new AsyncDisposable()|})
+                    {
+                    }
+                    await using (var {|TRX0004:a = new AsyncDisposable()|})
+                    {
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    {
+                        var a = new AsyncDisposable();
+                        await using (a.ConfigureAwait(false))
+                        {
+                        }
+                    }
+                    {
+                        var a = new AsyncDisposable();
+                        await using (a.ConfigureAwait(false))
+                        {
+                        }
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_Block_SameVariableNameInSiblingScope_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using (var {|TRX0004:a = new AsyncDisposable()|})
+                    {
+                    }
+                    {
+                        var a = 0;
+                        _ = a;
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    {
+                        var a = new AsyncDisposable();
+                        await using (a.ConfigureAwait(false))
+                        {
+                        }
+                    }
+                    {
+                        var a = 0;
+                        _ = a;
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwait_AwaitDispose_BlockWithoutVariable()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using ({|TRX0004:new AsyncDisposable()|})
+                    {
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using (new AsyncDisposable().ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ConfigureAwaitIsPresent_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(true);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ConfigureAwaitOfTIsPresent_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await Task.Run(() => 10).ConfigureAwait(true);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwaitInWpfWindowClass_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task MissingConfigureAwaitInWpfCommandClass_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Input.ICommand
+            {
+                public void Execute(object o) => throw null;
+                public bool CanExecute(object o) => throw null;
+                public event System.EventHandler CanExecuteChanged;
+
+                async Task Test()
+                {
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalse_AllAwaitShouldUseConfigureAwait()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1);
+                    await Task.Delay(1).ConfigureAwait(false);
+                    {|TRX0004:await Task.Delay(1)|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1);
+                    await Task.Delay(1).ConfigureAwait(false);
+                    await Task.Delay(1).ConfigureAwait(false);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalseInANonAccessibleBranch_ShouldNotReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    bool a = true;
+                    if (a)
+                    {
+                        await Task.Delay(1).ConfigureAwait(false);
+                        return;
+                    }
+
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalseInNonAccessibleBranch2_ShouldReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    bool a = true;
+                    if (a)
+                    {
+                        await Task.Delay(1).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        {|TRX0004:await Task.Delay(1)|};
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task TaskYield_ShouldNotReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await Task.Yield();
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task XUnitAttribute_ShouldNotReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = test.ReferenceAssemblies.AddXunitV3();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                [Xunit.Fact]
+                async Task Test()
+                {
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Blazor_ShouldNotReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            namespace Microsoft.AspNetCore.Components
+            {
+                public interface IComponent
+                {
+                }
+            }
+
+            class ClassTest : Microsoft.AspNetCore.Components.IComponent
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Blazor_ConfigurationAlways_ShouldReportDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestState.SetConfiguration("TRX0004.report", "always");
+        test.TestCode = """
+            using System.Threading.Tasks;
+            namespace Microsoft.AspNetCore.Components
+            {
+                public interface IComponent
+                {
+                }
+            }
+
+            class ClassTest : Microsoft.AspNetCore.Components.IComponent
+            {
+                async Task Test()
+                {
+                    {|TRX0004:await Task.Delay(1)|};
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitForEach_VariableAlreadyAwaited()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    IAsyncEnumerable<int> Enumerable() => throw null;
+
+                    var temp = Enumerable().ConfigureAwait(false);
+                    await foreach(var item in temp)
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitUsing_ConfiguredNextStatement()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net60.AddAspNetCore("6.0.10");
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            using Microsoft.Extensions.DependencyInjection;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    ServiceProvider services = null!;
+                    AsyncServiceScope scope = services.CreateAsyncScope();
+                    await using (scope.ConfigureAwait(false))
+                    {
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitUsingAwait()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await using var {|TRX0004:a = await CreateDisposableAsync().ConfigureAwait(false)|};
+                }
+
+                async Task<IAsyncDisposable> CreateDisposableAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    var a = await CreateDisposableAsync().ConfigureAwait(false);
+                    await using (a.ConfigureAwait(false))
+                    {
+                    }
+                }
+
+                async Task<IAsyncDisposable> CreateDisposableAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitUsing_WithMultipleUsings_ShouldNotThrow()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.IO;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    Stream stream = OpenWrite();
+                    await using (stream.ConfigureAwait(false))
+                    await using (var {|TRX0004:streamWriter = new StreamWriter(stream)|})
+                    {
+                        await streamWriter.WriteAsync("test-data").ConfigureAwait(false);
+                    }
+                }
+
+                Stream OpenWrite() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.IO;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    Stream stream = OpenWrite();
+                    await using (stream.ConfigureAwait(false))
+                    {
+                        var streamWriter = new StreamWriter(stream);
+                        await using (streamWriter.ConfigureAwait(false))
+                        {
+                            await streamWriter.WriteAsync("test-data").ConfigureAwait(false);
+                        }
+                    }
+                }
+
+                Stream OpenWrite() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitUsing_UnderUsingWithSideEffect_KeepsEvaluationOrder()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    using (Create("outer"))
+                    await using (var {|TRX0004:resource = Create("inner")|})
+                    {
+                    }
+                }
+
+                static Resource Create(string text) => throw null;
+            }
+            class Resource : IDisposable, IAsyncDisposable
+            {
+                public void Dispose() => throw null;
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    using (Create("outer"))
+                    {
+                        var resource = Create("inner");
+                        await using (resource.ConfigureAwait(false))
+                        {
+                        }
+                    }
+                }
+
+                static Resource Create(string text) => throw null;
+            }
+            class Resource : IDisposable, IAsyncDisposable
+            {
+                public void Dispose() => throw null;
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitUsingVar_InsideConfiguredUsing_ShouldNotThrow()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    var connection = new AsyncDisposable();
+                    await using (connection.ConfigureAwait(false))
+                    {
+                        await using var {|TRX0004:command = new AsyncDisposable()|};
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    var connection = new AsyncDisposable();
+                    await using (connection.ConfigureAwait(false))
+                    {
+                        var command = new AsyncDisposable();
+                        await using (command.ConfigureAwait(false))
+                        {
+                        }
+                    }
+                }
+            }
+            class AsyncDisposable : IAsyncDisposable
+            {
+                public ValueTask DisposeAsync() => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitUsingAwait_NoVariable()
+    {
+        var test = CreateTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            await using ({|TRX0004:await A().ConfigureAwait(false)|})
+            {
+            }
+
+            Task<IAsyncDisposable> A() => throw null;
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            await using ((await A().ConfigureAwait(false)).ConfigureAwait(false))
+            {
+            }
+
+            Task<IAsyncDisposable> A() => throw null;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalFunction_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                void Test()
+                {
+                    async Task LocalAsync()
+                    {
+                        {|TRX0004:await Task.Delay(1)|};
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                void Test()
+                {
+                    async Task LocalAsync()
+                    {
+                        await Task.Delay(1).ConfigureAwait(false);
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Lambda_InFieldInitializer_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                Func<Task> _value = async () => {|TRX0004:await Task.Delay(1)|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                Func<Task> _value = async () => await Task.Delay(1).ConfigureAwait(false);
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Lambda_InWpfWindowClass_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                void Test()
+                {
+                    Func<Task> value = async () => await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalse_InLambda_InWpfWindowClass_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(false);
+                    Func<Task> value = async () => await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalse_InNestedLambda_InWpfWindowClass_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System;
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    Func<Task> f = async () => await Task.Delay(1).ConfigureAwait(false);
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalse_InNestedLocalFunction_InWpfWindowClass_ShouldNotReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.NetFramework.Net48.Wpf;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class MyClass : System.Windows.Window
+            {
+                async Task Test()
+                {
+                    async Task Local() => await Task.Delay(1).ConfigureAwait(false);
+                    await Task.Delay(1);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AfterConfigureAwaitFalse_InUnitTestMethod_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = test.ReferenceAssemblies.AddXunitV3();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                [Xunit.Fact]
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(false);
+                    {|TRX0004:await Task.Delay(1)|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                [Xunit.Fact]
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(false);
+                    await Task.Delay(1).ConfigureAwait(false);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitInPropertyAccessorLocalFunction_ShouldReportError()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                Task Value
+                {
+                    get
+                    {
+                        async Task LocalAsync() => {|TRX0004:await Task.Delay(1)|};
+                        return LocalAsync();
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                Task Value
+                {
+                    get
+                    {
+                        async Task LocalAsync() => await Task.Delay(1).ConfigureAwait(false);
+                        return LocalAsync();
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task AwaitInArgument_CodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                async Task A()
+                {
+                    B({|TRX0004:await Task.FromResult(1)|});
+                }
+
+                void B(int value) { }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class Test
+            {
+                async Task A()
+                {
+                    B(await Task.FromResult(1).ConfigureAwait(false));
+                }
+
+                void B(int value) { }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1676")]
+    public Task InvalidCode_MissingSemicolon()
+    {
+        var test = CreateTest();
+        // The code does not compile, so the compiler diagnostics cannot be verified
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    {|TRX0004:await Task.Delay(1)|}
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Threading.Tasks;
+            class ClassTest
+            {
+                async Task Test()
+                {
+                    await Task.Delay(1).ConfigureAwait(false)
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

@@ -27,7 +27,7 @@ public abstract class TypedRequest<TResponse> : IGraphQLClientRequest<TResponse>
 
     /// <summary>
     /// A dictionary of every <see cref="GraphQLArgumentAttribute"/> property's current value, keyed by
-    /// variable name; <c>null</c> when the request declares no arguments.
+    /// variable name; <see langword="null"/> when the request declares no arguments.
     /// </summary>
     public virtual object? Variables
     {

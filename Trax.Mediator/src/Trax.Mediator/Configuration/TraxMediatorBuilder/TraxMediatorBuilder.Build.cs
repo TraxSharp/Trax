@@ -1,6 +1,6 @@
 namespace Trax.Mediator.Configuration;
 
-public partial class TraxMediatorBuilder
+public sealed partial class TraxMediatorBuilder
 {
     internal MediatorConfiguration Build()
     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 
 namespace Trax.Effect.Broadcaster.RabbitMQ;
@@ -29,7 +30,14 @@ internal static class RabbitMqSettings
             var port = DefaultPort;
             if (
                 section["Port"] is { Length: > 0 } text
-                && (!int.TryParse(text, out port) || port is < 1 or > 65535)
+                && (
+                    !int.TryParse(
+                        text,
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out port
+                    ) || port is < 1 or > 65535
+                )
             )
                 throw new ArgumentException(
                     $"{name}:Port is '{text}', which is not a TCP port.",

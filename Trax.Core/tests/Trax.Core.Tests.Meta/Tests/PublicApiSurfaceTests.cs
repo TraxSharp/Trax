@@ -1,12 +1,12 @@
 using System.Reflection;
 using PublicApiGenerator;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
 /// The published surface of <c>Trax.Core</c> and <c>Trax.Core.Testing</c> is a committed file,
-/// so a change to it lands in the diff. <c>Trax.Core.Analyzers</c> ships as a development
-/// dependency that loads into the compiler, so it has no baseline.
+/// so a change to it lands in the diff.
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md</c>.</para>
 /// </summary>
@@ -20,7 +20,7 @@ public class PublicApiSurfaceTests
     );
 
     private static readonly string BaselineSourceDir = Path.Combine(
-        Path.GetDirectoryName(typeof(PublicApiSurfaceTests).Assembly.Location)!,
+        Path.GetDirectoryName(typeof(PublicApiSurfaceTests).Assembly.Location).NotNull(),
         "..",
         "..",
         "..",
@@ -69,10 +69,6 @@ public class PublicApiSurfaceTests
             )
                 continue;
 
-            // An analyzer loads into the compiler; it has no API a consumer calls.
-            if (name == "Trax.Core.Analyzers")
-                continue;
-
             if (!File.Exists(Path.Combine(BaselineSourceDir, $"{name}.received.txt")))
                 missing.Add(name);
         }
@@ -92,7 +88,7 @@ public class PublicApiSurfaceTests
     [TestCaseSource(nameof(Assemblies))]
     public void PublicApi_Matches_CheckedInBaseline(Assembly assembly)
     {
-        var name = assembly.GetName().Name!;
+        var name = assembly.GetName().Name.NotNull();
         var current = assembly.GeneratePublicApi(
             new ApiGeneratorOptions { IncludeAssemblyAttributes = false }
         );
@@ -125,7 +121,8 @@ public class PublicApiSurfaceTests
         var baseline = File.ReadAllText(baselinePath);
 
         // Normalise line endings + trailing whitespace for cross-platform stability.
-        string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd() + "\n";
+        string Normalize(string s) =>
+            s.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd() + "\n";
 
         Normalize(current)
             .Should()

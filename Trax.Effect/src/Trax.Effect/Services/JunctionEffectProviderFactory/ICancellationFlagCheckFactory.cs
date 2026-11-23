@@ -6,4 +6,7 @@ namespace Trax.Effect.Services.JunctionEffectProviderFactory;
 /// invoke trains must register it, because leaving an invoking state cancels its run through that flag, wherever the
 /// run executes; the state-machine startup check looks for this marker among the registered junction effects.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal interface ICancellationFlagCheckFactory : IJunctionEffectProviderFactory;

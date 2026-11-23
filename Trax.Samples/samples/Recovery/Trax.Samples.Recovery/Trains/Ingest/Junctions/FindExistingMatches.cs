@@ -16,13 +16,14 @@ public class FindExistingMatches(ITopicMapDbContext db, DemoPace pace)
 
     public override async Task<MatchEvidence> Run(NormalisedPartition partition)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         var corpus = await db
             .Works.AsNoTracking()
             .OrderBy(w => w.Id)
             .Select(w => new { w.Id, w.Title })
-            .ToListAsync(CancellationToken);
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
 
         var candidates = new List<WorkMatch>();
         foreach (var work in partition.Works)
@@ -33,7 +34,11 @@ public class FindExistingMatches(ITopicMapDbContext db, DemoPace pace)
                     work.SourceId,
                     existing.Id,
                     existing.Title,
-                    Math.Round(TitleWords.Jaccard(words, TitleWords.Of(existing.Title)), 3)
+                    Math.Round(
+                        TitleWords.Jaccard(words, TitleWords.Of(existing.Title)),
+                        3,
+                        MidpointRounding.ToEven
+                    )
                 ))
                 .OrderByDescending(m => m.Similarity)
                 .ThenBy(m => m.ExistingWorkId, StringComparer.Ordinal)

@@ -94,7 +94,7 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
         persisted
             .SingleNode()
-            .RequirePersisted(true)
+            .RequirePersisted(require: true)
             .DisableIntrospection()
             .ClientDocuments(Path.Combine(AppContext.BaseDirectory, "trax.documents.json"))
     )
@@ -119,9 +119,16 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.StateMachine.Api
 {
-    public partial class Program;
+    /// <summary>
+    /// Names this assembly for <c>WebApplicationFactory&lt;Program&gt;</c> in the E2E suite. It is
+    /// never created: the host is the top-level program above.
+    /// </summary>
+    public sealed class Program
+    {
+        private Program() { }
+    }
 }

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -11,36 +12,41 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// </summary>
 public class SqliteRevisionTriggerTests
 {
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(StoreProvider.Sqlite);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private async Task<long> Seeded(Guid id)
     {
-        await _host.SeedDraft("trigger-user", id, PlainTimerMachine.Json("Idle"));
-        return await _host.RowId(id);
+        await _host
+            .NotNull()
+            .SeedDraft("trigger-user", id, PlainTimerMachine.Json("Idle"))
+            .ConfigureAwait(false);
+        return await _host.NotNull().RowId(id).ConfigureAwait(false);
     }
 
     private Task<int> Update(string set, long rowId, params object?[] values) =>
-        _host.Execute(
-            $"PRAGMA recursive_triggers = ON; UPDATE snapshot_draft SET {set} WHERE row_id = @p0",
-            [rowId, .. values]
-        );
+        _host
+            .NotNull()
+            .Execute(
+                $"PRAGMA recursive_triggers = ON; UPDATE snapshot_draft SET {set} WHERE row_id = @p0",
+                [rowId, .. values]
+            );
 
     [Test]
     public async Task An_update_that_leaves_the_revision_is_bumped_once_with_recursive_triggers_on()
     {
         var id = Guid.NewGuid();
         var row = await Seeded(id);
-        var before = await _host.Revision(id);
+        var before = await _host.NotNull().Revision(id);
 
         await Update("context = '{}'", row);
 
-        (await _host.Revision(id)).Should().Be(before + 1);
+        (await _host.NotNull().Revision(id)).Should().Be(before + 1);
     }
 
     [Test]
@@ -50,11 +56,11 @@ public class SqliteRevisionTriggerTests
         var row = await Seeded(id);
         await Update("context = '{}'", row);
         await Update("context = '{}'", row);
-        var before = await _host.Revision(id);
+        var before = await _host.NotNull().Revision(id);
 
         await Update("revision = @p1", row, 1L);
 
-        (await _host.Revision(id))
+        (await _host.NotNull().Revision(id))
             .Should()
             .Be(
                 before + 1,
@@ -70,6 +76,8 @@ public class SqliteRevisionTriggerTests
 
         await Update("revision = @p1", row, 99L);
 
-        (await _host.Revision(id)).Should().Be(99, "a revision moved forward never goes back");
+        (await _host.NotNull().Revision(id))
+            .Should()
+            .Be(99, "a revision moved forward never goes back");
     }
 }

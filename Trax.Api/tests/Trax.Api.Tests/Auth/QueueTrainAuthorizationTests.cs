@@ -212,7 +212,7 @@ public class QueueTrainAuthorizationTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 }

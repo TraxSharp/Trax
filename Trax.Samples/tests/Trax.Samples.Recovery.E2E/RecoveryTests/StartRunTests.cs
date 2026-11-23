@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectProvider;
@@ -30,14 +31,17 @@ public class StartRunTests : RecoveryTestFixture
         var faults = services.GetRequiredService<FaultInjector>();
         var before = await LastManifestIdAsync(dataContexts);
 
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var start = new ScheduleDemoRun(
             scope.ServiceProvider.GetRequiredService<ITraxScheduler>(),
             services.GetRequiredService<CaseFiles>(),
             faults,
             new Operator(),
-            // The manifest is scheduled for real; only the wait for its first run gives up.
-            new NeverSeen()
+            // The manifest is scheduled for real; only the wait for its first run gives up, on
+            // the real clock.
+            new NeverSeen(),
+            TimeProvider.System
         );
 
         var starting = () =>
@@ -56,7 +60,7 @@ public class StartRunTests : RecoveryTestFixture
             .Manifests.AsNoTracking()
             .Where(m => m.Id > before && m.ExternalId.StartsWith("recovery-"))
             .Select(m => m.ExternalId)
-            .SingleAsync();
+            .SingleAsync(cancellationToken: start.CancellationToken);
         faults
             .IsArmed(scheduled["recovery-".Length..])
             .Should()
@@ -76,7 +80,8 @@ public class StartRunTests : RecoveryTestFixture
             services.GetRequiredService<CaseFiles>(),
             faults,
             new Operator(),
-            new NeverSeen()
+            new NeverSeen(),
+            TimeProvider.System
         );
 
         var starting = () =>
@@ -89,13 +94,16 @@ public class StartRunTests : RecoveryTestFixture
                 }
             );
 
-        await starting.Should().ThrowAsync<SchedulingSeen.Stopped>();
+        await starting.Should().ThrowAsync<SchedulingSeen.StoppedException>();
         seen.RunId.Should().NotBeNull("the start schedules the manifest");
         seen.ArmedWhenScheduled.Should()
             .BeTrue(
                 "the dispatcher may start the first run as soon as the manifest is scheduled, so the crash is armed by then"
             );
-        faults.IsArmed(seen.RunId!).Should().BeFalse("the start that failed disarms its crash");
+        faults
+            .IsArmed(seen.RunId.NotNull())
+            .Should()
+            .BeFalse("the start that failed disarms its crash");
     }
 
     [Test]
@@ -123,8 +131,17 @@ public class StartRunTests : RecoveryTestFixture
 
     private static async Task<long> LastManifestIdAsync(IDataContextProviderFactory dataContexts)
     {
-        await using var context = await dataContexts.CreateDbContextAsync(CancellationToken.None);
-        return await context.Manifests.AsNoTracking().MaxAsync(m => (long?)m.Id) ?? 0;
+        var context = await dataContexts
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            return await context
+                    .Manifests.AsNoTracking()
+                    .MaxAsync(m => (long?)m.Id)
+                    .ConfigureAwait(false)
+                ?? 0;
+        }
     }
 
     private sealed class Operator : ICurrentPrincipalProvider
@@ -136,23 +153,26 @@ public class StartRunTests : RecoveryTestFixture
     // moment, then fails the start, so nothing is scheduled for real.
     public class SchedulingSeen : DispatchProxy
     {
-        public FaultInjector Faults { get; set; } = null!;
+        public required FaultInjector Faults { get; set; }
         public string? RunId { get; private set; }
         public bool ArmedWhenScheduled { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             if (
-                targetMethod?.Name != nameof(ITraxScheduler.ScheduleOnceAsync)
-                || args?.OfType<RefundInput>().FirstOrDefault() is not { } input
+                !string.Equals(
+                    targetMethod?.Name,
+                    nameof(ITraxScheduler.ScheduleOnceAsync),
+                    StringComparison.Ordinal
+                ) || args?.OfType<RefundInput>().FirstOrDefault() is not { } input
             )
                 throw new NotSupportedException(targetMethod?.Name);
             RunId = input.RunId;
             ArmedWhenScheduled = Faults.IsArmed(input.RunId);
-            return Task.FromException<Trax.Effect.Models.Manifest.Manifest>(new Stopped());
+            return Task.FromException<Trax.Effect.Models.Manifest.Manifest>(new StoppedException());
         }
 
-        public sealed class Stopped : Exception;
+        public sealed class StoppedException : Exception;
     }
 
     // Stands in for the scheduler never queueing the first run within the start's wait.

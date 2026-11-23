@@ -14,6 +14,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -47,59 +48,58 @@ public class ApiKeyAuthHandlerTests
                             });
                         }
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected",
-                                    (ClaimsPrincipal user) =>
-                                        Results.Ok(
-                                            new ProtectedResponse
-                                            {
-                                                Name = user.Identity?.Name,
-                                                PrincipalId = user.FindFirst(
-                                                    TraxAuthClaimTypes.PrincipalId
-                                                )?.Value,
-                                                Roles = user.FindAll(ClaimTypes.Role)
-                                                    .Select(c => c.Value)
-                                                    .ToArray(),
-                                                TenantClaim = user.FindFirst("tenant")?.Value,
-                                            }
-                                        )
-                                )
-                                .RequireAuthorization(ApiKeyDefaults.PolicyName);
-
-                            endpoints.MapGet("/anonymous", () => Results.Ok("ok")).AllowAnonymous();
-
-                            endpoints.MapGet(
-                                "/authresult",
-                                async (HttpContext ctx) =>
-                                {
-                                    var result = await ctx.AuthenticateAsync(
-                                        ApiKeyDefaults.SchemeName
-                                    );
-                                    return Results.Ok(
-                                        new AuthResultResponse
-                                        {
-                                            Succeeded = result.Succeeded,
-                                            None = result.None,
-                                            FailureMessage = result.Failure?.Message,
-                                        }
-                                    );
-                                }
-                            );
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected",
+                    (ClaimsPrincipal user) =>
+                        Results.Ok(
+                            new ProtectedResponse
+                            {
+                                Name = user.Identity?.Name,
+                                PrincipalId = user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value,
+                                Roles = user.FindAll(ClaimTypes.Role)
+                                    .Select(c => c.Value)
+                                    .ToArray(),
+                                TenantClaim = user.FindFirst("tenant")?.Value,
+                            }
+                        )
+                )
+                .RequireAuthorization(ApiKeyDefaults.PolicyName);
+
+            endpoints.MapGet("/anonymous", () => Results.Ok("ok")).AllowAnonymous();
+
+            endpoints.MapGet(
+                "/authresult",
+                async (HttpContext ctx) =>
+                {
+                    var result = await ctx.AuthenticateAsync(ApiKeyDefaults.SchemeName)
+                        .ConfigureAwait(false);
+                    return Results.Ok(
+                        new AuthResultResponse
+                        {
+                            Succeeded = result.Succeeded,
+                            None = result.None,
+                            FailureMessage = result.Failure?.Message,
+                        }
+                    );
+                }
+            );
+        });
     }
 
     #region Header handling
@@ -113,7 +113,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
         response.Should().NotBeNull();
-        response!.None.Should().BeTrue();
+        response.NotNull().None.Should().BeTrue();
         response.Succeeded.Should().BeFalse();
         response.FailureMessage.Should().BeNull();
     }
@@ -150,7 +150,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
         response.Should().NotBeNull();
-        response!.Succeeded.Should().BeFalse();
+        response.NotNull().Succeeded.Should().BeFalse();
         response.None.Should().BeFalse();
         response.FailureMessage.Should().NotBeNullOrEmpty();
     }
@@ -172,7 +172,7 @@ public class ApiKeyAuthHandlerTests
     {
         using var host = await CreateHost(
             (key, _) =>
-                key == "super"
+                string.Equals(key, "super", StringComparison.Ordinal)
                     ? ValueTask.FromResult<TraxPrincipal?>(new TraxPrincipal("alice", "Alice", []))
                     : ValueTask.FromResult<TraxPrincipal?>(null),
             opts => opts.HeaderName = "X-My-Key"
@@ -183,7 +183,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.Name.Should().Be("Alice");
+        response.NotNull().Name.Should().Be("Alice");
     }
 
     #endregion
@@ -203,7 +203,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("TraxApiKey:alice");
+        response.NotNull().PrincipalId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -220,7 +220,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.Name.Should().Be("Alice Liddell");
+        response.NotNull().Name.Should().Be("Alice Liddell");
     }
 
     [Test]
@@ -237,7 +237,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.Roles.Should().BeEquivalentTo("Admin", "Player");
+        response.NotNull().Roles.Should().BeEquivalentTo("Admin", "Player");
     }
 
     [Test]
@@ -250,7 +250,10 @@ public class ApiKeyAuthHandlerTests
                         "alice",
                         "Alice",
                         ["User"],
-                        Claims: new Dictionary<string, string> { ["tenant"] = "acme" }
+                        Claims: new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["tenant"] = "acme",
+                        }
                     )
                 )
         );
@@ -259,7 +262,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.TenantClaim.Should().Be("acme");
+        response.NotNull().TenantClaim.Should().Be("acme");
     }
 
     #endregion
@@ -275,7 +278,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
-        response!.Succeeded.Should().BeFalse();
+        response.NotNull().Succeeded.Should().BeFalse();
         response.None.Should().BeFalse();
     }
 
@@ -292,7 +295,7 @@ public class ApiKeyAuthHandlerTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<AuthResultResponse>();
-        body!.Succeeded.Should().BeFalse();
+        body.NotNull().Succeeded.Should().BeFalse();
         body.FailureMessage.Should().NotBeNullOrEmpty();
     }
 
@@ -303,7 +306,7 @@ public class ApiKeyAuthHandlerTests
     [Test]
     public async Task ConcurrentRequests_EachResolvesIndependently()
     {
-        var principals = new Dictionary<string, TraxPrincipal>
+        var principals = new Dictionary<string, TraxPrincipal>(StringComparer.Ordinal)
         {
             ["alice-key"] = new("alice", "Alice", ["User"]),
             ["bob-key"] = new("bob", "Bob", ["User"]),
@@ -336,7 +339,9 @@ public class ApiKeyAuthHandlerTests
 
                 var client = host.GetTestClient();
                 client.DefaultRequestHeaders.Add("X-Api-Key", key);
-                var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
+                var response = await client
+                    .GetFromJsonAsync<ProtectedResponse>("/protected")
+                    .ConfigureAwait(false);
                 return (expected: expectedId, actual: response?.PrincipalId);
             });
 
@@ -372,7 +377,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadFromJsonAsync<AuthResultResponse>();
 
-        body!.Succeeded.Should().BeFalse();
+        body.NotNull().Succeeded.Should().BeFalse();
         body.None.Should().BeFalse();
         body.FailureMessage.Should().Contain("Multiple API keys");
         invocationCount.Should().Be(0);
@@ -418,7 +423,7 @@ public class ApiKeyAuthHandlerTests
 
         var response = await client.GetFromJsonAsync<AuthResultResponse>("/authresult");
 
-        response!.Succeeded.Should().BeFalse();
+        response.NotNull().Succeeded.Should().BeFalse();
         response.None.Should().BeFalse();
         response.FailureMessage.Should().Contain("Ambiguous");
         invocationCount.Should().Be(0);
@@ -431,7 +436,7 @@ public class ApiKeyAuthHandlerTests
         // reject a single legitimate header value.
         using var host = await CreateHost(
             (key, _) =>
-                key == "good"
+                string.Equals(key, "good", StringComparison.Ordinal)
                     ? ValueTask.FromResult<TraxPrincipal?>(new TraxPrincipal("alice", "Alice", []))
                     : ValueTask.FromResult<TraxPrincipal?>(null)
         );
@@ -505,7 +510,7 @@ public class ApiKeyAuthHandlerTests
 
         public void Dispose() { }
 
-        public record LogEntry(
+        public sealed record LogEntry(
             string Category,
             LogLevel Level,
             string Message,

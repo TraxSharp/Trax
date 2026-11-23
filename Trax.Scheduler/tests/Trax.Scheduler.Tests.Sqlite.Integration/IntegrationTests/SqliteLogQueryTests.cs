@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Log.DTOs;
 using Trax.Scheduler.Services.Operations;
@@ -16,12 +18,12 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteLogQueryTests : TestSetup
 {
-    private IOperationsService _operations = null!;
-    private string _tag = null!;
+    private IOperationsService? _operations;
+    private string? _tag;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
         // The data-context logger writes this host's own logs to the same table, so every term
         // carries a tag no other row has.
@@ -31,45 +33,49 @@ public class SqliteLogQueryTests : TestSetup
     [Test]
     public async Task Text_filters_match_ignoring_case_and_the_count_agrees()
     {
-        await Seed($"{_tag} Payment REFUSED", "Shop.Payments");
-        await Seed($"{_tag} payment accepted", "Shop.Payments");
-        await Seed($"{_tag} refused: no stock", "Shop.Stock");
+        await Seed($"{_tag.NotNull()} Payment REFUSED", "Shop.Payments");
+        await Seed($"{_tag.NotNull()} payment accepted", "Shop.Payments");
+        await Seed($"{_tag.NotNull()} refused: no stock", "Shop.Stock");
 
         var query = new LogQuery
         {
-            MessageContains = $"{_tag.ToUpperInvariant()} PAYMENT",
+            MessageContains = $"{_tag.NotNull().ToUpperInvariant()} PAYMENT",
             CategoryContains = "payments",
         };
-        var page = await _operations.GetLogsAsync(query, CancellationToken.None);
-        var count = await _operations.CountLogsAsync(query, CancellationToken.None);
+        var page = await _operations.NotNull().GetLogsAsync(query, CancellationToken.None);
+        var count = await _operations.NotNull().CountLogsAsync(query, CancellationToken.None);
 
         page.Items.Select(l => l.Message)
             .Should()
-            .Equal($"{_tag} payment accepted", $"{_tag} Payment REFUSED");
+            .Equal($"{_tag.NotNull()} payment accepted", $"{_tag.NotNull()} Payment REFUSED");
         count.Should().Be(2);
     }
 
     [Test]
     public async Task Wildcards_in_a_term_match_themselves()
     {
-        await Seed($"{_tag} at 50% capacity", "Wildcards");
-        await Seed($"{_tag} at 500 MB", "Wildcards");
-        await Seed($"{_tag} key a_b", "Wildcards");
-        await Seed($"{_tag} key axb", "Wildcards");
+        await Seed($"{_tag.NotNull()} at 50% capacity", "Wildcards");
+        await Seed($"{_tag.NotNull()} at 500 MB", "Wildcards");
+        await Seed($"{_tag.NotNull()} key a_b", "Wildcards");
+        await Seed($"{_tag.NotNull()} key axb", "Wildcards");
 
         (
-            await _operations.CountLogsAsync(
-                new LogQuery { MessageContains = $"{_tag} at 50%" },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery { MessageContains = $"{_tag.NotNull()} at 50%" },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(1);
         (
-            await _operations.CountLogsAsync(
-                new LogQuery { MessageContains = $"{_tag} key a_b" },
-                CancellationToken.None
-            )
+            await _operations
+                .NotNull()
+                .CountLogsAsync(
+                    new LogQuery { MessageContains = $"{_tag.NotNull()} key a_b" },
+                    CancellationToken.None
+                )
         )
             .Should()
             .Be(1);
@@ -79,26 +85,43 @@ public class SqliteLogQueryTests : TestSetup
     public async Task Oldest_first_pages_forward_by_cursor()
     {
         for (var i = 0; i < 5; i++)
-            await Seed($"{_tag} line {i}", "Ascending");
+            await Seed(
+                string.Create(CultureInfo.InvariantCulture, $"{_tag.NotNull()} line {i}"),
+                "Ascending"
+            );
 
-        var first = await _operations.GetLogsAsync(
-            new LogQuery(Take: 3) { MessageContains = _tag, Order = LogOrder.OldestFirst },
-            CancellationToken.None
-        );
-        var second = await _operations.GetLogsAsync(
-            new LogQuery(AfterId: first.NextCursor, Take: 3)
-            {
-                MessageContains = _tag,
-                Order = LogOrder.OldestFirst,
-            },
-            CancellationToken.None
-        );
+        var first = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(Take: 3)
+                {
+                    MessageContains = _tag.NotNull(),
+                    Order = LogOrder.OldestFirst,
+                },
+                CancellationToken.None
+            );
+        var second = await _operations
+            .NotNull()
+            .GetLogsAsync(
+                new LogQuery(AfterId: first.NextCursor, Take: 3)
+                {
+                    MessageContains = _tag.NotNull(),
+                    Order = LogOrder.OldestFirst,
+                },
+                CancellationToken.None
+            );
 
         first
             .Items.Concat(second.Items)
             .Select(l => l.Message)
             .Should()
-            .Equal(Enumerable.Range(0, 5).Select(i => $"{_tag} line {i}"));
+            .Equal(
+                Enumerable
+                    .Range(0, 5)
+                    .Select(i =>
+                        string.Create(CultureInfo.InvariantCulture, $"{_tag.NotNull()} line {i}")
+                    )
+            );
     }
 
     [TestCase(OperationsService.LogCountCap, OperationsService.LogCountCap, false)]
@@ -109,47 +132,53 @@ public class SqliteLogQueryTests : TestSetup
         bool expectedCapped
     )
     {
-        await SeedMany(matching, $"{_tag} capped");
-        var query = new LogQuery { MessageContains = _tag };
+        await SeedMany(matching, $"{_tag.NotNull()} capped");
+        var query = new LogQuery { MessageContains = _tag.NotNull() };
 
-        (await _operations.CountLogsCappedAsync(query, CancellationToken.None))
+        (await _operations.NotNull().CountLogsCappedAsync(query, CancellationToken.None))
             .Should()
             .Be(new LogCount(expectedCount, expectedCapped));
-        (await _operations.CountLogsAsync(query, CancellationToken.None)).Should().Be(matching);
+        (await _operations.NotNull().CountLogsAsync(query, CancellationToken.None))
+            .Should()
+            .Be(matching);
     }
 
     private async Task SeedMany(int count, string message)
     {
         for (var i = 0; i < count; i++)
-            await DataContext.Track(
-                Log.Create(
-                    new CreateLog
-                    {
-                        Level = LogLevel.Information,
-                        Message = message,
-                        CategoryName = "Capped",
-                        EventId = 0,
-                    }
+            await DataContext
+                .Track(
+                    Log.Create(
+                        new CreateLog
+                        {
+                            Level = LogLevel.Information,
+                            Message = message,
+                            CategoryName = "Capped",
+                            EventId = 0,
+                        }
+                    )
                 )
-            );
-        await DataContext.SaveChanges(CancellationToken.None);
+                .ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
     private async Task Seed(string message, string category)
     {
-        await DataContext.Track(
-            Log.Create(
-                new CreateLog
-                {
-                    Level = LogLevel.Information,
-                    Message = message,
-                    CategoryName = category,
-                    EventId = 0,
-                }
+        await DataContext
+            .Track(
+                Log.Create(
+                    new CreateLog
+                    {
+                        Level = LogLevel.Information,
+                        Message = message,
+                        CategoryName = category,
+                        EventId = 0,
+                    }
+                )
             )
-        );
-        await DataContext.SaveChanges(CancellationToken.None);
+            .ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 }

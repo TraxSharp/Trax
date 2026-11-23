@@ -167,7 +167,7 @@ internal partial class TrainBus(
 
         var foundTrain = registry.InputTypeToTrain.TryGetValue(inputType, out var correctTrain);
 
-        if (foundTrain == false || correctTrain == null)
+        if (!foundTrain || correctTrain == null)
             throw new NoTrainForInputException(inputType, ScannedAssemblies(registry));
 
         var trainService = provider.GetRequiredService(correctTrain);
@@ -209,72 +209,55 @@ internal partial class TrainBus(
     /// <exception cref="NoTrainForInputException">No registered train takes the input's type.</exception>
     public async Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
-        var trainType = trainService.GetType();
-
-        // When metadata is pre-created and Pending (from the scheduler or ad-hoc dashboard execution),
-        // use the 2-param Run(input, metadata) method so the train uses this
-        // pre-created metadata instead of creating a new one.
-        if (metadata != null)
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            if (metadata.TrainState != TrainState.Pending)
-                throw new TrainException(
-                    $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+            var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
+            var trainType = trainService.GetType();
+
+            // When metadata is pre-created and Pending (from the scheduler or ad-hoc dashboard execution),
+            // use the 2-param Run(input, metadata) method so the train uses this
+            // pre-created metadata instead of creating a new one.
+            if (metadata != null)
+            {
+                if (metadata.TrainState != TrainState.Pending)
+                    throw new TrainException(
+                        $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+                    );
+
+                var runWithMetadataMethod = RunWithMetadataMethodCache.GetOrAdd(
+                    trainType,
+                    type =>
+                    {
+                        var method = type.GetMethods()
+                            .FirstOrDefault(x =>
+                                string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                                && x.GetParameters().Length == 2
+                                && x.GetParameters()[1].ParameterType == typeof(Metadata)
+                            );
+
+                        return method
+                            ?? MissingMethod<MethodInfo>("Run(input, metadata)", type.Name);
+                    }
                 );
 
-            var runWithMetadataMethod = RunWithMetadataMethodCache.GetOrAdd(
-                trainType,
-                type =>
-                {
-                    var method = type.GetMethods()
-                        .Where(x => x.Name == "Run")
-                        // Run(input, metadata) has 2 parameters
-                        .Where(x => x.GetParameters().Length == 2)
-                        .FirstOrDefault(x =>
-                            x.GetParameters()[1].ParameterType == typeof(Metadata)
-                        );
+                var taskWithMetadata =
+                    (Task<TOut>?)runWithMetadataMethod.Invoke(trainService, [trainInput, metadata])
+                    ?? InvocationNull<Task<TOut>>("Run(input, metadata)", trainType.Name);
 
-                    return method ?? MissingMethod<MethodInfo>("Run(input, metadata)", type.Name);
-                }
-            );
-
-            var taskWithMetadata =
-                (Task<TOut>?)runWithMetadataMethod.Invoke(trainService, [trainInput, metadata])
-                ?? InvocationNull<Task<TOut>>("Run(input, metadata)", trainType.Name);
-
-            return await taskWithMetadata;
-        }
-
-        // Standard case: Get the 1-param Run method from cache
-        var runMethod = RunMethodCache.GetOrAdd(
-            trainType,
-            type =>
-            {
-                var method = type.GetMethods()
-                    // Run function on Train/ServiceTrain
-                    .Where(x => x.Name == "Run")
-                    // Run(input, cancellationToken = default) has 2 parameters (second is optional CancellationToken).
-                    .Where(x =>
-                    {
-                        var parameters = x.GetParameters();
-                        return parameters.Length == 2
-                            && parameters[1].ParameterType == typeof(CancellationToken);
-                    })
-                    // Run has an implementation in Trax.Core and Trax.Effect (the latter with the "new" keyword).
-                    // We want the one from Trax.Effect
-                    .FirstOrDefault(x => x.Module.Name.Contains("Effect"));
-
-                return method ?? MissingMethod<MethodInfo>("Run", type.Name);
+                return await taskWithMetadata.ConfigureAwait(false);
             }
-        );
 
-        // And finally run the train, casting the return type to preserve type safety.
-        var taskRunMethod =
-            (Task<TOut>?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
-            ?? InvocationNull<Task<TOut>>("Run", trainService.GetType().Name);
+            // Standard case: Get the 1-param Run method from cache
+            var runMethod = RunMethod(trainType);
 
-        return await taskRunMethod;
+            // And finally run the train, casting the return type to preserve type safety.
+            var taskRunMethod =
+                (Task<TOut>?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
+                ?? InvocationNull<Task<TOut>>("Run", trainService.GetType().Name);
+
+            return await taskRunMethod.ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -287,10 +270,19 @@ internal partial class TrainBus(
         Metadata? metadata = null
     )
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
 
-        return await RunResolvedAsync<TOut>(trainService, trainInput, metadata, cancellationToken);
+            return await RunResolvedAsync<TOut>(
+                    trainService,
+                    trainInput,
+                    metadata,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -319,10 +311,10 @@ internal partial class TrainBus(
                 type =>
                 {
                     var method = type.GetMethods()
-                        .Where(x => x.Name == "Run")
-                        .Where(x => x.GetParameters().Length == 3)
                         .FirstOrDefault(x =>
-                            x.GetParameters()[1].ParameterType == typeof(Metadata)
+                            string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                            && x.GetParameters().Length == 3
+                            && x.GetParameters()[1].ParameterType == typeof(Metadata)
                             && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
                         );
 
@@ -339,31 +331,17 @@ internal partial class TrainBus(
                     )
                 ?? InvocationNull<Task<TOut>>("Run(input, metadata, ct)", trainType.Name);
 
-            return await taskWithMetadata;
+            return await taskWithMetadata.ConfigureAwait(false);
         }
 
         // Find Run(input, ct) — 2 params where second is CancellationToken
-        var runWithCtMethod = RunWithCtMethodCache.GetOrAdd(
-            trainType,
-            type =>
-            {
-                var method = type.GetMethods()
-                    .Where(x => x.Name == "Run")
-                    .Where(x => x.GetParameters().Length == 2)
-                    .FirstOrDefault(x =>
-                        x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                        && x.Module.Name.Contains("Effect")
-                    );
-
-                return method ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
-            }
-        );
+        var runWithCtMethod = RunWithCtMethod(trainType);
 
         var taskRunMethod =
             (Task<TOut>?)runWithCtMethod.Invoke(trainService, [trainInput, cancellationToken])
             ?? InvocationNull<Task<TOut>>("Run(input, ct)", trainType.Name);
 
-        return await taskRunMethod;
+        return await taskRunMethod.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -381,63 +359,64 @@ internal partial class TrainBus(
     /// </exception>
     public async Task RunAsync(object trainInput, Metadata? metadata = null)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
-        var trainType = trainService.GetType();
-
-        if (metadata != null)
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            if (metadata.TrainState != TrainState.Pending)
-                throw new TrainException(
-                    $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+            var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
+            var trainType = trainService.GetType();
+
+            if (metadata != null)
+            {
+                if (metadata.TrainState != TrainState.Pending)
+                    throw new TrainException(
+                        $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+                    );
+
+                var method = RunWithMetadataMethodCache.GetOrAdd(
+                    trainType,
+                    type =>
+                    {
+                        var m = type.GetMethods()
+                            .FirstOrDefault(x =>
+                                string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                                && x.GetParameters().Length == 2
+                                && x.GetParameters()[1].ParameterType == typeof(Metadata)
+                            );
+
+                        return m ?? MissingMethod<MethodInfo>("Run(input, metadata)", type.Name);
+                    }
                 );
 
-            var method = RunWithMetadataMethodCache.GetOrAdd(
+                var task =
+                    (Task?)method.Invoke(trainService, [trainInput, metadata])
+                    ?? InvocationNull<Task>("Run(input, metadata)", trainType.Name);
+
+                await task.ConfigureAwait(false);
+                return;
+            }
+
+            var runMethod = RunMethodCache.GetOrAdd(
                 trainType,
                 type =>
                 {
                     var m = type.GetMethods()
-                        .Where(x => x.Name == "Run")
-                        .Where(x => x.GetParameters().Length == 2)
                         .FirstOrDefault(x =>
-                            x.GetParameters()[1].ParameterType == typeof(Metadata)
+                            string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                            && x.GetParameters().Length == 2
+                            && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                            && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
                         );
 
-                    return m ?? MissingMethod<MethodInfo>("Run(input, metadata)", type.Name);
+                    return m ?? MissingMethod<MethodInfo>("Run", type.Name);
                 }
             );
 
-            var task =
-                (Task?)method.Invoke(trainService, [trainInput, metadata])
-                ?? InvocationNull<Task>("Run(input, metadata)", trainType.Name);
+            var taskRun =
+                (Task?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
+                ?? InvocationNull<Task>("Run", trainService.GetType().Name);
 
-            await task;
-            return;
+            await taskRun.ConfigureAwait(false);
         }
-
-        var runMethod = RunMethodCache.GetOrAdd(
-            trainType,
-            type =>
-            {
-                var m = type.GetMethods()
-                    .Where(x => x.Name == "Run")
-                    .Where(x =>
-                    {
-                        var parameters = x.GetParameters();
-                        return parameters.Length == 2
-                            && parameters[1].ParameterType == typeof(CancellationToken);
-                    })
-                    .FirstOrDefault(x => x.Module.Name.Contains("Effect"));
-
-                return m ?? MissingMethod<MethodInfo>("Run", type.Name);
-            }
-        );
-
-        var taskRun =
-            (Task?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
-            ?? InvocationNull<Task>("Run", trainService.GetType().Name);
-
-        await taskRun;
     }
 
     /// <summary>
@@ -460,61 +439,89 @@ internal partial class TrainBus(
         Metadata? metadata = null
     )
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
-        var trainType = trainService.GetType();
-
-        if (metadata != null)
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            if (metadata.TrainState != TrainState.Pending)
-                throw new TrainException(
-                    $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+            var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
+            var trainType = trainService.GetType();
+
+            if (metadata != null)
+            {
+                if (metadata.TrainState != TrainState.Pending)
+                    throw new TrainException(
+                        $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+                    );
+
+                var method = RunWithMetadataCtMethodCache.GetOrAdd(
+                    trainType,
+                    type =>
+                    {
+                        var m = type.GetMethods()
+                            .FirstOrDefault(x =>
+                                string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                                && x.GetParameters().Length == 3
+                                && x.GetParameters()[1].ParameterType == typeof(Metadata)
+                                && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
+                            );
+
+                        return m
+                            ?? MissingMethod<MethodInfo>("Run(input, metadata, ct)", type.Name);
+                    }
                 );
 
-            var method = RunWithMetadataCtMethodCache.GetOrAdd(
-                trainType,
-                type =>
-                {
-                    var m = type.GetMethods()
-                        .Where(x => x.Name == "Run")
-                        .Where(x => x.GetParameters().Length == 3)
-                        .FirstOrDefault(x =>
-                            x.GetParameters()[1].ParameterType == typeof(Metadata)
-                            && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
-                        );
+                var task =
+                    (Task?)method.Invoke(trainService, [trainInput, metadata, cancellationToken])
+                    ?? InvocationNull<Task>("Run(input, metadata, ct)", trainType.Name);
 
-                    return m ?? MissingMethod<MethodInfo>("Run(input, metadata, ct)", type.Name);
-                }
-            );
+                await task.ConfigureAwait(false);
+                return;
+            }
 
-            var task =
-                (Task?)method.Invoke(trainService, [trainInput, metadata, cancellationToken])
-                ?? InvocationNull<Task>("Run(input, metadata, ct)", trainType.Name);
+            var runMethod = RunWithCtMethod(trainType);
 
-            await task;
-            return;
+            var taskRun =
+                (Task?)runMethod.Invoke(trainService, [trainInput, cancellationToken])
+                ?? InvocationNull<Task>("Run(input, ct)", trainType.Name);
+
+            await taskRun.ConfigureAwait(false);
         }
+    }
 
-        var runMethod = RunWithCtMethodCache.GetOrAdd(
+    private static MethodInfo RunMethod(Type trainType) =>
+        RunMethodCache.GetOrAdd(
             trainType,
             type =>
             {
-                var m = type.GetMethods()
-                    .Where(x => x.Name == "Run")
-                    .Where(x => x.GetParameters().Length == 2)
+                var method = type.GetMethods()
+                    // Run function on Train/ServiceTrain
+                    // Run(input, cancellationToken = default) has 2 parameters (second is optional CancellationToken).
+                    // Run has an implementation in Trax.Core and Trax.Effect (the latter with the "new" keyword).
+                    // We want the one from Trax.Effect
                     .FirstOrDefault(x =>
-                        x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                        && x.Module.Name.Contains("Effect")
+                        string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                        && x.GetParameters().Length == 2
+                        && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                        && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
                     );
 
-                return m ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
+                return method ?? MissingMethod<MethodInfo>("Run", type.Name);
             }
         );
 
-        var taskRun =
-            (Task?)runMethod.Invoke(trainService, [trainInput, cancellationToken])
-            ?? InvocationNull<Task>("Run(input, ct)", trainType.Name);
+    private static MethodInfo RunWithCtMethod(Type trainType) =>
+        RunWithCtMethodCache.GetOrAdd(
+            trainType,
+            type =>
+            {
+                var method = type.GetMethods()
+                    .FirstOrDefault(x =>
+                        string.Equals(x.Name, "Run", StringComparison.Ordinal)
+                        && x.GetParameters().Length == 2
+                        && x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                        && x.Module.Name.Contains("Effect", StringComparison.Ordinal)
+                    );
 
-        await taskRun;
-    }
+                return method ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
+            }
+        );
 }

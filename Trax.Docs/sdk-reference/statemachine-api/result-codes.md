@@ -10,7 +10,10 @@ package: Trax.StateMachine
 namespace: Trax.StateMachine
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine/RefusalCode.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Results.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/RefusalCodes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/RefusalCodeJsonConverter.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/AdvanceResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/RehydrationResult.cs
 ---
 
 # Result codes

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Enums;
@@ -20,7 +21,18 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulerSettingsExtraTests
 {
-    private static SchedulerConfiguration ResolveConfiguration(
+    // Disposed after each test, asynchronously, so the helper that builds them stays synchronous.
+    private readonly List<ServiceProvider> _providers = [];
+
+    [TearDown]
+    public async Task DisposeProviders()
+    {
+        foreach (var provider in _providers)
+            await provider.DisposeAsync().ConfigureAwait(false);
+        _providers.Clear();
+    }
+
+    private SchedulerConfiguration ResolveConfiguration(
         Action<SchedulerConfigurationBuilder> configure
     )
     {
@@ -36,7 +48,8 @@ public class SchedulerSettingsExtraTests
                     return scheduler;
                 })
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
         return provider.GetRequiredService<SchedulerConfiguration>();
     }
 
@@ -78,7 +91,7 @@ public class SchedulerSettingsExtraTests
     [Test]
     public void MaxWorkQueueEntriesPerCycle_Null_DisablesLimit()
     {
-        var config = ResolveConfiguration(b => b.MaxWorkQueueEntriesPerCycle(null));
+        var config = ResolveConfiguration(b => b.MaxWorkQueueEntriesPerCycle(limit: null));
         config.MaxWorkQueueEntriesPerCycle.Should().BeNull();
     }
 
@@ -130,14 +143,14 @@ public class SchedulerSettingsExtraTests
 
         var opts = provider.GetService<RemoteRunOptions>();
         opts.Should().NotBeNull();
-        opts!.BaseUrl.Should().Be("https://run.example.com/");
+        opts.NotNull().BaseUrl.Should().Be("https://run.example.com/");
     }
 
     [Test]
     public void PruneOrphanedManifests_FlagSetsConfiguration()
     {
         var enabledConfig = ResolveConfiguration(b => b.PruneOrphanedManifests());
-        var disabledConfig = ResolveConfiguration(b => b.PruneOrphanedManifests(false));
+        var disabledConfig = ResolveConfiguration(b => b.PruneOrphanedManifests(prune: false));
 
         enabledConfig.PruneOrphanedManifests.Should().BeTrue();
         disabledConfig.PruneOrphanedManifests.Should().BeFalse();

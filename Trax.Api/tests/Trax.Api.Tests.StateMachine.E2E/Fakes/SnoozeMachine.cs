@@ -5,31 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
 
-public enum SnoozeState
-{
-    Waiting,
-    Awake,
-    Lapsed,
-}
-
-public enum SnoozeTrigger
-{
-    Wake,
-    Snooze,
-}
-
-public sealed record SnoozeContext
-{
-    /// <summary>How long <see cref="SnoozeState.Waiting"/> is held before it lapses.</summary>
-    public TimeSpan? Patience { get; init; }
-}
-
-/// <summary>What a client starts a snooze with, and snoozes again with.</summary>
-public sealed record SnoozeInput
-{
-    public TimeSpan Patience { get; init; }
-}
-
 /// <summary>
 /// A machine whose timer reads its duration from the context: <c>start</c> and <c>Snooze</c> carry a
 /// <see cref="TimeSpan"/> the reduction puts in <c>patience</c>, and <see cref="SnoozeState.Waiting"/> lapses once it

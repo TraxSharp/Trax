@@ -65,10 +65,12 @@ public class PollingServicesTests
     )
     {
         using var cts = new CancellationTokenSource();
-        await service.StartAsync(cts.Token);
-        await trainHit.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await service.StartAsync(cts.Token).ConfigureAwait(false);
+        await trainHit
+            .Task.WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None)
+            .ConfigureAwait(false);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     private static TaskCompletionSource Hit() =>
@@ -76,14 +78,14 @@ public class PollingServicesTests
 
     private static async Task<bool> WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + timeout;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             if (predicate())
                 return true;
             // allowed-delay: poll interval while awaiting the completion signal, bounded by the
             // timeout above. Not a fixed wait for the work to finish.
-            await Task.Delay(25);
+            await Task.Delay(25).ConfigureAwait(false);
         }
         return predicate();
     }
@@ -187,14 +189,17 @@ public class PollingServicesTests
             () => liveness.LastDispatchCompletedAt is not null,
             TimeSpan.FromSeconds(10)
         );
-        cts.Cancel();
-        await service.StopAsync(CancellationToken.None);
+        await cts.CancelAsync().ConfigureAwait(false);
+        await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         liveness
             .LastDispatchCompletedAt.Should()
             .NotBeNull("the disabled loop still runs its cycle");
 
-        await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
+        await train
+            .DidNotReceive()
+            .Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     #endregion

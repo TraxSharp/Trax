@@ -46,9 +46,11 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/cognito-token-issuer">SDK reference</seealso>
 public sealed class CognitoTokenIssuer
 {
-    private static readonly JsonWriterOptions JsonWriterOptions = new()
+    private static readonly JsonSerializerOptions IdentitiesJson = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     /// <summary>
@@ -141,9 +143,9 @@ public sealed class CognitoTokenIssuer
     public string MintAccessToken(CognitoAccessTokenRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId, nameof(request));
         if (request.Email is not null)
-            ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.Email, nameof(request));
         if (request.Lifetime <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "Lifetime must be positive.");
 
@@ -154,7 +156,12 @@ public sealed class CognitoTokenIssuer
             new("sub", request.Sub.ToString()),
             new(CognitoDefaults.TokenUse, CognitoDefaults.TokenUseAccess),
             new(CognitoDefaults.ClientId, request.ClientId),
-            new("auth_time", ToEpochSeconds(authTime).ToString(), ClaimValueTypes.Integer64),
+            new(
+                "auth_time",
+                ToEpochSeconds(authTime)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64
+            ),
             new("jti", Guid.NewGuid().ToString()),
             new(
                 "username",
@@ -199,8 +206,8 @@ public sealed class CognitoTokenIssuer
     public string MintIdToken(CognitoIdTokenRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId, nameof(request));
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Email, nameof(request));
         if (request.Lifetime <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "Lifetime must be positive.");
 
@@ -210,7 +217,12 @@ public sealed class CognitoTokenIssuer
         {
             new("sub", request.Sub.ToString()),
             new(CognitoDefaults.TokenUse, CognitoDefaults.TokenUseId),
-            new("auth_time", ToEpochSeconds(authTime).ToString(), ClaimValueTypes.Integer64),
+            new(
+                "auth_time",
+                ToEpochSeconds(authTime)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64
+            ),
             new("jti", Guid.NewGuid().ToString()),
             new(CognitoDefaults.Email, request.Email),
             new(
@@ -302,25 +314,20 @@ public sealed class CognitoTokenIssuer
     /// </summary>
     private static string SerializeIdentities(IReadOnlyList<FederatedIdentity> identities)
     {
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer, JsonWriterOptions))
-        {
-            writer.WriteStartArray();
-            foreach (var identity in identities)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("userId", identity.UserId);
-                writer.WriteString("providerName", identity.ProviderName);
-                writer.WriteString("providerType", identity.ProviderType);
-                writer.WriteBoolean("primary", identity.Primary);
-                writer.WriteString(
-                    "dateCreated",
-                    identity.DateCreated.ToUnixTimeMilliseconds().ToString()
-                );
-                writer.WriteEndObject();
-            }
-            writer.WriteEndArray();
-        }
-        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+        var array = new System.Text.Json.Nodes.JsonArray();
+        foreach (var identity in identities)
+            array.Add(
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["userId"] = identity.UserId,
+                    ["providerName"] = identity.ProviderName,
+                    ["providerType"] = identity.ProviderType,
+                    ["primary"] = identity.Primary,
+                    ["dateCreated"] = identity
+                        .DateCreated.ToUnixTimeMilliseconds()
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture),
+                }
+            );
+        return array.ToJsonString(IdentitiesJson);
     }
 }

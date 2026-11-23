@@ -86,7 +86,7 @@ internal static class EnumerableExtensions
         var results = new List<TResult>();
 
         foreach (var item in source)
-            results.Add(await func(item));
+            results.Add(await func(item).ConfigureAwait(false));
 
         return results;
     }
@@ -117,7 +117,7 @@ internal static class EnumerableExtensions
         {
             try
             {
-                await func(item);
+                await func(item).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -128,7 +128,7 @@ internal static class EnumerableExtensions
         if (failures is null)
             return;
 
-        if (failures.Count == 1 || failures.All(f => f is OperationCanceledException))
+        if (failures.Count == 1 || failures.TrueForAll(f => f is OperationCanceledException))
             ExceptionDispatchInfo.Capture(failures[0]).Throw();
 
         throw new AggregateException(failures);

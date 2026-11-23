@@ -1,6 +1,8 @@
 using System.CommandLine;
+using System.Globalization;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Commands;
@@ -12,9 +14,12 @@ namespace Trax.Cli.Commands;
 /// </summary>
 internal static class DeployAwsCommands
 {
+    /// <summary>The clock image tags and log windows are read from; tests swap in a fixed one.</summary>
+    internal static TimeProvider Clock { get; set; } = TimeProvider.System;
+
     /// <summary>How the commands reach AWS; tests swap in a fake.</summary>
     internal static Func<string, IAwsDeployClient> Client { get; set; } =
-        region => new AwsDeployClient(region);
+        region => new AwsDeployClient(region, Clock);
 
     internal static IImagePublisher Images { get; set; } = new DotnetImagePublisher();
 
@@ -61,7 +66,14 @@ internal static class DeployAwsCommands
         };
         command.SetAction(
             (r, ct) =>
-                PlanAsync(PathOf(r, file), r.GetRequiredValue(env), new DotnetHostExporter(ct), ct)
+                PlanAsync(
+                    PathOf(r, file),
+                    r.GetRequiredValue(env),
+                    new DotnetHostExporter(ct),
+                    r.InvocationConfiguration.Output,
+                    r.InvocationConfiguration.Error,
+                    ct
+                )
         );
         return command;
     }
@@ -78,7 +90,16 @@ internal static class DeployAwsCommands
             env,
             file,
         };
-        command.SetAction((r, ct) => StatusAsync(PathOf(r, file), r.GetRequiredValue(env), ct));
+        command.SetAction(
+            (r, ct) =>
+                StatusAsync(
+                    PathOf(r, file),
+                    r.GetRequiredValue(env),
+                    r.InvocationConfiguration.Output,
+                    r.InvocationConfiguration.Error,
+                    ct
+                )
+        );
         return command;
     }
 
@@ -112,6 +133,8 @@ internal static class DeployAwsCommands
                     r.GetRequiredValue(service),
                     r.GetValue(follow),
                     r.GetValue(since),
+                    r.InvocationConfiguration.Output,
+                    r.InvocationConfiguration.Error,
                     ct
                 )
         );
@@ -146,6 +169,8 @@ internal static class DeployAwsCommands
                     r.GetRequiredValue(env),
                     r.GetValue(deleteData),
                     r.GetValue(yes),
+                    r.InvocationConfiguration.Output,
+                    r.InvocationConfiguration.Error,
                     ct
                 )
         );
@@ -176,7 +201,9 @@ internal static class DeployAwsCommands
                     PathOf(r, file),
                     r.GetRequiredValue(env),
                     r.GetRequiredValue(name),
-                    ReadSecret,
+                    () => ReadSecretAsync(r.InvocationConfiguration.Output),
+                    r.InvocationConfiguration.Output,
+                    r.InvocationConfiguration.Error,
                     ct
                 )
         );
@@ -191,7 +218,14 @@ internal static class DeployAwsCommands
             listFile,
         };
         list.SetAction(
-            (r, ct) => SecretListAsync(PathOf(r, listFile), r.GetRequiredValue(listEnv), ct)
+            (r, ct) =>
+                SecretListAsync(
+                    PathOf(r, listFile),
+                    r.GetRequiredValue(listEnv),
+                    r.InvocationConfiguration.Output,
+                    r.InvocationConfiguration.Error,
+                    ct
+                )
         );
         return new Command("secret", "Set and list the secrets the app reads.") { set, list };
     }
@@ -202,104 +236,159 @@ internal static class DeployAwsCommands
         string filePath,
         string environment,
         IHostExporter exporter,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var exports = DeployCommand.Export(file, filePath, exporter);
-            var deployer = new AwsDeployer(Client(env.Region), Images, Console.WriteLine);
-            var tag = AwsDeployer.ImageTag(
-                Path.GetDirectoryName(Path.GetFullPath(filePath))!,
-                DateTime.UtcNow
-            );
-            var url = await deployer.DeployAsync(file, filePath, environment, exports, tag, ct);
-            Console.WriteLine(
-                url is null ? $"Deployed {file.StackName(environment)}." : $"Deployed: {url}"
-            );
-        });
+        await GuardAsync(
+                stderr,
+                async () =>
+                {
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    var exports = await DeployCommand
+                        .ExportAsync(file, filePath, exporter, stdout)
+                        .ConfigureAwait(false);
+                    var deployer = new AwsDeployer(Client(env.Region), Images, stdout.WriteLine);
+                    var tag = await AwsDeployer
+                        .ImageTagAsync(
+                            Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull(),
+                            Clock.GetUtcNow().UtcDateTime
+                        )
+                        .ConfigureAwait(false);
+                    var url = await deployer
+                        .DeployAsync(file, filePath, environment, exports, tag, ct)
+                        .ConfigureAwait(false);
+                    await stdout
+                        .WriteLineAsync(
+                            url is null
+                                ? $"Deployed {file.StackName(environment)}."
+                                : $"Deployed: {url}"
+                        )
+                        .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
 
     internal static async Task<int> PlanAsync(
         string filePath,
         string environment,
         IHostExporter exporter,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var exports = DeployCommand.Export(file, filePath, exporter);
-            var templates = await new AwsDeployer(
-                Client(env.Region),
-                Images,
-                Console.WriteLine
-            ).PlanAsync(file, environment, exports, ct);
-            var dir = Path.Combine(
-                Path.GetDirectoryName(Path.GetFullPath(filePath))!,
-                ".trax",
-                "deploy",
-                "aws"
-            );
-            Directory.CreateDirectory(dir);
-            foreach (
-                var (stack, template) in new[]
+        await GuardAsync(
+                stderr,
+                async () =>
                 {
-                    (file.FoundationStackName(environment), templates.Foundation),
-                    (file.StackName(environment), templates.Runtime),
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    var exports = await DeployCommand
+                        .ExportAsync(file, filePath, exporter, stdout)
+                        .ConfigureAwait(false);
+                    var templates = await new AwsDeployer(
+                        Client(env.Region),
+                        Images,
+                        stdout.WriteLine
+                    )
+                        .PlanAsync(file, environment, exports, ct)
+                        .ConfigureAwait(false);
+                    var dir = Path.Combine(
+                        Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull(),
+                        ".trax",
+                        "deploy",
+                        "aws"
+                    );
+                    Directory.CreateDirectory(dir);
+                    foreach (
+                        var (stack, template) in new[]
+                        {
+                            (file.FoundationStackName(environment), templates.Foundation),
+                            (file.StackName(environment), templates.Runtime),
+                        }
+                    )
+                    {
+                        var path = Path.Combine(dir, $"{stack}.template.json");
+                        await File.WriteAllTextAsync(path, AwsStack.Indented(template), ct)
+                            .ConfigureAwait(false);
+                        await stdout.WriteLineAsync($"Wrote {path}").ConfigureAwait(false);
+                    }
+                    foreach (var line in AwsPlanSummary.Lines(file, environment, templates))
+                        await stdout.WriteLineAsync(line).ConfigureAwait(false);
                 }
             )
-            {
-                var path = Path.Combine(dir, $"{stack}.template.json");
-                File.WriteAllText(path, AwsStack.Indented(template));
-                Console.WriteLine($"Wrote {path}");
-            }
-            foreach (var line in AwsPlanSummary.Lines(file, environment, templates))
-                Console.WriteLine(line);
-        });
+            .ConfigureAwait(false);
 
     internal static async Task<int> StatusAsync(
         string filePath,
         string environment,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var aws = Client(env.Region);
-            var stack = file.StackName(environment);
-            var foundation = await aws.DescribeStackAsync(
-                file.FoundationStackName(environment),
-                ct
-            );
-            if (foundation is not null)
-                Console.WriteLine($"{file.FoundationStackName(environment)}: {foundation.Status}");
-            var state = await aws.DescribeStackAsync(stack, ct);
-            if (state is null)
-            {
-                Console.WriteLine($"{stack} is not deployed.");
-                return;
-            }
-            Console.WriteLine($"{stack}: {state.Status}");
-            if (state.Outputs.TryGetValue("Url", out var url))
-                Console.WriteLine($"  {url}");
-            if (!state.Outputs.TryGetValue("ClusterName", out var cluster))
-                return;
-            var names = file
-                .Services.Keys.Select(s =>
-                    state.Outputs.GetValueOrDefault(AwsStack.ServiceOutput(s))
-                )
-                .OfType<string>()
-                .ToList();
-            foreach (var service in await aws.DescribeServicesAsync(cluster, names, ct))
-                Console.WriteLine(
-                    $"  {service.Name, -16}{service.Running}/{service.Desired} running"
-                        + (service.Pending > 0 ? $", {service.Pending} starting" : "")
-                        + $"  {service.Rollout, -12}{service.TaskDefinition}"
-                );
-        });
+        await GuardAsync(
+                stderr,
+                async () =>
+                {
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    var aws = Client(env.Region);
+                    var stack = file.StackName(environment);
+                    var foundation = await aws.DescribeStackAsync(
+                            file.FoundationStackName(environment),
+                            ct
+                        )
+                        .ConfigureAwait(false);
+                    if (foundation is not null)
+                        await stdout
+                            .WriteLineAsync(
+                                $"{file.FoundationStackName(environment)}: {foundation.Status}"
+                            )
+                            .ConfigureAwait(false);
+                    var state = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+                    if (state is null)
+                    {
+                        await stdout
+                            .WriteLineAsync($"{stack} is not deployed.")
+                            .ConfigureAwait(false);
+                        return;
+                    }
+                    await stdout.WriteLineAsync($"{stack}: {state.Status}").ConfigureAwait(false);
+                    if (state.Outputs.TryGetValue("Url", out var url))
+                        await stdout.WriteLineAsync($"  {url}").ConfigureAwait(false);
+                    if (!state.Outputs.TryGetValue("ClusterName", out var cluster))
+                        return;
+                    var names = file
+                        .Services.Keys.Select(s =>
+                            state.Outputs.GetValueOrDefault(AwsStack.ServiceOutput(s))
+                        )
+                        .OfType<string>()
+                        .ToList();
+                    foreach (
+                        var service in await aws.DescribeServicesAsync(cluster, names, ct)
+                            .ConfigureAwait(false)
+                    )
+                        await stdout
+                            .WriteLineAsync(
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"  {service.Name, -16}{service.Running}/{service.Desired} running"
+                                )
+                                    + (
+                                        service.Pending > 0
+                                            ? string.Create(
+                                                CultureInfo.InvariantCulture,
+                                                $", {service.Pending} starting"
+                                            )
+                                            : ""
+                                    )
+                                    + $"  {service.Rollout, -12}{service.TaskDefinition}"
+                            )
+                            .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
 
     internal static async Task<int> LogsAsync(
         string filePath,
@@ -307,23 +396,38 @@ internal static class DeployAwsCommands
         string service,
         bool follow,
         int sinceMinutes,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            if (service != AwsStack.MigrateContainer && !file.Services.ContainsKey(service))
-                throw new InvalidOperationException(
-                    $"'{service}' is not a service. Read one of: {string.Join(", ", file.Services.Keys.Append(AwsStack.MigrateContainer))}."
-                );
-            var group = AwsStack.LogGroup(file.StackName(environment), service);
-            await foreach (
-                var line in Client(env.Region)
-                    .LogsAsync(group, DateTime.UtcNow.AddMinutes(-sinceMinutes), follow, ct)
+        await GuardAsync(
+                stderr,
+                async () =>
+                {
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    if (
+                        !string.Equals(service, AwsStack.MigrateContainer, StringComparison.Ordinal)
+                        && !file.Services.ContainsKey(service)
+                    )
+                        throw new InvalidOperationException(
+                            $"'{service}' is not a service. Read one of: {string.Join(", ", file.Services.Keys.Append(AwsStack.MigrateContainer))}."
+                        );
+                    var group = AwsStack.LogGroup(file.StackName(environment), service);
+                    await foreach (
+                        var line in Client(env.Region)
+                            .LogsAsync(
+                                group,
+                                Clock.GetUtcNow().UtcDateTime.AddMinutes(-sinceMinutes),
+                                follow,
+                                ct
+                            )
+                            .ConfigureAwait(false)
+                    )
+                        await stdout.WriteLineAsync(line).ConfigureAwait(false);
+                }
             )
-                Console.WriteLine(line);
-        });
+            .ConfigureAwait(false);
 
     /// <summary>What destroy asks before it deletes anything: what goes, and what happens to the users.</summary>
     internal static string DestroyPrompt(DeployFile file, string environment, bool deleteData)
@@ -331,7 +435,11 @@ internal static class DeployAwsCommands
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var cognito = env.Auth is { Kind: DeployAuth.Cognito };
-        var production = env.Profile == DeployEnvironment.Production;
+        var production = string.Equals(
+            env.Profile,
+            DeployEnvironment.Production,
+            StringComparison.Ordinal
+        );
         var gone = new List<string> { $"{stack} and {file.FoundationStackName(environment)}" };
         if (cognito && (deleteData || !production))
             gone.Add("its user pool with every user in it");
@@ -350,88 +458,120 @@ internal static class DeployAwsCommands
         string environment,
         bool deleteData,
         bool yes,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var stack = file.StackName(environment);
-            if (!yes)
-            {
-                Console.Write(DestroyPrompt(file, environment, deleteData));
-                if (ReadLine()?.Trim() != stack)
-                    throw new InvalidOperationException("Nothing was deleted.");
-            }
-            await new AwsDeployer(Client(env.Region), Images, Console.WriteLine).DestroyAsync(
-                file,
-                environment,
-                deleteData,
-                ct
-            );
-        });
+        await GuardAsync(
+                stderr,
+                async () =>
+                {
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    var stack = file.StackName(environment);
+                    if (!yes)
+                    {
+                        await stdout
+                            .WriteAsync(DestroyPrompt(file, environment, deleteData))
+                            .ConfigureAwait(false);
+                        if (!string.Equals(ReadLine()?.Trim(), stack, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Nothing was deleted.");
+                    }
+                    await new AwsDeployer(Client(env.Region), Images, stdout.WriteLine)
+                        .DestroyAsync(file, environment, deleteData, ct)
+                        .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
 
     internal static async Task<int> SecretSetAsync(
         string filePath,
         string environment,
         string name,
-        Func<string> readValue,
+        Func<Task<string>> readValue,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            if (!file.Secrets.Contains(name))
-                throw new InvalidOperationException(
-                    $"'{name}' is not listed under secrets in {DeployFile.FileName}. Add it there first, so every "
-                        + "deploy knows to supply it."
-                );
-            var value = readValue();
-            if (value.Length == 0)
-                throw new InvalidOperationException("The value is empty; nothing was stored.");
-            var stack = file.StackName(environment);
-            await Client(env.Region)
-                .PutSecretAsync(
-                    AwsStack.AppSecretName(stack, name),
-                    value,
-                    AwsDeployer.Tags(file, environment),
-                    ct
-                );
-            Console.WriteLine(
-                $"Stored {AwsStack.AppSecretName(stack, name)}. Deploy again for the services to read it."
-            );
-        });
+        await GuardAsync(
+                stderr,
+                async () =>
+                {
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    if (!file.Secrets.Contains(name))
+                        throw new InvalidOperationException(
+                            $"'{name}' is not listed under secrets in {DeployFile.FileName}. Add it there first, so every "
+                                + "deploy knows to supply it."
+                        );
+                    var value = await readValue().ConfigureAwait(false);
+                    if (value.Length == 0)
+                        throw new InvalidOperationException(
+                            "The value is empty; nothing was stored."
+                        );
+                    var stack = file.StackName(environment);
+                    await Client(env.Region)
+                        .PutSecretAsync(
+                            AwsStack.AppSecretName(stack, name),
+                            value,
+                            AwsDeployer.Tags(file, environment),
+                            ct
+                        )
+                        .ConfigureAwait(false);
+                    await stdout
+                        .WriteLineAsync(
+                            $"Stored {AwsStack.AppSecretName(stack, name)}. Deploy again for the services to read it."
+                        )
+                        .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
 
     internal static async Task<int> SecretListAsync(
         string filePath,
         string environment,
+        TextWriter stdout,
+        TextWriter stderr,
         CancellationToken ct
     ) =>
-        await Guard(async () =>
-        {
-            var file = DeployFile.Read(filePath);
-            var env = file.Environment(environment);
-            var stack = file.StackName(environment);
-            var stored = (
-                await Client(env.Region).ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct)
-            ).ToDictionary(s => s.Name, s => s.Changed, StringComparer.Ordinal);
-            foreach (var name in file.Secrets)
-                Console.WriteLine(
-                    stored.TryGetValue(AwsStack.AppSecretName(stack, name), out var changed)
-                        ? $"  {name, -32}set {changed:yyyy-MM-dd HH:mm}"
-                        : $"  {name, -32}NOT SET"
-                );
-        });
+        await GuardAsync(
+                stderr,
+                async () =>
+                {
+                    var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+                    var env = file.Environment(environment);
+                    var stack = file.StackName(environment);
+                    var stored = (
+                        await Client(env.Region)
+                            .ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct)
+                            .ConfigureAwait(false)
+                    ).ToDictionary(s => s.Name, s => s.Changed, StringComparer.Ordinal);
+                    foreach (var name in file.Secrets)
+                        await stdout
+                            .WriteLineAsync(
+                                stored.TryGetValue(
+                                    AwsStack.AppSecretName(stack, name),
+                                    out var changed
+                                )
+                                    ? string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"  {name, -32}set {changed:yyyy-MM-dd HH:mm}"
+                                    )
+                                    : $"  {name, -32}NOT SET"
+                            )
+                            .ConfigureAwait(false);
+                }
+            )
+            .ConfigureAwait(false);
 
     /// <summary>The value from standard input when it is redirected, else typed without echo.</summary>
-    private static string ReadSecret()
+    private static async Task<string> ReadSecretAsync(TextWriter stdout)
     {
         if (Console.IsInputRedirected)
-            return Console.In.ReadToEnd().TrimEnd('\r', '\n');
-        Console.Write("Value (not shown): ");
+            return (await Console.In.ReadToEndAsync().ConfigureAwait(false)).TrimEnd('\r', '\n');
+        await stdout.WriteAsync("Value (not shown): ").ConfigureAwait(false);
         var value = ReadHidden(() => Console.ReadKey(intercept: true));
-        Console.WriteLine();
+        await stdout.WriteLineAsync().ConfigureAwait(false);
         return value;
     }
 
@@ -459,11 +599,11 @@ internal static class DeployAwsCommands
         return value.ToString();
     }
 
-    private static async Task<int> Guard(Func<Task> action)
+    private static async Task<int> GuardAsync(TextWriter stderr, Func<Task> action)
     {
         try
         {
-            await action();
+            await action().ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex)
@@ -473,7 +613,7 @@ internal static class DeployAwsCommands
                         or Amazon.Runtime.AmazonClientException
             )
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
     }

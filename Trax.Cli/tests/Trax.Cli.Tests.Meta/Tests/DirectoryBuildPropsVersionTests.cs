@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Cli.Tests.Meta.Tests;
 
 /// <summary>
@@ -27,7 +29,7 @@ public class DirectoryBuildPropsVersionTests
     {
         var path = RepoRoot.Combine("Directory.Build.props");
         var doc = XDocument.Load(path);
-        var version = doc.Root!.Descendants("Version").FirstOrDefault()?.Value;
+        var version = doc.Root.NotNull().Descendants("Version").FirstOrDefault()?.Value;
 
         version
             .Should()

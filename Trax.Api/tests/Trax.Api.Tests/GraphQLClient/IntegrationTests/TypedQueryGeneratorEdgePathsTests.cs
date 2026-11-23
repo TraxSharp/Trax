@@ -4,6 +4,7 @@ using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Typed;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -15,9 +16,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class TypedQueryGeneratorEdgePathsTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
-    private ServiceProvider _services = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private GraphQLTestServerFixture? _fixture;
+    private ServiceProvider? _services;
+    private IGraphQLClientExecutor? _executor;
 
     [SetUp]
     public void SetUp()
@@ -25,17 +26,17 @@ public class TypedQueryGeneratorEdgePathsTests
         _fixture = new GraphQLTestServerFixture();
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient());
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient());
         _services = services.BuildServiceProvider();
-        _executor = _services.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _services.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _fixture.Dispose();
+        _services?.Dispose();
+        _fixture?.Dispose();
     }
 
     [Test]
@@ -86,7 +87,7 @@ public class TypedQueryGeneratorEdgePathsTests
     {
         // End-to-end: the renamed-field request actually works against a real server.
         // Pin down that the generator's output is server-compatible, not just textually correct.
-        var result = await _executor.Run(new FieldRenamedRequest { Id = "player-1" });
+        var result = await _executor.NotNull().Run(new FieldRenamedRequest { Id = "player-1" });
 
         result.Id.Should().Be("player-1");
         result.DisplayName.Should().Be("Aragorn");
@@ -252,20 +253,20 @@ public class TypedQueryGeneratorEdgePathsTests
     }
 
     [GraphQLOperation(OperationType.Query, Path = "", RootField = "typedCustomers")]
-    private sealed class EmptyPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class EmptyPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(OperationType.Query, Path = ".discover", RootField = "typedCustomers")]
-    private sealed class LeadingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class LeadingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(OperationType.Query, Path = "discover.", RootField = "typedCustomers")]
-    private sealed class TrailingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class TrailingDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(
         OperationType.Query,
         Path = "discover..netsuite",
         RootField = "typedCustomers"
     )]
-    private sealed class DoubleDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+    private sealed class DoubleDotPathRequest : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     [GraphQLOperation(
         OperationType.Query,
@@ -273,7 +274,7 @@ public class TypedQueryGeneratorEdgePathsTests
         RootField = "typedCustomers"
     )]
     private sealed class WhitespaceSegmentPathRequest
-        : TypedRequest<IReadOnlyList<TypedItemSummary>> { }
+        : TypedRequest<IReadOnlyList<TypedItemSummary>>;
 
     #endregion
 }

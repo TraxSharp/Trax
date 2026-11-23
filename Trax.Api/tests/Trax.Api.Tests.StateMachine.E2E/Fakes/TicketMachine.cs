@@ -5,41 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
 
-public enum TicketState
-{
-    Open,
-    Triaged,
-}
-
-public enum TicketTrigger
-{
-    Triage,
-}
-
-/// <summary>A priority whose member names are not upper snake case, so a spelling that differs from them shows.</summary>
-public enum TicketPriority
-{
-    Low,
-    HighPriority,
-}
-
-public sealed record TicketContext
-{
-    public string? Title { get; init; }
-
-    public TicketPriority? Priority { get; init; }
-}
-
-public sealed record TicketStartInput
-{
-    public string Title { get; init; } = "";
-}
-
-public sealed record TicketTriageInput
-{
-    public TicketPriority Priority { get; init; }
-}
-
 /// <summary>A machine with an enum in its context and in an event's input, for how an enum is spelled on the wire.</summary>
 public class TicketMachine : Machine<TicketState, TicketTrigger>
 {

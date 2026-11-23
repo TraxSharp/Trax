@@ -41,7 +41,8 @@ public class KeyedClientE2ETests
         // schema and rejects the billing query before any HTTP call — the isolation guarantee.
         var act = async () =>
             await Executor("serverB")
-                .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") });
+                .Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") })
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<GraphQLValidationException>();
     }
@@ -51,7 +52,8 @@ public class KeyedClientE2ETests
     {
         var act = async () =>
             await Executor("serverC")
-                .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") });
+                .Run(new GetProductRequest { Input = new GetProductInput("SKU-1") })
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<GraphQLValidationException>();
     }

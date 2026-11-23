@@ -2,38 +2,14 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
+using Trax.Core.Junction;
 using Trax.Effect.Data.Testing;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.StateMachine.Persistence.Integration;
-
-public enum ProbeState
-{
-    Open,
-    Closed,
-}
-
-public enum ProbeTrigger
-{
-    Close,
-}
-
-/// <summary>A machine whose only guard throws, carrying text that must stay on the server.</summary>
-public sealed class ThrowingGuardMachine : Machine<ProbeState, ProbeTrigger>
-{
-    public const string Secret = "Host=db.internal;Password=hunter2";
-
-    protected override void Configure(IMachineBuilder<ProbeState, ProbeTrigger> m)
-    {
-        m.Id("throwing-guard").Version(1).StartsAt(ProbeState.Open, () => new JsonObject());
-        m.In(ProbeState.Open)
-            .On(ProbeTrigger.Close)
-            .When((_, _) => throw new InvalidOperationException(Secret))
-            .To(ProbeState.Closed);
-    }
-}
 
 /// <summary>
 /// What the send and advance mutations tell the client when something fails on the server: a fixed message
@@ -56,7 +32,9 @@ public class MutationErrorMessageTests
     private static async Task<Guid> SeedReview(SnapshotMachineRegistry registry)
     {
         var id = Guid.NewGuid();
-        await TestDb.Seed(User.CurrentUserKey!, id, OrderMachine.ReviewSnapshot(1));
+        await TestDb
+            .Seed(User.CurrentUserKey.NotNull(), id, OrderMachine.ReviewSnapshot(1))
+            .ConfigureAwait(false);
         return id;
     }
 
@@ -71,10 +49,10 @@ public class MutationErrorMessageTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
+        send.Problem.NotNull().Code.Should().Be(RefusalCode.DeliveryFailed);
         send.Problem.Message.Should().NotContain(Secret);
         var entry = logger.Entries.Should().ContainSingle().Which;
-        entry.Exception!.Message.Should().Be(Secret);
+        entry.Exception.NotNull().Message.Should().Be(Secret);
         send.Problem.Message.Should().Contain(entry.Reference);
     }
 
@@ -88,19 +66,27 @@ public class MutationErrorMessageTests
         var registry = Registry(new CancellingCharge(request));
         var id = await SeedReview(registry);
 
-        var act = () =>
-            new CancellableSend(registry, request.Token).Run(
-                new SendSnapshotInput { Machine = "order", Id = id }
-            );
+        var send = CancellableSend(registry, request.Token);
+        var act = () => send.Run(new SendSnapshotInput { Machine = "order", Id = id });
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
-    /// <summary>The send mutation as a request whose token the test controls.</summary>
-    private sealed class CancellableSend : SendSnapshotJunction
+    /// <summary>
+    /// The send mutation as a request whose token the test controls. The junction is sealed and the token's setter
+    /// is the train's to call, so the test sets it the way a running train would, through the property.
+    /// </summary>
+    private static SendSnapshotJunction CancellableSend(
+        ISnapshotMachineRegistry registry,
+        CancellationToken token
+    )
     {
-        public CancellableSend(ISnapshotMachineRegistry registry, CancellationToken token)
-            : base(registry, User) => CancellationToken = token;
+        var send = new SendSnapshotJunction(registry, User);
+        typeof(Junction<SendSnapshotInput, SendSnapshotOutput>)
+            .GetProperty(nameof(Junction<SendSnapshotInput, SendSnapshotOutput>.CancellationToken))
+            .NotNull()
+            .SetValue(send, token);
+        return send;
     }
 
     /// <summary>A charge during which the request goes away, and which then reports the cancellation.</summary>
@@ -111,7 +97,7 @@ public class MutationErrorMessageTests
             CancellationToken cancellationToken = default
         )
         {
-            await request.CancelAsync();
+            await request.CancelAsync().ConfigureAwait(false);
             throw new OperationCanceledException(request.Token);
         }
     }
@@ -137,10 +123,10 @@ public class MutationErrorMessageTests
             }
         );
 
-        advance.Problem!.Code.Should().Be(RefusalCode.InternalError);
+        advance.Problem.NotNull().Code.Should().Be(RefusalCode.InternalError);
         advance.Problem.Message.Should().NotContain(Secret);
         var entry = logger.Entries.Should().ContainSingle().Which;
-        entry.Exception!.Message.Should().Be(Secret);
+        entry.Exception.NotNull().Message.Should().Be(Secret);
         advance.Problem.Message.Should().Contain(entry.Reference);
     }
 
@@ -171,7 +157,9 @@ public class MutationErrorMessageTests
         {
             var reference =
                 (state as IEnumerable<KeyValuePair<string, object?>>)
-                    ?.FirstOrDefault(p => p.Key == "Reference")
+                    ?.FirstOrDefault(p =>
+                        string.Equals(p.Key, "Reference", StringComparison.Ordinal)
+                    )
                     .Value?.ToString()
                 ?? "";
             Entries.Add(new Entry(exception, reference));

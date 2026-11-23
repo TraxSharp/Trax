@@ -4,6 +4,7 @@ using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
@@ -27,10 +28,11 @@ namespace Trax.Scheduler.Lambda.Services;
 ///
 /// No public endpoint is created — access is governed by IAM policies.
 /// </remarks>
-internal class LambdaRunExecutor(
+internal sealed class LambdaRunExecutor(
     IAmazonLambda lambdaClient,
     LambdaRunOptions options,
-    ILogger<LambdaRunExecutor> logger
+    ILogger<LambdaRunExecutor> logger,
+    TimeProvider timeProvider
 ) : IRunExecutor
 {
     /// <summary>
@@ -66,31 +68,7 @@ internal class LambdaRunExecutor(
         CancellationToken ct = default
     )
     {
-        var inputJson = JsonSerializer.Serialize(
-            input,
-            input.GetType(),
-            TraxJsonSerializationOptions.ManifestProperties
-        );
-
-        var runRequest = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
-        var payloadJson = JsonSerializer.Serialize(runRequest);
-        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payloadJson)
-        {
-            Signature = options.SigningKey is { } key
-                ? RunnerRequestSignature.Create(
-                    key,
-                    RunnerRequestPurpose.Run,
-                    Encoding.UTF8.GetBytes(payloadJson)
-                )
-                : null,
-        };
-
-        var invokeRequest = new InvokeRequest
-        {
-            FunctionName = options.FunctionName,
-            InvocationType = InvocationType.RequestResponse,
-            Payload = JsonSerializer.Serialize(envelope),
-        };
+        var invokeRequest = BuildRunInvokeRequest(trainName, input);
 
         logger.LogDebug(
             "Invoking Lambda {FunctionName} (RequestResponse) for train {TrainName}",
@@ -98,17 +76,20 @@ internal class LambdaRunExecutor(
             trainName
         );
 
-        var invokeResponse = await LambdaRetryHelper.InvokeWithRetryAsync(
-            lambdaClient,
-            invokeRequest,
-            options.Retry,
-            logger,
-            ct
-        );
+        var invokeResponse = await LambdaRetryHelper
+            .InvokeWithRetryAsync(
+                lambdaClient,
+                invokeRequest,
+                options.Retry,
+                logger,
+                timeProvider,
+                ct
+            )
+            .ConfigureAwait(false);
 
         if (!string.IsNullOrEmpty(invokeResponse.FunctionError))
         {
-            var errorPayload = await ReadPayloadAsync(invokeResponse);
+            var errorPayload = await ReadPayloadAsync(invokeResponse).ConfigureAwait(false);
             throw new RemoteRunException(
                 $"Lambda function '{options.FunctionName}' returned error: "
                     + $"{invokeResponse.FunctionError}. {errorPayload}"
@@ -116,11 +97,14 @@ internal class LambdaRunExecutor(
         }
 
         var response =
-            await JsonSerializer.DeserializeAsync<RemoteRunResponse>(
-                invokeResponse.Payload,
-                RemoteRunJson.Read,
-                cancellationToken: ct
-            ) ?? throw new RemoteRunException("Lambda function returned null response.");
+            await JsonSerializer
+                .DeserializeAsync<RemoteRunResponse>(
+                    invokeResponse.Payload,
+                    RemoteRunJson.Read,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false)
+            ?? throw new RemoteRunException("Lambda function returned null response.");
 
         // Shared with the HTTP executor, so a field the worker sends back, such as its failure
         // classification, is carried by both transports rather than by whichever was updated.
@@ -134,12 +118,48 @@ internal class LambdaRunExecutor(
         return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
     }
 
+    private InvokeRequest BuildRunInvokeRequest(string trainName, object input)
+    {
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var runRequest = new RemoteRunRequest(
+            trainName,
+            inputJson,
+            input.GetType().FullName.NotNull()
+        );
+        var payloadJson = JsonSerializer.Serialize(runRequest);
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payloadJson)
+        {
+            Signature = options.SigningKey is { } key
+                ? RunnerRequestSignature.Create(
+                    key,
+                    RunnerRequestPurpose.Run,
+                    Encoding.UTF8.GetBytes(payloadJson),
+                    timeProvider
+                )
+                : null,
+        };
+
+        var invokeRequest = new InvokeRequest
+        {
+            FunctionName = options.FunctionName,
+            InvocationType = InvocationType.RequestResponse,
+            Payload = JsonSerializer.Serialize(envelope),
+        };
+
+        return invokeRequest;
+    }
+
     private static async Task<string> ReadPayloadAsync(InvokeResponse response)
     {
         try
         {
             using var reader = new StreamReader(response.Payload);
-            return await reader.ReadToEndAsync();
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
         }
         catch
         {

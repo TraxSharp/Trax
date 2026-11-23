@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Extensions;
@@ -288,8 +290,10 @@ public class SaneDefaultsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        var connectionString =
-            $"Host=localhost;Port={TestPostgres.Port};Database=trax_data_tests;Username=trax;Password=trax123";
+        var connectionString = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_data_tests;Username=trax;Password=trax123"
+        );
         Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
 
         services.AddTrax(trax =>
@@ -298,7 +302,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDatabaseProvider.Should().BeTrue();
+        captured.NotNull().HasDatabaseProvider.Should().BeTrue();
     }
 
     [Test]
@@ -314,7 +318,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDatabaseProvider.Should().BeFalse();
+        captured.NotNull().HasDatabaseProvider.Should().BeFalse();
     }
 
     [Test]
@@ -323,8 +327,10 @@ public class SaneDefaultsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        var connectionString =
-            $"Host=localhost;Port={TestPostgres.Port};Database=trax_data_tests;Username=trax;Password=trax123";
+        var connectionString = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_data_tests;Username=trax;Password=trax123"
+        );
         Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
 
         services.AddTrax(trax =>
@@ -333,7 +339,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDataProvider.Should().BeTrue();
+        captured.NotNull().HasDataProvider.Should().BeTrue();
     }
 
     [Test]
@@ -349,7 +355,7 @@ public class SaneDefaultsTests
         });
 
         captured.Should().NotBeNull();
-        captured!.HasDataProvider.Should().BeTrue();
+        captured.NotNull().HasDataProvider.Should().BeTrue();
     }
 
     #endregion

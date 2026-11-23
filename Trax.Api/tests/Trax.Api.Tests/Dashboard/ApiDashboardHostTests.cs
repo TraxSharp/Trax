@@ -23,6 +23,7 @@ using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Dashboard.Serving;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -67,7 +68,7 @@ public partial class ApiDashboardHostTests
 
     private static DashboardAssets StandInBuild() =>
         new(
-            new Dictionary<string, byte[]>
+            new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
                 ["index.html"] = Encoding.UTF8.GetBytes(IndexTemplate),
                 ["assets/index-3f2a9c.js"] = Encoding.UTF8.GetBytes("console.log('app');"),
@@ -86,8 +87,10 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
-        var html = await response.Content.ReadAsStringAsync();
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
+        var html = await response.Content.ReadAsStringAsync(
+            cancellationToken: CancellationToken.None
+        );
         html.Should().Contain("<base href=\"/trax/dashboard/\" />");
         Config(html).Should().Be(("/trax/dashboard/", "/trax/graphql"));
         html.IndexOf("<base", StringComparison.Ordinal)
@@ -96,7 +99,10 @@ public partial class ApiDashboardHostTests
                 html.IndexOf("./assets/", StringComparison.Ordinal),
                 "the base must precede every relative URL it resolves"
             );
-        response.Headers.CacheControl!.NoCache.Should().BeTrue("a new build must be seen at once");
+        response
+            .Headers.CacheControl.NotNull()
+            .NoCache.Should()
+            .BeTrue("a new build must be seen at once");
         response
             .Headers.CacheControl.Private.Should()
             .BeTrue("the page names who loaded it, so no shared cache may keep it");
@@ -110,7 +116,7 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard?x=1");
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location!.OriginalString.Should().Be("/trax/dashboard/?x=1");
+        response.Headers.Location.NotNull().OriginalString.Should().Be("/trax/dashboard/?x=1");
     }
 
     [Test]
@@ -121,7 +127,9 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/executions/42");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var html = await response.Content.ReadAsStringAsync();
+        var html = await response.Content.ReadAsStringAsync(
+            cancellationToken: CancellationToken.None
+        );
         html.Should().Contain("<base href=\"/trax/dashboard/\" />");
         Config(html).Should().Be(("/trax/dashboard/", "/trax/graphql"));
     }
@@ -139,8 +147,8 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, path);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, "a train or machine name is not a file");
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
-        Config(await response.Content.ReadAsStringAsync())
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
+        Config(await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
             .Should()
             .Be(("/trax/dashboard/", "/trax/graphql"));
     }
@@ -177,8 +185,8 @@ public partial class ApiDashboardHostTests
         response
             .StatusCode.Should()
             .Be(HttpStatusCode.OK, "an id is not a file because it ends in .zip or .log");
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
-        Config(await response.Content.ReadAsStringAsync())
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/html");
+        Config(await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
             .Should()
             .Be(("/trax/dashboard/", "/trax/graphql"));
     }
@@ -191,9 +199,11 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/assets/index-3f2a9c.js");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.MediaType.Should().Be("text/javascript");
-        (await response.Content.ReadAsStringAsync()).Should().Be("console.log('app');");
-        response.Headers.CacheControl!.ToString().Should().Contain("immutable");
+        response.Content.Headers.ContentType.NotNull().MediaType.Should().Be("text/javascript");
+        (await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .Be("console.log('app');");
+        response.Headers.CacheControl.NotNull().ToString().Should().Contain("immutable");
         response.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromDays(365));
         response
             .Headers.CacheControl.Public.Should()
@@ -217,11 +227,12 @@ public partial class ApiDashboardHostTests
 
         asset.StatusCode.Should().Be(HttpStatusCode.OK);
         asset
-            .Headers.CacheControl!.Private.Should()
+            .Headers.CacheControl.NotNull()
+            .Private.Should()
             .BeTrue($"{Adr}: a shared cache would hand a gated file to anyone");
         asset.Headers.CacheControl.Public.Should().BeFalse();
         asset.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromDays(365));
-        page.Headers.CacheControl!.Private.Should().BeTrue();
+        page.Headers.CacheControl.NotNull().Private.Should().BeTrue();
         page.Headers.CacheControl.NoCache.Should().BeTrue();
     }
 
@@ -234,7 +245,8 @@ public partial class ApiDashboardHostTests
 
         asset.StatusCode.Should().Be(HttpStatusCode.OK);
         asset
-            .Headers.CacheControl!.Private.Should()
+            .Headers.CacheControl.NotNull()
+            .Private.Should()
             .BeTrue("the fallback policy gated it, so no shared cache may keep it");
     }
 
@@ -246,7 +258,7 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, "/trax/dashboard/favicon.svg");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Headers.CacheControl!.NoCache.Should().BeTrue();
+        response.Headers.CacheControl.NotNull().NoCache.Should().BeTrue();
     }
 
     [TestCase("/trax/dashboard/assets/index-000000.js")]
@@ -259,7 +271,9 @@ public partial class ApiDashboardHostTests
         var response = await GetAsync(app, path);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await response.Content.ReadAsStringAsync()).Should().NotContain("<html");
+        (await response.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .NotContain("<html");
     }
 
     [Test]
@@ -270,11 +284,12 @@ public partial class ApiDashboardHostTests
         foreach (var path in new[] { "/trax/dashboard/", "/trax/dashboard/assets/index-3f2a9c.js" })
         {
             var first = await GetAsync(app, path);
-            var etag = first.Headers.ETag!;
+            var etag = first.Headers.ETag.NotNull();
 
             using var request = new HttpRequestMessage(HttpMethod.Get, path);
             request.Headers.IfNoneMatch.Add(etag);
-            var second = await app.GetTestClient().SendAsync(request);
+            var second = await app.GetTestClient()
+                .SendAsync(request, cancellationToken: CancellationToken.None);
 
             second.StatusCode.Should().Be(HttpStatusCode.NotModified, path);
         }
@@ -286,10 +301,13 @@ public partial class ApiDashboardHostTests
         await using var app = await StartAsync(e => Anonymous(e));
 
         using var request = new HttpRequestMessage(HttpMethod.Head, "/trax/dashboard/");
-        var response = await app.GetTestClient().SendAsync(request);
+        var response = await app.GetTestClient()
+            .SendAsync(request, cancellationToken: CancellationToken.None);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.Content.ReadAsByteArrayAsync()).Should().BeEmpty();
+        (await response.Content.ReadAsByteArrayAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .BeEmpty();
     }
 
     [TestCase("GET", "/trax/dashboard/", null, HttpStatusCode.OK)]
@@ -317,7 +335,7 @@ public partial class ApiDashboardHostTests
     )
     {
         // "gated" serves the app behind RequireRoles("Admin"); what follows it signs the caller in.
-        var gated = posture?.StartsWith("gated") == true;
+        var gated = posture?.StartsWith("gated", StringComparison.Ordinal) == true;
         var user = posture?.Split(';', 2) is [_, var who] ? who : null;
         await using var app = gated
             ? await StartAsync(
@@ -371,7 +389,9 @@ public partial class ApiDashboardHostTests
 
         var ada = await GetAsync(app, "/trax/dashboard/", "ada;Admin");
         var grace = await GetAsync(app, "/trax/dashboard/", "grace;Admin");
-        var adaPage = await ada.Content.ReadAsStringAsync();
+        var adaPage = await ada.Content.ReadAsStringAsync(
+            cancellationToken: CancellationToken.None
+        );
 
         ConfigKeys(adaPage)
             .Should()
@@ -380,9 +400,13 @@ public partial class ApiDashboardHostTests
                 "the app holds its credential in memory, so the page names nobody"
             );
         adaPage.Should().NotContain("ada");
-        (await grace.Content.ReadAsStringAsync()).Should().Be(adaPage);
+        (await grace.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None))
+            .Should()
+            .Be(adaPage);
         grace.Headers.ETag.Should().Be(ada.Headers.ETag);
-        ada.Headers.CacheControl!.Private.Should().BeTrue("no shared cache may keep the shell");
+        ada.Headers.CacheControl.NotNull()
+            .Private.Should()
+            .BeTrue("no shared cache may keep the shell");
         ada.Headers.CacheControl.NoCache.Should().BeTrue();
     }
 
@@ -406,7 +430,9 @@ public partial class ApiDashboardHostTests
     {
         await using var app = await StartAsync(e => Anonymous(e), graphQLPath: "/api/graphql");
 
-        var html = await (await GetAsync(app, "/trax/dashboard/")).Content.ReadAsStringAsync();
+        var html = await (await GetAsync(app, "/trax/dashboard/")).Content.ReadAsStringAsync(
+            cancellationToken: CancellationToken.None
+        );
 
         Config(html).GraphQLPath.Should().Be("/api/graphql");
     }
@@ -422,7 +448,9 @@ public partial class ApiDashboardHostTests
             })
         );
 
-        var html = await (await GetAsync(app, "/trax/dashboard/")).Content.ReadAsStringAsync();
+        var html = await (await GetAsync(app, "/trax/dashboard/")).Content.ReadAsStringAsync(
+            cancellationToken: CancellationToken.None
+        );
 
         Config(html).GraphQLPath.Should().Be("/custom/graphql");
     }
@@ -449,7 +477,7 @@ public partial class ApiDashboardHostTests
 
         var html = await (
             await GetAsync(app, "/ops/trax/dashboard/runs")
-        ).Content.ReadAsStringAsync();
+        ).Content.ReadAsStringAsync(cancellationToken: CancellationToken.None);
 
         Config(html).Should().Be(("/ops/trax/dashboard/", "/ops/trax/graphql"));
     }
@@ -461,7 +489,9 @@ public partial class ApiDashboardHostTests
             e.UseTraxApiDashboard(o => o.AllowAnonymousShell(), path: "admin/ops/")
         );
 
-        var html = await (await GetAsync(app, "/admin/ops/")).Content.ReadAsStringAsync();
+        var html = await (await GetAsync(app, "/admin/ops/")).Content.ReadAsStringAsync(
+            cancellationToken: CancellationToken.None
+        );
 
         Config(html).BasePath.Should().Be("/admin/ops/");
         (await GetAsync(app, "/trax/dashboard/")).StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -486,7 +516,7 @@ public partial class ApiDashboardHostTests
             IndexTemplate,
             new Microsoft.AspNetCore.Http.PathString("/a\"><script>x</script>"),
             "/trax/graphql",
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
 
         html.Should().NotContain("<script>x</script>");
@@ -502,13 +532,16 @@ public partial class ApiDashboardHostTests
             IndexTemplate,
             path,
             "/trax/graphql",
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
         var with = DashboardEndpoint.RenderIndex(
             IndexTemplate,
             path,
             "/trax/graphql",
-            new Dictionary<string, string> { ["Overview"] = "trax_console_Overview_abc" }
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Overview"] = "trax_console_Overview_abc",
+            }
         );
 
         without.Should().NotContain("documents");
@@ -524,13 +557,13 @@ public partial class ApiDashboardHostTests
             IndexTemplate,
             path,
             "/trax/graphql",
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
         var signedIn = DashboardEndpoint.RenderIndex(
             IndexTemplate,
             path,
             "/trax/graphql",
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             hostAuthenticates: true
         );
 
@@ -539,10 +572,10 @@ public partial class ApiDashboardHostTests
     }
 
     [Test]
-    public void The_package_carries_the_documents_the_app_sends()
+    public async Task The_package_carries_the_documents_the_app_sends()
     {
-        ConsoleDocumentsResource
-            .Documents.Select(d => d.Name)
+        (await ConsoleDocumentsResource.DocumentsAsync())
+            .Select(d => d.Name)
             .Should()
             .Contain(["Overview", "OnJunctionEvent", "RequeueDeadLetter"])
             .And.NotContain("PersistedOperations", "management runs as text behind its own gate");
@@ -576,7 +609,7 @@ public partial class ApiDashboardHostTests
         var act = () =>
             StartAsync(
                 e => Anonymous(e),
-                assets: new DashboardAssets(new Dictionary<string, byte[]>())
+                assets: new DashboardAssets(new Dictionary<string, byte[]>(StringComparer.Ordinal))
             );
 
         await act.Should()
@@ -782,30 +815,28 @@ public partial class ApiDashboardHostTests
     [Test]
     public async Task The_embedded_app_is_served_with_every_file_its_page_names()
     {
-        if (DashboardAssets.Embedded.IndexTemplate is null)
+        var embedded = await DashboardAssets.EmbeddedAsync();
+        if (embedded.IndexTemplate is null)
             Unavailable(
                 "This build carries no app: Trax.Api/src/Trax.Api.Dashboard/ClientApp has no "
                     + "node_modules."
             );
 
-        await using var app = await StartAsync(e => Anonymous(e), assets: DashboardAssets.Embedded);
+        await using var app = await StartAsync(e => Anonymous(e), assets: embedded);
 
         var page = await GetAsync(app, "/trax/dashboard/");
         page.StatusCode.Should().Be(HttpStatusCode.OK);
-        var html = await page.Content.ReadAsStringAsync();
+        var html = await page.Content.ReadAsStringAsync(cancellationToken: CancellationToken.None);
         Config(html).Should().Be(("/trax/dashboard/", "/trax/graphql"));
 
-        var files = AssetReference().Matches(html).Select(m => m.Groups["path"].Value).ToList();
+        var files = AssetReference.Matches(html).Select(m => m.Groups["path"].Value).ToList();
         files.Should().NotBeEmpty().And.OnlyContain(f => f.StartsWith("./assets/"));
         foreach (var file in files)
         {
             var response = await GetAsync(app, "/trax/dashboard/" + file[2..]);
             response.StatusCode.Should().Be(HttpStatusCode.OK, file);
-            response.Headers.CacheControl!.ToString().Should().Contain("immutable", file);
-            Regex
-                .IsMatch(file, @"-[A-Za-z0-9_-]{6,}\.(js|css)$")
-                .Should()
-                .BeTrue($"{file} is named by its content");
+            response.Headers.CacheControl.NotNull().ToString().Should().Contain("immutable", file);
+            HashedAssetName.IsMatch(file).Should().BeTrue($"{file} is named by its content");
         }
     }
 
@@ -859,44 +890,9 @@ public partial class ApiDashboardHostTests
         var services = builder.Services;
         services.AddSingleton(assets ?? StandInBuild());
         if (addGraphQL)
-        {
-            services.AddSingleton<TraxMarker>();
-            services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
-            services.AddSingleton(Substitute.For<IEffectRegistry>());
-            services.AddSingleton(Substitute.For<ITraxScheduler>());
-            services.AddSingleton(Substitute.For<IOperationsService>());
-            services.AddSingleton(Substitute.For<ITrainExecutionService>());
-            services.AddSingleton(Substitute.For<ITraxHealthService>());
-            services.AddDbContext<OrderTestDbContext>(o =>
-                o.UseInMemoryDatabase("Dashboard_" + Guid.NewGuid())
-            );
-            services.AddTraxGraphQL(g =>
-                exposeOperations
-                    ? g.AddDbContext<OrderTestDbContext>()
-                        .ExposeOperationQueries()
-                        .AllowAnonymousOperations()
-                    : g.AddDbContext<OrderTestDbContext>()
-            );
-        }
+            AddGraphQLServices(services, exposeOperations);
 
-        if (auth != AuthSetup.None)
-            services.AddAuthorization(o =>
-            {
-                if (auth == AuthSetup.SchemeAndPolicy)
-                    o.AddPolicy("TraxAdmin", p => p.RequireRole("Admin"));
-                if (auth == AuthSetup.FallbackPolicy)
-                    o.FallbackPolicy =
-                        new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-                            .RequireAuthenticatedUser()
-                            .Build();
-            });
-        if (auth is AuthSetup.SchemeOnly or AuthSetup.SchemeAndPolicy or AuthSetup.FallbackPolicy)
-            services
-                .AddAuthentication(TestUserHandler.Name)
-                .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(
-                    TestUserHandler.Name,
-                    null
-                );
+        AddAuthServices(services, auth);
 
         var app = builder.Build();
         try
@@ -917,14 +913,57 @@ public partial class ApiDashboardHostTests
             map(app);
             if (addGraphQL)
                 app.UseTraxGraphQL(graphQLPath);
-            await app.StartAsync();
+            await app.StartAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
             return app;
         }
         catch
         {
-            await app.DisposeAsync();
+            await app.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    private static void AddGraphQLServices(IServiceCollection services, bool exposeOperations)
+    {
+        services.AddSingleton<TraxMarker>();
+        services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddSingleton(Substitute.For<ITraxScheduler>());
+        services.AddSingleton(Substitute.For<IOperationsService>());
+        services.AddSingleton(Substitute.For<ITrainExecutionService>());
+        services.AddSingleton(Substitute.For<ITraxHealthService>());
+        services.AddDbContext<OrderTestDbContext>(o =>
+            o.UseInMemoryDatabase("Dashboard_" + Guid.NewGuid())
+        );
+        services.AddTraxGraphQL(g =>
+            exposeOperations
+                ? g.AddDbContext<OrderTestDbContext>()
+                    .ExposeOperationQueries()
+                    .AllowAnonymousOperations()
+                : g.AddDbContext<OrderTestDbContext>()
+        );
+    }
+
+    private static void AddAuthServices(IServiceCollection services, AuthSetup auth)
+    {
+        if (auth != AuthSetup.None)
+            services.AddAuthorization(o =>
+            {
+                if (auth == AuthSetup.SchemeAndPolicy)
+                    o.AddPolicy("TraxAdmin", p => p.RequireRole("Admin"));
+                if (auth == AuthSetup.FallbackPolicy)
+                    o.FallbackPolicy =
+                        new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                            .RequireAuthenticatedUser()
+                            .Build();
+            });
+        if (auth is AuthSetup.SchemeOnly or AuthSetup.SchemeAndPolicy or AuthSetup.FallbackPolicy)
+            services
+                .AddAuthentication(TestUserHandler.Name)
+                .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(
+                    TestUserHandler.Name,
+                    configureOptions: null
+                );
     }
 
     private static Task<HttpResponseMessage> GetAsync(
@@ -949,38 +988,48 @@ public partial class ApiDashboardHostTests
         if (host is not null)
             request.Headers.Host = host;
         var client = app.GetTestClient();
-        return await client.SendAsync(request);
+        return await client
+            .SendAsync(request, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static string Header(HttpResponseMessage response, string name) =>
-        response.Headers.TryGetValues(name, out var values) ? string.Join(",", values)
-        : response.Content.Headers.TryGetValues(name, out var content) ? string.Join(",", content)
+        response.Headers.TryGetValues(name, out var values) ? string.Join(',', values)
+        : response.Content.Headers.TryGetValues(name, out var content) ? string.Join(',', content)
         : "";
 
     private static (string BasePath, string GraphQLPath) Config(string html)
     {
-        var content = ConfigMeta().Match(html);
+        var content = ConfigMeta.Match(html);
         content.Success.Should().BeTrue("the page carries its runtime config");
         using var json = JsonDocument.Parse(WebUtility.HtmlDecode(content.Groups["json"].Value));
         return (
-            json.RootElement.GetProperty("basePath").GetString()!,
-            json.RootElement.GetProperty("graphqlPath").GetString()!
+            json.RootElement.GetProperty("basePath").GetString().NotNull(),
+            json.RootElement.GetProperty("graphqlPath").GetString().NotNull()
         );
     }
 
     private static string[] ConfigKeys(string html)
     {
-        var content = ConfigMeta().Match(html);
+        var content = ConfigMeta.Match(html);
         content.Success.Should().BeTrue("the page carries its runtime config");
         using var json = JsonDocument.Parse(WebUtility.HtmlDecode(content.Groups["json"].Value));
         return json.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
     }
 
-    [GeneratedRegex("""<meta name="trax-dashboard-config" content="(?<json>[^"]*)" />""")]
-    private static partial Regex ConfigMeta();
+    [GeneratedRegex(
+        """<meta name="trax-dashboard-config" content="(?<json>[^"]*)" />""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ConfigMeta { get; }
 
-    [GeneratedRegex("""(?:src|href)="(?<path>[^"]+\.(?:js|css))""")]
-    private static partial Regex AssetReference();
+    [GeneratedRegex(
+        """(?:src|href)="(?<path>[^"]+\.(?:js|css))""",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AssetReference { get; }
 
     /// <summary>
     /// Signs a request in as the user its <c>X-Test-User</c> header names (<c>name;Role1,Role2</c>);
@@ -1035,4 +1084,11 @@ public partial class ApiDashboardHostTests
             ) => provider.Entries.Enqueue((logLevel, formatter(state, exception)));
         }
     }
+
+    [GeneratedRegex(
+        @"-[A-Za-z0-9_-]{6,}\.(js|css)$",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex HashedAssetName { get; }
 }

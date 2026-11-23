@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
@@ -24,20 +26,26 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
 
     // The version a snapshot of each machine carries, from its IR.
     private static int VersionOf(string machine) =>
-        Manifest.Machines.Single(m => m.Id == machine).Ir["version"]!.GetValue<int>();
+        Manifest
+            .Machines.Single(m => string.Equals(m.Id, machine, StringComparison.Ordinal))
+            .Ir["version"]
+            .NotNull()
+            .GetValue<int>();
 
     /// <summary>The generated document of <paramref name="machine"/>'s <paramref name="operation"/>, or null.</summary>
     public static ClientManifestDocument? DocumentOf(string machine, string operation) =>
         Manifest
-            .Machines.SingleOrDefault(m => m.Id == machine)
-            ?.Documents.SingleOrDefault(d => d.Operation == operation);
+            .Machines.SingleOrDefault(m => string.Equals(m.Id, machine, StringComparison.Ordinal))
+            ?.Documents.SingleOrDefault(d =>
+                string.Equals(d.Operation, operation, StringComparison.Ordinal)
+            );
 
     /// <summary>
     /// The id of the page's own document whose function is <paramref name="function"/>, as its generated module
     /// (<c>web/src/trax/documents/&lt;function&gt;.g.ts</c>) holds it.
     /// </summary>
     public static string DocumentIdOf(string function) =>
-        DocumentId()
+        DocumentId
             .Match(
                 File.ReadAllText(
                     Path.Combine(AppContext.BaseDirectory, "documents", $"{function}.g.ts")
@@ -46,8 +54,12 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
             .Groups["id"]
             .Value;
 
-    [System.Text.RegularExpressions.GeneratedRegex("DocumentId = \"(?<id>[^\"]+)\"")]
-    private static partial System.Text.RegularExpressions.Regex DocumentId();
+    [System.Text.RegularExpressions.GeneratedRegex(
+        "DocumentId = \"(?<id>[^\"]+)\"",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex DocumentId { get; }
 
     /// <summary>
     /// Starts an instance of <paramref name="machine"/> from its declared start, as the page does: the server mints
@@ -60,25 +72,28 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     )
     {
         var result = await OperateAsync(
-            caller,
-            machine,
-            "start",
-            new Dictionary<string, object?>
-            {
-                ["requestId"] = requestId ?? $"start-{Guid.NewGuid():N}",
-            }
-        );
+                caller,
+                machine,
+                "start",
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["requestId"] = requestId ?? $"start-{Guid.NewGuid():N}",
+                }
+            )
+            .ConfigureAwait(false);
         return (result.Id, result);
     }
 
     /// <summary>Discards one of the caller's instances; true when it is gone.</summary>
     public async Task<bool> DiscardAsync(Caller caller, string machine, Guid id)
     {
-        var response = await graphQL.SendIdAsync(
-            DocumentOf(machine, "discard")!.Id,
-            caller,
-            new { id, requestId = $"discard-{Guid.NewGuid():N}" }
-        );
+        var response = await graphQL
+            .SendIdAsync(
+                DocumentOf(machine, "discard").NotNull().Id,
+                caller,
+                new { id, requestId = $"discard-{Guid.NewGuid():N}" }
+            )
+            .ConfigureAwait(false);
         response
             .HasErrors.Should()
             .BeFalse($"discard as {caller} should not error: {response.Raw}");
@@ -99,24 +114,26 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
         string snapshot
     )
     {
-        var response = await graphQL.SendAsync(
-            "mutation($i: SaveSnapshotInput!) { dispatch { stateMachine { saveSnapshot(input: $i) { "
-                + "output { snapshot problem { code } } } } } }",
-            caller,
-            new
-            {
-                i = new
+        var response = await graphQL
+            .SendAsync(
+                "mutation($i: SaveSnapshotInput!) { dispatch { stateMachine { saveSnapshot(input: $i) { "
+                    + "output { snapshot problem { code } } } } } }",
+                caller,
+                new
                 {
-                    machine,
-                    id,
-                    snapshot,
-                },
-            }
-        );
+                    i = new
+                    {
+                        machine,
+                        id,
+                        snapshot,
+                    },
+                }
+            )
+            .ConfigureAwait(false);
         response
             .HasErrors.Should()
             .BeTrue($"the host serves no document sent as text: {response.Raw}");
-        return new SnapshotResult(null, NotServed, response.Raw);
+        return new SnapshotResult(Wire: null, NotServed, response.Raw);
     }
 
     /// <summary>
@@ -133,7 +150,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
         string? requestId = null
     )
     {
-        var variables = new Dictionary<string, object?>
+        var variables = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["id"] = id,
             ["requestId"] = requestId ?? $"req-{Guid.NewGuid():N}",
@@ -152,13 +169,13 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     public async Task<SnapshotResult> LoadAsync(Caller caller, string machine, Guid id)
     {
         if (DocumentOf(machine, "get") is not { } get)
-            return new SnapshotResult(null, NotServed, "");
+            return new SnapshotResult(Wire: null, NotServed, "");
 
-        var response = await graphQL.SendIdAsync(get.Id, caller, new { id });
+        var response = await graphQL.SendIdAsync(get.Id, caller, new { id }).ConfigureAwait(false);
         response.HasErrors.Should().BeFalse($"get as {caller} should not error: {response.Raw}");
         var read = response.GetData("machines", machine, "get");
         return read.ValueKind == JsonValueKind.Null
-            ? new SnapshotResult(null, "NOT_FOUND", response.Raw)
+            ? new SnapshotResult(Wire: null, "NOT_FOUND", response.Raw)
             : Result(machine, read, response.Raw);
     }
 
@@ -176,7 +193,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
             caller,
             machine,
             "pay",
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["id"] = id,
                 ["requestId"] = requestId ?? $"pay-{Guid.NewGuid():N}",
@@ -200,9 +217,11 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
                 !document.Document.Contains($"${v}:", StringComparison.Ordinal)
             )
         )
-            return new SnapshotResult(null, NotServed, "");
+            return new SnapshotResult(Wire: null, NotServed, "");
 
-        var response = await graphQL.SendIdAsync(document.Id, caller, variables);
+        var response = await graphQL
+            .SendIdAsync(document.Id, caller, variables)
+            .ConfigureAwait(false);
         response
             .HasErrors.Should()
             .BeFalse($"{machine}.{operation} as {caller} should not error: {response.Raw}");
@@ -214,7 +233,7 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
     private static SnapshotResult Result(string machine, JsonElement answer, string raw)
     {
         if (answer.GetProperty("problem") is { ValueKind: JsonValueKind.Object } problem)
-            return new SnapshotResult(null, problem.GetProperty("code").GetString(), raw);
+            return new SnapshotResult(Wire: null, problem.GetProperty("code").GetString(), raw);
 
         var context = new JsonObject();
         if (answer.TryGetProperty("context", out var fields))
@@ -229,35 +248,11 @@ public sealed partial class StateMachineClient(GraphQLClient graphQL)
             ["state"] = answer.GetProperty("state").GetString(),
             ["context"] = context,
         }.ToJsonString();
-        return new SnapshotResult(wire, null, raw)
+        return new SnapshotResult(wire, ProblemCode: null, raw)
         {
             Id = answer.GetProperty("id") is { ValueKind: JsonValueKind.String } id
-                ? Guid.Parse(id.GetString()!)
+                ? Guid.Parse(id.GetString().NotNull())
                 : null,
         };
     }
-}
-
-/// <summary>
-/// An operation's answer: the snapshot as JSON, or the code of the problem that refused it. Exactly one of the two
-/// is set.
-/// </summary>
-public sealed record SnapshotResult(string? Wire, string? ProblemCode, string Raw)
-{
-    /// <summary>The instance's id, when the answer carries one.</summary>
-    public Guid? Id { get; init; }
-
-    /// <summary>The snapshot, asserting that the operation succeeded.</summary>
-    public JsonObject Snapshot
-    {
-        get
-        {
-            ProblemCode.Should().BeNull($"the operation should succeed: {Raw}");
-            return JsonNode.Parse(Wire!)!.AsObject();
-        }
-    }
-
-    public string State => Snapshot["state"]!.GetValue<string>();
-
-    public JsonObject Context => Snapshot["context"]!.AsObject();
 }

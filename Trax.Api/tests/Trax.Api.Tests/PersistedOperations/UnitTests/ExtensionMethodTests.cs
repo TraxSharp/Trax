@@ -11,6 +11,7 @@ using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Middleware;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
@@ -24,7 +25,7 @@ public class ExtensionMethodTests
     [Test]
     public void UsePersistedOperations_NullBuilder_Throws()
     {
-        Action act = () => ((TraxGraphQLBuilder)null!).UsePersistedOperations(_ => { });
+        Action act = () => ((TraxGraphQLBuilder)Null.Of<object>()).UsePersistedOperations(_ => { });
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -33,7 +34,12 @@ public class ExtensionMethodTests
     {
         var sc = new ServiceCollection();
         var builder = new TraxGraphQLBuilder(sc);
-        Action act = () => builder.UsePersistedOperations(null!);
+        Action act = () =>
+            builder.UsePersistedOperations(
+                Null.Of<
+                    Action<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder>
+                >()
+            );
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -96,10 +102,10 @@ public class ExtensionMethodTests
 
         // Functional: set/get/invalidate round-trip through the resolved cache.
         var cache = sp.GetRequiredService<IPersistedOperationCache>();
-        cache.Set(null, "id", "doc");
-        cache.TryGet(null, "id").Should().Be("doc");
-        cache.Invalidate(null, "id");
-        cache.TryGet(null, "id").Should().BeNull();
+        cache.Set(tenantKey: null, "id", "doc");
+        cache.TryGet(tenantKey: null, "id").Should().Be("doc");
+        cache.Invalidate(tenantKey: null, "id");
+        cache.TryGet(tenantKey: null, "id").Should().BeNull();
     }
 
     [Test]
@@ -155,7 +161,8 @@ public class ExtensionMethodTests
     [Test]
     public void UsePersistedOperationsEnforcement_NullApp_Throws()
     {
-        Action act = () => ((IApplicationBuilder)null!).UsePersistedOperationsEnforcement();
+        Action act = () =>
+            ((IApplicationBuilder)Null.Of<object>()).UsePersistedOperationsEnforcement();
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -187,10 +194,12 @@ public class ExtensionMethodTests
     [Test]
     public void AddPersistedOperationStore_WithOnlyAConnectionString_RefusesToStart()
     {
-        var overload = typeof(ServiceCollectionPersistedOperationsExtensions).GetMethod(
-            nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
-            [typeof(IServiceCollection), typeof(string)]
-        )!;
+        var overload = typeof(ServiceCollectionPersistedOperationsExtensions)
+            .GetMethod(
+                nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
+                [typeof(IServiceCollection), typeof(string)]
+            )
+            .NotNull();
 
         var act = () => overload.Invoke(null, [new ServiceCollection(), FakeConn]);
 
@@ -218,21 +227,30 @@ public class ExtensionMethodTests
         await using var sp = sc.BuildServiceProvider();
         var store = sp.GetRequiredService<IPersistedOperationStore>();
 
-        await store.UpsertAsync("mem_v1", "query Greet { hello }", null, CancellationToken.None);
-        await store.DeactivateAsync("mem_v1", null, "retired", CancellationToken.None);
-        await store.RestoreAsync("mem_v1", null, CancellationToken.None);
+        await store.UpsertAsync(
+            "mem_v1",
+            "query Greet { hello }",
+            options: null,
+            CancellationToken.None
+        );
+        await store.DeactivateAsync("mem_v1", tenantKey: null, "retired", CancellationToken.None);
+        await store.RestoreAsync("mem_v1", tenantKey: null, CancellationToken.None);
 
-        (await store.GetAsync("mem_v1", null, CancellationToken.None)).Should().NotBeNull();
+        (await store.GetAsync("mem_v1", tenantKey: null, CancellationToken.None))
+            .Should()
+            .NotBeNull();
     }
 
     [Test]
     public void AddPersistedOperationStore_NullArguments_Throw()
     {
         Action nullServices = () =>
-            ((IServiceCollection)null!).AddPersistedOperationStore(store => store.SingleNode());
+            ((IServiceCollection)Null.Of<object>()).AddPersistedOperationStore(store =>
+                store.SingleNode()
+            );
         Action nullConfigure = () =>
             new ServiceCollection().AddPersistedOperationStore(
-                (Action<PersistedOperationStoreBuilder>)null!
+                (Action<PersistedOperationStoreBuilder>)Null.Of<object>()
             );
         nullServices.Should().Throw<ArgumentNullException>();
         nullConfigure.Should().Throw<ArgumentNullException>();
@@ -307,10 +325,12 @@ public class ExtensionMethodTests
     public void AddPersistedOperationStore_TheTwoStringOverload_RefusesWithoutASigningKey()
     {
         // It names a broker and nothing else, so it has no key to sign the broadcast with.
-        var overload = typeof(ServiceCollectionPersistedOperationsExtensions).GetMethod(
-            nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
-            [typeof(IServiceCollection), typeof(string), typeof(string)]
-        )!;
+        var overload = typeof(ServiceCollectionPersistedOperationsExtensions)
+            .GetMethod(
+                nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
+                [typeof(IServiceCollection), typeof(string), typeof(string)]
+            )
+            .NotNull();
         var sc = new ServiceCollection();
         sc.AddLogging();
 
@@ -412,14 +432,22 @@ public class ExtensionMethodTests
             (Action)(
                 () =>
                     _ = new RabbitMqPersistedOperationBroadcaster(
-                        null!,
+                        Null.Of<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsOptions>(),
                         NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
                     )
             )
         )
             .Should()
             .Throw<ArgumentNullException>();
-        ((Action)(() => _ = new RabbitMqPersistedOperationBroadcaster(options, null!)))
+        (
+            (Action)(
+                () =>
+                    _ = new RabbitMqPersistedOperationBroadcaster(
+                        options,
+                        Null.Of<Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.PersistedOperations.Broadcasting.RabbitMqPersistedOperationBroadcaster>>()
+                    )
+            )
+        )
             .Should()
             .Throw<ArgumentNullException>();
     }
@@ -445,11 +473,12 @@ public class ExtensionMethodTests
             NullLogger<PersistedOperationReceiverService>.Instance
         );
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = TimeProvider.System.GetTimestamp();
         await svc.StartAsync(CancellationToken.None);
-        sw.Stop();
+        var swTook = TimeProvider.System.GetElapsedTime(sw);
 
-        sw.Elapsed.Should()
+        swTook
+            .Should()
             .BeLessThan(
                 TimeSpan.FromSeconds(1),
                 "StartAsync must short-circuit when no connection string is configured; "
@@ -468,7 +497,7 @@ public class ExtensionMethodTests
             (Action)(
                 () =>
                     _ = new PersistedOperationReceiverService(
-                        null!,
+                        Null.Of<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsOptions>(),
                         new NoOpPersistedOperationCache(),
                         NoOpInvalidator(),
                         NullLogger<PersistedOperationReceiverService>.Instance
@@ -482,7 +511,7 @@ public class ExtensionMethodTests
                 () =>
                     _ = new PersistedOperationReceiverService(
                         options,
-                        null!,
+                        Null.Of<Trax.Api.GraphQL.PersistedOperations.Storage.IPersistedOperationCache>(),
                         NoOpInvalidator(),
                         NullLogger<PersistedOperationReceiverService>.Instance
                     )
@@ -496,7 +525,7 @@ public class ExtensionMethodTests
                     _ = new PersistedOperationReceiverService(
                         options,
                         new NoOpPersistedOperationCache(),
-                        null!,
+                        Null.Of<Trax.Api.GraphQL.PersistedOperations.Storage.HotChocolateOperationCacheInvalidator>(),
                         NullLogger<PersistedOperationReceiverService>.Instance
                     )
             )
@@ -510,7 +539,7 @@ public class ExtensionMethodTests
                         options,
                         new NoOpPersistedOperationCache(),
                         NoOpInvalidator(),
-                        null!
+                        Null.Of<Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.PersistedOperations.Broadcasting.PersistedOperationReceiverService>>()
                     )
             )
         )
@@ -586,7 +615,6 @@ public class ExtensionMethodTests
 
     private static PersistedOperationsOptions Options(IServiceCollection sc) =>
         (PersistedOperationsOptions)
-            sc.Single(d =>
-                d.ServiceType == typeof(PersistedOperationsOptions)
-            ).ImplementationInstance!;
+            sc.Single(d => d.ServiceType == typeof(PersistedOperationsOptions))
+                .ImplementationInstance.NotNull();
 }

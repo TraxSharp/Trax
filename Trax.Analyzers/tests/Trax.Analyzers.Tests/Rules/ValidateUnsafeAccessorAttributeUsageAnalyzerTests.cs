@@ -1,0 +1,232 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.ValidateUnsafeAccessorAttributeUsageAnalyzer,
+    Trax.Analyzers.Rules.ValidateUnsafeAccessorAttributeUsageFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class ValidateUnsafeAccessorAttributeUsageAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task NotExternStaticMethod()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.StaticMethod)]
+                void {|TRX0145:A|}() { }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalFunction_WithoutNameParameter()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    // Local function name are mangle by the compiler, so the Name property is required
+                    [UnsafeAccessor(UnsafeAccessorKind.Field)]
+                    extern static ref int {|TRX0146:B|}(System.Version a);
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    // Local function name are mangle by the compiler, so the Name property is required
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "B")]
+                    extern static ref int B(System.Version a);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalFunction_WithNameProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_Major")]
+                    extern static ref int B(System.Version a);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_TooManyParameters()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_Major")]
+                    extern static ref int {|TRX0145:B|}(System.Version a, int b);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_ReturnVoid()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_Major")]
+                    extern static void {|TRX0145:B|}(System.Version a);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_DoesNotReturnByRef()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_Major")]
+                    extern static int {|TRX0145:B|}(System.Version a);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_FirstParameterNotByRefForStruct()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_Major")]
+                    extern static ref int {|TRX0145:B|}(System.Int32 a);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_FirstParameterByRefForStruct()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_Major")]
+                    extern static ref int B(ref System.Int32 a);
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NotStaticExternMethod()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "a")]
+                extern ref int {|TRX0145:A|}(Sample s);
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalFunction_Constructor_WithoutNameParameter()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
+                    static extern Sample Create();
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalFunction_WithNamePropertyWithoutValue_NoCodeFix()
+    {
+        const string SourceCode = """
+            using System.Runtime.CompilerServices;
+            class Sample
+            {
+                void A()
+                {
+                    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = )]
+                    extern static ref int {|TRX0146:B|}(System.Version a);
+                }
+            }
+            """;
+        var test = CreateTest();
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestCode = SourceCode;
+        test.FixedCode = SourceCode;
+
+        return test.RunAsync();
+    }
+}

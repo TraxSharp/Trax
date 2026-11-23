@@ -34,11 +34,7 @@ public static class GenerateCommand
                 "Schema type: graphql or openapi (auto-detected from extension if omitted)",
         };
 
-        var forceOption = new Option<bool>("--force")
-        {
-            Description =
-                "Replace the output directory if it exists, once generation has succeeded (refused for the current directory, its parents, or a git repository)",
-        };
+        var forceOption = CreateForceOption();
 
         var command = new Command("generate", "Generate a Trax API project from a schema file")
         {
@@ -49,50 +45,73 @@ public static class GenerateCommand
             forceOption,
         };
 
-        command.SetAction(parseResult =>
-        {
-            var schema = parseResult.GetRequiredValue(schemaOption);
-            var output = parseResult.GetRequiredValue(outputOption);
-            var name = parseResult.GetRequiredValue(nameOption);
-            var type = parseResult.GetValue(typeOption);
-            var force = parseResult.GetValue(forceOption);
+        command.SetAction(
+            (parseResult, _) =>
+            {
+                var schema = parseResult.GetRequiredValue(schemaOption);
+                var output = parseResult.GetRequiredValue(outputOption);
+                var name = parseResult.GetRequiredValue(nameOption);
+                var type = parseResult.GetValue(typeOption);
+                var force = parseResult.GetValue(forceOption);
 
-            return Handle(schema, output, name, type, force);
-        });
+                return HandleAsync(
+                    schema,
+                    output,
+                    name,
+                    type,
+                    force,
+                    parseResult.InvocationConfiguration.Output,
+                    parseResult.InvocationConfiguration.Error
+                );
+            }
+        );
 
         return command;
     }
 
+    private static Option<bool> CreateForceOption() =>
+        new("--force")
+        {
+            Description =
+                "Replace the output directory if it exists, once generation has succeeded (refused for the current directory, its parents, or a git repository)",
+        };
+
     // Returns the exit code as well as setting Environment.ExitCode: Program returns InvokeAsync's
     // result, which wins over Environment.ExitCode, so an action that only set it exited 0.
-    internal static int Handle(
+    internal static async Task<int> HandleAsync(
         FileInfo schema,
         DirectoryInfo output,
         string name,
         string? type,
         bool force,
+        TextWriter stdout,
+        TextWriter stderr,
         TraxProjectGenerator? generator = null
     )
     {
-        if (!TraxProjectGenerator.IsDotnetAvailable())
+        if (!await TraxProjectGenerator.IsDotnetAvailableAsync().ConfigureAwait(false))
         {
-            Console.Error.WriteLine(
-                "The 'dotnet' CLI is not available. Please install the .NET SDK."
-            );
+            await stderr
+                .WriteLineAsync("The 'dotnet' CLI is not available. Please install the .NET SDK.")
+                .ConfigureAwait(false);
             return Fail();
         }
 
         if (!schema.Exists)
         {
-            Console.Error.WriteLine($"Schema file not found: {schema.FullName}");
+            await stderr
+                .WriteLineAsync($"Schema file not found: {schema.FullName}")
+                .ConfigureAwait(false);
             return Fail();
         }
 
         if (output.Exists && !force)
         {
-            Console.Error.WriteLine(
-                $"Output directory already exists: {output.FullName}. Use --force to overwrite."
-            );
+            await stderr
+                .WriteLineAsync(
+                    $"Output directory already exists: {output.FullName}. Use --force to overwrite."
+                )
+                .ConfigureAwait(false);
             return Fail();
         }
 
@@ -103,50 +122,95 @@ public static class GenerateCommand
         }
         catch (ArgumentException ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return Fail();
         }
 
+        if (
+            !await ParseAndGenerateAsync(
+                    schema,
+                    output,
+                    name,
+                    force,
+                    schemaType,
+                    stdout,
+                    stderr,
+                    generator
+                )
+                .ConfigureAwait(false)
+        )
+            return Fail();
+
+        await WriteNextStepsAsync(output, name, stdout).ConfigureAwait(false);
+        return 0;
+    }
+
+    // Parses the schema and generates the project; false once the failure is written to stderr.
+    private static async Task<bool> ParseAndGenerateAsync(
+        FileInfo schema,
+        DirectoryInfo output,
+        string name,
+        bool force,
+        string schemaType,
+        TextWriter stdout,
+        TextWriter stderr,
+        TraxProjectGenerator? generator
+    )
+    {
         try
         {
             ISchemaParser parser = schemaType switch
             {
-                "graphql" => new GraphQLSchemaParser(),
-                "openapi" => new OpenApiSchemaParser(),
+                "graphql" => new GraphQLSchemaParser(stdout),
+                "openapi" => new OpenApiSchemaParser(stderr),
                 _ => throw new InvalidOperationException($"Unsupported schema type: {schemaType}"),
             };
 
-            var apiSchema = parser.Parse(schema.FullName);
+            var apiSchema = await parser.ParseAsync(schema.FullName).ConfigureAwait(false);
 
-            Console.WriteLine(
-                $"Parsed {apiSchema.Operations.Count} operations, "
-                    + $"{apiSchema.Types.Count} types, "
-                    + $"{apiSchema.Enums.Count} enums from {schemaType} schema."
-            );
+            await stdout
+                .WriteLineAsync(
+                    $"Parsed {apiSchema.Operations.Count} operations, "
+                        + $"{apiSchema.Types.Count} types, "
+                        + $"{apiSchema.Enums.Count} enums from {schemaType} schema."
+                )
+                .ConfigureAwait(false);
 
-            (generator ?? new TraxProjectGenerator()).Generate(
-                apiSchema,
-                output.FullName,
-                name,
-                force
-            );
+            await (generator ?? new TraxProjectGenerator())
+                .GenerateAsync(apiSchema, output.FullName, name, force)
+                .ConfigureAwait(false);
+            return true;
         }
         catch (InvalidOperationException ex)
         {
-            Console.Error.WriteLine(ex.Message);
-            return Fail();
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return false;
         }
+    }
 
-        Console.WriteLine($"Generated Trax project at: {output.FullName}");
-        Console.WriteLine($"  {name}.Hub/     — Hub project (API + Scheduler + Dashboard)");
-        Console.WriteLine($"  {name}.Trains/  — Trains library (generated from schema)");
-        Console.WriteLine();
-        Console.WriteLine("Next steps:");
-        Console.WriteLine($"  cd {output.FullName}/{name}.Hub");
-        Console.WriteLine("  dotnet restore");
-        Console.WriteLine("  # Fill in junction implementations (search for TODO)");
-        Console.WriteLine("  dotnet run");
-        return 0;
+    private static async Task WriteNextStepsAsync(
+        DirectoryInfo output,
+        string name,
+        TextWriter stdout
+    )
+    {
+        await stdout
+            .WriteLineAsync($"Generated Trax project at: {output.FullName}")
+            .ConfigureAwait(false);
+        await stdout
+            .WriteLineAsync($"  {name}.Hub/     — Hub project (API + Scheduler + Dashboard)")
+            .ConfigureAwait(false);
+        await stdout
+            .WriteLineAsync($"  {name}.Trains/  — Trains library (generated from schema)")
+            .ConfigureAwait(false);
+        await stdout.WriteLineAsync().ConfigureAwait(false);
+        await stdout.WriteLineAsync("Next steps:").ConfigureAwait(false);
+        await stdout.WriteLineAsync($"  cd {output.FullName}/{name}.Hub").ConfigureAwait(false);
+        await stdout.WriteLineAsync("  dotnet restore").ConfigureAwait(false);
+        await stdout
+            .WriteLineAsync("  # Fill in junction implementations (search for TODO)")
+            .ConfigureAwait(false);
+        await stdout.WriteLineAsync("  dotnet run").ConfigureAwait(false);
     }
 
     private static int Fail()

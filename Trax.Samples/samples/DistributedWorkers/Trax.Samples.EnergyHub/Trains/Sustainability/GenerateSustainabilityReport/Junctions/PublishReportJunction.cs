@@ -12,7 +12,7 @@ public class PublishReportJunction(ILogger<PublishReportJunction> logger)
     {
         logger.LogInformation("[{Period}] Publishing sustainability report", input.ReportPeriod);
 
-        await Task.Delay(200);
+        await Task.Delay(200, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{Period}] Report published — 82% renewable, 12.4 tons CO₂ offset, $156.80 revenue",

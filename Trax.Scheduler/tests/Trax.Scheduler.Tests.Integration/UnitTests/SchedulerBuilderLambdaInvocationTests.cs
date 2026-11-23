@@ -23,7 +23,18 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulerBuilderLambdaInvocationTests
 {
-    private static SchedulerConfiguration ResolveConfiguration(
+    // Disposed after each test, asynchronously, so the helper that builds them stays synchronous.
+    private readonly List<ServiceProvider> _providers = [];
+
+    [TearDown]
+    public async Task DisposeProviders()
+    {
+        foreach (var provider in _providers)
+            await provider.DisposeAsync().ConfigureAwait(false);
+        _providers.Clear();
+    }
+
+    private SchedulerConfiguration ResolveConfiguration(
         Action<SchedulerConfigurationBuilder> configure
     )
     {
@@ -39,7 +50,8 @@ public class SchedulerBuilderLambdaInvocationTests
                     return scheduler;
                 })
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
         return provider.GetRequiredService<SchedulerConfiguration>();
     }
 
@@ -67,7 +79,9 @@ public class SchedulerBuilderLambdaInvocationTests
             )
             .Returns(dummyManifest);
 
-        var pending = config.PendingManifests.Single(m => m.ExternalId == "ext-sched");
+        var pending = config.PendingManifests.Single(m =>
+            string.Equals(m.ExternalId, "ext-sched", StringComparison.Ordinal)
+        );
         await pending.ScheduleFunc(scheduler, CancellationToken.None);
 
         await scheduler
@@ -105,7 +119,9 @@ public class SchedulerBuilderLambdaInvocationTests
             )
             .Returns(dummyManifest);
 
-        var pending = config.PendingManifests.Single(m => m.ExternalId == "once-ext");
+        var pending = config.PendingManifests.Single(m =>
+            string.Equals(m.ExternalId, "once-ext", StringComparison.Ordinal)
+        );
         await pending.ScheduleFunc(scheduler, CancellationToken.None);
 
         await scheduler
@@ -147,7 +163,9 @@ public class SchedulerBuilderLambdaInvocationTests
             )
             .Returns(dummyManifest);
 
-        var pending = config.PendingManifests.Single(m => m.ExternalId == "branch-x");
+        var pending = config.PendingManifests.Single(m =>
+            string.Equals(m.ExternalId, "branch-x", StringComparison.Ordinal)
+        );
         await pending.ScheduleFunc(scheduler, CancellationToken.None);
 
         await scheduler

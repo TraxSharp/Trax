@@ -28,7 +28,9 @@ public class LendingMutationModeTests : ApiTestFixture
             .EnumerateArray()
             .Where(t => t.GetProperty("fields").ValueKind == JsonValueKind.Array)
             .SelectMany(t => t.GetProperty("fields").EnumerateArray())
-            .Where(f => f.GetProperty("name").GetString() == field)
+            .Where(f =>
+                string.Equals(f.GetProperty("name").GetString(), field, StringComparison.Ordinal)
+            )
             .Select(f =>
                 f.GetProperty("args")
                     .EnumerateArray()

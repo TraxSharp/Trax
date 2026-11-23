@@ -23,7 +23,7 @@ internal sealed class TraxGraphQLAuthPolicyValidator(
             return;
 
         var policyName = configuration.AuthorizationPolicy ?? TraxAuthClaimTypes.TraxAuthPolicy;
-        var policy = await policyProvider.GetPolicyAsync(policyName);
+        var policy = await policyProvider.GetPolicyAsync(policyName).ConfigureAwait(false);
 
         if (policy is null)
             throw new InvalidOperationException(

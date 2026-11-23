@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Subscriptions;
@@ -28,12 +29,12 @@ internal sealed class LifecycleStreamRule
         _broadcastTrains = discovery
             .DiscoverTrains()
             .Where(r => r.IsBroadcastEnabled)
-            .Select(r => r.ServiceType.FullName!)
+            .Select(r => r.ServiceType.FullName.NotNull())
             .ToHashSet(StringComparer.Ordinal);
         _progressTrains = discovery
             .DiscoverTrains()
             .Where(r => r.IsRunProgressEnabled)
-            .Select(r => r.ServiceType.FullName!)
+            .Select(r => r.ServiceType.FullName.NotNull())
             .ToHashSet(StringComparer.Ordinal);
     }
 
@@ -47,12 +48,12 @@ internal sealed class LifecycleStreamRule
         StringComparer.Ordinal
     )
     {
-        typeof(Trax.StateMachine.Persistence.Mutations.ISaveSnapshot).FullName!,
-        typeof(Trax.StateMachine.Persistence.Mutations.IAdvanceSnapshot).FullName!,
-        typeof(Trax.StateMachine.Persistence.Mutations.ILoadSnapshot).FullName!,
-        typeof(Trax.StateMachine.Persistence.Mutations.ISendSnapshot).FullName!,
-        typeof(Trax.StateMachine.Persistence.Mutations.IStartSnapshot).FullName!,
-        typeof(Trax.StateMachine.Persistence.Mutations.IDiscardSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.ISaveSnapshot).FullName.NotNull(),
+        typeof(Trax.StateMachine.Persistence.Mutations.IAdvanceSnapshot).FullName.NotNull(),
+        typeof(Trax.StateMachine.Persistence.Mutations.ILoadSnapshot).FullName.NotNull(),
+        typeof(Trax.StateMachine.Persistence.Mutations.ISendSnapshot).FullName.NotNull(),
+        typeof(Trax.StateMachine.Persistence.Mutations.IStartSnapshot).FullName.NotNull(),
+        typeof(Trax.StateMachine.Persistence.Mutations.IDiscardSnapshot).FullName.NotNull(),
     };
 
     /// <summary>Whether events of the train named <paramref name="trainName"/> are published.</summary>

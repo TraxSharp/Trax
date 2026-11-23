@@ -6,13 +6,8 @@ namespace Trax.Scheduler.Tests.Meta.Tests;
 /// <para>Not ADR-enforcing: the partial-class split is a pattern documented at contributing/api-conventions, not a decision taken against alternatives.</para>
 /// </summary>
 [TestFixture]
-public class BuilderPartialSplitTests
+public partial class BuilderPartialSplitTests
 {
-    private static readonly Regex BuildMethod = new(
-        @"^\s*(public|internal|protected|private)\s+(?:[\w<>\.]+\s+)?Build\s*\(",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
-
     private static readonly HashSet<string> KnownExceptions = new(StringComparer.Ordinal);
 
     public static IEnumerable<TestCaseData> BuilderDirectories()
@@ -83,4 +78,11 @@ public class BuilderPartialSplitTests
                     + string.Join("\n  ", found)
             );
     }
+
+    [GeneratedRegex(
+        @"^\s*(public|internal|protected|private)\s+(?:[\w<>\.]+\s+)?Build\s*\(",
+        RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex BuildMethod { get; }
 }

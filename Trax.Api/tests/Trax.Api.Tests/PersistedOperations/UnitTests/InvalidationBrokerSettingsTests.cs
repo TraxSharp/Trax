@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -42,7 +43,7 @@ public class InvalidationBrokerSettingsTests
 
         options.RabbitMqConnectionString.Should().Be("amqp://rabbitmq:5672/");
         var factory = options.RabbitMqInvalidation.CreateConnectionFactory(
-            options.RabbitMqConnectionString!
+            options.RabbitMqConnectionString.NotNull()
         );
         factory.HostName.Should().Be("rabbitmq");
         factory.Port.Should().Be(5672);
@@ -82,7 +83,7 @@ public class InvalidationBrokerSettingsTests
             .Build();
 
         var factory = options.RabbitMqInvalidation.CreateConnectionFactory(
-            options.RabbitMqConnectionString!
+            options.RabbitMqConnectionString.NotNull()
         );
         factory.UserName.Should().Be("guest");
         factory.Password.Should().Be("guest");
@@ -102,7 +103,9 @@ public class InvalidationBrokerSettingsTests
             .Build();
 
         options
-            .RabbitMqInvalidation.CreateConnectionFactory(options.RabbitMqConnectionString!)
+            .RabbitMqInvalidation.CreateConnectionFactory(
+                options.RabbitMqConnectionString.NotNull()
+            )
             .Password.Should()
             .Be(Password);
     }

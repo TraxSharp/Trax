@@ -12,13 +12,13 @@ namespace Trax.Mediator.Configuration
         public bool SkipChainVerification { get; }
         public Microsoft.Extensions.DependencyInjection.ServiceLifetime TrainLifetime { get; }
     }
-    public class TraxBuilderWithMediator
+    public sealed class TraxBuilderWithMediator
     {
         public bool HasDataProvider { get; }
         public bool HasDatabaseProvider { get; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
     }
-    public class TraxMediatorBuilder
+    public sealed class TraxMediatorBuilder
     {
         public Trax.Mediator.Configuration.TraxMediatorBuilder AllowMissingAuthorizationService() { }
         public Trax.Mediator.Configuration.TraxMediatorBuilder ConcurrentRunLimit<TTrain>(int maxConcurrent)
@@ -294,7 +294,7 @@ namespace Trax.Mediator.Services.TrainRegistry
 {
     public interface ITrainRegistry
     {
-        System.Collections.Generic.Dictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
+        System.Collections.Generic.IReadOnlyDictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
     }
 }
 namespace Trax.Mediator.Services.TrustedExecution

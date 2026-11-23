@@ -1,46 +1,11 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
 
 namespace Trax.Api.Console.Terminal.Trace;
-
-/// <summary>What one line of a run's trace is.</summary>
-internal enum TraceKind
-{
-    /// <summary>A step: a junction, a decision point or a route, as it started and ended.</summary>
-    Step,
-
-    /// <summary>A decision the run recorded: the question, the answer, who answered.</summary>
-    Decision,
-
-    /// <summary>A line the run logged.</summary>
-    Log,
-}
-
-/// <summary>One line of a run's trace.</summary>
-/// <param name="Kind">A step, a decision or a log line.</param>
-/// <param name="Key">What makes it this line: a step's position, a decision's or log's id. A step that changes keeps its key.</param>
-/// <param name="At">When it happened; null for a log line, which the host records without a time.</param>
-/// <param name="Text">The line as the terminal shows it.</param>
-/// <param name="Json">What the host answered for it.</param>
-/// <param name="Ended">For a step, whether it had ended (completed, failed or cancelled) when it was read.</param>
-internal sealed record TraceEntry(
-    TraceKind Kind,
-    string Key,
-    DateTimeOffset? At,
-    string Text,
-    JsonNode? Json,
-    bool Ended = false
-)
-{
-    /// <summary>
-    /// Of two readings of one line, the one to keep: a step that had ended is newer than one still running, and of two
-    /// equally far along, <paramref name="later"/>, the one read last.
-    /// </summary>
-    public static TraceEntry Newest(TraceEntry earlier, TraceEntry later) =>
-        earlier.Ended && !later.Ended ? earlier : later;
-}
 
 /// <summary>
 /// A run's steps, decisions and log, read with the browser console's documents and told as one timeline: steps and
@@ -58,36 +23,42 @@ internal static class RunTrace
         CancellationToken cancellationToken
     )
     {
-        var steps = await client.JunctionRunsAsync(
-            new JunctionRunsVariables { MetadataId = run, Take = Take },
-            cancellationToken
-        );
+        var steps = await client
+            .JunctionRunsAsync(
+                new JunctionRunsVariables { MetadataId = run, Take = Take },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (!steps.Succeeded)
             return Failed(steps);
-        var decisions = await client.DecisionsAsync(
-            new DecisionsVariables { MetadataId = run, Take = Take },
-            cancellationToken
-        );
+        var decisions = await client
+            .DecisionsAsync(
+                new DecisionsVariables { MetadataId = run, Take = Take },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (!decisions.Succeeded)
             return Failed(decisions);
-        var logs = await client.LogsAsync(
-            new LogsVariables
-            {
-                Take = Take,
-                MetadataId = run,
-                Order = SortOrder.Oldest,
-            },
-            cancellationToken
-        );
+        var logs = await client
+            .LogsAsync(
+                new LogsVariables
+                {
+                    Take = Take,
+                    MetadataId = run,
+                    Order = SortOrder.Oldest,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (!logs.Succeeded)
             return Failed(logs);
 
-        var timeline = (steps.Data!.Operations?.JunctionRuns ?? [])
+        var timeline = (steps.Data.NotNull().Operations?.JunctionRuns ?? [])
             .Select(Step)
-            .Concat((decisions.Data!.Operations?.Decisions.Items ?? []).Select(Decision))
+            .Concat((decisions.Data.NotNull().Operations?.Decisions.Items ?? []).Select(Decision))
             .OrderBy(e => e.At)
             .ThenBy(e => e.Kind)
-            .Concat((logs.Data!.Operations?.Logs.Logs.Items ?? []).Select(Log))
+            .Concat((logs.Data.NotNull().Operations?.Logs.Logs.Items ?? []).Select(Log))
             .ToList();
         return new() { Data = timeline };
     }
@@ -139,7 +110,7 @@ internal static class RunTrace
     private static TraceEntry Step(JunctionRunsResultOperationsJunctionRuns s) =>
         new(
             TraceKind.Step,
-            $"step:{s.Position}",
+            string.Create(CultureInfo.InvariantCulture, $"step:{s.Position}"),
             s.StartedAt,
             StepText(
                 Wire.Name(s.Kind),
@@ -156,7 +127,7 @@ internal static class RunTrace
     private static TraceEntry StepOf(OnJunctionEventResultOnJunctionEventJunction s) =>
         new(
             TraceKind.Step,
-            $"step:{s.Position}",
+            string.Create(CultureInfo.InvariantCulture, $"step:{s.Position}"),
             s.StartedAt,
             StepText(
                 Wire.Name(s.Kind),
@@ -184,7 +155,9 @@ internal static class RunTrace
             {
                 $"{kind.ToLowerInvariant()} {name}",
                 state,
-                durationMs is { } ms ? $"{ms:0} ms" : null,
+                durationMs is { } ms
+                    ? string.Create(CultureInfo.InvariantCulture, $"{ms:0} ms")
+                    : null,
                 answer is null ? null : $"answer {answer}",
                 failure,
             }.Where(p => p is not null)
@@ -193,7 +166,7 @@ internal static class RunTrace
     private static TraceEntry Decision(DecisionsResultOperationsDecisionsItems d) =>
         new(
             TraceKind.Decision,
-            $"decision:{d.Id}",
+            string.Create(CultureInfo.InvariantCulture, $"decision:{d.Id}"),
             d.DecidedAt,
             string.Join(
                 "  ",
@@ -211,8 +184,8 @@ internal static class RunTrace
     private static TraceEntry Log(LogsResultOperationsLogsLogsItems l) =>
         new(
             TraceKind.Log,
-            $"log:{l.Id}",
-            null,
+            string.Create(CultureInfo.InvariantCulture, $"log:{l.Id}"),
+            At: null,
             $"{Wire.Name(l.Level).ToLowerInvariant()}  {l.Category}  {l.Message}"
                 + (l.Exception is null ? "" : $"  {l.Exception}"),
             Wire.Json(l)

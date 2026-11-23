@@ -5,6 +5,7 @@ using Amazon.Lambda.Model;
 using Amazon.Runtime;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Lambda.Configuration;
 using Trax.Scheduler.Lambda.Services;
@@ -17,7 +18,11 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class LambdaJobSubmitterTests
 {
-    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     #region Helpers
 
@@ -33,7 +38,7 @@ public class LambdaJobSubmitterTests
             .Abstractions
             .NullLogger<LambdaJobSubmitter>
             .Instance;
-        return (new LambdaJobSubmitter(client, options, logger), client);
+        return (new LambdaJobSubmitter(client, options, logger, TimeProvider.System), client);
     }
 
     #endregion
@@ -48,12 +53,15 @@ public class LambdaJobSubmitterTests
         var submitter = new LambdaJobSubmitter(
             client,
             new LambdaWorkerOptions { FunctionName = "fn", SigningKey = key },
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<LambdaJobSubmitter>.Instance
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<LambdaJobSubmitter>.Instance,
+            TimeProvider.System
         );
 
         await submitter.EnqueueAsync(42);
 
-        var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!;
+        var envelope = JsonSerializer
+            .Deserialize<LambdaEnvelope>(client.LastRequest.NotNull().Payload)
+            .NotNull();
         (
             await new Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier(
                 new Trax.Scheduler.Configuration.TraxJobRunnerOptions { SigningKey = key },
@@ -83,7 +91,8 @@ public class LambdaJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         JsonSerializer
-            .Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!
+            .Deserialize<LambdaEnvelope>(client.LastRequest.NotNull().Payload)
+            .NotNull()
             .Signature.Should()
             .BeNull();
     }
@@ -117,19 +126,19 @@ public class LambdaJobSubmitterTests
         // Assert
         client.LastRequest.Should().NotBeNull();
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         envelope.Should().NotBeNull();
-        envelope!.Type.Should().Be(LambdaRequestType.Execute);
+        envelope.NotNull().Type.Should().Be(LambdaRequestType.Execute);
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
             envelope.PayloadJson,
             WebOptions
         );
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(42);
+        request.NotNull().MetadataId.Should().Be(42);
         request.Input.Should().BeNull();
         request.InputType.Should().BeNull();
     }
@@ -144,7 +153,7 @@ public class LambdaJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.InvocationType.Should().Be(InvocationType.Event);
+        client.LastRequest.NotNull().InvocationType.Should().Be(InvocationType.Event);
     }
 
     [Test]
@@ -160,7 +169,8 @@ public class LambdaJobSubmitterTests
 
         // Assert
         client
-            .LastRequest!.FunctionName.Should()
+            .LastRequest.NotNull()
+            .FunctionName.Should()
             .Be("arn:aws:lambda:us-east-1:123456789:function:my-fn");
     }
 
@@ -180,17 +190,17 @@ public class LambdaJobSubmitterTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            envelope!.PayloadJson,
+            envelope.NotNull().PayloadJson,
             WebOptions
         );
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(50);
+        request.NotNull().MetadataId.Should().Be(50);
         request.Input.Should().NotBeNull();
         request.Input.Should().Contain("hello-world");
         request.InputType.Should().Be(typeof(SchedulerTestInput).FullName);
@@ -208,12 +218,12 @@ public class LambdaJobSubmitterTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            envelope!.PayloadJson,
+            envelope.NotNull().PayloadJson,
             WebOptions
         );
 
@@ -222,7 +232,7 @@ public class LambdaJobSubmitterTests
             input.GetType(),
             TraxJsonSerializationOptions.ManifestProperties
         );
-        request!.Input.Should().Be(expectedJson);
+        request.NotNull().Input.Should().Be(expectedJson);
     }
 
     [Test]
@@ -256,30 +266,30 @@ public class LambdaJobSubmitterTests
 
         // Assert
         var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
+            client.LastRequest.NotNull().Payload,
             WebOptions
         );
 
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            envelope!.PayloadJson,
+            envelope.NotNull().PayloadJson,
             WebOptions
         );
 
-        request!.MetadataId.Should().Be(99);
+        request.NotNull().MetadataId.Should().Be(99);
         request.Input.Should().BeNull();
     }
 
     [Test]
-    public void EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
+    public async Task EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
     {
         // Arrange
         var (submitter, _) = CreateSubmitter();
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(1, cts.Token);
-        act.Should().ThrowAsync<OperationCanceledException>();
+        var act = async () => await submitter.EnqueueAsync(1, cts.Token).ConfigureAwait(false);
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -294,22 +304,22 @@ public class LambdaJobSubmitterTests
         client.FunctionError = "Unhandled";
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(42);
+        var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
         await act.Should()
             .ThrowAsync<TrainException>()
             .WithMessage("*my-lambda-function*Unhandled*");
     }
 
     [Test]
-    public void EnqueueAsync_WhenLambdaThrows_PropagatesException()
+    public async Task EnqueueAsync_WhenLambdaThrows_PropagatesException()
     {
         // Arrange
         var (submitter, client) = CreateSubmitter();
         client.ThrowOnInvoke = true;
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(42);
-        act.Should().ThrowAsync<AmazonLambdaException>();
+        var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
+        await act.Should().ThrowAsync<AmazonLambdaException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -321,7 +331,7 @@ public class LambdaJobSubmitterTests
     {
         // Arrange
         var (submitter, _) = CreateSubmitter();
-        var jobIds = new HashSet<string>();
+        var jobIds = new HashSet<string>(StringComparer.Ordinal);
 
         // Act
         for (var i = 0; i < 10; i++)
@@ -361,7 +371,7 @@ public class LambdaJobSubmitterTests
             .Abstractions
             .NullLogger<LambdaJobSubmitter>
             .Instance;
-        var submitter = new LambdaJobSubmitter(client, options, logger);
+        var submitter = new LambdaJobSubmitter(client, options, logger, TimeProvider.System);
 
         // Act
         var jobId = await submitter.EnqueueAsync(42);
@@ -375,7 +385,7 @@ public class LambdaJobSubmitterTests
 
     #region MockLambdaClient
 
-    internal class MockLambdaClient : IAmazonLambda
+    internal sealed class MockLambdaClient : IAmazonLambda
     {
         public InvokeRequest? LastRequest { get; private set; }
         public List<InvokeRequest> AllRequests { get; } = [];

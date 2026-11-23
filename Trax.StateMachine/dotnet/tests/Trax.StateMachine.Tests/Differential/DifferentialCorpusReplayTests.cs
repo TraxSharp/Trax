@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Testing;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
@@ -72,7 +73,7 @@ public class DifferentialCorpusReplayTests
     public void Replay_returns_no_diffs_when_the_engine_reproduces_every_case()
     {
         var diffs = DifferentialCorpus.Replay(TestTurnstile.Machine, MatchingCorpus);
-        diffs.Should().BeEmpty(string.Join("\n", diffs));
+        diffs.Should().BeEmpty(string.Join('\n', diffs));
     }
 
     [Test]
@@ -99,20 +100,31 @@ public class DifferentialCorpusReplayTests
         var file = FixturePaths.DifferentialFile("ingest");
         var corpus = File.ReadAllText(file);
 
-        var outcomeCases = JsonNode.Parse(corpus)!["cases"]!
+        var outcomeCases = JsonNode
+            .Parse(corpus)
+            .NotNull()["cases"]
+            .NotNull()
             .AsArray()
-            .Where(c => c!["when"]!["trigger"]!.GetValue<string>().StartsWith("Fetching."))
+            .Where(c =>
+                c.NotNull()["when"]
+                    .NotNull()["trigger"]
+                    .NotNull()
+                    .GetValue<string>()
+                    .StartsWith("Fetching.", StringComparison.Ordinal)
+            )
             .ToList();
         outcomeCases
             .Should()
             .Contain(
-                c => c!["expect"]!["outcome"]!.GetValue<string>() == "transitioned",
+                c =>
+                    c.NotNull()["expect"].NotNull()["outcome"].NotNull().GetValue<string>()
+                    == "transitioned",
                 "the corpus must exercise the outcome reductions, not only their rejections"
             );
 
         var diffs = DifferentialCorpus.Replay(IngestMachine.Machine, corpus);
 
-        diffs.Should().BeEmpty(string.Join("\n", diffs));
+        diffs.Should().BeEmpty(string.Join('\n', diffs));
     }
 
     [Test]
@@ -156,7 +168,7 @@ public class DifferentialCorpusReplayTests
             .Should()
             .BeEmpty(
                 "a timer case replays through AdvanceTimer, never Advance (Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md): "
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 }

@@ -43,7 +43,10 @@ internal sealed class TrainAuthorizationPolicyValidator(IServiceProvider service
         var policyProvider = serviceProvider.GetService<IAuthorizationPolicyProvider>();
         var missing = new List<string>();
         foreach (var (policy, trains) in named)
-            if (policyProvider is null || await policyProvider.GetPolicyAsync(policy) is null)
+            if (
+                policyProvider is null
+                || await policyProvider.GetPolicyAsync(policy).ConfigureAwait(false) is null
+            )
                 missing.Add($"'{policy}', named by [TraxAuthorize] on {string.Join(", ", trains)}");
 
         if (missing.Count == 0)

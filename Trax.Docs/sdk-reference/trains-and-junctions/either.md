@@ -7,6 +7,7 @@ package: Trax.Core
 namespace: Trax.Core.Functional
 source:
   - Trax.Core/src/Trax.Core/Functional/Either.cs
+  - Trax.Core/src/Trax.Core/Functional/EitherStatus.cs
   - Trax.Core/src/Trax.Core/Functional/Unit.cs
 parent: Trains and Junctions
 grand_parent: SDK Reference

@@ -92,5 +92,5 @@ public class RemoteRunOutputTests
 
     [Test]
     public void NoOutput_ReadsAsNull() =>
-        RemoteRunOutput.Read(null, typeof(IShape), null).Should().BeNull();
+        RemoteRunOutput.Read(outputJson: null, typeof(IShape), namedType: null).Should().BeNull();
 }

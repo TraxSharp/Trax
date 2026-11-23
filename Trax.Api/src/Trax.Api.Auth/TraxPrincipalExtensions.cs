@@ -93,7 +93,7 @@ public static class TraxPrincipalExtensions
     /// <summary>
     /// Attempts to reconstruct a <see cref="TraxPrincipal"/> from a
     /// <see cref="ClaimsPrincipal"/> produced by
-    /// <see cref="ToClaimsPrincipal(TraxPrincipal, string)"/>. Returns <c>false</c>
+    /// <see cref="ToClaimsPrincipal(TraxPrincipal, string)"/>. Returns <see langword="false"/>
     /// when no <see cref="TraxAuthClaimTypes.PrincipalId"/> claim is present,
     /// meaning the principal did not originate from a Trax auth scheme. The returned
     /// <see cref="TraxPrincipal.Id"/> is the qualified id the claim carries,
@@ -148,7 +148,7 @@ public static class TraxPrincipalExtensions
     /// <summary>
     /// Returns the stable principal identifier from
     /// <see cref="TraxAuthClaimTypes.PrincipalId"/>, qualified by its scheme
-    /// (<c>{scheme}:{id}</c>), or <c>false</c> if the claim
+    /// (<c>{scheme}:{id}</c>), or <see langword="false"/> if the claim
     /// is absent. Convenient for audit sinks and log correlation.
     /// </summary>
     public static bool TryGetPrincipalId(

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -10,6 +11,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -107,7 +109,7 @@ internal sealed class ResumeHost : IAsyncDisposable
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return new ResumeHost(host);
     }
 
@@ -121,19 +123,20 @@ internal sealed class ResumeHost : IAsyncDisposable
         ResumeProbe.FailIn = failIn;
         try
         {
-            using var scope = Services.CreateScope();
+            var scope = Services.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             var train = scope.ServiceProvider.GetRequiredService<TTrain>();
             try
             {
-                await train.Run(new ResumableInput { Topic = topic });
+                await train.Run(new ResumableInput { Topic = topic }).ConfigureAwait(false);
             }
             catch (TimeoutException) when (failIn is not null)
             {
                 // The run fails where it was told to.
             }
 
-            await FlushJunctionEventsAsync();
-            return ((ServiceTrain<ResumableInput, string>)(object)train).Metadata!.Id;
+            await FlushJunctionEventsAsync().ConfigureAwait(false);
+            return ((ServiceTrain<ResumableInput, string>)(object)train).Metadata.NotNull().Id;
         }
         finally
         {
@@ -149,10 +152,12 @@ internal sealed class ResumeHost : IAsyncDisposable
     {
         // The writer and its flush are internal to Trax.Effect.Data, which this assembly cannot see.
         var writer = Services.GetRequiredService(
-            typeof(Effect.Data.Extensions.ServiceExtensions).Assembly.GetType(
-                "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
-                throwOnError: true
-            )!
+            typeof(Effect.Data.Extensions.ServiceExtensions)
+                .Assembly.GetType(
+                    "Trax.Effect.Data.JunctionEvents.JunctionRunWriter",
+                    throwOnError: true
+                )
+                .NotNull()
         );
         await (
             (Task)
@@ -162,9 +167,13 @@ internal sealed class ResumeHost : IAsyncDisposable
                         "FlushAsync",
                         System.Reflection.BindingFlags.Instance
                             | System.Reflection.BindingFlags.NonPublic
-                    )!
-                    .Invoke(writer, [CancellationToken.None])!
-        ).WaitAsync(TimeSpan.FromSeconds(30));
+                    )
+                    .NotNull()
+                    .Invoke(writer, [CancellationToken.None])
+                    .NotNull()
+        )
+            .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -174,8 +183,10 @@ internal sealed class ResumeHost : IAsyncDisposable
     public async Task<long> RunResumeAsync<TTrain>(long entryId)
         where TTrain : IServiceTrain<ResumableInput, string>
     {
-        var entry = await With(d => d.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId));
-        using var scope = Services.CreateScope();
+        var entry = await With(d => d.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entryId))
+            .ConfigureAwait(false);
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<ResumableInput, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
@@ -187,16 +198,26 @@ internal sealed class ResumeHost : IAsyncDisposable
                 Input = null,
                 ResumeFrom = entry.ResumeFrom,
                 ResumeAt = entry.ResumeAt,
-            }
+            },
+            train.Clock
         );
         // Read as the dispatcher reads a queued input: its members are camelCase.
-        var input = JsonSerializer.Deserialize<ResumableInput>(
-            entry.Input!,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        )!;
-        await train.Run(input, metadata);
-        await FlushJunctionEventsAsync();
-        return train.Metadata!.Id;
+        var input = JsonSerializer
+            .Deserialize<ResumableInput>(
+                entry.Input.NotNull(),
+                new JsonSerializerOptions
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                    PropertyNameCaseInsensitive = true,
+                }
+            )
+            .NotNull();
+        await train
+            .Run(input, metadata, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
+        await FlushJunctionEventsAsync().ConfigureAwait(false);
+        return train.Metadata.NotNull().Id;
     }
 
     /// <summary>The GraphQL response to <paramref name="query"/>, sent with <paramref name="apiKey"/>.</summary>
@@ -210,8 +231,8 @@ internal sealed class ResumeHost : IAsyncDisposable
         if (apiKey is not null)
             request.Headers.Add("X-Api-Key", apiKey);
 
-        var response = await client.SendAsync(request);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await client.SendAsync(request).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     /// <summary><c>operations.resumeExecution</c> over HTTP, as a GraphQL caller sends it.</summary>
@@ -221,7 +242,9 @@ internal sealed class ResumeHost : IAsyncDisposable
         string? apiKey = OperatorKey
     ) =>
         GraphQLAsync(
-            $$"""
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""
             mutation {
               operations {
                 resumeExecution(id: {{id}}{{(
@@ -234,19 +257,22 @@ internal sealed class ResumeHost : IAsyncDisposable
                 }
               }
             }
-            """,
+            """
+            ),
             apiKey
         );
 
     /// <summary>The dashboard's resume: the operations service, inside its trusted scope.</summary>
     public async Task<OperationResult> ResumeAsTheDashboardAsync(long id, string? from)
     {
-        using var scope = Services.CreateScope();
+        var scope = Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trusted = scope.ServiceProvider.GetRequiredService<ITrustedExecutionScope>();
         using (trusted.BeginTrusted("dashboard"))
             return await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
-                .ResumeExecutionAsync(id, from, CancellationToken.None);
+                .ResumeExecutionAsync(id, from, CancellationToken.None)
+                .ConfigureAwait(false);
     }
 
     /// <summary>The queued entries that resume <paramref name="runId"/>.</summary>
@@ -259,15 +285,19 @@ internal sealed class ResumeHost : IAsyncDisposable
 
     public async Task<T> With<T>(Func<IDataContext, Task<T>> read)
     {
-        await using var context = await Services
+        var context = await Services
             .GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await read(context);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            return await read(context).ConfigureAwait(false);
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _host.StopAsync();
+        await _host.StopAsync().ConfigureAwait(false);
         _host.Dispose();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }

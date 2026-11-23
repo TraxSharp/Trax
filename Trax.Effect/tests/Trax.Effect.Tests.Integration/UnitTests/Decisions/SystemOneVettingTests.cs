@@ -37,7 +37,7 @@ public class SystemOneVettingTests
     private static readonly Question Fine = new ChoiceQuestion(
         "Lane",
         "Which lane?",
-        [new("Left", null), new("Right", null)]
+        [new("Left", Description: null), new("Right", Description: null)]
     );
 
     [Test]
@@ -53,9 +53,9 @@ public class SystemOneVettingTests
                     new ScoreQuestion(
                         "Urgency",
                         "How urgent?",
-                        [new("Low", null), new("High", null)]
+                        [new("Low", Description: null), new("High", Description: null)]
                     ),
-                    new YesNoQuestion("Threat", "Does it threaten anyone?", null, null)
+                    new YesNoQuestion("Threat", "Does it threaten anyone?", Yes: null, No: null)
                 )
             )
             .Should()
@@ -82,12 +82,12 @@ public class SystemOneVettingTests
 
         yield return Case(
             "AQuestionWithNoInstructions",
-            new YesNoQuestion("Q", "  ", null, null),
+            new YesNoQuestion("Q", "  ", Yes: null, No: null),
             "'Q' has no instructions"
         );
         yield return Case(
             "AChoiceOfOneOption",
-            new ChoiceQuestion("Lane", "Which lane?", [new("Left", null)]),
+            new ChoiceQuestion("Lane", "Which lane?", [new("Left", Description: null)]),
             "offers 1 option, and the model needs at least 2"
         );
         yield return Case(
@@ -95,7 +95,12 @@ public class SystemOneVettingTests
             new ChoiceQuestion(
                 "Lane",
                 "Which lane?",
-                [new("A", null), new("B", null), new("C", null), new("D", null)]
+                [
+                    new("A", Description: null),
+                    new("B", Description: null),
+                    new("C", Description: null),
+                    new("D", Description: null),
+                ]
             ),
             "offers 4 options, and the model accepts at most 3"
         );
@@ -104,13 +109,22 @@ public class SystemOneVettingTests
             new ScoreQuestion(
                 "Urgency",
                 "How urgent?",
-                [new("A", null), new("B", null), new("C", null), new("D", null)]
+                [
+                    new("A", Description: null),
+                    new("B", Description: null),
+                    new("C", Description: null),
+                    new("D", Description: null),
+                ]
             ),
             "offers 4 levels, and the model accepts at most 3"
         );
         yield return Case(
             "AnOptionNamedTwice",
-            new ChoiceQuestion("Lane", "Which lane?", [new("A", null), new("A", null)]),
+            new ChoiceQuestion(
+                "Lane",
+                "Which lane?",
+                [new("A", Description: null), new("A", Description: null)]
+            ),
             "offers the option 'A' more than once"
         );
         yield return Case(
@@ -130,7 +144,7 @@ public class SystemOneVettingTests
                 Declared(
                     typeof(Order),
                     Fine,
-                    new YesNoQuestion("Threat", "Does it threaten anyone?", null, null)
+                    new YesNoQuestion("Threat", "Does it threaten anyone?", Yes: null, No: null)
                 )
             )
             .Should()

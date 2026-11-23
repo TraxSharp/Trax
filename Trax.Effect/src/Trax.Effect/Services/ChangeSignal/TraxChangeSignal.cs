@@ -27,6 +27,8 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     // One bit per ChangeDomain value: set while that domain sits in the channel unread.
     private int _pending;
     private readonly ILogger<TraxChangeSignal>? _logger;
+    private static readonly TimeSpan WarningInterval = TimeSpan.FromSeconds(5);
+    private readonly TimeProvider _clock;
     private readonly Meter _meter;
     private readonly Counter<long> _droppedCounter;
     private long _totalDropped;
@@ -38,11 +40,27 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     /// domain, whatever <see cref="ChangeSignalOptions.ChannelCapacity"/> says. Registered as a singleton by <c>AddTrax</c>; not intended to be
     /// constructed directly.
     /// </summary>
-    /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <c>null</c>.</param>
+    /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <see langword="null"/>.</param>
     /// <param name="logger">Receives the throttled warning logged when signals are dropped; optional.</param>
     public TraxChangeSignal(ChangeSignalOptions options, ILogger<TraxChangeSignal>? logger = null)
+        : this(options, logger, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates the signal as <see cref="TraxChangeSignal(ChangeSignalOptions, ILogger{TraxChangeSignal}?)"/>
+    /// does, throttling its warnings on <paramref name="timeProvider"/>. <c>AddTrax</c> uses this one.
+    /// </summary>
+    /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <see langword="null"/>.</param>
+    /// <param name="logger">Receives the throttled warning logged when signals are dropped; optional.</param>
+    /// <param name="timeProvider">The clock the five seconds between warnings are measured on.</param>
+    public TraxChangeSignal(
+        ChangeSignalOptions options,
+        ILogger<TraxChangeSignal>? logger,
+        TimeProvider timeProvider
+    )
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        _clock = timeProvider;
         _logger = logger;
         _channel = Channel.CreateBounded<ChangeDomain>(
             new BoundedChannelOptions(Math.Max(options.ChannelCapacity, DomainCount))
@@ -84,9 +102,9 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
 
         _droppedCounter.Add(1);
         var total = Interlocked.Increment(ref _totalDropped);
-        var now = Environment.TickCount64;
+        var now = _clock.GetTimestamp();
         var lastWarn = Interlocked.Read(ref _lastWarnedAt);
-        if (now - lastWarn >= 5_000)
+        if (lastWarn == 0 || _clock.GetElapsedTime(lastWarn, now) >= WarningInterval)
         {
             if (Interlocked.CompareExchange(ref _lastWarnedAt, now, lastWarn) == lastWarn)
             {
@@ -100,10 +118,10 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
 
     private void RefuseUndefined(ChangeDomain domain)
     {
-        var now = Environment.TickCount64;
+        var now = _clock.GetTimestamp();
         var lastWarn = Interlocked.Read(ref _lastRefusedWarnedAt);
         if (
-            now - lastWarn >= 5_000
+            (lastWarn == 0 || _clock.GetElapsedTime(lastWarn, now) >= WarningInterval)
             && Interlocked.CompareExchange(ref _lastRefusedWarnedAt, now, lastWarn) == lastWarn
         )
             _logger?.LogWarning(

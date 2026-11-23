@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Postgres.Services.SqlDialect;
 /// PostgreSQL-specific SQL dialect using advisory locks, FOR UPDATE SKIP LOCKED,
 /// and native time functions.
 /// </summary>
-internal class PostgresSqlDialect : ISqlDialect
+internal sealed class PostgresSqlDialect : ISqlDialect
 {
     /// <remarks>
     /// The name is a parameter, so it must not sit inside SQL quotes: quoted, the placeholder EF

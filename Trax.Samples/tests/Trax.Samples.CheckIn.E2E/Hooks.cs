@@ -1,4 +1,5 @@
 using Reqnroll;
+using Trax.Core.Extensions;
 using Trax.Samples.CheckIn.Api.Auth;
 using Trax.Samples.CheckIn.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
@@ -19,10 +20,16 @@ public sealed class Hooks
     private static CheckInApiFactory? s_factory;
 
     [BeforeTestRun]
-    public static void Start()
+    public static async Task Start()
     {
         s_factory = new CheckInApiFactory();
         var client = s_factory.CreateClient();
+        var manifest = ClientManifest.Read(
+            await File.ReadAllTextAsync(
+                    Path.Combine(AppContext.BaseDirectory, "client", "manifest.json")
+                )
+                .ConfigureAwait(false)
+        );
         TraxFeatures.Configure(o =>
         {
             o.Host = s_factory.Services;
@@ -31,11 +38,10 @@ public sealed class Hooks
                 .ReadDirectory(
                     Path.Combine(AppContext.BaseDirectory, "features"),
                     [typeof(Trax.Samples.CheckIn.Trains.IIssueBoardingPassTrain).Assembly]
-                )!
+                )
+                .NotNull()
                 .GlossaryOrThrow();
-            o.Manifest = ClientManifest.Read(
-                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "client", "manifest.json"))
-            );
+            o.Manifest = manifest;
             o.Credential = DemoFeatureCredentials.PerPerson(DemoTokens.Issuer);
         });
     }
@@ -45,7 +51,7 @@ public sealed class Hooks
     /// (a boarding pass that cannot be issued, or is called off). It runs in memory (<see cref="InMemoryRunTests"/>), not here.
     /// </summary>
     [BeforeScenario("in-memory")]
-    public static void InMemoryOnly() =>
+    public void InMemoryOnly() =>
         Assert.Ignore(
             "Runs in memory only: the host's boarding pass train neither fails nor is called off by itself."
         );
@@ -54,7 +60,7 @@ public sealed class Hooks
     public static async Task Stop()
     {
         if (s_factory is not null)
-            await s_factory.DisposeAsync();
+            await s_factory.DisposeAsync().ConfigureAwait(false);
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 }

@@ -25,6 +25,8 @@ namespace Trax.Effect.Decisions.SystemOne
     {
         public SystemOneDecider(Trax.Effect.Decisions.SystemOne.SystemOneOptions options) { }
         public SystemOneDecider(Trax.Effect.Decisions.SystemOne.SystemOneOptions options, System.Net.Http.HttpClient http) { }
+        public SystemOneDecider(Trax.Effect.Decisions.SystemOne.SystemOneOptions options, System.TimeProvider timeProvider) { }
+        public SystemOneDecider(Trax.Effect.Decisions.SystemOne.SystemOneOptions options, System.Net.Http.HttpClient http, System.TimeProvider timeProvider) { }
         public System.Threading.Tasks.Task<Trax.Core.Decisions.DecisionResult> Decide(Trax.Core.Decisions.DecisionRequest request, System.Threading.CancellationToken cancellationToken) { }
         public void Dispose() { }
         public System.Collections.Generic.IEnumerable<string> Problems(Trax.Core.Decisions.DeclaredQuestions declared) { }

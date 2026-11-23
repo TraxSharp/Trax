@@ -1,101 +1,13 @@
+using System.Globalization;
 using System.Net;
 using System.Net.WebSockets;
 using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Client.Checks;
 
 namespace Trax.Client;
-
-/// <summary>What a subscription delivers: one GraphQL result per event, then an error or the end.</summary>
-public interface ISubscriptionSink
-{
-    /// <summary>One event: a GraphQL result, <c>data</c> or <c>errors</c>.</summary>
-    void Next(JsonObject value);
-
-    /// <summary>
-    /// The subscription failed: the server refused it (<see cref="SubscriptionErrorException"/>), the socket closed or
-    /// broke (<see cref="SocketClosedException"/> and others), or there is no socket to follow it over
-    /// (<see cref="SocketUnavailableException"/>).
-    /// </summary>
-    void Error(Exception error);
-
-    /// <summary>The server ended the subscription.</summary>
-    void Complete();
-
-    /// <summary>
-    /// The subscribe message went out over an acknowledged connection. Nothing by default. A
-    /// <see cref="GraphQLSubscriptionSocket"/> calls it before the subscription's first <see cref="Next"/>, and never
-    /// calls one subscription's sink from two threads at once.
-    /// </summary>
-    void Started() { }
-}
-
-/// <summary>A socket that subscribes to a document. The returned handle ends the subscription.</summary>
-public interface ISubscriptionSocket
-{
-    /// <summary>
-    /// Subscribes with <paramref name="payload"/> as the subscribe message's payload: <c>id</c> or <c>query</c>, and
-    /// <c>operationName</c> and <c>variables</c>.
-    /// </summary>
-    IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink);
-}
-
-/// <summary>How a <see cref="GraphQLSubscriptionSocket"/> connects.</summary>
-public sealed record GraphQLSubscriptionSocketOptions
-{
-    /// <summary>
-    /// The host's socket endpoint (<c>wss://host/trax/graphql</c>). It must be <c>wss</c> unless its host is loopback
-    /// or <see cref="AllowInsecureTransport"/> is set.
-    /// </summary>
-    public required Uri Endpoint { get; init; }
-
-    /// <summary>
-    /// Accepts a <c>ws</c> endpoint on a host that is not loopback. Off by default: the <c>connection_init</c> payload,
-    /// and any header set in <see cref="ConfigureSocket"/>, would travel in cleartext.
-    /// </summary>
-    public bool AllowInsecureTransport { get; init; }
-
-    /// <summary>
-    /// The payload of <c>connection_init</c>, read on every connection so a rotating token stays fresh; how a host
-    /// authenticates a socket. Null sends none.
-    /// </summary>
-    public Func<CancellationToken, ValueTask<JsonObject?>>? ConnectionParams { get; init; }
-
-    /// <summary>
-    /// Sets up each socket before it connects: headers, a proxy, client certificates. It runs after the keep-alive is
-    /// set, so it may change that too.
-    /// </summary>
-    public Action<ClientWebSocketOptions>? ConfigureSocket { get; init; }
-
-    /// <summary>
-    /// How often the socket pings the host; 15 seconds by default. <see cref="Timeout.InfiniteTimeSpan"/> or zero sends
-    /// no pings. Not set in a browser, which keeps its sockets alive itself.
-    /// </summary>
-    public TimeSpan KeepAliveInterval { get; init; } = TimeSpan.FromSeconds(15);
-
-    /// <summary>
-    /// How long a ping may go unanswered before the connection counts as broken, and every subscription over it is
-    /// failed so its subscriber can subscribe again; 15 seconds by default. A host that drops off the network without
-    /// closing the socket is found this way. <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Any other must be
-    /// positive and at most <see cref="int.MaxValue"/> milliseconds.
-    /// </summary>
-    public TimeSpan KeepAliveTimeout { get; init; } = TimeSpan.FromSeconds(15);
-
-    /// <summary>
-    /// How long a connection may take to be acknowledged, its <c>connection_init</c> included, before it counts as
-    /// failed; and how long a close waits for the host's answer before the connection is dropped. 10 seconds by default;
-    /// <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Any other must be positive and at most
-    /// <see cref="int.MaxValue"/> milliseconds (about 24.8 days).
-    /// </summary>
-    public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
-
-    /// <summary>
-    /// The largest message the server may send, in bytes; 16 MiB by default. A larger one fails the connection, and
-    /// every subscription over it, rather than being read into memory. It must be positive.
-    /// </summary>
-    public int MaxMessageSize { get; init; } = 16 * 1024 * 1024;
-}
 
 /// <summary>
 /// A graphql-transport-ws socket. Each subscribe message carries the payload it is given, a persisted document's id or
@@ -114,7 +26,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private const string Protocol = "graphql-transport-ws";
 
     private readonly GraphQLSubscriptionSocketOptions _options;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Connection? _connection;
     private long _next;
     private bool _disposed;
@@ -176,7 +88,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public Dictionary<string, Subscription> Sinks { get; } = new(StringComparer.Ordinal);
 
         private readonly CancellationTokenSource _stop = new();
-        private readonly object _stopGate = new();
+        private readonly Lock _stopGate = new();
         private bool _stopDisposed;
         private Task? _released;
 
@@ -220,7 +132,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             Socket.Dispose();
             Invoker?.Dispose();
             // A send in flight is cancelled by the stop, and gives the lock back; one that comes after finds it disposed.
-            await Sending.WaitAsync().ConfigureAwait(false);
+            await Sending.WaitAsync(CancellationToken.None).ConfigureAwait(false);
             Sending.Dispose();
             lock (_stopGate)
             {
@@ -316,7 +228,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             return;
         }
         if (sent)
-            Deliver(connection, subscription, null);
+            Deliver(connection, subscription, next: null);
     }
 
     private void Unsubscribe(Connection connection, Subscription subscription)
@@ -332,25 +244,28 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
         if (connection.Closed)
             return;
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await connection.Ready.ConfigureAwait(false);
-                await SendAsync(
-                        connection,
-                        new JsonObject { ["id"] = id, ["type"] = "complete" },
-                        when: () => subscription.Sent
-                    )
-                    .ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                // The socket is gone already; there is nothing left to end.
-            }
-            if (last)
-                CloseIfIdle(connection);
-        });
+                try
+                {
+                    await connection.Ready.ConfigureAwait(false);
+                    await SendAsync(
+                            connection,
+                            new JsonObject { ["id"] = id, ["type"] = "complete" },
+                            when: () => subscription.Sent
+                        )
+                        .ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // The socket is gone already; there is nothing left to end.
+                }
+                if (last)
+                    CloseIfIdle(connection);
+            },
+            CancellationToken.None
+        );
     }
 
     // Closes a connection nobody subscribes over any more.
@@ -428,7 +343,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 var first = await ReceiveAsync(connection, timeout.Token).ConfigureAwait(false);
                 if (first is null)
                     throw Closed(connection.Socket, "before it was acknowledged");
-                if (Text(first, "type") != "connection_ack")
+                if (!string.Equals(Text(first, "type"), "connection_ack", StringComparison.Ordinal))
                     throw new WebSocketException(
                         "The server answered connection_init with something other than connection_ack."
                     );
@@ -559,8 +474,11 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             var status = (int)socket.HttpStatusCode;
             throw new SocketClosedException(
-                $"The host refused the socket's upgrade: {status} {socket.HttpStatusCode}.",
-                null,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The host refused the socket's upgrade: {status} {socket.HttpStatusCode}."
+                ),
+                closeStatus: null,
                 status
             );
         }
@@ -569,10 +487,14 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private static SocketClosedException Closed(ClientWebSocket socket, string when) =>
         socket.CloseStatus is { } status
             ? new SocketClosedException(
-                $"The socket was closed {when}: {(int)status} {socket.CloseStatusDescription}".TrimEnd(),
+                string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The socket was closed {when}: {(int)status} {socket.CloseStatusDescription}"
+                    )
+                    .TrimEnd(),
                 (int)status
             )
-            : new SocketClosedException($"The socket was closed {when}.", null);
+            : new SocketClosedException($"The socket was closed {when}.", closeStatus: null);
 
     private async Task OnMessageAsync(Connection connection, JsonObject message)
     {
@@ -593,12 +515,12 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 Deliver(connection, subscription, payload);
                 return;
             case "error" when subscription is not null:
-                Remove(connection, id!);
+                Remove(connection, id.NotNull());
                 End(subscription, new SubscriptionErrorException(message["payload"] as JsonArray));
                 return;
             case "complete" when subscription is not null:
-                Remove(connection, id!);
-                End(subscription, null);
+                Remove(connection, id.NotNull());
+                End(subscription, error: null);
                 return;
         }
     }
@@ -706,7 +628,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             if (when is not null && !when())
                 return false;
             await connection
-                .Socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancel)
+                .Socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancel)
                 .ConfigureAwait(false);
             return true;
         }
@@ -729,10 +651,16 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             {
                 connection.Overflowed = true;
                 throw new WebSocketException(
-                    $"The server sent a message larger than {_options.MaxMessageSize} bytes."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The server sent a message larger than {_options.MaxMessageSize} bytes."
+                    )
                 );
             }
-            text.Write(buffer, 0, result.Count);
+            // A MemoryStream writes at once; the token is not passed, so a cancel after the frame arrived ends the
+            // read where it did before, at the next receive.
+            await text.WriteAsync(buffer.AsMemory(0, result.Count), CancellationToken.None)
+                .ConfigureAwait(false);
             if (result.EndOfMessage)
                 break;
         }
@@ -790,63 +718,4 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 dispose();
         }
     }
-}
-
-/// <summary>The server ended a subscription with GraphQL errors.</summary>
-public sealed class SubscriptionErrorException : Exception
-{
-    /// <summary>Builds the exception from the errors the server sent.</summary>
-    public SubscriptionErrorException(JsonArray? errors)
-        : base(
-            errors is { Count: > 0 }
-            && errors[0] is JsonObject first
-            && first["message"] is JsonValue message
-            && message.TryGetValue<string>(out var text)
-                ? text
-                : "The server ended the subscription with an error."
-        ) => Errors = errors ?? [];
-
-    /// <summary>The errors as the server sent them.</summary>
-    public JsonArray Errors { get; }
-}
-
-/// <summary>
-/// The socket closed, before it was acknowledged or while subscribed, or the host refused to open it.
-/// <see cref="CloseStatus"/> is the code the server closed it with, when it sent one: 4401 (unauthorized) or 4403
-/// (forbidden) is the host refusing the connection, and subscribing again will not change its answer. So is an upgrade
-/// answered 401 or 403 (<see cref="HttpStatus"/>). Any other close, 4408 (the connection was not initialised in time)
-/// and 4429 (too many initialisation requests) among them, may be answered differently next time.
-/// </summary>
-public sealed class SocketClosedException : IOException
-{
-    /// <summary>Builds the exception.</summary>
-    public SocketClosedException(string message, int? closeStatus, int? httpStatus = null)
-        : base(message)
-    {
-        CloseStatus = closeStatus;
-        HttpStatus = httpStatus;
-    }
-
-    /// <summary>The close code the server sent, or null when the socket closed without one.</summary>
-    public int? CloseStatus { get; }
-
-    /// <summary>The HTTP status the host refused the upgrade with, or null when the socket opened.</summary>
-    public int? HttpStatus { get; }
-
-    /// <summary>
-    /// Whether the host refused the connection itself (a 4401 or 4403 close, or an upgrade answered 401 or 403), so a
-    /// retry gets the same answer.
-    /// </summary>
-    public bool Refused => CloseStatus is 4401 or 4403 || HttpStatus is 401 or 403;
-}
-
-/// <summary>
-/// There is no socket to follow a subscription over: the transport has none, or the socket was disposed. Subscribing
-/// again gets the same answer.
-/// </summary>
-public sealed class SocketUnavailableException : Exception
-{
-    /// <summary>Builds the exception.</summary>
-    public SocketUnavailableException(string message)
-        : base(message) { }
 }

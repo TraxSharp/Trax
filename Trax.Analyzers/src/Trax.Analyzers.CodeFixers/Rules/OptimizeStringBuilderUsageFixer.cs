@@ -1,0 +1,443 @@
+using Microsoft.CodeAnalysis.Simplification;
+
+namespace Trax.Analyzers.Rules;
+
+[ExportCodeFixProvider(LanguageNames.CSharp), Shared]
+public sealed class OptimizeStringBuilderUsageFixer : CodeFixProvider
+{
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(RuleIdentifiers.OptimizeStringBuilderUsage);
+
+    public override FixAllProvider GetFixAllProvider()
+    {
+        return WellKnownFixAllProviders.BatchFixer;
+    }
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var nodeToFix = root?.FindNode(context.Span, getInnermostNodeForTie: true);
+        if (nodeToFix is null)
+            return;
+
+        var diagnostic = context.Diagnostics.FirstOrDefault();
+        if (diagnostic is null)
+            return;
+
+        if (!Enum.TryParse(diagnostic.Properties.GetValueOrDefault(OptimizeStringBuilderUsageAnalyzerCommon.DataKey, ""), ignoreCase: false, out OptimizeStringBuilderUsageData data) || data == OptimizeStringBuilderUsageData.None)
+            return;
+
+        var title = "Optimize StringBuilder usage";
+        switch (data)
+        {
+            case OptimizeStringBuilderUsageData.RemoveArgument:
+                context.RegisterCodeFix(CodeAction.Create(title, ct => RemoveArgument(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.RemoveMethod:
+                if (nodeToFix is not InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: var receiver } } removedInvocation)
+                    return;
+
+                var removeSemanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+                if (removeSemanticModel?.GetOperation(removedInvocation, context.CancellationToken) is not IInvocationOperation removedOperation)
+                    return;
+
+                // 'a?.b.Append("")' cannot be replaced by 'a?.b'
+                if (removedOperation.Parent is IConditionalAccessOperation)
+                    return;
+
+                // The other arguments, such as the index of 'Insert(index, "")', are not evaluated anymore
+                if (removedOperation.Arguments.Any(argument => argument.Parameter is not { Type.SpecialType: SpecialType.System_String } && !CanBeEvaluatedMultipleTimes(argument.Value)))
+                    return;
+
+                // 'sb.Append("").Append(value)' => 'sb.Append(value)', and 'sb.AppendLine().Append("");' => 'sb.AppendLine();'
+                if (removedOperation.Parent is not IExpressionStatementOperation || receiver is InvocationExpressionSyntax or ObjectCreationExpressionSyntax)
+                {
+                    context.RegisterCodeFix(CodeAction.Create(title, ct => ReplaceNode(context.Document, removedInvocation, receiver.WithTriviaFrom(removedInvocation), ct), equivalenceKey: title), context.Diagnostics);
+                    break;
+                }
+
+                // 'sb.Append("");' => '', as 'sb;' is not a valid statement. The statement can be removed only when the receiver has no side effect,
+                // and when it is not the embedded statement of another statement, such as 'if (condition) sb.Append("");'
+                if (removedInvocation.Parent is not ExpressionStatementSyntax { Parent: BlockSyntax or SwitchSectionSyntax or GlobalStatementSyntax } statement || !CanBeEvaluatedMultipleTimes(removedOperation.Instance))
+                    return;
+
+                SyntaxNode nodeToRemove = statement.Parent is GlobalStatementSyntax globalStatement ? globalStatement : statement;
+                context.RegisterCodeFix(CodeAction.Create(title, ct => RemoveNode(context.Document, nodeToRemove, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.ReplaceWithChar:
+                if (diagnostic.Properties.GetValueOrDefault(OptimizeStringBuilderUsageAnalyzerCommon.ConstantValueKey) is not [var constValue, ..])
+                    return;
+
+                context.RegisterCodeFix(CodeAction.Create(title, ct => ReplaceArgWithCharacter(context.Document, constValue, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.SplitStringInterpolation:
+                context.RegisterCodeFix(CodeAction.Create(title, ct => SplitStringInterpolation(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.SplitAddOperator:
+                var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+                if (semanticModel?.GetOperation(nodeToFix, context.CancellationToken) is not IInvocationOperation { Arguments: [{ Value: IBinaryOperation binaryOperation }, ..] })
+                    return;
+
+                // "value" + charArray uses char[].ToString(), whereas Append(char[]) appends the content of the array
+                if (IsCharArray(binaryOperation.LeftOperand) || IsCharArray(binaryOperation.RightOperand))
+                    return;
+
+                context.RegisterCodeFix(CodeAction.Create(title, ct => SplitAddOperator(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.RemoveToString:
+                context.RegisterCodeFix(CodeAction.Create(title, ct => RemoveToString(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.ReplaceStringFormatWithAppendFormat:
+                context.RegisterCodeFix(CodeAction.Create(title, ct => ReplaceStringFormatWithAppendFormat(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.ReplaceStringJoinWithAppendJoin:
+                context.RegisterCodeFix(CodeAction.Create(title, ct => ReplaceStringJoinWithAppendJoin(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.ReplaceSubstring:
+                var substringSemanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+                if (substringSemanticModel?.GetOperation(nodeToFix, context.CancellationToken) is not IInvocationOperation { Arguments: [{ Value: IInvocationOperation substringOperation }, ..] })
+                    return;
+
+                // Substring(startIndex) is replaced by Append(str, startIndex, str.Length - startIndex),
+                // so both the string and the start index are evaluated twice
+                if (substringOperation.Arguments.Length == 1 && (!CanBeEvaluatedMultipleTimes(substringOperation.Instance) || !CanBeEvaluatedMultipleTimes(substringOperation.Arguments[0].Value)))
+                    return;
+
+                context.RegisterCodeFix(CodeAction.Create(title, ct => ReplaceSubstring(context.Document, nodeToFix, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+
+            case OptimizeStringBuilderUsageData.ReplaceAppendFormatWithAppend:
+                var appendFormatSemanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+                if (appendFormatSemanticModel?.GetOperation(nodeToFix, context.CancellationToken) is not IInvocationOperation appendFormatOperation)
+                    return;
+
+                var formatProviderType = appendFormatSemanticModel.Compilation.GetTypeByMetadataName("System.IFormatProvider");
+                var parameters = appendFormatOperation.TargetMethod.Parameters;
+                var formatArgIndex = parameters.Length > 0 && parameters[0].Type.IsEqualTo(formatProviderType) ? 1 : 0;
+                if (formatArgIndex >= appendFormatOperation.Arguments.Length)
+                    return;
+
+                // AppendFormat unescapes the doubled braces ("{{" and "}}"), whereas Append appends the string as-is
+                var formatArg = appendFormatOperation.Arguments[formatArgIndex].Value;
+                if (OptimizeStringBuilderUsageAnalyzerCommon.GetConstStringValue(formatArg) is not { } formatString ||
+                    !OptimizeStringBuilderUsageAnalyzerCommon.TryGetCompositeFormatLiteralText(formatString, out var literalText))
+                {
+                    return;
+                }
+
+                var formatArgReplacement = string.Equals(formatString, literalText, StringComparison.Ordinal) ? null : literalText;
+                context.RegisterCodeFix(CodeAction.Create(title, ct => ReplaceAppendFormatWithAppend(context.Document, appendFormatOperation, formatArg, formatArgReplacement, ct), equivalenceKey: title), context.Diagnostics);
+                break;
+        }
+    }
+
+    private static async Task<Document> SplitStringInterpolation(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+        var operation = (IInvocationOperation?)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken);
+        if (operation is null)
+            return document;
+
+        var methodName = operation.TargetMethod.Name; // Append or AppendLine
+        var argument = (IInterpolatedStringOperation)operation.Arguments[0].Value;
+
+        var shouldAppendLastAppendLine = string.Equals(methodName, nameof(StringBuilder.AppendLine), StringComparison.Ordinal);
+        var newExpression = operation.GetChildOperations().First().Syntax;
+        foreach (var part in argument.Parts)
+        {
+            if (part is IInterpolatedStringTextOperation str)
+            {
+                var text = OptimizeStringBuilderUsageAnalyzerCommon.GetConstStringValue(str);
+                if (text is null)
+                    return document; // This should not happen
+
+                var newArgument = generator.LiteralExpression(text.Length == 1 ? text[0] : text);
+                if (shouldAppendLastAppendLine && part == argument.Parts.Last())
+                {
+                    if (text.Length == 1)
+                    {
+                        // AppendLine doesn't support char, so we need to use Append(char).AppendLine();
+                        newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "Append"), newArgument);
+                        newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+                    }
+                    else
+                    {
+                        newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"), newArgument);
+                    }
+
+                    shouldAppendLastAppendLine = false;
+                }
+                else
+                {
+                    newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "Append"), newArgument);
+                }
+            }
+            else if (part is IInterpolationOperation interpolation)
+            {
+                if (interpolation.FormatString is null && interpolation.Alignment is null)
+                {
+                    newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "Append"), interpolation.Expression.Syntax);
+                }
+                else
+                {
+                    var format = "{0";
+                    if (interpolation.Alignment is not null)
+                    {
+                        var value = interpolation.Alignment.ConstantValue.Value;
+                        format += "," + string.Format(CultureInfo.InvariantCulture, "{0}", value);
+                    }
+
+                    if (interpolation.FormatString is not null)
+                    {
+                        format += ":" + OptimizeStringBuilderUsageAnalyzerCommon.GetConstStringValue(interpolation.FormatString);
+                    }
+
+                    format += "}";
+                    newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendFormat"), generator.LiteralExpression(format), interpolation.Expression.Syntax);
+                }
+            }
+        }
+
+        if (shouldAppendLastAppendLine)
+        {
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+        }
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> SplitAddOperator(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+        var operation = (IInvocationOperation?)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken);
+        if (operation is null)
+            return document;
+
+        var methodName = operation.TargetMethod.Name; // Append or AppendLine
+        var isAppendLine = string.Equals(methodName, nameof(StringBuilder.AppendLine), StringComparison.Ordinal);
+
+        var binaryOperation = (IBinaryOperation)operation.Arguments[0].Value;
+
+        var newExpression = generator.InvocationExpression(generator.MemberAccessExpression(operation.GetChildOperations().First().Syntax, "Append"), binaryOperation.LeftOperand.Syntax);
+        if (isAppendLine && !IsString(binaryOperation.RightOperand))
+        {
+            // AppendLine has no overload for the type of the operand, so the value must be appended before the line terminator
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "Append"), binaryOperation.RightOperand.Syntax);
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+        }
+        else
+        {
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, isAppendLine ? "AppendLine" : "Append"), binaryOperation.RightOperand.Syntax);
+        }
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static bool IsString(IOperation operation)
+    {
+        // An operand of a string concatenation has no type when it is the 'null' or 'default' literal, in which case it is converted to string
+        return operation.Type is null || operation.Type.IsString();
+    }
+
+    private static bool IsCharArray(IOperation operation)
+    {
+        // A non-string operand of a string concatenation is implicitly converted to object
+        if (operation is IConversionOperation { IsImplicit: true, Type.SpecialType: SpecialType.System_Object } conversion)
+        {
+            operation = conversion.Operand;
+        }
+
+        return operation.Type is IArrayTypeSymbol { Rank: 1, ElementType.SpecialType: SpecialType.System_Char };
+    }
+
+    /// <summary>
+    /// Indicates whether duplicating the expression in the generated code is safe, i.e. evaluating it twice
+    /// has no side effect and always returns the same value.
+    /// </summary>
+    private static bool CanBeEvaluatedMultipleTimes(IOperation? operation)
+    {
+        return operation switch
+        {
+            null => false,
+            IConversionOperation { IsImplicit: true } conversion => CanBeEvaluatedMultipleTimes(conversion.Operand),
+            IParenthesizedOperation parenthesized => CanBeEvaluatedMultipleTimes(parenthesized.Operand),
+            ILiteralOperation or IInstanceReferenceOperation or ILocalReferenceOperation or IParameterReferenceOperation => true,
+            IFieldReferenceOperation fieldReference => fieldReference.Field.IsStatic || fieldReference.Field.IsConst || CanBeEvaluatedMultipleTimes(fieldReference.Instance),
+            _ => operation.ConstantValue.HasValue,
+        };
+    }
+
+    private static async Task<Document> RemoveToString(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+        var operation = (IInvocationOperation?)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken);
+        if (operation is null)
+            return document;
+
+        var methodName = operation.TargetMethod.Name; // Append or AppendLine
+        var isAppendLine = string.Equals(methodName, nameof(StringBuilder.AppendLine), StringComparison.Ordinal);
+
+        var toStringOperation = (IInvocationOperation)operation.Arguments[0].Value;
+
+        var newExpression = generator.InvocationExpression(generator.MemberAccessExpression(operation.GetChildOperations().First().Syntax, "Append"), toStringOperation.GetChildOperations().First().Syntax);
+        if (isAppendLine)
+        {
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+        }
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> ReplaceStringFormatWithAppendFormat(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+        var operation = (IInvocationOperation?)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken);
+        if (operation is null)
+            return document;
+
+        var methodName = operation.TargetMethod.Name; // Append or AppendLine
+        var isAppendLine = string.Equals(methodName, nameof(StringBuilder.AppendLine), StringComparison.Ordinal);
+
+        var stringFormatOperation = (IInvocationOperation)operation.Arguments[0].Value;
+
+        var stringFormatSyntax = (InvocationExpressionSyntax)stringFormatOperation.Syntax;
+        var arguments = stringFormatSyntax.ArgumentList.Arguments
+            .Select(static argument => (SyntaxNode)argument.WithAdditionalAnnotations(Simplifier.Annotation))
+            .ToArray();
+
+        var newExpression = generator.InvocationExpression(generator.MemberAccessExpression(operation.GetChildOperations().First().Syntax, "AppendFormat"),
+            [.. arguments]);
+
+        if (isAppendLine)
+        {
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+        }
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> ReplaceStringJoinWithAppendJoin(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+        var operation = (IInvocationOperation?)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken);
+        if (operation is null)
+            return document;
+
+        var methodName = operation.TargetMethod.Name; // Append or AppendLine
+        var isAppendLine = string.Equals(methodName, nameof(StringBuilder.AppendLine), StringComparison.Ordinal);
+
+        // Use the syntax arguments, as the argument operation of an expanded params parameter is the whole invocation
+        var stringJoinSyntax = (InvocationExpressionSyntax)operation.Arguments[0].Value.Syntax;
+
+        var newExpression = generator.InvocationExpression(generator.MemberAccessExpression(operation.GetChildOperations().First().Syntax, "AppendJoin"),
+            [.. stringJoinSyntax.ArgumentList.Arguments]);
+
+        if (isAppendLine)
+        {
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+        }
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> ReplaceSubstring(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+        var operation = (IInvocationOperation?)editor.SemanticModel.GetOperation(nodeToFix, cancellationToken);
+        if (operation is null)
+            return document;
+
+        var methodName = operation.TargetMethod.Name; // Append or AppendLine
+        var isAppendLine = string.Equals(methodName, nameof(StringBuilder.AppendLine), StringComparison.Ordinal);
+
+        var toStringOperation = (IInvocationOperation)operation.Arguments[0].Value;
+
+        var strSyntax = toStringOperation.GetChildOperations().First().Syntax;
+        var lengthArgument = toStringOperation.Arguments.Length == 2 ?
+            toStringOperation.Arguments[1].Value.Syntax :
+            generator.SubtractExpression(generator.MemberAccessExpression(strSyntax, "Length"), toStringOperation.Arguments[0].Value.Syntax);
+
+        var newExpression = generator.InvocationExpression(
+                generator.MemberAccessExpression(operation.GetChildOperations().First().Syntax, "Append"),
+                strSyntax,
+                toStringOperation.Arguments[0].Value.Syntax,
+                lengthArgument);
+
+        if (isAppendLine)
+        {
+            newExpression = generator.InvocationExpression(generator.MemberAccessExpression(newExpression, "AppendLine"));
+        }
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> ReplaceArgWithCharacter(Document document, char constValue, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+
+        var argument = nodeToFix.FirstAncestorOrSelf<ArgumentSyntax>();
+        if (argument is not null)
+        {
+            var newArgument = argument.WithExpression((ExpressionSyntax)editor.Generator.LiteralExpression(constValue));
+            editor.ReplaceNode(argument, newArgument);
+        }
+
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> RemoveArgument(Document document, SyntaxNode nodeToFix, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+
+        var newExpression = ((InvocationExpressionSyntax)nodeToFix).WithArgumentList(SyntaxFactory.ArgumentList());
+
+        editor.ReplaceNode(nodeToFix, newExpression);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> ReplaceNode(Document document, SyntaxNode nodeToReplace, SyntaxNode newNode, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        editor.ReplaceNode(nodeToReplace, newNode);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> RemoveNode(Document document, SyntaxNode nodeToRemove, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        editor.RemoveNode(nodeToRemove);
+        return editor.GetChangedDocument();
+    }
+
+    private static async Task<Document> ReplaceAppendFormatWithAppend(Document document, IInvocationOperation operation, IOperation formatArg, string? formatArgReplacement, CancellationToken cancellationToken)
+    {
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        var generator = editor.Generator;
+
+        var newExpression = generator.InvocationExpression(
+            generator.MemberAccessExpression(operation.GetChildOperations().First().Syntax, "Append"),
+            formatArgReplacement is null ? formatArg.Syntax : generator.LiteralExpression(formatArgReplacement));
+
+        editor.ReplaceNode(operation.Syntax, newExpression);
+        return editor.GetChangedDocument();
+    }
+}

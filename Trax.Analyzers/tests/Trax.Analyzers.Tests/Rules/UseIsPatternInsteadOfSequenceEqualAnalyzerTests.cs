@@ -1,0 +1,278 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.UseIsPatternInsteadOfSequenceEqualAnalyzer,
+    Trax.Analyzers.Rules.UseIsPatternInsteadOfSequenceEqualFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class UseIsPatternInsteadOfSequenceEqualAnalyzerTests
+{
+    private static CodeFixTest CreateTest()
+    {
+        var test = new CodeFixTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        return test;
+    }
+
+    [Fact]
+    public Task EqualsOrdinal_CSharp10()
+    {
+        var test = CreateTest();
+        test.LanguageVersion = LanguageVersion.CSharp10;
+        test.TestCode = """
+            using System;
+            _ = "foo".AsSpan().Equals("bar", StringComparison.Ordinal);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanByte_SequenceEqual()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            _ = new byte[1].AsSpan().SequenceEqual(new byte[0].AsSpan());
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SpanByte_SequenceEqual()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            Span<byte> value = default;
+            _ = value.SequenceEqual(new byte[0].AsSpan());
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpan_Equals()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            _ = "foo".AsSpan().Equals("value");
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EqualsOrdinal_NonConstant()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            string value = "test";
+            _ = "foo".AsSpan().Equals(value, StringComparison.Ordinal);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SequenceEquals_NonConstant()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            string value = "test";
+            _ = "foo".AsSpan().SequenceEqual(value);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SequenceEquals_Comparer()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+
+            string value = "test";
+            _ = "foo".AsSpan().SequenceEqual(value, default(System.Collections.Generic.IEqualityComparer<char>));
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_EqualsOrdinal()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            _ = {|TRX0128:"foo".AsSpan().Equals("bar", StringComparison.Ordinal)|};
+            """;
+        test.FixedCode = """
+            using System;
+            _ = "foo".AsSpan() is "bar";
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_SequenceEqual_Negated()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            Span<char> str = default;
+            if (!{|TRX0128:str.SequenceEqual("bar")|}) { }
+            """;
+        test.FixedCode = """
+            using System;
+            Span<char> str = default;
+            if (!(str is "bar")) { }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_SequenceEqual_MemberAccess()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            Span<char> str = default;
+            _ = {|TRX0128:str.SequenceEqual("bar")|}.ToString();
+            """;
+        test.FixedCode = """
+            using System;
+            Span<char> str = default;
+            _ = (str is "bar").ToString();
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_SequenceEqual_KeepsTrivia()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            Span<char> str = default;
+            _ = /* before */ {|TRX0128:str.SequenceEqual("bar")|} /* after */;
+            """;
+        test.FixedCode = """
+            using System;
+            Span<char> str = default;
+            _ = /* before */ str is "bar" /* after */;
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_EqualsOrdinalIgnoreCase()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            _ = "foo".AsSpan().Equals("bar", StringComparison.OrdinalIgnoreCase);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_SequenceEqual()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            _ = {|TRX0128:"foo".AsSpan().SequenceEqual("bar")|};
+            """;
+        test.FixedCode = """
+            using System;
+            _ = "foo".AsSpan() is "bar";
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SpanChar_SequenceEqual()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            Span<char> str = default;
+            _ = {|TRX0128:str.SequenceEqual("bar")|};
+            """;
+        test.FixedCode = """
+            using System;
+            Span<char> str = default;
+            _ = str is "bar";
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task StringConvertedToSpan_EmptyConstant()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            string value = null;
+            _ = MemoryExtensions.SequenceEqual<char>(value, "");
+            _ = MemoryExtensions.Equals(value, "", StringComparison.Ordinal);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task StringConvertedToSpan_NonEmptyConstant()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            string value = null;
+            _ = {|TRX0128:MemoryExtensions.SequenceEqual<char>(value, "abc")|};
+            _ = {|TRX0128:MemoryExtensions.Equals(value, "abc", StringComparison.Ordinal)|};
+            """;
+        test.FixedCode = """
+            using System;
+            string value = null;
+            _ = value is "abc";
+            _ = value is "abc";
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ReadOnlySpanChar_SequenceEqual_EmptyConstant()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            ReadOnlySpan<char> value = default;
+            _ = {|TRX0128:value.SequenceEqual("")|};
+            """;
+        test.FixedCode = """
+            using System;
+            ReadOnlySpan<char> value = default;
+            _ = value is "";
+            """;
+
+        return test.RunAsync();
+    }
+}

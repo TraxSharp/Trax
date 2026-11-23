@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Client;
 using Trax.StateMachine.Tests.Helpers;
@@ -17,22 +18,28 @@ public class GeneratedViewTests
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
-    private static ClientManifestMachine Manifest(string machine)
+    private static async Task<ClientManifestMachine> Manifest(string machine)
     {
-        var text = File.ReadAllText(FixturePaths.IrFile(machine)).TrimEnd('\n');
+        var text = (
+            await File.ReadAllTextAsync(FixturePaths.IrFile(machine)).ConfigureAwait(false)
+        ).TrimEnd('\n');
         return new ClientManifestMachine
         {
             Id = machine,
             IrHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))),
-            Ir = (JsonObject)JsonNode.Parse(text)!,
+            Ir = (JsonObject)JsonNode.Parse(text).NotNull(),
         };
     }
 
     [Test]
-    public void The_view_carries_the_hash_of_the_IR_it_was_generated_from()
+    public async Task The_view_carries_the_hash_of_the_IR_it_was_generated_from()
     {
-        TurnstileMachine.IrHash.Should().Be(Manifest("turnstile").IrHash);
-        CheckoutMachine.IrHash.Should().Be(Manifest("checkout").IrHash);
+        TurnstileMachine
+            .IrHash.Should()
+            .Be((await Manifest("turnstile").ConfigureAwait(false)).IrHash);
+        CheckoutMachine
+            .IrHash.Should()
+            .Be((await Manifest("checkout").ConfigureAwait(false)).IrHash);
         TurnstileMachine.Create().Id.Should().Be("turnstile");
     }
 
@@ -40,28 +47,38 @@ public class GeneratedViewTests
     public async Task A_typed_send_is_predicted_and_its_context_read_typed()
     {
         var server = new HandServer();
-        using var turnstile = TurnstileClient.Create(Manifest("turnstile"), server, id: "i-1");
-        await server.Answer(
-            turnstile.Controller,
-            ServerAnswer.Of(
-                new ServerSnapshot
-                {
-                    Revision = 1,
-                    State = "Locked",
-                    Context = [],
-                    DueAtKnown = true,
-                }
-            )
+        using var turnstile = TurnstileClient.Create(
+            (await Manifest("turnstile").ConfigureAwait(false)),
+            server,
+            id: "i-1"
         );
+        await server
+            .Answer(
+                turnstile.Controller,
+                ServerAnswer.Of(
+                    new ServerSnapshot
+                    {
+                        Revision = 1,
+                        State = "Locked",
+                        Context = [],
+                        DueAtKnown = true,
+                    }
+                )
+            )
+            .ConfigureAwait(false);
         turnstile.State.Should().Be(TurnstileState.Locked);
         turnstile.AvailableTriggers().Should().Equal(TurnstileTrigger.Coin);
         turnstile.CanSendCoin(new TurnstileCoinInput { Coin = "quarter" }).Should().BeTrue();
         turnstile.CanSendCoin(new TurnstileCoinInput { Coin = "penny" }).Should().BeFalse();
 
         var send = turnstile.SendCoinAsync(new TurnstileCoinInput { Coin = "quarter" });
-        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var sent = await server
+            .Events.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(Wait, TimeProvider.System)
+            .ConfigureAwait(false);
 
-        sent.Input!.ToJsonString().Should().Be("{\"coin\":\"quarter\"}");
+        sent.Input.NotNull().ToJsonString().Should().Be("{\"coin\":\"quarter\"}");
         sent.ClientResult.Should()
             .Be(
                 "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
@@ -77,17 +94,22 @@ public class GeneratedViewTests
                 }
             )
         );
-        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        (await send.WaitAsync(Wait, TimeProvider.System).ConfigureAwait(false))
+            .Should()
+            .BeOfType<SendOutcome.Confirmed>();
 
         turnstile.State.Should().Be(TurnstileState.Unlocked);
-        turnstile.UnlockedContext!.PaidWith.Should().Be("quarter");
+        turnstile.UnlockedContext.NotNull().PaidWith.Should().Be("quarter");
         turnstile.LockedContext.Should().BeNull();
     }
 
     [Test]
-    public void A_manifest_of_another_version_is_refused()
+    public async Task A_manifest_of_another_version_is_refused()
     {
-        var other = Manifest("turnstile") with { IrHash = new string('0', 64) };
+        var other = (await Manifest("turnstile").ConfigureAwait(false)) with
+        {
+            IrHash = new string('0', 64),
+        };
 
         var create = () => TurnstileClient.Create(other, new HandServer());
 

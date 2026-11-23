@@ -39,7 +39,7 @@ namespace Trax.Scheduler.Configuration
     public class ManifestOptions
     {
         public ManifestOptions() { }
-        public System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> Exclusions { get; set; }
+        public System.Collections.Generic.IList<Trax.Effect.Models.Manifest.Exclusion> Exclusions { get; set; }
         public System.TimeSpan? FailureWindow { get; set; }
         public bool IsDormant { get; set; }
         public bool IsEnabled { get; set; }
@@ -69,7 +69,7 @@ namespace Trax.Scheduler.Configuration
         public const long DefaultMaxResponseBodyBytes = 16777216;
         public RemoteRunOptions() { }
         public bool AllowInsecureTransport { get; set; }
-        public string BaseUrl { get; set; }
+        public string? BaseUrl { get; set; }
         public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
         public long MaxResponseBodyBytes { get; set; }
         public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
@@ -80,7 +80,7 @@ namespace Trax.Scheduler.Configuration
     {
         public RemoteWorkerOptions() { }
         public bool AllowInsecureTransport { get; set; }
-        public string BaseUrl { get; set; }
+        public string? BaseUrl { get; set; }
         public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
         public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
         public byte[]? SigningKey { get; set; }
@@ -1421,6 +1421,7 @@ namespace Trax.Scheduler.Services.RequestSigning
         public const int MinimumKeyLength = 32;
         public const string ResponseHeaderName = "Trax-Response-Signature";
         public static string Create(byte[] key, Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose, System.ReadOnlySpan<byte> body) { }
+        public static string Create(byte[] key, Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose, System.ReadOnlySpan<byte> body, System.TimeProvider timeProvider) { }
         public static void EnsureKey(byte[]? key, string paramName) { }
     }
     public enum RunnerRequestVerdict
@@ -1599,6 +1600,7 @@ namespace Trax.Scheduler.Services.TraxScheduler
         public const int MaxAcknowledgeNoteLength = 1000;
         public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null) { }
         public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService? trainDiscovery, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger, Trax.Scheduler.Configuration.SchedulerConfiguration? configuration, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null) { }
+        public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService? trainDiscovery, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger, Trax.Scheduler.Configuration.SchedulerConfiguration? configuration, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal, System.TimeProvider timeProvider) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(string note, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> AcknowledgeDeadLetterAsync(long deadLetterId, string note, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeDeadLettersAsync(long[] deadLetterIds, string note, System.Threading.CancellationToken ct = default) { }

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Helpers;
 
 namespace Trax.StateMachine.Tests.Conformance;
@@ -14,12 +15,14 @@ public class IrSchemaTests
 {
     [Test]
     [Category(Categories.CrossEngine)]
-    public void Every_IR_the_exporter_writes_for_the_test_machines_validates()
+    public async Task Every_IR_the_exporter_writes_for_the_test_machines_validates()
     {
         var irs = ExportedIrs();
         irs.Should().NotBeEmpty();
 
-        var results = TwinEngine.ValidateIrs(irs.Select(i => i.Ir).ToList());
+        var results = await TwinEngine
+            .ValidateIrsAsync(irs.Select(i => i.Ir).ToList())
+            .ConfigureAwait(false);
 
         var invalid = irs.Zip(results)
             .Where(r => r.Second.Count > 0)
@@ -29,7 +32,7 @@ public class IrSchemaTests
             .Should()
             .BeEmpty(
                 "every exported IR matches conformance/ir.schema.json:\n"
-                    + string.Join("\n", invalid)
+                    + string.Join('\n', invalid)
             );
     }
 
@@ -42,18 +45,20 @@ public class IrSchemaTests
             irs.Should().Contain(ir => ir.ContainsKey(section), $"some test machine has {section}");
         irs.Should()
             .Contain(
-                ir => ir["transitions"]!.AsArray().Any(t => t!["effect"] != null),
+                ir => ir["transitions"].NotNull().AsArray().Any(t => t.NotNull()["effect"] != null),
                 "some test machine has an effect-bound edge"
             );
     }
 
     private static List<(string Name, JsonObject Ir)> ExportedIrs()
     {
-        var export = typeof(IrExporter).GetMethod(nameof(IrExporter.Export))!;
-        var refuses = typeof(IrExporter).GetMethod(
-            nameof(IrExporter.RefusesByDesign),
-            BindingFlags.NonPublic | BindingFlags.Static
-        )!;
+        var export = typeof(IrExporter).GetMethod(nameof(IrExporter.Export)).NotNull();
+        var refuses = typeof(IrExporter)
+            .GetMethod(
+                nameof(IrExporter.RefusesByDesign),
+                BindingFlags.NonPublic | BindingFlags.Static
+            )
+            .NotNull();
         const BindingFlags statics =
             BindingFlags.Public
             | BindingFlags.NonPublic
@@ -83,10 +88,10 @@ public class IrSchemaTests
             if (read() is not { } machine)
                 continue;
             var args = machine.GetType().GetGenericArguments();
-            if ((bool)refuses.MakeGenericMethod(args).Invoke(null, [machine])!)
+            if ((bool)refuses.MakeGenericMethod(args).Invoke(null, [machine]).NotNull())
                 continue;
-            var ir = (string)export.MakeGenericMethod(args).Invoke(null, [machine])!;
-            irs.Add(($"{type.FullName}.{name}", (JsonObject)JsonNode.Parse(ir)!));
+            var ir = (string)export.MakeGenericMethod(args).Invoke(null, [machine]).NotNull();
+            irs.Add(($"{type.FullName}.{name}", (JsonObject)JsonNode.Parse(ir).NotNull()));
         }
         return irs;
     }

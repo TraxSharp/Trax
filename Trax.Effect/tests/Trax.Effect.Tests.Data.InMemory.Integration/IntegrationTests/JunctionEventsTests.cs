@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
@@ -45,7 +46,7 @@ public class JunctionEventsTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     private static readonly CapturingHandler Handler = new();
     private static readonly CapturingBroadcaster Broadcaster = new();
@@ -66,7 +67,11 @@ public class JunctionEventsTests
             .BuildServiceProvider();
 
     [OneTimeTearDown]
-    public async Task Dispose() => await _provider.DisposeAsync();
+    public async Task Dispose()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_run_publishes_each_junction_and_decision_in_order()
@@ -81,11 +86,11 @@ public class JunctionEventsTests
             .Should()
             .HaveCount(8)
             .And.OnlyContain(
-                e => e.Junction!.Attempt == null,
+                e => e.Junction.NotNull().Attempt == null,
                 $"a run with no manifest is no attempt of anything. See {Adr}."
             );
         events
-            .Select(e => (e.EventType, e.Junction!.Position, e.Junction.Name))
+            .Select(e => (e.EventType, e.Junction.NotNull().Position, e.Junction.Name))
             .Should()
             .Equal(
                 ("JunctionStarted", 0, nameof(Weigh)),
@@ -107,7 +112,21 @@ public class JunctionEventsTests
                 && e.FailureReason == null
             );
 
-        var decided = events.Single(e => e.EventType == "Decided").Junction!;
+        AssertDecisionAndLoadSteps(events);
+
+        Broadcaster
+            .For(metadataId)
+            .Select(e => e.EventType)
+            .Should()
+            .Equal(events.Select(e => e.EventType), "the same steps go over the transport");
+    }
+
+    // The decision, the route it took, and the Load junction's start and end.
+    private static void AssertDecisionAndLoadSteps(List<TrainLifecycleEventMessage> events)
+    {
+        var decided = events
+            .Single(e => string.Equals(e.EventType, "Decided", StringComparison.Ordinal))
+            .Junction.NotNull();
         decided.Kind.Should().Be(JunctionRunKind.Choice);
         decided.State.Should().Be(JunctionRunState.Completed);
         decided.QuestionKey.Should().Be("Lane");
@@ -116,23 +135,23 @@ public class JunctionEventsTests
         decided.Replayed.Should().BeFalse();
         decided.Decider.Should().Be(typeof(SwitchableDecider).FullName);
 
-        var routed = events.Single(e => e.EventType == "Routed").Junction!;
+        var routed = events
+            .Single(e => string.Equals(e.EventType, "Routed", StringComparison.Ordinal))
+            .Junction.NotNull();
         routed.Kind.Should().Be(JunctionRunKind.Route);
         routed.Answer.Should().Be("Express");
 
-        var load = events.Where(e => e.Junction!.Name == nameof(Load)).ToList();
-        load[0].Junction!.State.Should().Be(JunctionRunState.InProgress);
-        load[0].Junction!.EndedAt.Should().BeNull();
-        load[1].Junction!.State.Should().Be(JunctionRunState.Completed);
-        load[1].Junction!.EndedAt.Should().NotBeNull();
-        load[1].Junction!.DurationMs.Should().BeGreaterThanOrEqualTo(0);
-        load[1].Junction!.StartedAt.Should().Be(load[0].Junction!.StartedAt);
-
-        Broadcaster
-            .For(metadataId)
-            .Select(e => e.EventType)
-            .Should()
-            .Equal(events.Select(e => e.EventType), "the same steps go over the transport");
+        var load = events
+            .Where(e =>
+                string.Equals(e.Junction.NotNull().Name, nameof(Load), StringComparison.Ordinal)
+            )
+            .ToList();
+        load[0].Junction.NotNull().State.Should().Be(JunctionRunState.InProgress);
+        load[0].Junction.NotNull().EndedAt.Should().BeNull();
+        load[1].Junction.NotNull().State.Should().Be(JunctionRunState.Completed);
+        load[1].Junction.NotNull().EndedAt.Should().NotBeNull();
+        load[1].Junction.NotNull().DurationMs.Should().BeGreaterThanOrEqualTo(0);
+        load[1].Junction.NotNull().StartedAt.Should().Be(load[0].Junction.NotNull().StartedAt);
     }
 
     [Test]
@@ -144,13 +163,13 @@ public class JunctionEventsTests
 
         var events = Handler.For(metadataId);
         var failed = events.Should().ContainSingle(e => e.EventType == "JunctionFailed").Subject;
-        failed.Junction!.Name.Should().Be(nameof(Explode));
+        failed.Junction.NotNull().Name.Should().Be(nameof(Explode));
         failed.Junction.State.Should().Be(JunctionRunState.Failed);
         failed.Junction.FailureClass.Should().Be(FailureClass.Permanent);
         failed.Junction.FailureException.Should().Be(nameof(InvalidOperationException));
         failed.Junction.EndedAt.Should().NotBeNull();
-        events.Should().NotContain(e => e.Junction!.Name == nameof(NeverReached));
-        events.Last().Should().BeSameAs(failed);
+        events.Should().NotContain(e => e.Junction.NotNull().Name == nameof(NeverReached));
+        events[^1].Should().BeSameAs(failed);
     }
 
     [Test]
@@ -230,13 +249,17 @@ public class JunctionEventsTests
         var (metadataId, _) = await Run<ICustomsTrain>();
 
         var events = Handler.For(metadataId);
-        var decided = events.Single(e => e.EventType == "Decided").Junction!;
+        var decided = events
+            .Single(e => string.Equals(e.EventType, "Decided", StringComparison.Ordinal))
+            .Junction.NotNull();
         decided.QuestionKey.Should().Be("CustomsTier");
         decided.AnswerWithheld.Should().BeTrue();
         decided.Answer.Should().BeNull();
         decided.Confidence.Should().BeNull();
 
-        var routed = events.Single(e => e.EventType == "Routed").Junction!;
+        var routed = events
+            .Single(e => string.Equals(e.EventType, "Routed", StringComparison.Ordinal))
+            .Junction.NotNull();
         routed.AnswerWithheld.Should().BeTrue();
         routed.Answer.Should().BeNull($"the track taken would give the answer away. See {Adr}.");
 
@@ -277,12 +300,12 @@ public class JunctionEventsTests
         AssertWithheld(metadataId, "Audit");
     }
 
-    private void AssertWithheld(long metadataId, string key)
+    private static void AssertWithheld(long metadataId, string key)
     {
         var steps = Handler
             .For(metadataId)
             .Where(e => e.EventType is "Decided" or "Routed")
-            .Select(e => e.Junction!)
+            .Select(e => e.Junction.NotNull())
             .ToList();
 
         steps.Should().HaveCount(2);
@@ -301,20 +324,21 @@ public class JunctionEventsTests
     [Test]
     public async Task A_run_that_was_never_persisted_has_no_junction_events()
     {
-        var publisher = _provider.GetRequiredService<JunctionEventPublisher>();
+        var publisher = _provider.NotNull().GetRequiredService<JunctionEventPublisher>();
         var unsaved = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILaneTrain).FullName!,
+                Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = JunctionEventTrains.Parcel(),
-            }
+            },
+            TestTime.Clock
         );
 
         var run = await publisher.BeginAsync(
             unsaved,
             typeof(LaneTrain),
-            _provider,
+            _provider.NotNull(),
             CancellationToken.None
         );
 
@@ -342,18 +366,18 @@ public class JunctionEventsTests
         // Set here, in the test's own frame, as ServiceTrain.Run sets it in the run's.
         JunctionEventRun.Current = run;
         var metadataId = run.Metadata.Id;
-        var observer = new JunctionEventDecisionObserver();
+        var observer = new JunctionEventDecisionObserver(TimeProvider.System);
 
         await observer.Decided(
             new DecisionMade(
                 DecisionRun.NameOf(typeof(LaneTrain)),
                 _externalId,
-                new YesNoQuestion("HiddenAudit", "Audit it?", null, null),
+                new YesNoQuestion("HiddenAudit", "Audit it?", Yes: null, No: null),
                 0,
                 new string('0', 64),
                 new YesNoAnswer(0.97),
                 typeof(SwitchableDecider),
-                false,
+                Replayed: false,
                 []
             )
             {
@@ -363,7 +387,7 @@ public class JunctionEventsTests
         );
         JunctionEventRun.Current = null;
 
-        var decided = Handler.For(metadataId).Should().ContainSingle().Subject.Junction!;
+        var decided = Handler.For(metadataId).Should().ContainSingle().Subject.Junction.NotNull();
         decided
             .AnswerWithheld.Should()
             .BeTrue($"the question's type inherits the mark. See {Adr}.");
@@ -375,41 +399,52 @@ public class JunctionEventsTests
     /// <summary>The junction events of a persisted run of the lane train.</summary>
     private async Task<JunctionEventRun> PersistedRun()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILaneTrain).FullName!,
+                Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = JunctionEventTrains.Parcel(),
-            }
+            },
+            TestTime.Clock
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         _externalId = metadata.ExternalId;
 
         return (
             await _provider
+                .NotNull()
                 .GetRequiredService<JunctionEventPublisher>()
-                .BeginAsync(metadata, typeof(LaneTrain), _provider, CancellationToken.None)
-        )!;
+                .BeginAsync(
+                    metadata,
+                    typeof(LaneTrain),
+                    _provider.NotNull(),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false)
+        ).NotNull();
     }
 
     [Test]
     public async Task The_decision_log_withholds_the_answer_to_a_sensitive_question()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<ILogger<DecisionJournal>>(logger)
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<ICustomsTrain>()
             .Run(JunctionEventTrains.Parcel());
@@ -427,16 +462,18 @@ public class JunctionEventsTests
     public async Task The_decision_log_withholds_the_decisions_of_a_withheld_track()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<ILogger<DecisionJournal>>(logger)
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99).Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await scope
             .ServiceProvider.GetRequiredService<IInspectionTrain>()
             .Run(JunctionEventTrains.Parcel());
@@ -463,13 +500,14 @@ public class JunctionEventsTests
     public async Task The_decision_log_withholds_why_a_sensitive_answer_was_not_replayed()
     {
         var logger = new CapturingJournalLogger();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<ILogger<DecisionJournal>>(logger)
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddDecisionRecording())
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var journal = provider.GetRequiredService<DecisionJournal>();
 
         // Outside a run, so it is logged only.
@@ -480,13 +518,16 @@ public class JunctionEventsTests
                 new ChoiceQuestion(
                     "CustomsTier",
                     "Which tier?",
-                    [new Criterion("Green", null), new Criterion("Red", null)]
+                    [
+                        new Criterion("Green", Description: null),
+                        new Criterion("Red", Description: null),
+                    ]
                 ),
                 0,
                 "fp",
                 new ChoiceAnswer("Green", 0.9),
                 typeof(SwitchableDecider),
-                false,
+                Replayed: false,
                 [],
                 ReplayRefused: "the recorded answer 'Red' was given about a different state"
             )
@@ -514,10 +555,14 @@ public class JunctionEventsTests
 
         var junctions = Handler
             .For(metadataId)
-            .Select(e => e.Junction!)
+            .Select(e => e.Junction.NotNull())
             .Where(j => j.Kind == JunctionRunKind.Junction)
             .ToList();
-        var route = Handler.For(metadataId).Single(e => e.EventType == "Routed").Junction!.Position;
+        var route = Handler
+            .For(metadataId)
+            .Single(e => string.Equals(e.EventType, "Routed", StringComparison.Ordinal))
+            .Junction.NotNull()
+            .Position;
 
         junctions
             .Where(j => j.Position < route)
@@ -553,7 +598,7 @@ public class JunctionEventsTests
 
         var (metadataId, _) = await Run<IInspectionTrain>();
 
-        var steps = Handler.For(metadataId).Select(e => e.Junction!).ToList();
+        var steps = Handler.For(metadataId).Select(e => e.Junction.NotNull()).ToList();
         var customs = steps.Single(s => s.Kind == JunctionRunKind.Route && !s.NameWithheld);
         customs.Name.Should().Be(nameof(CustomsTier));
 
@@ -611,12 +656,16 @@ public class JunctionEventsTests
 
         var (metadataId, _) = await Run<IGroundInspectionTrain>();
 
-        var steps = Handler.For(metadataId).Select(e => e.Junction!).ToList();
-        var lane = steps.Single(s => s.Kind == JunctionRunKind.Route && s.Name == nameof(Lane));
+        var steps = Handler.For(metadataId).Select(e => e.Junction.NotNull()).ToList();
+        var lane = steps.Single(s =>
+            s.Kind == JunctionRunKind.Route
+            && string.Equals(s.Name, nameof(Lane), StringComparison.Ordinal)
+        );
         lane.Answer.Should().Be(nameof(Lane.Ground));
 
         var customs = steps.Single(s =>
-            s.Kind == JunctionRunKind.Route && s.Name == nameof(CustomsTier)
+            s.Kind == JunctionRunKind.Route
+            && string.Equals(s.Name, nameof(CustomsTier), StringComparison.Ordinal)
         );
         customs.TrackPosition.Should().Be(lane.Position);
         customs.Answer.Should().BeNull();
@@ -636,9 +685,9 @@ public class JunctionEventsTests
 
         var (metadataId, _) = await Run<ILaneTrain>();
 
-        var steps = Handler.For(metadataId).Select(e => e.Junction!).ToList();
+        var steps = Handler.For(metadataId).Select(e => e.Junction.NotNull()).ToList();
         steps
-            .Where(j => j.Name == nameof(Weigh))
+            .Where(j => string.Equals(j.Name, nameof(Weigh), StringComparison.Ordinal))
             .Should()
             .HaveCount(2, "Weigh started and completed")
             .And.OnlyContain(j => j.TrackPosition == null);
@@ -653,11 +702,11 @@ public class JunctionEventsTests
     public async Task Each_step_carries_the_id_the_trains_graph_draws_for_it()
     {
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
-        var graph = GraphOf<ILaneTrain>();
+        var graph = await GraphOf<ILaneTrain>().ConfigureAwait(false);
 
-        var (metadataId, _) = await Run<ILaneTrain>();
+        var (metadataId, _) = await Run<ILaneTrain>().ConfigureAwait(false);
 
-        var rows = await Rows(metadataId);
+        var rows = await Rows(metadataId).ConfigureAwait(false);
         rows.Select(r => (r.Position, r.NodeId))
             .Should()
             .Equal(
@@ -667,13 +716,13 @@ public class JunctionEventsTests
                 (3, "Switch<Lane>#0/Express/Load#0"),
                 (4, "Stamp#0")
             );
-        rows.Select(r => r.NodeId!)
+        rows.Select(r => r.NodeId.NotNull())
             .Should()
             .BeSubsetOf(Ids(graph.Nodes), "a step's id is the one the graph drew for it");
 
         Handler
             .For(metadataId)
-            .Select(e => (e.Junction!.Position, e.Junction.NodeId))
+            .Select(e => (e.Junction.NotNull().Position, e.Junction.NodeId))
             .Should()
             .OnlyContain(
                 e => rows.Single(r => r.Position == e.Position).NodeId == e.NodeId,
@@ -692,7 +741,7 @@ public class JunctionEventsTests
             .For(metadataId)
             .Should()
             .ContainSingle(e => e.EventType == "DecisionRefused")
-            .Subject.Junction!;
+            .Subject.Junction.NotNull();
         refused.NodeId.Should().Be("Decide<ChoiceDecision<Lane>>#0");
         (await Rows(metadataId))
             .Single(r => r.Position == refused.Position)
@@ -722,7 +771,7 @@ public class JunctionEventsTests
             );
         Handler
             .For(metadataId)
-            .Select(e => e.Junction!)
+            .Select(e => e.Junction.NotNull())
             .Where(j => j.Position > route.Position)
             .Should()
             .NotBeEmpty()
@@ -742,13 +791,15 @@ public class JunctionEventsTests
         // database context threw "a second operation was started", which was swallowed, and the
         // event was lost.
         BranchMeeting.Reset();
-        await using var provider = new ServiceCollection()
+        var provider = new ServiceCollection()
             .AddScopedTraxRoute<IMeetingTrain, MeetingTrain>()
             .AddScoped<IJunctionEventHandler, OneAtATimeHandler>()
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<IMeetingTrain>();
         await train.Run(Unit.Default);
 
@@ -765,14 +816,16 @@ public class JunctionEventsTests
     public async Task Junction_events_are_off_unless_the_host_asks_for_them()
     {
         var handler = new CapturingHandler();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         await train.Run(JunctionEventTrains.Parcel());
 
@@ -784,20 +837,22 @@ public class JunctionEventsTests
     [Test]
     public async Task A_handler_or_broadcaster_that_throws_does_not_change_the_run()
     {
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler, ThrowingHandler>()
             .AddSingleton<ITrainEventBroadcaster, ThrowingBroadcaster>()
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         var output = await train.Run(JunctionEventTrains.Parcel());
 
         output.Should().Be("loaded|stamped");
-        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Completed);
 
         await provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -816,7 +871,7 @@ public class JunctionEventsTests
         // Registered before AddTrax: it used to win, and silently turn decision recording off.
         services.AddSingleton<IDecisionObserver>(observer);
 
-        await using var provider = services
+        var provider = services
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -824,15 +879,17 @@ public class JunctionEventsTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         await train.Run(JunctionEventTrains.Parcel());
 
         observer.Decided.Should().Be(1);
         observer.Routed.Should().Be(1);
-        handler.For(train.Metadata!.Id).Should().Contain(e => e.EventType == "Decided");
+        handler.For(train.Metadata.NotNull().Id).Should().Contain(e => e.EventType == "Decided");
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         (await context.RecordedDecisions.CountAsync(d => d.MetadataId == train.Metadata.Id))
             .Should()
@@ -843,7 +900,7 @@ public class JunctionEventsTests
     public async Task An_observer_registered_after_AddTrax_refuses_the_host_and_every_recorded_run()
     {
         var observer = new CountingObserver();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -852,6 +909,7 @@ public class JunctionEventsTests
             )
             .AddSingleton<IDecisionObserver>(observer)
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var gate = provider
@@ -868,9 +926,10 @@ public class JunctionEventsTests
             )
             .WithMessage("*before AddTrax*");
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
-        var run = async () => await train.Run(JunctionEventTrains.Parcel());
+        var run = async () => await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().WithMessage("*before AddTrax*");
         observer.Decided.Should().Be(0, "the run refused before it asked anything");
     }
@@ -880,12 +939,13 @@ public class JunctionEventsTests
     {
         var handler = new CapturingHandler();
         var observer = new CountingObserver();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .AddSingleton<IDecisionObserver>(observer)
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99));
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
@@ -897,15 +957,16 @@ public class JunctionEventsTests
             )
             .WithMessage("*JunctionEventDecisionObserver*before AddTrax*");
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICustomsThenStampTrain>();
-        var run = async () => await train.Run(JunctionEventTrains.Parcel());
+        var run = async () => await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
         await run.Should().ThrowAsync<InvalidOperationException>().WithMessage("*before AddTrax*");
         observer.Decided.Should().Be(0, "the run refused before it asked anything");
         handler
-            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata!.Id)
+            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata.NotNull().Id)
             .Should()
-            .NotContain(e => e.Junction!.Name == nameof(Load));
+            .NotContain(e => e.Junction.NotNull().Name == nameof(Load));
     }
 
     [Test]
@@ -917,22 +978,24 @@ public class JunctionEventsTests
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IDecisionObserver>(observer)
             .AddSingleton<IJunctionEventHandler>(handler);
-        await using var provider = services
+        var provider = services
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(CustomsTier.Red, 0.99));
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
         await gate.Invoking(g => g.StartingAsync(CancellationToken.None)).Should().NotThrowAsync();
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ICustomsThenStampTrain>();
         await train.Run(JunctionEventTrains.Parcel());
 
         observer.Routed.Should().Be(1);
         var steps = handler
-            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata!.Id)
-            .Select(e => e.Junction!)
+            .For(((ServiceTrain<Parcel, string>)(object)train).Metadata.NotNull().Id)
+            .Select(e => e.Junction.NotNull())
             .ToList();
         steps.Should().Contain(j => j.Kind == JunctionRunKind.Route);
         steps
@@ -945,7 +1008,7 @@ public class JunctionEventsTests
     [Test]
     public async Task A_best_effort_observer_that_cannot_be_built_is_left_out()
     {
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IDecisionObserver, UnbuildableObserver>()
             .AddTrax(trax =>
@@ -954,6 +1017,7 @@ public class JunctionEventsTests
                 )
             )
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
@@ -961,11 +1025,16 @@ public class JunctionEventsTests
             .Should()
             .NotThrowAsync("an observer that is best effort cannot stop decisions being recorded");
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         (await train.Run(JunctionEventTrains.Parcel())).Should().Be("loaded|stamped");
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        (await context.RecordedDecisions.CountAsync(d => d.MetadataId == train.Metadata!.Id))
+        (
+            await context.RecordedDecisions.CountAsync(d =>
+                d.MetadataId == train.Metadata.NotNull().Id
+            )
+        )
             .Should()
             .Be(1);
     }
@@ -973,11 +1042,12 @@ public class JunctionEventsTests
     [Test]
     public async Task A_required_observer_that_cannot_be_built_refuses_the_host()
     {
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IDecisionObserver, UnbuildableRequiredObserver>()
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         var gate = provider.GetServices<IHostedService>().OfType<DecisionObserverCheck>().Single();
         await gate.Invoking(g => g.StartingAsync(CancellationToken.None))
@@ -993,22 +1063,24 @@ public class JunctionEventsTests
         var services = JunctionEventTrains.Register(new ServiceCollection(), Decider);
         services.AddSingleton<IDecisionObserver, FailingRequiredObserver>();
 
-        await using var provider = services
+        var provider = services
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<ILaneTrain>();
-        var run = async () => await train.Run(JunctionEventTrains.Parcel());
+        var run = async () => await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
 
         await run.Should().ThrowAsync<Exception>();
         handler
-            .For(train.Metadata!.Id)
+            .For(train.Metadata.NotNull().Id)
             .Should()
             .Contain(
-                e => e.Junction!.Name == nameof(Weigh),
+                e => e.Junction.NotNull().Name == nameof(Weigh),
                 "the junction before the question ran and was published"
             )
             .And.NotContain(e => e.EventType == "Decided" || e.EventType == "Routed");
@@ -1026,14 +1098,14 @@ public class JunctionEventsTests
             TrainState.Pending
         );
 
-        var metadataId = await RunForManifest(_provider, manifestId);
+        var metadataId = await RunForManifest(_provider.NotNull(), manifestId);
 
         Handler
             .For(metadataId)
             .Should()
             .NotBeEmpty()
             .And.OnlyContain(
-                e => e.Junction!.Attempt == 3,
+                e => e.Junction.NotNull().Attempt == 3,
                 $"two failed runs since the last success make this the third attempt. See {Adr}."
             );
         (await Rows(metadataId)).Should().NotBeEmpty().And.OnlyContain(r => r.Attempt == 3);
@@ -1043,12 +1115,13 @@ public class JunctionEventsTests
     public async Task A_run_whose_attempt_cannot_be_read_still_runs_and_carries_none()
     {
         var handler = new CapturingHandler();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .AddSingleton<IRunAttempts, BrokenRunAttempts>()
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var metadataId = await RunForManifest(provider, manifestId: 424242);
@@ -1057,7 +1130,7 @@ public class JunctionEventsTests
             .For(metadataId)
             .Should()
             .HaveCount(8, "the run went through every step")
-            .And.OnlyContain(e => e.Junction!.Attempt == null);
+            .And.OnlyContain(e => e.Junction.NotNull().Attempt == null);
     }
 
     [Test]
@@ -1071,14 +1144,14 @@ public class JunctionEventsTests
             .. Enumerable.Repeat(TrainState.Failed, RunAttempts.MaxRunsRead + 500),
         ]);
 
-        var metadataId = await RunForManifest(_provider, manifestId);
+        var metadataId = await RunForManifest(_provider.NotNull(), manifestId);
 
         Handler
             .For(metadataId)
             .Should()
             .HaveCount(8, "the run went through every step")
             .And.OnlyContain(
-                e => e.Junction!.Attempt == RunAttempts.MaxRunsRead + 1,
+                e => e.Junction.NotNull().Attempt == RunAttempts.MaxRunsRead + 1,
                 $"the attempt reads at most {RunAttempts.MaxRunsRead} runs. See {Adr}."
             );
     }
@@ -1087,25 +1160,26 @@ public class JunctionEventsTests
     public async Task A_run_does_not_wait_long_on_an_attempt_that_never_comes()
     {
         var handler = new CapturingHandler();
-        await using var provider = JunctionEventTrains
+        var provider = JunctionEventTrains
             .Register(new ServiceCollection(), Decider)
             .AddSingleton<IJunctionEventHandler>(handler)
             .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
             .AddSingleton<IRunAttempts, HangingRunAttempts>()
             .BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         provider.GetRequiredService<JunctionEventPublisher>().AttemptTimeout =
             TimeSpan.FromMilliseconds(50);
         Decider.Use(new ScriptedDecider().Choose(Lane.Express, 0.9));
 
         var metadataId = await RunForManifest(provider, manifestId: 777)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System);
 
         handler
             .For(metadataId)
             .Should()
             .HaveCount(8)
             .And.OnlyContain(
-                e => e.Junction!.Attempt == null,
+                e => e.Junction.NotNull().Attempt == null,
                 $"an attempt that is not read in time is left out. See {Adr}."
             );
     }
@@ -1116,22 +1190,24 @@ public class JunctionEventsTests
     /// </summary>
     private async Task<long> SeedManifestRuns(params TrainState[] runs)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var manifest = Manifest.Create(new CreateManifest { Name = typeof(ILaneTrain) });
-        await context.Track(manifest);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(manifest).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         foreach (var state in runs)
         {
             var run = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(ILaneTrain).FullName!,
+                    Name = typeof(ILaneTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = JunctionEventTrains.Parcel(),
                     ManifestId = manifest.Id,
-                }
+                },
+                TestTime.Clock
             );
 
             if (state == TrainState.Pending)
@@ -1155,8 +1231,8 @@ public class JunctionEventsTests
                     run.AddException(new InvalidOperationException("failed"));
             }
 
-            await context.Track(run);
-            await context.SaveChanges(CancellationToken.None);
+            await context.Track(run).ConfigureAwait(false);
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
 
         return manifest.Id;
@@ -1164,55 +1240,73 @@ public class JunctionEventsTests
 
     private static async Task<long> RunForManifest(IServiceProvider provider, long manifestId)
     {
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (LaneTrain)scope.ServiceProvider.GetRequiredService<ILaneTrain>();
         var input = JunctionEventTrains.Parcel();
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ILaneTrain).FullName!,
+                Name = typeof(ILaneTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
 
-        (await train.Run(input, metadata)).Should().Be("loaded|stamped");
-        await provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
-        return train.Metadata!.Id;
+        (await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false))
+            .Should()
+            .Be("loaded|stamped");
+        await provider
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<(long MetadataId, string? Output)> Run<TTrain>(bool expectFailure = false)
         where TTrain : class, IServiceTrain<Parcel, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
         string? output = null;
 
         try
         {
-            output = await train.Run(JunctionEventTrains.Parcel());
+            output = await train.Run(JunctionEventTrains.Parcel()).ConfigureAwait(false);
             expectFailure.Should().BeFalse("the run completed");
         }
         catch (Exception) when (expectFailure) { }
 
         var serviceTrain = (ServiceTrain<Parcel, string>)(object)train;
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
-        return (serviceTrain.Metadata!.Id, output);
+        await _provider
+            .NotNull()
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return (serviceTrain.Metadata.NotNull().Id, output);
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>The graph of a fresh instance of the train, as a tool reading it would draw it.</summary>
-    private ChainGraph GraphOf<TTrain>()
+    private async Task<ChainGraph> GraphOf<TTrain>()
         where TTrain : class, IServiceTrain<Parcel, string>
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Parcel, string>)
                 (object)scope.ServiceProvider.GetRequiredService<TTrain>();
@@ -1226,471 +1320,4 @@ public class JunctionEventsTests
 
     private static IEnumerable<string> Ids(IEnumerable<ChainGraphNode> nodes) =>
         nodes.SelectMany(n => Ids(n.Tracks.SelectMany(t => t.Nodes)).Prepend(n.Id));
-}
-
-internal static class JunctionEventTrains
-{
-    public const string InputSecret = "INPUT-SECRET-7f3a";
-    public const string OutputSecret = "OUTPUT-SECRET-91c2";
-    public const string FailureSecret = "FAILURE-SECRET-5d0e";
-
-    public static Parcel Parcel() => new($"p-{Guid.NewGuid():N}", InputSecret);
-
-    public static IServiceCollection Register(IServiceCollection services, IDecider decider) =>
-        services
-            .AddSingleton(decider)
-            .AddScopedTraxRoute<ILaneTrain, LaneTrain>()
-            .AddScopedTraxRoute<ILaneThenFailTrain, LaneThenFailTrain>()
-            .AddScopedTraxRoute<ICustomsTrain, CustomsTrain>()
-            .AddScopedTraxRoute<IHeldTrain, HeldTrain>()
-            .AddScopedTraxRoute<IAuditTrain, AuditTrain>()
-            .AddScopedTraxRoute<ICustomsThenStampTrain, CustomsThenStampTrain>()
-            .AddScopedTraxRoute<IInspectionTrain, InspectionTrain>()
-            .AddScopedTraxRoute<IGroundInspectionTrain, GroundInspectionTrain>();
-}
-
-/// <summary>Records every junction event it is handed.</summary>
-internal sealed class CapturingHandler : IJunctionEventHandler
-{
-    private readonly ConcurrentQueue<TrainLifecycleEventMessage> _seen = new();
-
-    public IReadOnlyList<TrainLifecycleEventMessage> All => _seen.ToList();
-
-    public List<TrainLifecycleEventMessage> For(long metadataId) =>
-        _seen.Where(m => m.MetadataId == metadataId).ToList();
-
-    public Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
-    {
-        _seen.Enqueue(message);
-        return Task.CompletedTask;
-    }
-}
-
-/// <summary>Records every message published to the transport.</summary>
-internal sealed class CapturingBroadcaster : ITrainEventBroadcaster
-{
-    private readonly ConcurrentQueue<TrainLifecycleEventMessage> _seen = new();
-
-    public List<TrainLifecycleEventMessage> For(long metadataId) =>
-        _seen.Where(m => m.MetadataId == metadataId).ToList();
-
-    public Task PublishAsync(TrainLifecycleEventMessage message, CancellationToken ct)
-    {
-        _seen.Enqueue(message);
-        return Task.CompletedTask;
-    }
-}
-
-/// <summary>Never answers, and ignores cancellation, as a stuck connection would.</summary>
-internal sealed class HangingRunAttempts : IRunAttempts
-{
-    private readonly TaskCompletionSource<int?> _never = new();
-
-    public Task<int?> AttemptOf(
-        Trax.Effect.Models.Metadata.Metadata metadata,
-        CancellationToken cancellationToken
-    ) => _never.Task;
-}
-
-internal sealed class BrokenRunAttempts : IRunAttempts
-{
-    public Task<int?> AttemptOf(
-        Trax.Effect.Models.Metadata.Metadata metadata,
-        CancellationToken cancellationToken
-    ) => throw new InvalidOperationException("the database is down");
-}
-
-internal sealed class CapturingJournalLogger : ILogger<DecisionJournal>
-{
-    private readonly ConcurrentQueue<string> _messages = new();
-
-    public IReadOnlyList<string> Messages => _messages.ToList();
-
-    public IDisposable? BeginScope<TState>(TState state)
-        where TState : notnull => null;
-
-    public bool IsEnabled(LogLevel logLevel) => true;
-
-    public void Log<TState>(
-        LogLevel logLevel,
-        EventId eventId,
-        TState state,
-        Exception? exception,
-        Func<TState, Exception?, string> formatter
-    ) => _messages.Enqueue(formatter(state, exception));
-}
-
-/// <summary>
-/// What <see cref="OneAtATimeHandler"/> saw: whether any instance was used from two threads at
-/// once, and the junctions whose events it handled.
-/// </summary>
-internal static class BranchMeeting
-{
-    private static TaskCompletionSource _a = New();
-    private static TaskCompletionSource _b = New();
-
-    public static bool ConcurrentUse;
-    public static ConcurrentQueue<string> Handled = new();
-
-    public static void Reset()
-    {
-        _a = New();
-        _b = New();
-        ConcurrentUse = false;
-        Handled = new();
-    }
-
-    /// <summary>
-    /// Holds a branch junction's start event until the other branch's has arrived too, so the
-    /// two are handled at the same time.
-    /// </summary>
-    public static Task Meet(string junction)
-    {
-        var (mine, theirs) = junction == nameof(MeetA) ? (_a, _b) : (_b, _a);
-        mine.TrySetResult();
-        return theirs.Task.WaitAsync(TimeSpan.FromSeconds(30));
-    }
-
-    private static TaskCompletionSource New() =>
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
-}
-
-/// <summary>A scoped handler that, like one holding a database context, must not be used concurrently.</summary>
-internal sealed class OneAtATimeHandler : IJunctionEventHandler
-{
-    private int _inUse;
-
-    public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
-    {
-        if (Interlocked.Increment(ref _inUse) > 1)
-            BranchMeeting.ConcurrentUse = true;
-
-        try
-        {
-            var name = message.Junction?.Name;
-            if (
-                message.EventType == TrainLifecycleEventMessage.JunctionStartedEventType
-                && name is nameof(MeetA) or nameof(MeetB)
-            )
-                await BranchMeeting.Meet(name);
-
-            if (name is not null)
-                BranchMeeting.Handled.Enqueue(name);
-        }
-        finally
-        {
-            Interlocked.Decrement(ref _inUse);
-        }
-    }
-}
-
-public sealed record MetA;
-
-public sealed record MetB;
-
-public class MeetStart : EffectJunction<Unit, Unit>
-{
-    public override Task<Unit> Run(Unit input) => Task.FromResult(Unit.Default);
-}
-
-public class MeetA : EffectJunction<Unit, MetA>
-{
-    public override Task<MetA> Run(Unit input) => Task.FromResult(new MetA());
-}
-
-public class MeetB : EffectJunction<Unit, MetB>
-{
-    public override Task<MetB> Run(Unit input) => Task.FromResult(new MetB());
-}
-
-public class MeetJoin : EffectJunction<(MetA, MetB), Unit>
-{
-    public override Task<Unit> Run((MetA, MetB) input) => Task.FromResult(Unit.Default);
-}
-
-public interface IMeetingTrain : IServiceTrain<Unit, Unit>;
-
-/// <summary>Two branches whose junctions start at the same time.</summary>
-public class MeetingTrain : ServiceTrain<Unit, Unit>, IMeetingTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Chain<MeetStart>()
-            .Parallel(p => p.Branch("a", b => b.Chain<MeetA>()).Branch("b", b => b.Chain<MeetB>()))
-            .Chain<MeetJoin>()
-            .Resolve();
-}
-
-internal sealed class ThrowingHandler : IJunctionEventHandler
-{
-    public Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct) =>
-        throw new InvalidOperationException("the handler is broken");
-}
-
-internal sealed class ThrowingBroadcaster : ITrainEventBroadcaster
-{
-    public Task PublishAsync(TrainLifecycleEventMessage message, CancellationToken ct) =>
-        throw new InvalidOperationException("the broker is down");
-}
-
-internal sealed class CountingObserver : IDecisionObserver
-{
-    private int _decided;
-    private int _routed;
-
-    public int Decided => _decided;
-    public int Routed => _routed;
-
-    Task IDecisionObserver.Decided(DecisionMade decision, CancellationToken cancellationToken)
-    {
-        Interlocked.Increment(ref _decided);
-        return Task.CompletedTask;
-    }
-
-    Task IDecisionObserver.Routed(TrackRouted routing, CancellationToken cancellationToken)
-    {
-        Interlocked.Increment(ref _routed);
-        return Task.CompletedTask;
-    }
-}
-
-/// <summary>A best-effort observer whose constructor throws.</summary>
-internal sealed class UnbuildableObserver : IDecisionObserver
-{
-    public UnbuildableObserver() => throw new InvalidOperationException("misconfigured");
-
-    public Task Decided(DecisionMade decision, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
-
-    public Task Routed(TrackRouted routing, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
-}
-
-/// <summary>An observer that says whether it is required, and whose constructor throws.</summary>
-internal sealed class UnbuildableRequiredObserver : IDecisionObserver
-{
-    public UnbuildableRequiredObserver() => throw new InvalidOperationException("misconfigured");
-
-    public bool Required => true;
-
-    public Task Decided(DecisionMade decision, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
-
-    public Task Routed(TrackRouted routing, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
-}
-
-/// <summary>A required observer whose every write fails.</summary>
-internal sealed class FailingRequiredObserver : IDecisionObserver
-{
-    public bool Required => true;
-
-    public Task Decided(DecisionMade decision, CancellationToken cancellationToken) =>
-        throw new InvalidOperationException("the journal is down");
-
-    public Task Routed(TrackRouted routing, CancellationToken cancellationToken) =>
-        throw new InvalidOperationException("the journal is down");
-}
-
-/// <summary>The registered decider, swapped per test.</summary>
-internal sealed class SwitchableDecider : IDecider
-{
-    private IDecider _inner = new ScriptedDecider();
-
-    public void Use(IDecider inner) => _inner = inner;
-
-    public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct) =>
-        _inner.Decide(request, ct);
-}
-
-internal sealed class WarehouseClassifier : IFailureClassifier
-{
-    public FailureClass? Classify(Exception exception) =>
-        exception is InvalidOperationException ? FailureClass.Permanent : null;
-}
-
-public sealed record Parcel(string Id, [property: TraxSensitive] string Secret);
-
-[Asks("Which lane should this parcel take?")]
-public enum Lane
-{
-    Express,
-    Ground,
-}
-
-[TraxSensitive]
-[Asks("Which customs tier applies to this parcel?")]
-public enum CustomsTier
-{
-    Green,
-    Red,
-}
-
-public class Weigh : EffectJunction<Parcel, Parcel>
-{
-    public override Task<Parcel> Run(Parcel input) => Task.FromResult(input);
-}
-
-public class Load : EffectJunction<Parcel, string>
-{
-    public override Task<string> Run(Parcel input) => Task.FromResult("loaded");
-}
-
-public class LoadSecret : EffectJunction<Parcel, string>
-{
-    public override Task<string> Run(Parcel input) =>
-        Task.FromResult(JunctionEventTrains.OutputSecret);
-}
-
-public class Stamp : EffectJunction<string, string>
-{
-    public override Task<string> Run(string input) => Task.FromResult($"{input}|stamped");
-}
-
-public class Explode : EffectJunction<string, string>
-{
-    public override Task<string> Run(string input) =>
-        throw new InvalidOperationException(JunctionEventTrains.FailureSecret);
-}
-
-public class NeverReached : EffectJunction<string, string>
-{
-    public override Task<string> Run(string input) => Task.FromResult(input);
-}
-
-public interface ILaneTrain : IServiceTrain<Parcel, string>;
-
-public class LaneTrain : ServiceTrain<Parcel, string>, ILaneTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<Weigh>()
-            .Switch<Parcel, Lane>(tracks =>
-                tracks
-                    .When(Lane.Express, t => t.Chain<Load>())
-                    .When(Lane.Ground, t => t.Chain<Load>())
-            )
-            .Chain<Stamp>()
-            .Resolve();
-}
-
-public interface ILaneThenFailTrain : IServiceTrain<Parcel, string>;
-
-/// <summary>Its output carries a secret, and its last junction fails with one in the message.</summary>
-public class LaneThenFailTrain : ServiceTrain<Parcel, string>, ILaneThenFailTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<Weigh>()
-            .Switch<Parcel, Lane>(tracks =>
-                tracks
-                    .When(Lane.Express, t => t.Chain<LoadSecret>())
-                    .When(Lane.Ground, t => t.Chain<LoadSecret>())
-            )
-            .Chain<Stamp>()
-            .Chain<Explode>()
-            .Chain<NeverReached>()
-            .Resolve();
-}
-
-public interface ICustomsTrain : IServiceTrain<Parcel, string>;
-
-public class CustomsTrain : ServiceTrain<Parcel, string>, ICustomsTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Switch<Parcel, CustomsTier>(tracks =>
-                tracks
-                    .When(CustomsTier.Green, t => t.Chain<Load>())
-                    .When(CustomsTier.Red, t => t.Chain<Load>())
-            )
-            .Resolve();
-}
-
-[TraxSensitive]
-[Asks("Should this parcel be held?")]
-public sealed class Held<T>;
-
-public sealed class Refund;
-
-[TraxSensitive]
-public abstract class SensitiveQuestion;
-
-[Asks("Should this parcel be audited?")]
-public sealed class Audit : SensitiveQuestion;
-
-public interface IHeldTrain : IServiceTrain<Parcel, string>;
-
-public class HeldTrain : ServiceTrain<Parcel, string>, IHeldTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Gate<Parcel, Held<Refund>>(g => g.Yes(y => y.Chain<Load>()).No(n => n.Chain<Load>()))
-            .Resolve();
-}
-
-public interface IAuditTrain : IServiceTrain<Parcel, string>;
-
-public class AuditTrain : ServiceTrain<Parcel, string>, IAuditTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Gate<Parcel, Audit>(g => g.Yes(y => y.Chain<Load>()).No(n => n.Chain<Load>())).Resolve();
-}
-
-public interface ICustomsThenStampTrain : IServiceTrain<Parcel, string>;
-
-public class CustomsThenStampTrain : ServiceTrain<Parcel, string>, ICustomsThenStampTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<Weigh>()
-            .Switch<Parcel, CustomsTier>(tracks =>
-                tracks
-                    .When(CustomsTier.Green, t => t.Chain<Load>())
-                    .When(CustomsTier.Red, t => t.Chain<Load>())
-            )
-            .Chain<Stamp>()
-            .Resolve();
-}
-
-public interface IInspectionTrain : IServiceTrain<Parcel, string>;
-
-/// <summary>Its Red track asks a question of its own, which is not sensitive.</summary>
-public class InspectionTrain : ServiceTrain<Parcel, string>, IInspectionTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<Weigh>()
-            .Switch<Parcel, CustomsTier>(tracks =>
-                tracks
-                    .When(CustomsTier.Green, t => t.Chain<Load>())
-                    .When(
-                        CustomsTier.Red,
-                        t =>
-                            t.Switch<Parcel, Lane>(lanes =>
-                                lanes
-                                    .When(Lane.Express, l => l.Chain<Load>())
-                                    .When(Lane.Ground, l => l.Chain<Load>())
-                            )
-                    )
-            )
-            .Chain<Stamp>()
-            .Resolve();
-}
-
-public interface IGroundInspectionTrain : IServiceTrain<Parcel, string>;
-
-/// <summary>Its Ground track asks a sensitive question.</summary>
-public class GroundInspectionTrain : ServiceTrain<Parcel, string>, IGroundInspectionTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<Weigh>()
-            .Switch<Parcel, Lane>(tracks =>
-                tracks
-                    .When(Lane.Express, t => t.Chain<Load>())
-                    .When(
-                        Lane.Ground,
-                        t =>
-                            t.Switch<Parcel, CustomsTier>(tiers =>
-                                tiers
-                                    .When(CustomsTier.Green, c => c.Chain<Load>())
-                                    .When(CustomsTier.Red, c => c.Chain<Load>())
-                            )
-                    )
-            )
-            .Chain<Stamp>()
-            .Resolve();
 }

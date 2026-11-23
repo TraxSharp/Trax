@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
@@ -36,11 +37,11 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
         train.Metadata.FailureException.Should().Be("InvalidOperationException");
         train.Metadata.FailureReason.Should().Be("junction failure");
         train.Metadata.FailureJunction.Should().Be(nameof(AlwaysFailsJunction));
@@ -51,11 +52,11 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.StackTrace.Should().NotBeNullOrEmpty();
+        train.Metadata.NotNull().StackTrace.Should().NotBeNullOrEmpty();
         train.Metadata.StackTrace.Should().Contain(nameof(AlwaysFailsJunction));
     }
 
@@ -65,7 +66,7 @@ public class ExceptionPersistenceTests : TestSetup
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
         // The exception thrown to the caller should be the ORIGINAL type
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
 
         // The message should be the ORIGINAL human-readable message, not JSON
@@ -81,11 +82,11 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<HttpRequestException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.FailureException.Should().Be("HttpRequestException");
+        train.Metadata.NotNull().FailureException.Should().Be("HttpRequestException");
         train
             .Metadata.FailureReason.Should()
             .Be("Response status code does not indicate success: 500 (Internal Server Error).");
@@ -98,7 +99,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
 
         // Must be the original message, NOT a JSON blob
@@ -115,13 +116,13 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJsonMessageTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
 
         // The FailureReason must be the original JSON string, not double-encoded
-        train.Metadata!.FailureReason.Should().Contain("\"success\":false");
+        train.Metadata.NotNull().FailureReason.Should().Contain("\"success\":false");
         train.Metadata.FailureReason.Should().Contain("\"referenceId\":\"ref-123\"");
         train.Metadata.FailureJunction.Should().Be(nameof(JsonExceptionJunction));
     }
@@ -131,7 +132,7 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJsonMessageTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
 
         // The original JSON message must be intact — not wrapped or mutated
@@ -147,11 +148,11 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<ISpecialCharsTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.FailureReason.Should().Contain("newlines");
+        train.Metadata.NotNull().FailureReason.Should().Contain("newlines");
         train.Metadata.FailureReason.Should().Contain("tabs");
         train.Metadata.FailureReason.Should().Contain("quotes");
         train.Metadata.FailureReason.Should().Contain("backslashes");
@@ -166,11 +167,11 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IMultiJunctionTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.FailureJunction.Should().Be(nameof(SecondJunctionFails));
+        train.Metadata.NotNull().FailureJunction.Should().Be(nameof(SecondJunctionFails));
         train.Metadata.FailureReason.Should().Be("second junction failed");
         train.Metadata.StackTrace.Should().Contain(nameof(SecondJunctionFails));
     }
@@ -184,12 +185,12 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IPlainExceptionTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
-        await act.Should().ThrowAsync<ArgumentException>();
+        var act = async () => await train.Run(Unit.Default).ConfigureAwait(false);
+        await act.Should().ThrowAsync<InvalidOperationException>();
 
         train.Metadata.Should().NotBeNull();
-        train.Metadata!.TrainState.Should().Be(TrainState.Failed);
-        train.Metadata.FailureException.Should().Be("ArgumentException");
+        train.Metadata.NotNull().TrainState.Should().Be(TrainState.Failed);
+        train.Metadata.FailureException.Should().Be("InvalidOperationException");
         train.Metadata.FailureReason.Should().Be("plain failure");
         // No junction context — falls back to "TrainException" sentinel
         train.Metadata.FailureJunction.Should().Be("TrainException");
@@ -204,17 +205,17 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         // Read back from the database (not from the in-memory train object)
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         var persisted = await dataContext.Metadatas.FirstOrDefaultAsync(m =>
-            m.Id == train.Metadata!.Id
+            m.Id == train.Metadata.NotNull().Id
         );
 
         persisted.Should().NotBeNull();
-        persisted!.TrainState.Should().Be(TrainState.Failed);
+        persisted.NotNull().TrainState.Should().Be(TrainState.Failed);
         persisted.FailureException.Should().Be("InvalidOperationException");
         persisted.FailureReason.Should().Be("junction failure");
         persisted.FailureJunction.Should().Be(nameof(AlwaysFailsJunction));
@@ -226,16 +227,16 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<HttpRequestException>();
 
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         var persisted = await dataContext.Metadatas.FirstOrDefaultAsync(m =>
-            m.Id == train.Metadata!.Id
+            m.Id == train.Metadata.NotNull().Id
         );
 
         persisted.Should().NotBeNull();
-        persisted!.FailureException.Should().Be("HttpRequestException");
+        persisted.NotNull().FailureException.Should().Be("HttpRequestException");
         persisted
             .FailureReason.Should()
             .Be("Response status code does not indicate success: 500 (Internal Server Error).");
@@ -248,16 +249,16 @@ public class ExceptionPersistenceTests : TestSetup
     {
         var train = Scope.ServiceProvider.GetRequiredService<IJsonMessageTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         var dataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
         var persisted = await dataContext.Metadatas.FirstOrDefaultAsync(m =>
-            m.Id == train.Metadata!.Id
+            m.Id == train.Metadata.NotNull().Id
         );
 
         persisted.Should().NotBeNull();
-        persisted!.FailureReason.Should().Contain("\"success\":false");
+        persisted.NotNull().FailureReason.Should().Contain("\"success\":false");
         persisted.FailureReason.Should().Contain("\"referenceId\":\"ref-123\"");
     }
 
@@ -274,11 +275,11 @@ public class ExceptionPersistenceTests : TestSetup
 
         var train = Scope.ServiceProvider.GetRequiredService<IJunctionFailingTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         // FailureException should be a simple type name, not a full namespace or JSON
-        train.Metadata!.FailureException.Should().NotContain("{");
+        train.Metadata.NotNull().FailureException.Should().NotContain("{");
         train.Metadata.FailureException.Should().NotContain("\"");
 
         // FailureJunction should be a simple class name
@@ -301,11 +302,11 @@ public class ExceptionPersistenceTests : TestSetup
 
         var train = Scope.ServiceProvider.GetRequiredService<IHttpErrorTrain>();
 
-        var act = async () => await train.Run("input");
+        var act = async () => await train.Run("input").ConfigureAwait(false);
         await act.Should().ThrowAsync<HttpRequestException>();
 
         // The failure reason must NOT start with { — that would indicate a JSON blob
-        train.Metadata!.FailureReason.Should().NotStartWith("{");
+        train.Metadata.NotNull().FailureReason.Should().NotStartWith("{");
         train.Metadata.FailureReason.Should().StartWith("Response status code");
     }
 
@@ -313,13 +314,13 @@ public class ExceptionPersistenceTests : TestSetup
 
     #region Junctions
 
-    private class AlwaysFailsJunction : Junction<string, string>
+    private sealed class AlwaysFailsJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("junction failure");
     }
 
-    private class HttpCallJunction : Junction<string, string>
+    private sealed class HttpCallJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new HttpRequestException(
@@ -327,7 +328,7 @@ public class ExceptionPersistenceTests : TestSetup
             );
     }
 
-    private class JsonExceptionJunction : Junction<string, string>
+    private sealed class JsonExceptionJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException(
@@ -335,7 +336,7 @@ public class ExceptionPersistenceTests : TestSetup
             );
     }
 
-    private class SpecialCharsJunction : Junction<string, string>
+    private sealed class SpecialCharsJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException(
@@ -343,12 +344,12 @@ public class ExceptionPersistenceTests : TestSetup
             );
     }
 
-    private class FirstJunctionSucceeds : Junction<string, string>
+    private sealed class FirstJunctionSucceeds : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "-processed");
     }
 
-    private class SecondJunctionFails : Junction<string, string>
+    private sealed class SecondJunctionFails : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("second junction failed");
@@ -358,53 +359,55 @@ public class ExceptionPersistenceTests : TestSetup
 
     #region Trains
 
-    private class JunctionFailingTrain : ServiceTrain<string, string>, IJunctionFailingTrain
+    private sealed class JunctionFailingTrain : ServiceTrain<string, string>, IJunctionFailingTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<AlwaysFailsJunction>().Resolve();
     }
 
-    private interface IJunctionFailingTrain : IServiceTrain<string, string> { }
+    private interface IJunctionFailingTrain : IServiceTrain<string, string>;
 
-    private class HttpErrorTrain : ServiceTrain<string, string>, IHttpErrorTrain
+    private sealed class HttpErrorTrain : ServiceTrain<string, string>, IHttpErrorTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<HttpCallJunction>().Resolve();
     }
 
-    private interface IHttpErrorTrain : IServiceTrain<string, string> { }
+    private interface IHttpErrorTrain : IServiceTrain<string, string>;
 
-    private class JsonMessageTrain : ServiceTrain<string, string>, IJsonMessageTrain
+    private sealed class JsonMessageTrain : ServiceTrain<string, string>, IJsonMessageTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<JsonExceptionJunction>().Resolve();
     }
 
-    private interface IJsonMessageTrain : IServiceTrain<string, string> { }
+    private interface IJsonMessageTrain : IServiceTrain<string, string>;
 
-    private class SpecialCharsTrain : ServiceTrain<string, string>, ISpecialCharsTrain
+    private sealed class SpecialCharsTrain : ServiceTrain<string, string>, ISpecialCharsTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<SpecialCharsJunction>().Resolve();
     }
 
-    private interface ISpecialCharsTrain : IServiceTrain<string, string> { }
+    private interface ISpecialCharsTrain : IServiceTrain<string, string>;
 
-    private class MultiJunctionTrain : ServiceTrain<string, string>, IMultiJunctionTrain
+    private sealed class MultiJunctionTrain : ServiceTrain<string, string>, IMultiJunctionTrain
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<FirstJunctionSucceeds>().Chain<SecondJunctionFails>().Resolve();
     }
 
-    private interface IMultiJunctionTrain : IServiceTrain<string, string> { }
+    private interface IMultiJunctionTrain : IServiceTrain<string, string>;
 
-    private class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
+    private sealed class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
-            Task.FromResult<Either<Exception, Unit>>(new ArgumentException("plain failure"));
+            Task.FromResult<Either<Exception, Unit>>(
+                new InvalidOperationException("plain failure")
+            );
     }
 
-    private interface IPlainExceptionTrain : IServiceTrain<Unit, Unit> { }
+    private interface IPlainExceptionTrain : IServiceTrain<Unit, Unit>;
 
     #endregion
 }

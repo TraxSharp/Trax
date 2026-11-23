@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.StateMachine.Persistence.Integration.Fakes;
@@ -23,13 +24,13 @@ public class TimerFireConditionTests(StoreProvider provider)
 
     private const string User = "fire-condition-user";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider, launcher: new RecordingLauncher());
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static readonly Snapshot Expired = new()
     {
@@ -42,12 +43,17 @@ public class TimerFireConditionTests(StoreProvider provider)
     private async Task<Guid> InReview()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
-        using var scope = _host.Scope();
+        await _host
+            .NotNull()
+            .SeedDraft(User, id, ReminderMachine.Json("Idle"))
+            .ConfigureAwait(false);
+        using var scope = _host.NotNull().Scope();
         (
             await _host
+                .NotNull()
                 .Service(scope, ReminderMachine.Id)
                 .Advance(new Actor.Client(User, "Editor"), id, "Open")
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -57,35 +63,53 @@ public class TimerFireConditionTests(StoreProvider provider)
     // The row as the sweep reads it once it is due, and a fire written through the store on a context of its own.
     private async Task<DueRow> ReadDue(Guid id)
     {
-        (await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1))).Should().Be(1);
-        return await WithStore(async store =>
-            (
-                await store.ReadDue(
-                    [ReminderMachine.Id],
-                    Array.Empty<long>(),
-                    1000,
-                    CancellationToken.None
+        (
+            await RawSql
+                .SetDueAt(
+                    _host.NotNull(),
+                    id,
+                    (await RawSql.Now(_host.NotNull()).ConfigureAwait(false)).AddMinutes(-1)
                 )
-            ).Single(r => r.Id == id)
-        );
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
+        return await WithStore(async store =>
+                (
+                    await store
+                        .ReadDue(
+                            [ReminderMachine.Id],
+                            Array.Empty<long>(),
+                            1000,
+                            CancellationToken.None
+                        )
+                        .ConfigureAwait(false)
+                ).Single(r => r.Id == id)
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<T> WithStore<T>(Func<EfSnapshotStore, Task<T>> use)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var services = scope.ServiceProvider;
-        await using var context = await services
+        var context = await services
             .GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         return await use(
-            services
-                .GetRequiredService<InvokeOutbox>()
-                .StoreOver(context, services.GetService<ISqlDialect>())
-        );
+                services
+                    .GetRequiredService<InvokeOutbox>()
+                    .StoreOver(context, services.GetService<ISqlDialect>())
+            )
+            .ConfigureAwait(false);
     }
 
     private Task<bool> Fire(DueRow due) =>
-        WithStore(store => store.FireTimer(due, Expired, null, CancellationToken.None));
+        WithStore(store =>
+            store.FireTimer(due, Expired, invokeToken: null, CancellationToken.None)
+        );
 
     [Test]
     public async Task A_fire_over_a_row_written_since_it_was_read_matches_nothing()
@@ -94,17 +118,17 @@ public class TimerFireConditionTests(StoreProvider provider)
         var read = await ReadDue(id);
 
         // A client's Extend writes the row again in the same state, at a new revision.
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, ReminderMachine.Id).Advance(User, id, "Extend"))
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, ReminderMachine.Id).Advance(User, id, "Extend"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
-        var extended = (await RawSql.Timer(_host, id))!;
+        var extended = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         extended.State.Should().Be(nameof(ReminderState.Review));
 
         (await Fire(read))
             .Should()
             .BeFalse($"a fire writes only over the revision it read. See {Adr}");
-        var row = (await RawSql.Timer(_host, id))!;
+        var row = (await RawSql.Timer(_host.NotNull(), id)).NotNull();
         row.State.Should().Be(nameof(ReminderState.Review));
         row.Revision.Should().Be(extended.Revision);
         row.DueAt.Should().Be(extended.DueAt, "the client's write, and its timer, stand");
@@ -119,9 +143,15 @@ public class TimerFireConditionTests(StoreProvider provider)
         (await Fire(read with { State = nameof(ReminderState.Idle) }))
             .Should()
             .BeFalse($"a fire writes only over the state it read. See {Adr}");
-        (await RawSql.Timer(_host, id))!.State.Should().Be(nameof(ReminderState.Review));
+        (await RawSql.Timer(_host.NotNull(), id))
+            .NotNull()
+            .State.Should()
+            .Be(nameof(ReminderState.Review));
 
         (await Fire(read)).Should().BeTrue("the row as it was read is fired");
-        (await RawSql.Timer(_host, id))!.State.Should().Be(nameof(ReminderState.Expired));
+        (await RawSql.Timer(_host.NotNull(), id))
+            .NotNull()
+            .State.Should()
+            .Be(nameof(ReminderState.Expired));
     }
 }

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -37,7 +38,7 @@ public class QueryModelUndeclaredNavigationTests
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .Contain(typeof(UndeclaredAccount).FullName!, Adr)
+            .Contain(typeof(UndeclaredAccount).FullName.NotNull(), Adr)
             .And.Contain("'UndeclaredPost.account'", "the object field reads the entity");
     }
 
@@ -73,15 +74,16 @@ public class QueryModelUndeclaredNavigationTests
         try
         {
             foreach (var hosted in provider.GetServices<IHostedService>())
-                await hosted.StartAsync(default);
+                await hosted.StartAsync(default).ConfigureAwait(false);
         }
         catch
         {
-            await provider.DisposeAsync();
+            await provider.DisposeAsync().ConfigureAwait(false);
             throw;
         }
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var db = scope.ServiceProvider.GetRequiredService<UndeclaredNavDbContext>();
             var account = new UndeclaredAccount
@@ -100,12 +102,13 @@ public class QueryModelUndeclaredNavigationTests
                     Account = account,
                 }
             );
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (provider, executor);
     }
 
@@ -130,7 +133,7 @@ public class QueryModelUndeclaredNavigationTests
     public class UndeclaredNavDbContext(DbContextOptions<UndeclaredNavDbContext> options)
         : DbContext(options)
     {
-        public DbSet<UndeclaredPost> Posts { get; set; } = null!;
-        public DbSet<UndeclaredAccount> Accounts { get; set; } = null!;
+        public DbSet<UndeclaredPost> Posts => Set<UndeclaredPost>();
+        public DbSet<UndeclaredAccount> Accounts => Set<UndeclaredAccount>();
     }
 }

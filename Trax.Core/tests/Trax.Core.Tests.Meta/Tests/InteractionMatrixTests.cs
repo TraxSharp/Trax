@@ -1,3 +1,4 @@
+using System.Globalization;
 using Trax.Core.Monad;
 
 namespace Trax.Core.Tests.Meta.Tests;
@@ -17,7 +18,7 @@ namespace Trax.Core.Tests.Meta.Tests;
 /// there was no choice between alternatives for an ADR to explain, only a list to keep complete.</para>
 /// </summary>
 [TestFixture]
-public class InteractionMatrixTests
+public partial class InteractionMatrixTests
 {
     private const string MatrixPath = "docs/interaction-matrix.md";
 
@@ -80,12 +81,8 @@ public class InteractionMatrixTests
         "Generic opt-in",
     ];
 
-    private static readonly Regex TestCell = new(
-        @"^`(?<class>[A-Za-z_][A-Za-z0-9_]*)\.(?<method>[A-Za-z_][A-Za-z0-9_]*)`$",
-        RegexOptions.Compiled
-    );
-
-    private static readonly Regex NotApplicable = new(@"^n/a:\s*\S.{8,}$", RegexOptions.Compiled);
+    [GeneratedRegex(@"^n/a:\s*\S.{8,}$", RegexOptions.Compiled, matchTimeoutMilliseconds: 5_000)]
+    private static partial Regex NotApplicable { get; }
 
     [Test]
     public void TheMatrix_CoversEveryNewStepKind_WithTestsThatExist()
@@ -157,7 +154,7 @@ public class InteractionMatrixTests
     [Test]
     public void TheBaseline_NamesOnlyStepKindsThatExist() =>
         BaselineKinds
-            .Except(Enum.GetNames<ChainStepKind>())
+            .Except(Enum.GetNames<ChainStepKind>(), StringComparer.Ordinal)
             .Should()
             .BeEmpty("a baseline kind that was renamed or removed must leave the list too");
 
@@ -194,7 +191,7 @@ public class InteractionMatrixTests
 
     private static string Matrix(params string[] rows) =>
         string.Join(
-            "\n",
+            '\n',
             new[]
             {
                 "# Interaction matrix",
@@ -303,7 +300,7 @@ public class InteractionMatrixTests
     private static string WithMachineTable(params string[] rows) =>
         Matrix("| Parallel | `ParallelReplayTests.Replays` | `ParallelCancelTests.Cancels` |")
         + string.Join(
-            "\n",
+            '\n',
             new[]
             {
                 "",
@@ -415,7 +412,8 @@ public class InteractionMatrixTests
             testExists,
             problems,
             kind =>
-                !kinds.Contains(kind) ? $"'{kind}' is not a ChainStepKind member"
+                !kinds.Contains(kind, StringComparer.Ordinal)
+                    ? $"'{kind}' is not a ChainStepKind member"
                 : BaselineKinds.Contains(kind) ? $"'{kind}' is a baseline kind and needs no row"
                 : null
         );
@@ -451,11 +449,14 @@ public class InteractionMatrixTests
 
         if (
             Table.Find(markdown, "Step kind") is { } steps
-            && !steps.Header.Skip(1).SequenceEqual(table.Header.Skip(1))
+            && !steps.Header.Skip(1).SequenceEqual(table.Header.Skip(1), StringComparer.Ordinal)
         )
         {
             problems.Add(
-                $"line {table.HeaderLine}: the machine-features table's columns are "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"line {table.HeaderLine}: the machine-features table's columns are "
+                )
                     + $"'{string.Join(" | ", table.Header.Skip(1))}', not the step kinds' "
                     + $"'{string.Join(" | ", steps.Header.Skip(1))}'"
             );
@@ -467,7 +468,7 @@ public class InteractionMatrixTests
             testExists,
             problems,
             feature =>
-                features.Contains(feature)
+                features.Contains(feature, StringComparer.Ordinal)
                     ? null
                     : $"'{feature}' is not a declared machine feature (MachineFeatures)"
         );
@@ -496,10 +497,13 @@ public class InteractionMatrixTests
             return problems;
         }
 
-        if (!table.Header.Skip(1).SequenceEqual(MachineApiColumns))
+        if (!table.Header.Skip(1).SequenceEqual(MachineApiColumns, StringComparer.Ordinal))
         {
             problems.Add(
-                $"line {table.HeaderLine}: the machine API table's columns are "
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"line {table.HeaderLine}: the machine API table's columns are "
+                )
                     + $"'{string.Join(" | ", table.Header.Skip(1))}', not '{string.Join(" | ", MachineApiColumns)}'"
             );
             return problems;
@@ -510,7 +514,7 @@ public class InteractionMatrixTests
             testExists,
             problems,
             feature =>
-                features.Contains(feature)
+                features.Contains(feature, StringComparer.Ordinal)
                     ? null
                     : $"'{feature}' is not a declared machine API feature (MachineApiFeatures)"
         );
@@ -545,20 +549,26 @@ public class InteractionMatrixTests
             var kind = cells[0].Trim('`');
 
             if (nameProblem(kind) is { } bad)
-                problems.Add($"line {line}: {bad}");
+                problems.Add(string.Create(CultureInfo.InvariantCulture, $"line {line}: {bad}"));
             seen.Add(kind);
 
             if (cells.Length != header.Length)
             {
                 problems.Add(
-                    $"line {line}: the {kind} row has {cells.Length} cells, the header {header.Length}"
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"line {line}: the {kind} row has {cells.Length} cells, the header {header.Length}"
+                    )
                 );
                 continue;
             }
 
             for (var c = 1; c < cells.Length; c++)
             {
-                var where = $"line {line}: {kind} x {header[c]}";
+                var where = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"line {line}: {kind} x {header[c]}"
+                );
                 var cell = cells[c];
 
                 if (cell.Length == 0)
@@ -612,7 +622,7 @@ public class InteractionMatrixTests
     /// the class and the method. Read lazily, since the real matrix names tests only once a new
     /// step kind has a row.
     /// </summary>
-    private sealed class TestIndex(string monorepoRoot)
+    private sealed partial class TestIndex(string monorepoRoot)
     {
         private readonly Lazy<List<string>> _sources = new(() =>
             Directory
@@ -630,10 +640,6 @@ public class InteractionMatrixTests
                 .ToList()
         );
 
-        private static readonly Regex TestAttribute = new(
-            @"\[\s*(?:NUnit\.Framework\.)?(?:Test|TestCase|TestCaseSource|Theory|Fact)\b"
-        );
-
         /// <summary>
         /// Whether a file that declares the class <paramref name="type"/> declares
         /// <paramref name="method"/> as a test: with a <c>[Test]</c>, <c>[TestCase]</c>,
@@ -642,10 +648,18 @@ public class InteractionMatrixTests
         /// </summary>
         public bool Exists(string type, string method)
         {
-            var declaresClass = new Regex($@"\bclass\s+{Regex.Escape(type)}\b");
-            var namesMethod = new Regex($@"\b{Regex.Escape(method)}\s*(?:<[^<>()]*>)?\s*\(");
+            var declaresClass = new Regex(
+                $@"\bclass\s+{Regex.Escape(type)}\b",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5)
+            );
+            var namesMethod = new Regex(
+                $@"\b{Regex.Escape(method)}\s*(?:<[^<>()]*>)?\s*\(",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5)
+            );
 
-            return _sources.Value.Any(source =>
+            return _sources.Value.Exists(source =>
                 declaresClass.IsMatch(source)
                 && namesMethod.Matches(source).Any(m => DeclaredAsATest(source, m.Index))
             );
@@ -665,5 +679,19 @@ public class InteractionMatrixTests
             return TestAttribute.IsMatch(preamble)
                 && afterAttributes.IndexOfAny(['(', ')', '=', ',']) < 0;
         }
+
+        [GeneratedRegex(
+            @"\[\s*(?:NUnit\.Framework\.)?(?:Test|TestCase|TestCaseSource|Theory|Fact)\b",
+            RegexOptions.None,
+            matchTimeoutMilliseconds: 5_000
+        )]
+        private static partial Regex TestAttribute { get; }
     }
+
+    [GeneratedRegex(
+        @"^`(?<class>[A-Za-z_][A-Za-z0-9_]*)\.(?<method>[A-Za-z_][A-Za-z0-9_]*)`$",
+        RegexOptions.Compiled,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex TestCell { get; }
 }

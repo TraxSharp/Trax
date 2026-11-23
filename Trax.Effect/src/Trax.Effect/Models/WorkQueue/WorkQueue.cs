@@ -1,8 +1,10 @@
 using System.Buffers;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -22,12 +24,12 @@ namespace Trax.Effect.Models.WorkQueue;
 public class WorkQueue : IModel
 {
     /// <summary>
-    /// The lowest dispatch priority. <see cref="Create"/> clamps a lower requested priority up to it.
+    /// The lowest dispatch priority. <see cref="Create(CreateWorkQueue)"/> clamps a lower requested priority up to it.
     /// </summary>
     public const int MinPriority = 0;
 
     /// <summary>
-    /// The highest dispatch priority. <see cref="Create"/> clamps a higher requested priority down
+    /// The highest dispatch priority. <see cref="Create(CreateWorkQueue)"/> clamps a higher requested priority down
     /// to it.
     /// </summary>
     public const int MaxPriority = 31;
@@ -51,19 +53,27 @@ public class WorkQueue : IModel
     public long Id { get; private set; }
 
     /// <summary>
-    /// A 32-digit GUID assigned by <see cref="Create"/>, unique across <c>trax.work_queue</c>. It is
+    /// A 32-digit GUID assigned by <see cref="Create(CreateWorkQueue)"/>, unique across <c>trax.work_queue</c>. It is
     /// the id handed back to whoever queued the work, and the job dispatcher gives the run's
     /// <c>Metadata</c> the same <c>ExternalId</c>, so the entry and its run correlate. A dispatch
     /// retry can leave several metadata rows with this id, the older ones failed.
     /// </summary>
     [Column("external_id")]
-    public string ExternalId { get; set; } = null!;
+    public string ExternalId
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// The fully qualified train type name to execute.
     /// </summary>
     [Column("train_name")]
-    public string TrainName { get; set; } = null!;
+    public string TrainName
+    {
+        get => field ?? string.Empty;
+        set;
+    }
 
     /// <summary>
     /// Serialized train input (JSON). Same format as Manifest.Properties.
@@ -106,9 +116,9 @@ public class WorkQueue : IModel
     /// that is still working past its timeout no longer holds its subject. Only queued work is
     /// serialized; a synchronous run through the mediator does not consult the key.
     ///
-    /// Only <see cref="Create"/> sets it, from <see cref="CreateWorkQueue.SubjectKey"/>, so every
-    /// key goes through the checks <see cref="Create"/> makes. A Trax.Mediator older than 1.23.0
-    /// set it after <see cref="Create"/> and cannot run against this version.
+    /// Only <see cref="Create(CreateWorkQueue)"/> sets it, from <see cref="CreateWorkQueue.SubjectKey"/>, so every
+    /// key goes through the checks <see cref="Create(CreateWorkQueue)"/> makes. A Trax.Mediator older than 1.23.0
+    /// set it after <see cref="Create(CreateWorkQueue)"/> and cannot run against this version.
     /// </remarks>
     [Column("subject_key")]
     [JsonInclude]
@@ -126,7 +136,7 @@ public class WorkQueue : IModel
     ///
     /// Dispatch gates on this, so an unconfirmed entry is never claimed.
     ///
-    /// Only <see cref="Create"/> sets it, which is why <see cref="Create"/> is the only way to
+    /// Only <see cref="Create(CreateWorkQueue)"/> sets it, which is why <see cref="Create(CreateWorkQueue)"/> is the only way to
     /// build an entry: EF writes this column explicitly, so an entry saved with it null does not
     /// get the column's database default. It is treated as staged, is never dispatched, and is
     /// eventually cancelled by the stale-staged sweep.
@@ -184,7 +194,7 @@ public class WorkQueue : IModel
     /// asked for exactly that run. A disabled manifest group still holds everything, explicit or
     /// not.
     ///
-    /// <see cref="Create"/> sets it from <see cref="CreateWorkQueue.ExplicitTrigger"/>, and always
+    /// <see cref="Create(CreateWorkQueue)"/> sets it from <see cref="CreateWorkQueue.ExplicitTrigger"/>, and always
     /// for a dead-letter requeue. Setting it on an entry that is already queued, for a trigger that
     /// finds the manifest's scheduled entry waiting, releases that entry the same way. Entries
     /// without a manifest are never paused by one, so it changes nothing for them.
@@ -254,7 +264,7 @@ public class WorkQueue : IModel
 
     /// <summary>
     /// The machine whose invoking state queued this entry, or null for every other entry. Set only by
-    /// <see cref="Create"/>, from <see cref="CreateWorkQueue.InvokedBy"/>, and carried to the run's metadata at
+    /// <see cref="Create(CreateWorkQueue)"/>, from <see cref="CreateWorkQueue.InvokedBy"/>, and carried to the run's metadata at
     /// dispatch. An invoked run is never retried by the scheduler and an operator cannot requeue it: the machine
     /// retries by entering its state again.
     /// </summary>
@@ -293,6 +303,14 @@ public class WorkQueue : IModel
     /// </exception>
     public static WorkQueue Create(CreateWorkQueue dto)
     {
+        return Create(dto, TimeProvider.System);
+    }
+
+    /// <summary>Creates a new WorkQueue entry with Queued status, stamped on the given clock.</summary>
+    /// <param name="dto">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    public static WorkQueue Create(CreateWorkQueue dto, TimeProvider timeProvider)
+    {
         if (dto.SubjectKey is { } key)
             RefuseUnusableSubjectKey(key, nameof(dto));
 
@@ -311,8 +329,8 @@ public class WorkQueue : IModel
             ResumeAt = dto.ResumeAt,
             IsExplicitTrigger = dto.ExplicitTrigger || dto.DeadLetterId is not null,
             Status = WorkQueueStatus.Queued,
-            CreatedAt = DateTime.UtcNow,
-            ConfirmedAt = dto.DeferPromotion ? null : DateTime.UtcNow,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
+            ConfirmedAt = dto.DeferPromotion ? null : timeProvider.GetUtcNow().UtcDateTime,
             SubjectKey = dto.SubjectKey,
             InvokingMachine = dto.InvokedBy?.Machine,
             InvokingInstanceId = dto.InvokedBy?.InstanceId,
@@ -335,9 +353,12 @@ public class WorkQueue : IModel
 
         // Postgres cannot store a NUL in text, and the key is compared exactly, so it is refused
         // here rather than failing the insert or being rewritten into a different key.
-        if (key.Contains('\0'))
+        if (key.Contains('\0', StringComparison.Ordinal))
             throw new ArgumentException(
-                $"A subject key cannot contain a NUL character (at position {key.IndexOf('\0')}).",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A subject key cannot contain a NUL character (at position {key.IndexOf('\0', StringComparison.Ordinal)})."
+                ),
                 paramName
             );
 
@@ -353,7 +374,10 @@ public class WorkQueue : IModel
                 != OperationStatus.Done
             )
                 throw new ArgumentException(
-                    $"A subject key cannot contain an unpaired surrogate at position {position}. "
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"A subject key cannot contain an unpaired surrogate at position {position}. "
+                    )
                         + "It is half of a character, which cannot be stored; the key was likely "
                         + "cut in the middle of one.",
                     paramName
@@ -364,8 +388,10 @@ public class WorkQueue : IModel
 
         if (characters > MaxSubjectKeyLength)
             throw new ArgumentException(
-                $"A subject key of {characters} characters is over the limit of "
-                    + $"{MaxSubjectKeyLength}. Use a record identity, or a hash of a longer one.",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A subject key of {characters} characters is over the limit of "
+                ) + $"{MaxSubjectKeyLength}. Use a record identity, or a hash of a longer one.",
                 paramName
             );
     }
@@ -388,7 +414,7 @@ public class WorkQueue : IModel
     /// <summary>
     /// For deserialization, EF and the EF configuration subclass only. Not public because an entry
     /// built with it leaves <see cref="ConfirmedAt"/> null and would be saved as staged and never
-    /// dispatched; build a new entry with <see cref="Create"/>.
+    /// dispatched; build a new entry with <see cref="Create(CreateWorkQueue)"/>.
     /// </summary>
     [JsonConstructor]
     protected WorkQueue() { }

@@ -14,7 +14,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class HubProgramPatchTests
 {
-    private string _hubDir = null!;
+    private string _hubDir = "";
 
     [SetUp]
     public void SetUp()
@@ -31,13 +31,14 @@ public class HubProgramPatchTests
     }
 
     [Test]
-    public void PatchProgramCs_OnTheHubTemplatesProgram_StillParses()
+    public async Task PatchProgramCs_OnTheHubTemplatesProgram_StillParses()
     {
         File.Copy(TemplateProgram, Path.Combine(_hubDir, "Program.cs"));
 
-        TraxProjectGenerator.PatchProgramCs(_hubDir, "Demo");
+        await TraxProjectGenerator.PatchProgramCsAsync(_hubDir, "Demo").ConfigureAwait(false);
 
-        var patched = File.ReadAllText(Path.Combine(_hubDir, "Program.cs"));
+        var patched = await File.ReadAllTextAsync(Path.Combine(_hubDir, "Program.cs"))
+            .ConfigureAwait(false);
         var errors = CSharpSyntaxTree
             .ParseText(patched)
             .GetDiagnostics()
@@ -52,29 +53,33 @@ public class HubProgramPatchTests
     }
 
     [Test]
-    public void PatchProgramCs_WithoutTheAssemblyScan_Throws()
+    public async Task PatchProgramCs_WithoutTheAssemblyScan_Throws()
     {
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(_hubDir, "Program.cs"),
             "var builder = WebApplication.CreateBuilder(args);\nbuilder.Build().Run();\n"
         );
 
-        var act = () => TraxProjectGenerator.PatchProgramCs(_hubDir, "Demo");
+        var act = async () =>
+            await TraxProjectGenerator.PatchProgramCsAsync(_hubDir, "Demo").ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage(
-                "*typeof(Program).Assembly*",
-                "otherwise the hub silently registers no trains"
-            );
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(
+            "*typeof(Program).Assembly*",
+            "otherwise the hub silently registers no trains"
+        );
     }
 
     [Test]
-    public void PatchProgramCs_WithoutAProgramFile_Throws()
+    public async Task PatchProgramCs_WithoutAProgramFile_Throws()
     {
-        var act = () => TraxProjectGenerator.PatchProgramCs(_hubDir, "Demo");
+        var act = async () =>
+            await TraxProjectGenerator.PatchProgramCsAsync(_hubDir, "Demo").ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*Program.cs*");
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*Program.cs*");
     }
 
     private static string TemplateProgram =>

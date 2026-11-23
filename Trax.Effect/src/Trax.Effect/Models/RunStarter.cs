@@ -11,6 +11,9 @@ namespace Trax.Effect.Models;
 /// may follow the run's progress
 /// (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
 /// </summary>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal static class RunStarter
 {
     /// <summary>The hash of a caller's qualified <paramref name="principalId"/>, or null for no principal.</summary>

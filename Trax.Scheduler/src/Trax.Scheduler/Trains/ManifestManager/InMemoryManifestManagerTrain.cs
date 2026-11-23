@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Trains.ManifestManager;
 /// <see cref="InMemoryDispatchJobsJunction"/>, which creates Metadata and dispatches inline
 /// via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
 /// </remarks>
-internal class InMemoryManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
+internal sealed class InMemoryManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
 {
     /// <summary>
     /// Loads manifests, reaps failed jobs, determines which manifests are due, and dispatches them

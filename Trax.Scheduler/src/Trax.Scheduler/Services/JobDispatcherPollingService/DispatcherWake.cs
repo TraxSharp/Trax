@@ -19,7 +19,7 @@ internal sealed class DispatcherWake
     );
 
     /// <summary>Asks for a cycle. Never blocks and never throws.</summary>
-    public void Signal() => _signal.Writer.TryWrite(true);
+    public void Signal() => _signal.Writer.TryWrite(item: true);
 
     /// <summary>Completes when a signal is waiting. Does not consume it.</summary>
     public Task WaitAsync(CancellationToken cancellationToken) =>

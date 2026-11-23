@@ -1,6 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.StaticFiles;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Dashboard.Serving;
 
@@ -17,7 +19,9 @@ internal sealed class DashboardAssets
     /// <summary>The app's entry page, which the host serves with its runtime config written in.</summary>
     internal const string IndexPath = "index.html";
 
-    private static readonly Lazy<DashboardAssets> EmbeddedAssets = new(() =>
+    private static readonly Lazy<Task<DashboardAssets>> EmbeddedAssets = new(ReadEmbeddedAsync);
+
+    private static async Task<DashboardAssets> ReadEmbeddedAsync()
     {
         var assembly = typeof(DashboardAssets).Assembly;
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -25,13 +29,15 @@ internal sealed class DashboardAssets
         {
             if (!name.StartsWith(ResourcePrefix, StringComparison.Ordinal))
                 continue;
-            using var stream = assembly.GetManifestResourceStream(name)!;
-            using var buffer = new MemoryStream();
-            stream.CopyTo(buffer);
+            var stream = assembly.GetManifestResourceStream(name).NotNull();
+            await using var streamDisposal = stream.ConfigureAwait(false);
+            var buffer = new MemoryStream();
+            await using var bufferDisposal = buffer.ConfigureAwait(false);
+            await stream.CopyToAsync(buffer, CancellationToken.None).ConfigureAwait(false);
             files[name[ResourcePrefix.Length..]] = buffer.ToArray();
         }
         return new DashboardAssets(files);
-    });
+    }
 
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
 
@@ -49,12 +55,13 @@ internal sealed class DashboardAssets
     }
 
     /// <summary>The files embedded in this assembly by the build.</summary>
-    internal static DashboardAssets Embedded => EmbeddedAssets.Value;
+    internal static Task<DashboardAssets> EmbeddedAsync() => EmbeddedAssets.Value;
 
     /// <summary>The entry page as built, or <see langword="null"/> when the build carries no app.</summary>
     internal string? IndexTemplate { get; }
 
-    internal bool TryGet(string path, out Asset asset) => _files.TryGetValue(path, out asset!);
+    internal bool TryGet(string path, [MaybeNullWhen(false)] out Asset asset) =>
+        _files.TryGetValue(path, out asset);
 
     /// <summary>
     /// Whether a file at <paramref name="path"/> is named by its content: Vite writes every file

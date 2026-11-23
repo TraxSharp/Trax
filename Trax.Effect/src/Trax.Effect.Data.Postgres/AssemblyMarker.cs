@@ -22,4 +22,4 @@ namespace Trax.Effect.Data.Postgres;
 /// var embeddedResource = postgresAssembly.GetManifestResourceStream("ResourceName");
 /// ```
 /// </remarks>
-internal class AssemblyMarker { }
+internal static class AssemblyMarker;

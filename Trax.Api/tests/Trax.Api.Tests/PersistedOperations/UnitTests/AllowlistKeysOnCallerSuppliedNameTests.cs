@@ -26,7 +26,7 @@ public class AllowlistKeysOnCallerSuppliedNameTests
     [Test]
     public void AllowOperations_AdmitsAnyDocumentCarryingTheName()
     {
-        var policy = Build(b => b.RequirePersisted(true).AllowOperations("HealthProbe"));
+        var policy = Build(b => b.RequirePersisted(require: true).AllowOperations("HealthProbe"));
 
         Decide(policy, UnrelatedDocument, operationName: "HealthProbe")
             .Should()
@@ -41,7 +41,7 @@ public class AllowlistKeysOnCallerSuppliedNameTests
     [Test]
     public void AllowOperations_SameDocumentWithoutTheName_IsRejected()
     {
-        var policy = Build(b => b.RequirePersisted(true).AllowOperations("HealthProbe"));
+        var policy = Build(b => b.RequirePersisted(require: true).AllowOperations("HealthProbe"));
 
         Decide(policy, UnrelatedDocument, operationName: null)
             .Should()
@@ -58,7 +58,7 @@ public class AllowlistKeysOnCallerSuppliedNameTests
     {
         var seen = new List<string>();
         var policy = Build(b =>
-            b.RequirePersisted(true)
+            b.RequirePersisted(require: true)
                 .AllowOperationsMatching(key =>
                 {
                     seen.Add(key);
@@ -80,7 +80,7 @@ public class AllowlistKeysOnCallerSuppliedNameTests
     [Test]
     public void UnnamedRequest_IsMatchedOnTheCallerSuppliedDocumentId()
     {
-        var policy = Build(b => b.RequirePersisted(true).AllowOperations("probe_v1"));
+        var policy = Build(b => b.RequirePersisted(require: true).AllowOperations("probe_v1"));
 
         Decide(policy, "{ users { id } }", documentId: "probe_v1")
             .Should()

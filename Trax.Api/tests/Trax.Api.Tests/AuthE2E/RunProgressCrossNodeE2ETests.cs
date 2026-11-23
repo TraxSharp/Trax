@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
@@ -49,10 +50,10 @@ public class RunProgressCrossNodeE2ETests
         "sequence state failure step { name state } problem { code }";
 
     private readonly LoopbackBus _bus = new();
-    private LoopbackBus.Endpoint _apiEndpoint = null!;
-    private LoopbackBus.Endpoint _workerEndpoint = null!;
-    private IHost _api = null!;
-    private IHost _worker = null!;
+    private LoopbackBus.Endpoint? _apiEndpoint;
+    private LoopbackBus.Endpoint? _workerEndpoint;
+    private IHost? _api;
+    private IHost? _worker;
 
     [OneTimeSetUp]
     public async Task StartApiNode()
@@ -82,7 +83,7 @@ public class RunProgressCrossNodeE2ETests
                                     effects
                                         .UsePostgres(connectionString)
                                         .AddJunctionEvents()
-                                        .UseBroadcaster(b => _apiEndpoint.Register(b))
+                                        .UseBroadcaster(b => _apiEndpoint.NotNull().Register(b))
                                 )
                                 .AddMediator(typeof(AuthE2EHost).Assembly)
                         );
@@ -99,10 +100,15 @@ public class RunProgressCrossNodeE2ETests
                     })
             )
             .Build();
-        await _api.StartAsync();
+        await _api.NotNull().StartAsync();
 
         // Node B: built now, started by the test once Alice has seen her run queued.
-        _worker = new HostBuilder()
+        _worker = BuildWorkerNode(connectionString);
+    }
+
+    private IHost BuildWorkerNode(string connectionString)
+    {
+        return new HostBuilder()
             .ConfigureServices(services =>
             {
                 services.AddLogging();
@@ -112,7 +118,7 @@ public class RunProgressCrossNodeE2ETests
                                 .UsePostgres(connectionString)
                                 .AddDecisionRecording()
                                 .AddJunctionEvents()
-                                .UseBroadcaster(b => _workerEndpoint.Register(b))
+                                .UseBroadcaster(b => _workerEndpoint.NotNull().Register(b))
                         )
                         // A worker takes no API submissions, so it authorizes nobody.
                         .AddMediator(mediator =>
@@ -130,12 +136,14 @@ public class RunProgressCrossNodeE2ETests
     public async Task StopNodes()
     {
         ProgressMarkerTrain.Gate.TrySetResult();
-        await _worker.StopAsync();
-        _worker.Dispose();
-        await _api.StopAsync();
-        _api.Dispose();
-        await _workerEndpoint.DisposeAsync();
-        await _apiEndpoint.DisposeAsync();
+        await _worker.NotNull().StopAsync();
+        _worker?.Dispose();
+        await _api.NotNull().StopAsync();
+        _api?.Dispose();
+        if (_workerEndpoint is not null)
+            await _workerEndpoint.DisposeAsync();
+        if (_apiEndpoint is not null)
+            await _apiEndpoint.DisposeAsync();
     }
 
     [Test]
@@ -144,7 +152,10 @@ public class RunProgressCrossNodeE2ETests
         ProgressMarkerTrain.Reset(open: false);
         var runId = await QueueAsync(AliceKey);
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_api, AliceKey);
+        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(
+            _api.NotNull(),
+            AliceKey
+        );
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -158,16 +169,14 @@ public class RunProgressCrossNodeE2ETests
                 .Should()
                 .Be("NOT_FOUND", "only the caller who started a run may read it, per " + Adr);
 
-        await _worker.StartAsync();
+        await _worker.NotNull().StartAsync();
 
         // The run waits at the gate on node B, so all of this arrived over the transport.
-        var live = new List<JsonElement>();
-        while (
-            !live.Any(e => e.GetProperty("state").GetString() == "IN_PROGRESS")
-            || !live.Any(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
-        )
-            live.Add(await alice.NextAsync());
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var live = await ReadUntilInProgressWithStepAsync(alice);
+        await ProgressMarkerTrain.Waiting.Task.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System
+        );
 
         ProgressMarkerTrain.Gate.TrySetResult();
         var rest = await alice.ReadUntilCompleteAsync();
@@ -178,8 +187,7 @@ public class RunProgressCrossNodeE2ETests
             .Should()
             .BeInAscendingOrder()
             .And.OnlyHaveUniqueItems();
-        events
-            .Last()
+        events[^1]
             .GetProperty("state")
             .GetString()
             .Should()
@@ -187,12 +195,31 @@ public class RunProgressCrossNodeE2ETests
         alice.Received.Should().NotContain(RunProgressE2ETests.Marker);
 
         _apiEndpoint
+            .NotNull()
             .Published.Should()
             .NotContain(
                 m => m.ExternalId == runId,
                 "node A runs nothing, so none of the run's events can have come from it"
             );
-        _workerEndpoint.Published.Should().Contain(m => m.ExternalId == runId);
+        _workerEndpoint.NotNull().Published.Should().Contain(m => m.ExternalId == runId);
+    }
+
+    private static async Task<List<JsonElement>> ReadUntilInProgressWithStepAsync(
+        RunProgressE2ETests.Socket alice
+    )
+    {
+        var live = new List<JsonElement>();
+        while (
+            !live.Exists(e =>
+                string.Equals(
+                    e.GetProperty("state").GetString(),
+                    "IN_PROGRESS",
+                    StringComparison.Ordinal
+                )
+            ) || !live.Exists(e => e.GetProperty("step").ValueKind == JsonValueKind.Object)
+        )
+            live.Add(await alice.NextAsync().ConfigureAwait(false));
+        return live;
     }
 
     #region Helpers
@@ -207,115 +234,28 @@ public class RunProgressCrossNodeE2ETests
     }
 
     private Task<JsonDocument> ReadAsync(string runId, string key) =>
-        _api.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+        _api.NotNull()
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            );
 
     private async Task<string> QueueAsync(string key)
     {
-        using var response = await _api.PostGraphQLAsync(
-            $$"""mutation { dispatch { progressMarker(input: { note: "{{RunProgressE2ETests.Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
-            r => r.Headers.Add("X-Api-Key", key)
-        );
+        using var response = await _api.NotNull()
+            .PostGraphQLAsync(
+                $$"""mutation { dispatch { progressMarker(input: { note: "{{RunProgressE2ETests.Marker}}", fail: false }, mode: QUEUE) { externalId } } }""",
+                r => r.Headers.Add("X-Api-Key", key)
+            )
+            .ConfigureAwait(false);
         var data = response.RootElement.GetProperty("data");
         data.ValueKind.Should().NotBe(JsonValueKind.Null, response.RootElement.GetRawText());
         return data.GetProperty("dispatch")
             .GetProperty("progressMarker")
             .GetProperty("externalId")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     #endregion
-}
-
-/// <summary>
-/// An in-process broadcast transport for hosts that share one process. Each host joins as an <see cref="Endpoint"/>,
-/// which is both its broadcaster and its receiver. A published message is serialized to JSON bytes and handed, in
-/// publish order, to every endpoint whose receiver has started, the publisher's own included.
-/// </summary>
-internal sealed class LoopbackBus
-{
-    private readonly Lock _gate = new();
-    private readonly List<Endpoint> _started = [];
-
-    public Endpoint Join() => new(this);
-
-    private void Publish(byte[] body)
-    {
-        lock (_gate)
-            foreach (var endpoint in _started)
-                endpoint.Enqueue(body);
-    }
-
-    private void Start(Endpoint endpoint)
-    {
-        lock (_gate)
-            _started.Add(endpoint);
-    }
-
-    private void Stop(Endpoint endpoint)
-    {
-        lock (_gate)
-            _started.Remove(endpoint);
-    }
-
-    /// <summary>One host's side of the bus.</summary>
-    internal sealed class Endpoint(LoopbackBus bus) : ITrainEventBroadcaster, ITrainEventReceiver
-    {
-        private readonly ConcurrentQueue<TrainLifecycleEventMessage> _published = new();
-        private Channel<byte[]>? _inbox;
-        private Task? _pump;
-
-        /// <summary>Every message this host published.</summary>
-        public IReadOnlyCollection<TrainLifecycleEventMessage> Published => _published.ToArray();
-
-        /// <summary>Registers this endpoint as the host's transport, as <c>UseRabbitMq</c> registers its own.</summary>
-        public BroadcasterBuilder Register(BroadcasterBuilder builder)
-        {
-            builder.ServiceCollection.AddSingleton<ITrainEventBroadcaster>(this);
-            builder.ServiceCollection.AddSingleton<ITrainEventReceiver>(this);
-            return builder;
-        }
-
-        public Task PublishAsync(TrainLifecycleEventMessage message, CancellationToken ct)
-        {
-            _published.Enqueue(message);
-            bus.Publish(JsonSerializer.SerializeToUtf8Bytes(message));
-            return Task.CompletedTask;
-        }
-
-        public Task StartAsync(
-            Func<TrainLifecycleEventMessage, CancellationToken, Task> handler,
-            CancellationToken ct
-        )
-        {
-            var inbox = Channel.CreateUnbounded<byte[]>(
-                new UnboundedChannelOptions { SingleReader = true }
-            );
-            _inbox = inbox;
-            _pump = Task.Run(async () =>
-            {
-                await foreach (var body in inbox.Reader.ReadAllAsync())
-                {
-                    var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(body)!;
-                    await handler(message, CancellationToken.None);
-                }
-            });
-            bus.Start(this);
-            return Task.CompletedTask;
-        }
-
-        public async Task StopAsync(CancellationToken ct)
-        {
-            bus.Stop(this);
-            _inbox?.Writer.TryComplete();
-            if (_pump is not null)
-                await _pump.WaitAsync(TimeSpan.FromSeconds(10), ct);
-        }
-
-        public async ValueTask DisposeAsync() => await StopAsync(CancellationToken.None);
-
-        internal void Enqueue(byte[] body) => _inbox?.Writer.TryWrite(body);
-    }
 }

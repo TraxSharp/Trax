@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Persistence.FromIr;
@@ -24,14 +25,17 @@ public class IrMachineE2ETests
 
     private const string Approver = WizardMachine.ApproverRole;
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
     {
         await E2EHost.RecreateDatabaseAsync(Database);
 
-        var ir = JsonNode.Parse(File.ReadAllText(IrFile("turnstile")))!.AsObject();
+        var ir = JsonNode
+            .Parse((await File.ReadAllTextAsync(IrFile("turnstile")).ConfigureAwait(false)))
+            .NotNull()
+            .AsObject();
         ir["id"] = "ir-turnstile";
         var approvers = new AccessRule([
             [Approver],
@@ -41,29 +45,27 @@ public class IrMachineE2ETests
             Convert.ToHexStringLower(
                 SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson.Serialize(ir)))
             ),
-            null,
+            SystemKey: null,
             approvers,
             approvers,
-            new Dictionary<string, TriggerAccess>
+            new Dictionary<string, TriggerAccess>(StringComparer.Ordinal)
             {
                 ["Coin"] = new(approvers),
                 ["Push"] = new(AccessRule.AnyAuthenticated),
             },
-            new Dictionary<string, HostInvoke>()
+            new Dictionary<string, HostInvoke>(StringComparer.Ordinal)
         );
         var machines = IrMachines.Create([new IrMachines.Source(ir, entry)], []);
 
-        _host = await E2EHost.StartAsync(
-            Database,
-            new CountingCharge(),
-            new E2EHostOptions { Instances = machines }
-        );
+        _host = await E2EHost
+            .StartAsync(Database, new CountingCharge(), new E2EHostOptions { Instances = machines })
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -77,7 +79,7 @@ public class IrMachineE2ETests
             .Should()
             .Be("FORBIDDEN", "only an approver may start one");
 
-        var id = (await Start("s1", E2EHost.AliceKey)).GetProperty("id").GetString()!;
+        var id = (await Start("s1", E2EHost.AliceKey)).GetProperty("id").GetString().NotNull();
 
         (await Event("coin", id, "c0", E2EHost.BobKey, """input: { coin: "quarter" }, """))
             .GetProperty("problem")
@@ -108,12 +110,14 @@ public class IrMachineE2ETests
     [Test]
     public async Task An_input_that_is_not_the_records_is_refused()
     {
-        var id = (await Start("s2", E2EHost.AliceKey)).GetProperty("id").GetString()!;
+        var id = (await Start("s2", E2EHost.AliceKey)).GetProperty("id").GetString().NotNull();
 
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { irTurnstile { coin(id: "{{id}}", input: { coin: 25 }, requestId: "c2") { state } } } }""",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                $$"""mutation { machines { irTurnstile { coin(id: "{{id}}", input: { coin: 25 }, requestId: "c2") { state } } } }""",
+                apiKey: E2EHost.AliceKey
+            );
 
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -122,10 +126,13 @@ public class IrMachineE2ETests
 
     private async Task<JsonElement> Start(string requestId, string key)
     {
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { irTurnstile { start(requestId: "{{requestId}}") { id problem { code } } } } }""",
-            apiKey: key
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                $$"""mutation { machines { irTurnstile { start(requestId: "{{requestId}}") { id problem { code } } } } }""",
+                apiKey: key
+            )
+            .ConfigureAwait(false);
         return Data(doc, "start");
     }
 
@@ -137,10 +144,13 @@ public class IrMachineE2ETests
         string input
     )
     {
-        using var doc = await _host.PostAsync(
-            $$"""mutation { machines { irTurnstile { {{field}}(id: "{{id}}", {{input}}requestId: "{{requestId}}") { state problem { code } } } } }""",
-            apiKey: key
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                $$"""mutation { machines { irTurnstile { {{field}}(id: "{{id}}", {{input}}requestId: "{{requestId}}") { state problem { code } } } } }""",
+                apiKey: key
+            )
+            .ConfigureAwait(false);
         return Data(doc, field);
     }
 

@@ -123,7 +123,8 @@ public class DisabledManifestStaysStoppedTests : TestSetup
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(entry);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -167,7 +168,8 @@ public class DisabledManifestStaysStoppedTests : TestSetup
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(entry);
         await fx.DataContext.SaveChanges(CancellationToken.None);
@@ -209,7 +211,8 @@ public class DisabledManifestStaysStoppedTests : TestSetup
                 Manifest = manifest,
                 Reason = "test",
                 RetryCount = 1,
-            }
+            },
+            TimeProvider.System
         );
         await fx.DataContext.Track(deadLetter);
         await fx.DataContext.SaveChanges(CancellationToken.None);

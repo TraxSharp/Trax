@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Data.Extensions.BuilderOrderExtensions.AddDataContextLogging(Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder,System.Nullable{Microsoft.Extensions.Logging.LogLevel},System.Collections.Generic.List{System.String})</Target>
+    <Left>lib/net10.0/Trax.Effect.Data.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.Data.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Data.Extensions.ServiceExtensions.AddDataContextLogging(Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData,System.Nullable{Microsoft.Extensions.Logging.LogLevel},System.Collections.Generic.List{System.String})</Target>
+    <Left>lib/net10.0/Trax.Effect.Data.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.Data.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Data.Services.DataContextLoggingProvider.DataContextLogger.#ctor(System.Threading.Channels.ChannelWriter{Trax.Effect.Models.Log.Log},System.String,Microsoft.Extensions.Logging.LogLevel,System.Collections.Generic.HashSet{System.String},System.Collections.Generic.List{System.Text.RegularExpressions.Regex})</Target>
+    <Left>lib/net10.0/Trax.Effect.Data.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.Data.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Data.Services.DataContextLoggingProvider.DataContextLoggingProviderConfiguration.get_Blacklist</Target>
+    <Left>lib/net10.0/Trax.Effect.Data.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.Data.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration.get_Blacklist</Target>
+    <Left>lib/net10.0/Trax.Effect.Data.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.Data.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>P:Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration.Blacklist</Target>
+    <Left>lib/net10.0/Trax.Effect.Data.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.Data.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

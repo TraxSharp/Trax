@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -51,12 +52,14 @@ public class JunctionProgressWritesOnlyProgressTests
     public async Task Progress_does_not_save_the_runs_other_effects_after_each_junction()
     {
         var counter = new SaveCounter();
-        await using var provider = Build(counter, progress: true);
-        using var scope = provider.CreateScope();
+        var provider = Build(counter, progress: true);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (ThreeJunctionTrain)
             scope.ServiceProvider.GetRequiredService<IThreeJunctionTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         var withoutProgress = await SavesWithoutProgress();
         counter
@@ -71,14 +74,16 @@ public class JunctionProgressWritesOnlyProgressTests
     [Test]
     public async Task Progress_is_visible_in_the_store_while_the_junction_runs()
     {
-        await using var provider = Build(new SaveCounter(), progress: true);
-        using var scope = provider.CreateScope();
+        var provider = Build(new SaveCounter(), progress: true);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (WatchedTrain)scope.ServiceProvider.GetRequiredService<IWatchedTrain>();
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         WatchedTrain.Seen = null;
         WatchedTrain.Factory = factory;
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None);
 
         WatchedTrain
             .Seen.Should()
@@ -87,10 +92,14 @@ public class JunctionProgressWritesOnlyProgressTests
                 "the column is written before the junction runs"
             );
 
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var row = await context
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Id == train.Metadata!.Id);
+            .SingleAsync(
+                m => m.Id == train.Metadata.NotNull().Id,
+                cancellationToken: CancellationToken.None
+            );
         row.CurrentlyRunningJunction.Should().BeNull("the run's final write clears it");
         row.JunctionStartedAt.Should().BeNull();
     }
@@ -126,19 +135,21 @@ public class JunctionProgressWritesOnlyProgressTests
     [TestCase(Store.Postgres)]
     public async Task A_run_whose_branch_cancelled_its_sibling_leaves_no_progress(Store store)
     {
-        await using var host = ProgressHost.Create(store);
+        var host = ProgressHost.Create(store);
+        await using var hostDisposal = host.ConfigureAwait(false);
         Waits.Reset(expected: 1);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Unit, Unit>)
                 (object)scope.ServiceProvider.GetRequiredService<ICancelSiblingsTrain>();
 
         await FluentActions
-            .Awaiting(() => train.Run(Unit.Default))
+            .Awaiting(() => train.Run(Unit.Default, CancellationToken.None))
             .Should()
             .ThrowAsync<BranchesFailedException>();
 
-        var row = await host.Row(train.Metadata!.Id);
+        var row = await host.Row(train.Metadata.NotNull().Id);
         await host.Delete(train.Metadata.Id);
 
         row.TrainState.Should().Be(TrainState.Failed);
@@ -154,8 +165,10 @@ public class JunctionProgressWritesOnlyProgressTests
     [TestCase(Store.Postgres)]
     public async Task A_failed_run_commits_its_tracked_row_only_when_it_finishes(Store store)
     {
-        await using var host = ProgressHost.Create(store);
-        using var scope = host.Services.CreateScope();
+        var host = ProgressHost.Create(store);
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (TracksThenFailsTrain)
             scope.ServiceProvider.GetRequiredService<ITracksThenFailsTrain>();
         var group = $"progress-failed-{Guid.NewGuid():N}";
@@ -167,11 +180,11 @@ public class JunctionProgressWritesOnlyProgressTests
         TracksThenFailsTrain.GroupSeenMidRun = null;
 
         await FluentActions
-            .Awaiting(() => train.Run(Unit.Default))
+            .Awaiting(() => train.Run(Unit.Default, CancellationToken.None))
             .Should()
             .ThrowAsync<InvalidOperationException>();
 
-        var row = await host.Row(train.Metadata!.Id);
+        var row = await host.Row(train.Metadata.NotNull().Id);
         var committed = await host.GroupExists(group);
         await host.DeleteGroup(group);
         await host.Delete(train.Metadata.Id);
@@ -203,41 +216,52 @@ public class JunctionProgressWritesOnlyProgressTests
     )
         where TTrain : class, IServiceTrain<Unit, Unit>
     {
-        await using var host = ProgressHost.Create(store);
+        var host = ProgressHost.Create(store);
+        await using var hostDisposal = host.ConfigureAwait(false);
         Waits.Reset(expected: waiting);
-        using var scope = host.Services.CreateScope();
+        var scope = host.Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train =
             (ServiceTrain<Unit, Unit>)(object)scope.ServiceProvider.GetRequiredService<TTrain>();
         using var cancel = new CancellationTokenSource();
 
         var running = train.Run(Unit.Default, cancel.Token);
-        await Waits.AllWaiting.WaitAsync(TimeSpan.FromSeconds(30));
+        await Waits
+            .AllWaiting.WaitAsync(
+                TimeSpan.FromSeconds(30),
+                TimeProvider.System,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
 
         // The column is set while the junction runs, so the test proves the clear rather than
         // a column that was never written.
-        var during = await host.Row(train.Metadata!.Id);
+        var during = await host.Row(train.Metadata.NotNull().Id).ConfigureAwait(false);
         during.CurrentlyRunningJunction.Should().NotBeNull("the junction is running");
 
-        await cancel.CancelAsync();
+        await cancel.CancelAsync().ConfigureAwait(false);
         await FluentActions
             .Awaiting(() => running)
             .Should()
-            .ThrowAsync<OperationCanceledException>();
+            .ThrowAsync<OperationCanceledException>()
+            .ConfigureAwait(false);
 
-        var row = await host.Row(train.Metadata.Id);
-        await host.Delete(train.Metadata.Id);
+        var row = await host.Row(train.Metadata.Id).ConfigureAwait(false);
+        await host.Delete(train.Metadata.Id).ConfigureAwait(false);
         return row;
     }
 
     private static async Task<int> SavesWithoutProgress()
     {
         var counter = new SaveCounter();
-        await using var provider = Build(counter, progress: false);
-        using var scope = provider.CreateScope();
+        var provider = Build(counter, progress: false);
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (ThreeJunctionTrain)
             scope.ServiceProvider.GetRequiredService<IThreeJunctionTrain>();
 
-        await train.Run(Unit.Default);
+        await train.Run(Unit.Default, CancellationToken.None).ConfigureAwait(false);
 
         return counter.Saves;
     }
@@ -300,49 +324,67 @@ public class JunctionProgressWritesOnlyProgressTests
                     .SetBasePath(AppContext.BaseDirectory)
                     .AddJsonFile("appsettings.json", optional: false)
                     .Build()
-                    .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                    .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                    .NotNull()
             );
 
         public async Task<Models.Metadata.Metadata> Row(long id)
         {
-            await using var context = await Services
+            var context = await Services
                 .GetRequiredService<IDataContextProviderFactory>()
-                .CreateDbContextAsync(CancellationToken.None);
-            return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
+            return await context
+                .Metadatas.AsNoTracking()
+                .SingleAsync(m => m.Id == id)
+                .ConfigureAwait(false);
         }
 
         public async Task Delete(long id)
         {
-            await using var context = await Services
+            var context = await Services
                 .GetRequiredService<IDataContextProviderFactory>()
-                .CreateDbContextAsync(CancellationToken.None);
-            var row = await context.Metadatas.SingleAsync(m => m.Id == id);
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
+            var row = await context.Metadatas.SingleAsync(m => m.Id == id).ConfigureAwait(false);
             context.Metadatas.Remove(row);
-            await context.SaveChanges(CancellationToken.None);
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
 
         public async Task<bool> GroupExists(string name)
         {
-            await using var context = await Services
+            var context = await Services
                 .GetRequiredService<IDataContextProviderFactory>()
-                .CreateDbContextAsync(CancellationToken.None);
-            return await context.ManifestGroups.AsNoTracking().AnyAsync(g => g.Name == name);
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
+            return await context
+                .ManifestGroups.AsNoTracking()
+                .AnyAsync(g => g.Name == name)
+                .ConfigureAwait(false);
         }
 
         public async Task DeleteGroup(string name)
         {
-            await using var context = await Services
+            var context = await Services
                 .GetRequiredService<IDataContextProviderFactory>()
-                .CreateDbContextAsync(CancellationToken.None);
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             context.ManifestGroups.RemoveRange(
-                await context.ManifestGroups.Where(g => g.Name == name).ToListAsync()
+                await context
+                    .ManifestGroups.Where(g => g.Name == name)
+                    .ToListAsync()
+                    .ConfigureAwait(false)
             );
-            await context.SaveChanges(CancellationToken.None);
+            await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
 
         public async ValueTask DisposeAsync()
         {
-            await Services.DisposeAsync();
+            await Services.DisposeAsync().ConfigureAwait(false);
 
             if (sqliteFile is null)
                 return;
@@ -386,8 +428,10 @@ public class JunctionProgressWritesOnlyProgressTests
                 _all.TrySetResult();
 
             var cancelled = New();
-            await using (token.Register(() => cancelled.TrySetCanceled(token)))
-                await cancelled.Task;
+            await using (
+                (token.Register(() => cancelled.TrySetCanceled(token))).ConfigureAwait(false)
+            )
+                await cancelled.Task.ConfigureAwait(false);
         }
 
         private static TaskCompletionSource New() =>
@@ -407,7 +451,7 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         public override async Task<Unit> Run(Unit input)
         {
-            await Waits.UntilCancelled(CancellationToken);
+            await Waits.UntilCancelled(CancellationToken).ConfigureAwait(false);
             return Unit.Default;
         }
     }
@@ -416,7 +460,7 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         public override async Task<BranchA> Run(Unit input)
         {
-            await Waits.UntilCancelled(CancellationToken);
+            await Waits.UntilCancelled(CancellationToken).ConfigureAwait(false);
             return new BranchA();
         }
     }
@@ -425,7 +469,7 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         public override async Task<BranchB> Run(Unit input)
         {
-            await Waits.UntilCancelled(CancellationToken);
+            await Waits.UntilCancelled(CancellationToken).ConfigureAwait(false);
             return new BranchB();
         }
     }
@@ -435,7 +479,9 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         public override async Task<BranchA> Run(Unit input)
         {
-            await Waits.AllWaiting.WaitAsync(TimeSpan.FromSeconds(30));
+            await Waits
+                .AllWaiting.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None)
+                .ConfigureAwait(false);
             throw new InvalidOperationException("a broke");
         }
     }
@@ -489,24 +535,29 @@ public class JunctionProgressWritesOnlyProgressTests
 
     public class TracksThenFailsTrain : ServiceTrain<Unit, Unit>, ITracksThenFailsTrain
     {
-        public static TracksThenFailsTrain Instance = null!;
-        public static IDataContextProviderFactory Factory = null!;
-        public static string Group = "";
-        public static readonly List<string?> Seen = [];
-        public static bool? GroupSeenMidRun;
+        public static TracksThenFailsTrain? Instance { get; set; }
+        public static IDataContextProviderFactory? Factory { get; set; }
+        public static string Group { get; set; } = "";
+        public static IList<string?> Seen { get; } = [];
+        public static bool? GroupSeenMidRun { get; set; }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<TracksARow>().Chain<FailsAfterTheRow>().Resolve();
 
         public static async Task ReadProgress()
         {
-            await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+            var context = await Factory
+                .NotNull()
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             Seen.Add(
                 await context
                     .Metadatas.AsNoTracking()
-                    .Where(m => m.Id == Instance.Metadata!.Id)
+                    .Where(m => m.Id == Instance.NotNull().Metadata.NotNull().Id)
                     .Select(m => m.CurrentlyRunningJunction)
-                    .SingleAsync()
+                    .SingleAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false)
             );
         }
     }
@@ -515,15 +566,19 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         public override async Task<Unit> Run(Unit input)
         {
-            await TracksThenFailsTrain.ReadProgress();
-            await TracksThenFailsTrain.Instance.EffectRunner!.Track(
-                new ManifestGroup
-                {
-                    Name = TracksThenFailsTrain.Group,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                }
-            );
+            await TracksThenFailsTrain.ReadProgress().ConfigureAwait(false);
+            await TracksThenFailsTrain
+                .Instance.NotNull()
+                .EffectRunner.NotNull()
+                .Track(
+                    new ManifestGroup
+                    {
+                        Name = TracksThenFailsTrain.Group,
+                        CreatedAt = TestTime.UtcDateTime,
+                        UpdatedAt = TestTime.UtcDateTime,
+                    }
+                )
+                .ConfigureAwait(false);
             return Unit.Default;
         }
     }
@@ -532,13 +587,19 @@ public class JunctionProgressWritesOnlyProgressTests
     {
         public override async Task<Unit> Run(Unit input)
         {
-            await TracksThenFailsTrain.ReadProgress();
-            await using var context = await TracksThenFailsTrain.Factory.CreateDbContextAsync(
-                CancellationToken.None
-            );
+            await TracksThenFailsTrain.ReadProgress().ConfigureAwait(false);
+            var context = await TracksThenFailsTrain
+                .Factory.NotNull()
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var contextDisposal = context.ConfigureAwait(false);
             TracksThenFailsTrain.GroupSeenMidRun = await context
                 .ManifestGroups.AsNoTracking()
-                .AnyAsync(g => g.Name == TracksThenFailsTrain.Group);
+                .AnyAsync(
+                    g => g.Name == TracksThenFailsTrain.Group,
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
             throw new InvalidOperationException("fails after the row was tracked");
         }
     }
@@ -584,8 +645,8 @@ public class JunctionProgressWritesOnlyProgressTests
 
     public class WatchedTrain : ServiceTrain<Unit, Unit>, IWatchedTrain
     {
-        public static string? Seen;
-        public static IDataContextProviderFactory Factory = null!;
+        public static string? Seen { get; set; }
+        public static IDataContextProviderFactory? Factory { get; set; }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<ReadsItsOwnProgress>().Resolve();
@@ -594,7 +655,8 @@ public class JunctionProgressWritesOnlyProgressTests
         {
             public override async Task<Unit> Run(Unit input)
             {
-                using var context = (IDataContext)Factory.Create();
+                var context = (IDataContext)Factory.NotNull().Create();
+                await using var contextDisposal = context.ConfigureAwait(false);
                 Seen = await context
                     .Metadatas.AsNoTracking()
                     .Where(m =>
@@ -602,7 +664,8 @@ public class JunctionProgressWritesOnlyProgressTests
                         && m.TrainState == TrainState.InProgress
                     )
                     .Select(m => m.CurrentlyRunningJunction)
-                    .SingleAsync();
+                    .SingleAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
                 return Unit.Default;
             }
         }

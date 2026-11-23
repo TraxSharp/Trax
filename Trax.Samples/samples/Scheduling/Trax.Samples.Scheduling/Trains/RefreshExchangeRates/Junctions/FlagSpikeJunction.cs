@@ -32,14 +32,17 @@ public class FlagSpikeJunction(IDormantDependentContext dormants, ILogger<FlagSp
                 ManifestNames.AlertRateSpike
             );
 
-            await dormants.ActivateAsync<IAlertRateSpikeTrain, AlertRateSpikeInput, Unit>(
-                ManifestNames.AlertRateSpike,
-                new AlertRateSpikeInput
-                {
-                    BaseCurrency = reading.BaseCurrency,
-                    ChangePercent = reading.ChangePercent,
-                }
-            );
+            await dormants
+                .ActivateAsync<IAlertRateSpikeTrain, AlertRateSpikeInput, Unit>(
+                    ManifestNames.AlertRateSpike,
+                    new AlertRateSpikeInput
+                    {
+                        BaseCurrency = reading.BaseCurrency,
+                        ChangePercent = reading.ChangePercent,
+                    },
+                    CancellationToken
+                )
+                .ConfigureAwait(false);
         }
 
         return new RefreshExchangeRatesOutput(reading.BaseCurrency, reading.ChangePercent, spike);

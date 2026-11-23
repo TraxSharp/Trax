@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -77,13 +78,14 @@ public class AddTraxJwtAuthTests
         var services = NewServices();
 
         services.AddTraxJwtAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(JwtDefaults.PolicyName);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
     }
 
     [Test]
@@ -92,13 +94,14 @@ public class AddTraxJwtAuthTests
         var services = NewServices();
 
         services.AddTraxJwtAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var policyProvider = sp.GetRequiredService<IAuthorizationPolicyProvider>();
         var policy = await policyProvider.GetPolicyAsync(TraxAuthClaimTypes.TraxAuthPolicy);
 
         policy.Should().NotBeNull();
-        policy!.AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
+        policy.NotNull().AuthenticationSchemes.Should().Contain(JwtDefaults.SchemeName);
     }
 
     [Test]
@@ -126,7 +129,7 @@ public class AddTraxJwtAuthTests
     {
         var services = NewServices();
 
-        var act = () => services.AddTraxJwtAuth((Action<JwtBuilder>)null!);
+        var act = () => services.AddTraxJwtAuth((Action<JwtBuilder>)Null.Of<object>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -137,10 +140,11 @@ public class AddTraxJwtAuthTests
         var services = NewServices();
 
         services.AddTraxJwtAuth(ConfigureDefault);
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
 
         var hostedServices = sp.GetServices<IHostedService>()
-            .Where(s => s.GetType().Name.Contains("Disclaimer"))
+            .Where(s => s.GetType().Name.Contains("Disclaimer", StringComparison.Ordinal))
             .ToList();
 
         hostedServices.Should().HaveCount(1);
@@ -157,7 +161,7 @@ public class AddTraxJwtAuthTests
 
         var hostedCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
 
         hostedCount.Should().Be(1);

@@ -1,0 +1,222 @@
+using System.Text.RegularExpressions;
+
+namespace Trax.Analyzers.Rules;
+
+public abstract class RegexUsageAnalyzerBase : DiagnosticAnalyzer
+{
+    private static readonly string[] MethodNames = ["IsMatch", "Match", "Matches", "Replace", "Split"];
+
+    // Detecting the unnamed groups of a pattern requires building two Regex, which is expensive, and the same
+    // patterns are used over and over in a compilation. The cache is bounded, so the patterns of the projects
+    // that are no longer analyzed do not stay alive for the lifetime of the process.
+    private static readonly BoundedCache<(string Pattern, RegexOptions Options), bool> HasUnnamedGroupsCache = new(capacity: 128);
+
+    private static readonly DiagnosticDescriptor TimeoutRule = new(
+        RuleIdentifiers.MissingTimeoutParameterForRegex,
+        title: "Add regex evaluation timeout",
+        messageFormat: "Regular expressions should not be vulnerable to Denial of Service attacks",
+        RuleCategories.Security,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.MissingTimeoutParameterForRegex));
+
+    private static readonly DiagnosticDescriptor ExplicitCaptureRule = new(
+        RuleIdentifiers.UseRegexExplicitCaptureOptions,
+        title: "Use RegexOptions.ExplicitCapture or named groups",
+        messageFormat: "Use RegexOptions.ExplicitCapture or named groups to prevent capturing unneeded groups",
+        RuleCategories.Performance,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseRegexExplicitCaptureOptions));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(TimeoutRule, ExplicitCaptureRule);
+
+    private protected sealed class AnalyzerContext(Compilation compilation)
+    {
+        private readonly ITypeSymbol? _regexSymbol = compilation.GetTypeByMetadataName("System.Text.RegularExpressions.Regex");
+        private readonly ITypeSymbol? _regexOptionsSymbol = compilation.GetTypeByMetadataName("System.Text.RegularExpressions.RegexOptions");
+        private readonly ITypeSymbol? _generatedRegexAttributeSymbol = compilation.GetTypeByMetadataName("System.Text.RegularExpressions.GeneratedRegexAttribute");
+        private readonly ITypeSymbol? _timeSpanSymbol = compilation.GetTypeByMetadataName("System.TimeSpan");
+
+        public void AnalyzeGeneratedRegexSymbol(SymbolAnalysisContext context)
+        {
+            if (context.Symbol is not (IPropertySymbol or IMethodSymbol { MethodKind: MethodKind.Ordinary }))
+                return;
+
+            if (_generatedRegexAttributeSymbol is null)
+                return;
+
+            var attributes = context.Symbol.GetAttributes(_generatedRegexAttributeSymbol, inherits: false);
+            foreach (var attribute in attributes)
+            {
+                // Only analyze the symbol in the files that declared the attribute to avoid reporting multiple times for the same symbol
+                var attributeSyntaxReference = attribute.ApplicationSyntaxReference;
+                if (attributeSyntaxReference is not null && !context.Symbol.DeclaringSyntaxReferences.Any(reference => reference.SyntaxTree == attributeSyntaxReference.SyntaxTree && reference.Span.Contains(attributeSyntaxReference.Span)))
+                    continue;
+
+                var regexOptions = RegexOptions.None;
+
+                // RegexOptions.ExplicitCapture
+                // The constructor arguments are in the order of the parameters, except when the constructor cannot be resolved
+                if (attribute.AttributeConstructor is { Parameters: [{ Type.SpecialType: SpecialType.System_String }, { } optionsParameter, ..] } &&
+                    optionsParameter.Type.IsEqualTo(_regexOptionsSymbol) &&
+                    attribute.ConstructorArguments is [{ Value: var patternValue }, { Value: int optionsValue }, ..])
+                {
+                    regexOptions = (RegexOptions)optionsValue;
+                    if (patternValue is string pattern && ShouldAddExplicitCapture(pattern, regexOptions))
+                    {
+                        context.ReportDiagnostic(ExplicitCaptureRule, attribute);
+                    }
+                }
+
+                // Timeout: the constructors that accept a timeout have a matchTimeoutMilliseconds parameter.
+                // The number of arguments is not enough, as a constructor accepts the culture name instead of the timeout.
+                if (!HasNonBacktracking(regexOptions) && !HasTimeoutParameter(attribute.AttributeConstructor))
+                {
+                    context.ReportDiagnostic(TimeoutRule, attribute);
+                }
+            }
+        }
+
+        private static bool HasNonBacktracking(RegexOptions options) => ((int)options & 1024) == 1024;
+
+        private static bool HasTimeoutParameter(IMethodSymbol? constructor) => constructor is not null && constructor.Parameters.Any(parameter => parameter is { Name: "matchTimeoutMilliseconds", Type.SpecialType: SpecialType.System_Int32 });
+
+        public void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var op = (IInvocationOperation)context.Operation;
+            if (op is null || op.TargetMethod is null)
+                return;
+
+            if (!op.TargetMethod.IsStatic)
+                return;
+
+            if (!MethodNames.Contains(op.TargetMethod.Name, StringComparer.Ordinal))
+                return;
+
+            if (!op.TargetMethod.ContainingType.IsEqualTo(_regexSymbol))
+                return;
+
+            if (op.Arguments.Length == 0)
+                return;
+
+            var regexOptions = CheckRegexOptionsArgument(context, op.Arguments, _regexOptionsSymbol);
+            if (!HasNonBacktracking(regexOptions) && !CheckTimeout(op.Arguments))
+            {
+                context.ReportDiagnostic(TimeoutRule, op);
+            }
+        }
+
+        public void AnalyzeObjectCreation(OperationAnalysisContext context)
+        {
+            var op = (IObjectCreationOperation)context.Operation;
+            if (op is null)
+                return;
+
+            if (op.Arguments.Length == 0)
+                return;
+
+            if (!op.Type.IsEqualTo(_regexSymbol))
+                return;
+
+            var regexOptions = CheckRegexOptionsArgument(context, op.Arguments, _regexOptionsSymbol);
+            if (!HasNonBacktracking(regexOptions) && !CheckTimeout(op.Arguments))
+            {
+                context.ReportDiagnostic(TimeoutRule, op);
+            }
+        }
+
+        private bool CheckTimeout(ImmutableArray<IArgumentOperation> args)
+        {
+            if (_timeSpanSymbol is null)
+                return false;
+
+            // The arguments are in the order of the source code, so the named arguments can be in any position
+            return args.Any(arg => arg.Parameter is not null && arg.Parameter.Type.IsEqualTo(_timeSpanSymbol));
+        }
+
+        private static RegexOptions CheckRegexOptionsArgument(OperationAnalysisContext context, ImmutableArray<IArgumentOperation> arguments, ITypeSymbol? regexOptionsSymbol)
+        {
+            var pattern = GetPattern();
+            var (regexOptions, regexOptionsArgument) = GetRegexOptions();
+            if (pattern is not null && regexOptions is not null && regexOptionsArgument is not null)
+            {
+                if (ShouldAddExplicitCapture(pattern, regexOptions.Value))
+                {
+                    context.ReportDiagnostic(ExplicitCaptureRule, regexOptionsArgument);
+                }
+            }
+
+            return regexOptions ?? RegexOptions.None;
+
+            string? GetPattern()
+            {
+                // The arguments are in the order of the source code, so the named arguments can be in any position
+                var argument = arguments.FirstOrDefault(a => a.Parameter is { Name: "pattern", Type.SpecialType: SpecialType.System_String });
+                if (argument?.Value is not null && argument.Value.TryGetConstantValue(out var value, context.CancellationToken) && value is string pattern)
+                    return pattern;
+
+                return null;
+            }
+
+            (RegexOptions?, IArgumentOperation?) GetRegexOptions()
+            {
+                if (regexOptionsSymbol is null)
+                    return (null, null);
+
+                var arg = arguments.FirstOrDefault(a => a.Parameter is not null && a.Parameter.Type.IsEqualTo(regexOptionsSymbol));
+                if (arg is null || arg.Value is null || !arg.Value.TryGetConstantValue(out var value, context.CancellationToken))
+                    return (null, arg);
+
+                return ((RegexOptions)value!, arg);
+            }
+        }
+
+        private static bool ShouldAddExplicitCapture(string pattern, RegexOptions regexOptions)
+        {
+            if (!regexOptions.HasFlag(RegexOptions.ExplicitCapture) && !regexOptions.HasFlag(RegexOptions.ECMAScript)) // The 2 options are exclusives
+            {
+                // early exit
+                if (!pattern.Contains('(', StringComparison.Ordinal))
+                    return false;
+
+                return HasUnnamedGroups(pattern, regexOptions);
+            }
+
+            return false;
+
+            static bool HasUnnamedGroups(string pattern, RegexOptions options)
+            {
+                options &= ~RegexOptions.Compiled; // Compiled options doesn't change anything but is much more resource consuming
+                return HasUnnamedGroupsCache.GetOrAdd((pattern, options), static key =>
+                {
+                    try
+                    {
+                        var regex1 = new Regex(key.Pattern, key.Options, Regex.InfiniteMatchTimeout);
+
+                        // GetGroupNames always contains the name of the whole match ("0"), so a single name means the
+                        // pattern has no group at all: the '(' comes from a non-capturing group, a lookaround or an
+                        // escaped parenthesis. There is nothing to name, and building the second regex would be useless
+                        // as ExplicitCapture can only remove the unnamed groups, never add one.
+                        var groupNames = regex1.GetGroupNames();
+                        if (groupNames.Length <= 1)
+                            return false;
+
+                        var regex2 = new Regex(key.Pattern, key.Options | RegexOptions.ExplicitCapture, Regex.InfiniteMatchTimeout);
+
+                        // All groups are named => No need for explicit capture
+                        if (groupNames.Length == regex2.GetGroupNames().Length)
+                            return false;
+                    }
+                    catch
+                    {
+                    }
+
+                    return true;
+                });
+            }
+        }
+    }
+}

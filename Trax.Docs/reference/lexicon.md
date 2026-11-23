@@ -6,6 +6,9 @@ area: machines
 nav_order: 8
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/Lexicon.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/LexiconReading.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/LexiconSource.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/TrainShapes.cs
   - Trax.StateMachine/conformance/lexicon.md
 ---
 

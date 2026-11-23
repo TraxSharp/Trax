@@ -1,0 +1,4 @@
+// TraxBanRandom: chance is an input too. A seeded Random passed in stays allowed; for secrets use
+// System.Security.Cryptography.RandomNumberGenerator, which this file does not touch.
+P:System.Random.Shared;Take the Random, or the value it would have produced, as an input
+M:System.Random.#ctor;Take the Random, or the value it would have produced, as an input

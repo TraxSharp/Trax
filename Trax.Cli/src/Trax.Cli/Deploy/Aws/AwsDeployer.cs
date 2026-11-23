@@ -1,14 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Aws;
-
-/// <summary>Builds a service's image and pushes it to a registry.</summary>
-internal interface IImagePublisher
-{
-    void Publish(string projectPath, string repositoryUri, string tag, RegistryLogin login);
-}
 
 /// <summary>
 /// Puts an environment on AWS: checks its secrets, pushes the images, brings the foundation (network, database,
@@ -34,8 +30,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     )
     {
         var env = file.Environment(environment);
-        var prefixList =
-            env.Profile == DeployEnvironment.Try ? await aws.CloudFrontPrefixListAsync(ct) : null;
+        var prefixList = string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
+            ? await aws.CloudFrontPrefixListAsync(ct).ConfigureAwait(false)
+            : null;
         return AwsStack.Build(file, environment, exports, prefixList);
     }
 
@@ -52,74 +49,32 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var baseStack = file.FoundationStackName(environment);
-        var foundation = await ExistingAsync(baseStack, file, FoundationPart, ct);
-        var existing = await ExistingAsync(stack, file, RuntimePart, ct);
+        var foundation = await ExistingAsync(baseStack, file, FoundationPart, ct)
+            .ConfigureAwait(false);
+        var existing = await ExistingAsync(stack, file, RuntimePart, ct).ConfigureAwait(false);
 
-        // Nothing is created until every secret the app needs has a value.
-        var stored = (await aws.ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct))
-            .Select(s => s.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        var missing = file
-            .Secrets.Where(s => !stored.Contains(AwsStack.AppSecretName(stack, s)))
-            .ToList();
-        if (missing.Count > 0)
-            throw new InvalidOperationException(
-                $"{stack} has no value for {string.Join(", ", missing)}. Set each with "
-                    + $"'trax deploy secret set <name> --env {environment}'."
-            );
+        await CheckSecretsAsync(file, stack, environment, ct).ConfigureAwait(false);
 
-        foreach (var (name, state) in new[] { (baseStack, foundation), (stack, existing) })
-        {
-            if (state is { Dead: true })
-                throw new InvalidOperationException(
-                    $"{name} is {state.Status}: its creation failed and it can only be deleted. Run "
-                        + $"'trax deploy destroy --env {environment}', then deploy again."
-                );
-            if (state is { Settled: false })
-                throw new InvalidOperationException(
-                    $"{name} is {state.Status}. Wait for it to settle, then deploy again."
-                );
-        }
+        CheckSettled(foundation, baseStack, environment);
+        CheckSettled(existing, stack, environment);
 
-        var templates = await PlanAsync(file, environment, exports, ct);
+        var templates = await PlanAsync(file, environment, exports, ct).ConfigureAwait(false);
         var foundationTemplate = Inline(baseStack, templates.Foundation);
         var runtimeTemplate = Inline(stack, templates.Runtime);
 
-        say($"Pushing images tagged {tag}...");
-        var login = await aws.RegistryLoginAsync(ct);
-        var image = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, service) in file.Services)
-        {
-            var repository = await aws.EnsureRepositoryAsync(
-                Repository(stack, name),
-                Tags(file, environment),
-                ct
-            );
-            say($"  {name} -> {repository}:{tag}");
-            images.Publish(DeployFile.ProjectPath(filePath, service), repository, tag, login);
-            image[name] = $"{repository}:{tag}";
-        }
+        var image = await PushImagesAsync(file, filePath, stack, tag, Tags(file, environment), ct)
+            .ConfigureAwait(false);
         var migrator = image[AwsStack.Migrator(file, exports)];
 
-        // The foundation first: the runtime reads what it outputs.
-        var under = new Dictionary<string, string?>(StringComparer.Ordinal);
-        if (foundation?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
-            under[AwsStack.ProtectParameter] = "true";
-        if (KeepsItsUserPool(env))
-            under[AwsStack.UserPoolParameter] = await UserPoolAsync(stack, foundation, ct);
-        say(foundation is null ? $"Creating {baseStack}..." : $"Updating {baseStack}...");
-        await aws.DeployAsync(
-            baseStack,
-            foundationTemplate,
-            under,
-            StackTags(file, environment, FoundationPart),
-            say,
-            ct
-        );
-        var given = FoundationValues(
-            (await aws.DescribeStackAsync(baseStack, ct))!.Outputs,
-            templates.Runtime
-        );
+        var given = await DeployFoundationAsync(
+                file,
+                environment,
+                foundation,
+                foundationTemplate,
+                templates.Runtime,
+                ct
+            )
+            .ConfigureAwait(false);
 
         // Pass 1: the runtime, and the migrate task on the new image. A service the stack does not run yet (every
         // service of a new stack) waits at zero on the new image; one it runs keeps its image and count.
@@ -135,46 +90,54 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         }
         var tags = StackTags(file, environment, RuntimePart);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
-        await aws.DeployAsync(stack, runtimeTemplate, first, tags, say, ct);
+        await aws.DeployAsync(stack, runtimeTemplate, first, tags, say, ct).ConfigureAwait(false);
 
-        var outputs = (await aws.DescribeStackAsync(stack, ct))!.Outputs;
-        say("Migrating the database...");
-        var migration = await aws.RunTaskAsync(
-            new AwsTaskRequest(
-                outputs["ClusterName"],
-                outputs["MigrateTaskDefinition"],
-                AwsStack.MigrateContainer,
-                outputs["ServiceSubnets"].Split(','),
-                outputs["TaskSecurityGroups"].Split(','),
-                outputs["AssignPublicIp"] == "ENABLED"
-            ),
-            say,
-            ct
-        );
-        if (migration.ExitCode != 0)
-            throw new InvalidOperationException(
-                $"The migration ended {(migration.ExitCode is null ? "without an exit code" : $"with exit code {migration.ExitCode}")}"
-                    + (migration.StoppedReason is null ? "" : $" ({migration.StoppedReason})")
-                    + ", so no service was moved to the new version. Its log is "
-                    + $"{AwsStack.LogGroup(stack, AwsStack.MigrateContainer)} {migration.LogStream}: "
-                    + $"'trax deploy logs migrate --env {environment}'."
-            );
+        await MigrateAsync(stack, environment, ct).ConfigureAwait(false);
 
-        // Pass 2: every service onto the new image at its count, rolled with the circuit breaker on.
-        var second = new Dictionary<string, string?>(given, StringComparer.Ordinal)
-        {
-            [AwsStack.MigrateImageParameter] = migrator,
-        };
-        foreach (var name in file.Services.Keys)
-        {
-            second[AwsStack.CountParameter(name)] = file.Count(env, name)
-                .ToString(System.Globalization.CultureInfo.InvariantCulture);
-            second[AwsStack.ImageParameter(name)] = image[name];
-        }
+        var second = SecondPassParameters(file, env, migrator, image, given);
         say($"Rolling the services onto {tag}...");
-        await aws.DeployAsync(stack, runtimeTemplate, second, tags, say, ct);
+        await aws.DeployAsync(stack, runtimeTemplate, second, tags, say, ct).ConfigureAwait(false);
 
-        return (await aws.DescribeStackAsync(stack, ct))!.Outputs.GetValueOrDefault("Url");
+        return (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs.GetValueOrDefault("Url");
+    }
+
+    // The foundation first: the runtime reads what it outputs. Returns the outputs the runtime takes as parameters.
+    private async Task<Dictionary<string, string?>> DeployFoundationAsync(
+        DeployFile file,
+        string environment,
+        AwsStackState? foundation,
+        string template,
+        JsonObject runtime,
+        CancellationToken ct
+    )
+    {
+        var baseStack = file.FoundationStackName(environment);
+        var under = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (foundation?.Parameters.ContainsKey(AwsStack.ProtectParameter) is true)
+            under[AwsStack.ProtectParameter] = "true";
+        if (KeepsItsUserPool(file.Environment(environment)))
+            under[AwsStack.UserPoolParameter] = await UserPoolAsync(
+                    file.StackName(environment),
+                    foundation,
+                    ct
+                )
+                .ConfigureAwait(false);
+        say(foundation is null ? $"Creating {baseStack}..." : $"Updating {baseStack}...");
+        await aws.DeployAsync(
+                baseStack,
+                template,
+                under,
+                StackTags(file, environment, FoundationPart),
+                say,
+                ct
+            )
+            .ConfigureAwait(false);
+        var outputs = (await aws.DescribeStackAsync(baseStack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs;
+        return FoundationValues(outputs, runtime);
     }
 
     /// <summary>
@@ -188,12 +151,12 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         CancellationToken ct
     )
     {
-        var state = await aws.DescribeStackAsync(stack, ct);
+        var state = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
         if (state is null or { Created: false })
             return null;
         CheckOwner(state, file, stack);
         var found = state.Tags.GetValueOrDefault(PartTag);
-        if (found == part)
+        if (string.Equals(found, part, StringComparison.Ordinal))
             return state;
         throw new InvalidOperationException(
             found is null
@@ -210,8 +173,10 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var text = AwsStack.Compact(template);
         if (text.Length > InlineTemplateLimit)
             throw new InvalidOperationException(
-                $"The template of {stack} is {text.Length} bytes, over CloudFormation's {InlineTemplateLimit}-byte "
-                    + "limit for a template sent inline."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The template of {stack} is {text.Length} bytes, over CloudFormation's {InlineTemplateLimit}-byte "
+                ) + "limit for a template sent inline."
             );
         return text;
     }
@@ -222,7 +187,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         JsonObject runtime
     )
     {
-        var declared = (JsonObject)runtime["Parameters"]!;
+        var declared = (JsonObject)runtime["Parameters"].NotNull();
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var name in AwsStack.FoundationValues.Where(declared.ContainsKey))
             values[name] = outputs.TryGetValue(name, out var value)
@@ -233,9 +198,123 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         return values;
     }
 
+    // Nothing is created until every secret the app needs has a value.
+    private async Task CheckSecretsAsync(
+        DeployFile file,
+        string stack,
+        string environment,
+        CancellationToken ct
+    )
+    {
+        var stored = (
+            await aws.ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct).ConfigureAwait(false)
+        )
+            .Select(s => s.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var missing = file
+            .Secrets.Where(s => !stored.Contains(AwsStack.AppSecretName(stack, s)))
+            .ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                $"{stack} has no value for {string.Join(", ", missing)}. Set each with "
+                    + $"'trax deploy secret set <name> --env {environment}'."
+            );
+    }
+
+    private static void CheckSettled(AwsStackState? existing, string stack, string environment)
+    {
+        if (existing is { Dead: true })
+            throw new InvalidOperationException(
+                $"{stack} is {existing.Status}: its creation failed and it can only be deleted. Run "
+                    + $"'trax deploy destroy --env {environment}', then deploy again."
+            );
+        if (existing is { Settled: false })
+            throw new InvalidOperationException(
+                $"{stack} is {existing.Status}. Wait for it to settle, then deploy again."
+            );
+    }
+
+    // Pushes each service's image and returns where each went, by service.
+    private async Task<Dictionary<string, string>> PushImagesAsync(
+        DeployFile file,
+        string filePath,
+        string stack,
+        string tag,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct
+    )
+    {
+        say($"Pushing images tagged {tag}...");
+        var login = await aws.RegistryLoginAsync(ct).ConfigureAwait(false);
+        var image = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, service) in file.Services)
+        {
+            var repository = await aws.EnsureRepositoryAsync(Repository(stack, name), tags, ct)
+                .ConfigureAwait(false);
+            say($"  {name} -> {repository}:{tag}");
+            await images
+                .PublishAsync(DeployFile.ProjectPath(filePath, service), repository, tag, login)
+                .ConfigureAwait(false);
+            image[name] = $"{repository}:{tag}";
+        }
+        return image;
+    }
+
+    private async Task MigrateAsync(string stack, string environment, CancellationToken ct)
+    {
+        var outputs = (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs;
+        say("Migrating the database...");
+        var migration = await aws.RunTaskAsync(
+                new AwsTaskRequest(
+                    outputs["ClusterName"],
+                    outputs["MigrateTaskDefinition"],
+                    AwsStack.MigrateContainer,
+                    outputs["ServiceSubnets"].Split(','),
+                    outputs["TaskSecurityGroups"].Split(','),
+                    string.Equals(outputs["AssignPublicIp"], "ENABLED", StringComparison.Ordinal)
+                ),
+                say,
+                ct
+            )
+            .ConfigureAwait(false);
+        if (migration.ExitCode != 0)
+            throw new InvalidOperationException(
+                $"The migration ended {(migration.ExitCode is null ? "without an exit code" : string.Create(CultureInfo.InvariantCulture, $"with exit code {migration.ExitCode}"))}"
+                    + (migration.StoppedReason is null ? "" : $" ({migration.StoppedReason})")
+                    + ", so no service was moved to the new version. Its log is "
+                    + $"{AwsStack.LogGroup(stack, AwsStack.MigrateContainer)} {migration.LogStream}: "
+                    + $"'trax deploy logs migrate --env {environment}'."
+            );
+    }
+
+    // Pass 2: every service onto the new image at its count, rolled with the circuit breaker on.
+    private static Dictionary<string, string?> SecondPassParameters(
+        DeployFile file,
+        DeployEnvironment env,
+        string migrator,
+        Dictionary<string, string> image,
+        Dictionary<string, string?> given
+    )
+    {
+        var second = new Dictionary<string, string?>(given, StringComparer.Ordinal)
+        {
+            [AwsStack.MigrateImageParameter] = migrator,
+        };
+        foreach (var name in file.Services.Keys)
+        {
+            second[AwsStack.CountParameter(name)] = file.Count(env, name)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture);
+            second[AwsStack.ImageParameter(name)] = image[name];
+        }
+        return second;
+    }
+
     /// <summary>Whether the environment's user pool outlives its stack: production's Cognito pool.</summary>
     private static bool KeepsItsUserPool(DeployEnvironment env) =>
-        env.Profile == DeployEnvironment.Production && env.Auth is { Kind: DeployAuth.Cognito };
+        string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
+        && env.Auth is { Kind: DeployAuth.Cognito };
 
     /// <summary>
     /// The pool a deploy passes the foundation: the one it already uses, or on a new foundation the one an earlier
@@ -250,7 +329,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         if (foundation is not null)
             // A stack keeps the pool it has: switching would take the one it created out of the stack.
             return foundation.Parameters.GetValueOrDefault(AwsStack.UserPoolParameter) ?? "";
-        var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct);
+        var kept = await aws.GetParameterAsync(UserPoolRecord(stack), ct).ConfigureAwait(false);
         if (kept is not null)
             say($"Signing in against the user pool {kept}, which the last destroy kept.");
         return kept ?? "";
@@ -273,83 +352,81 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         var env = file.Environment(environment);
         var stack = file.StackName(environment);
         var baseStack = file.FoundationStackName(environment);
-        var runtime = await aws.DescribeStackAsync(stack, ct);
-        var foundation = await aws.DescribeStackAsync(baseStack, ct);
+        var runtime = await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false);
+        var foundation = await aws.DescribeStackAsync(baseStack, ct).ConfigureAwait(false);
         if (runtime is not null)
             CheckOwner(runtime, file, stack);
         if (foundation is not null)
             CheckOwner(foundation, file, baseStack);
         if (foundation is { Dead: false })
-            await CheckNetworkAsync(baseStack, foundation, runtime, ct);
+            await CheckNetworkAsync(baseStack, foundation, runtime, ct).ConfigureAwait(false);
 
         var record = UserPoolRecord(stack);
         var pool = KeepsItsUserPool(env)
             ? foundation?.Outputs.GetValueOrDefault("UserPoolId")
                 // A single stack from before the split kept its pool in its own outputs.
                 ?? runtime?.Outputs.GetValueOrDefault("UserPoolId")
-                ?? await aws.GetParameterAsync(record, ct)
+                ?? await aws.GetParameterAsync(record, ct).ConfigureAwait(false)
             : null;
         // Recorded before the stacks go, so a destroy that stops partway still leaves the pool findable.
         if (pool is not null && !deleteData)
-            await aws.PutParameterAsync(record, pool, Tags(file, environment), ct);
+            await aws.PutParameterAsync(record, pool, Tags(file, environment), ct)
+                .ConfigureAwait(false);
         if (runtime is null && foundation is null)
             say($"{stack} does not exist.");
         var snapshot = false;
         foreach (var (name, state) in new[] { (stack, runtime), (baseStack, foundation) })
-        {
-            if (state is null)
-                continue;
-            if (state.Parameters.ContainsKey(AwsStack.ProtectParameter) && !state.Dead)
-            {
-                say("Turning off the database's deletion protection...");
-                var keep = state.Parameters.Keys.ToDictionary(
-                    k => k,
-                    k => k == AwsStack.ProtectParameter ? "false" : (string?)null,
-                    StringComparer.Ordinal
-                );
-                await aws.DeployAsync(name, null, keep, state.Tags, say, ct);
-            }
-            say($"Deleting {name}...");
-            await aws.DeleteStackAsync(name, say, ct);
-            snapshot |= state.Parameters.ContainsKey(AwsStack.ProtectParameter);
-        }
+            if (state is not null)
+                snapshot |= await DeleteExistingStackAsync(state, name, ct).ConfigureAwait(false);
         if (snapshot)
             say(
                 "The database left a final snapshot, which RDS keeps until you delete it (RDS console, "
                     + "Snapshots)."
             );
         if (pool is not null)
-        {
-            if (deleteData)
-            {
-                await aws.DeleteUserPoolAsync(pool, ct);
-                await aws.DeleteParameterAsync(record, ct);
-                say($"Deleted the user pool {pool} and every user in it.");
-            }
-            else
-            {
-                var users = await aws.UserCountAsync(pool, ct);
-                say(
-                    users is null
-                        ? $"The user pool {pool} recorded in {record} no longer exists; the next deploy creates one."
-                        : $"Kept the user pool {pool} with its {users} users (Cognito's estimate), recorded in "
-                            + $"{record}. The next deploy of {environment} signs in against it; "
-                            + $"'trax deploy destroy --env {environment} --delete-data' deletes it."
-                );
-                if (users is null)
-                    await aws.DeleteParameterAsync(record, ct);
-            }
-        }
-        if (!deleteData)
-            return;
+            await SettleUserPoolAsync(pool, record, deleteData, environment, ct)
+                .ConfigureAwait(false);
+        if (deleteData)
+            await DeleteDataAsync(file, stack, ct).ConfigureAwait(false);
+    }
+
+    private async Task DeleteDataAsync(DeployFile file, string stack, CancellationToken ct)
+    {
         foreach (var name in file.Services.Keys)
-            await aws.DeleteRepositoryAsync(Repository(stack, name), ct);
+            await aws.DeleteRepositoryAsync(Repository(stack, name), ct).ConfigureAwait(false);
         foreach (var name in file.Secrets)
-            await aws.DeleteSecretAsync(AwsStack.AppSecretName(stack, name), ct);
+            await aws.DeleteSecretAsync(AwsStack.AppSecretName(stack, name), ct)
+                .ConfigureAwait(false);
         say(
             "Deleted the images and the app's secrets. For seven days 'trax deploy secret set' restores a secret "
                 + "with its new value."
         );
+    }
+
+    // Deletes one stack, unprotecting its database first; true when the database leaves a final snapshot.
+    private async Task<bool> DeleteExistingStackAsync(
+        AwsStackState existing,
+        string stack,
+        CancellationToken ct
+    )
+    {
+        if (existing.Parameters.ContainsKey(AwsStack.ProtectParameter) && !existing.Dead)
+        {
+            say("Turning off the database's deletion protection...");
+            var keep = existing.Parameters.Keys.ToDictionary(
+                k => k,
+                k =>
+                    string.Equals(k, AwsStack.ProtectParameter, StringComparison.Ordinal)
+                        ? "false"
+                        : (string?)null,
+                StringComparer.Ordinal
+            );
+            await aws.DeployAsync(stack, template: null, keep, existing.Tags, say, ct)
+                .ConfigureAwait(false);
+        }
+        say($"Deleting {stack}...");
+        await aws.DeleteStackAsync(stack, say, ct).ConfigureAwait(false);
+        return existing.Parameters.ContainsKey(AwsStack.ProtectParameter);
     }
 
     /// <summary>
@@ -367,14 +444,18 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     {
         if (foundation.Outputs.GetValueOrDefault("VpcId") is not { Length: > 0 } vpc)
             return;
-        var ownsVpc = foundation.Outputs.GetValueOrDefault("OwnsVpc") == "true";
+        var ownsVpc = string.Equals(
+            foundation.Outputs.GetValueOrDefault("OwnsVpc"),
+            "true",
+            StringComparison.Ordinal
+        );
         var mine = Split(foundation.Outputs.GetValueOrDefault("SecurityGroups"));
         var ours = mine.Concat(Split(runtime?.Outputs.GetValueOrDefault("SecurityGroups")))
             .ToHashSet(StringComparer.Ordinal);
-        var foreign = (await aws.NetworkInterfacesAsync(vpc, ct))
+        var foreign = (await aws.NetworkInterfacesAsync(vpc, ct).ConfigureAwait(false))
             .Where(e => ownsVpc || e.SecurityGroups.Any(mine.Contains))
             .Where(e =>
-                !(ownsVpc && e.Type == "nat_gateway")
+                !(ownsVpc && string.Equals(e.Type, "nat_gateway", StringComparison.Ordinal))
                 && (e.SecurityGroups.Count == 0 || !e.SecurityGroups.All(ours.Contains))
             )
             .ToList();
@@ -392,6 +473,36 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     private static string[] Split(string? list) =>
         string.IsNullOrEmpty(list) ? [] : list.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
+    // Production's pool, once its stack is gone: deleted with the data, else kept and recorded for the next deploy.
+    private async Task SettleUserPoolAsync(
+        string pool,
+        string record,
+        bool deleteData,
+        string environment,
+        CancellationToken ct
+    )
+    {
+        if (deleteData)
+        {
+            await aws.DeleteUserPoolAsync(pool, ct).ConfigureAwait(false);
+            await aws.DeleteParameterAsync(record, ct).ConfigureAwait(false);
+            say($"Deleted the user pool {pool} and every user in it.");
+        }
+        else
+        {
+            var users = await aws.UserCountAsync(pool, ct).ConfigureAwait(false);
+            say(
+                users is null
+                    ? $"The user pool {pool} recorded in {record} no longer exists; the next deploy creates one."
+                    : $"Kept the user pool {pool} with its {users.Value.ToString(CultureInfo.InvariantCulture)} users (Cognito's estimate), recorded in "
+                        + $"{record}. The next deploy of {environment} signs in against it; "
+                        + $"'trax deploy destroy --env {environment} --delete-data' deletes it."
+            );
+            if (users is null)
+                await aws.DeleteParameterAsync(record, ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// What pass 1 sends for <paramref name="service"/>: its count (null keeps the stack's), and whether it stays on
     /// the image it runs. A service the stack holds no image for, or runs none of, waits at zero on the new image.
@@ -400,7 +511,11 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     {
         if (existing?.Parameters.ContainsKey(AwsStack.ImageParameter(service)) is not true)
             return ("0", false);
-        return existing.Parameters.GetValueOrDefault(AwsStack.CountParameter(service)) == "0"
+        return string.Equals(
+            existing.Parameters.GetValueOrDefault(AwsStack.CountParameter(service)),
+            "0",
+            StringComparison.Ordinal
+        )
             ? ("0", false)
             : (null, true);
     }
@@ -413,7 +528,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     private static void CheckOwner(AwsStackState existing, DeployFile file, string stack)
     {
         var owner = existing.Tags.GetValueOrDefault("trax:app");
-        if (owner == file.App)
+        if (string.Equals(owner, file.App, StringComparison.Ordinal))
             return;
         throw new InvalidOperationException(
             owner is null
@@ -454,85 +569,39 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     /// A tag no earlier deploy used: the time, then the commit and whether the tree had changes, so an image says
     /// what it was built from.
     /// </summary>
-    public static string ImageTag(string directory, DateTime now)
+    public static async Task<string> ImageTagAsync(string directory, DateTime now)
     {
         var tag = now.ToString(
             "yyyyMMdd-HHmmss",
             System.Globalization.CultureInfo.InvariantCulture
         );
-        var commit = Git(directory, "rev-parse", "--short=12", "HEAD");
+        var commit = await GitAsync(directory, "rev-parse", "--short=12", "HEAD")
+            .ConfigureAwait(false);
         if (commit is null)
             return tag;
-        var dirty = Git(directory, "status", "--porcelain") is { Length: > 0 };
+        var dirty =
+            await GitAsync(directory, "status", "--porcelain").ConfigureAwait(false) is
+            { Length: > 0 };
         return $"{tag}-{commit}{(dirty ? "-dirty" : "")}";
     }
 
-    private static string? Git(string directory, params string[] args)
+    private static async Task<string?> GitAsync(string directory, params string[] args)
     {
-        var psi = new ProcessStartInfo("git") { WorkingDirectory = directory };
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = directory,
+            UseShellExecute = false,
+        };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
         try
         {
-            var (exit, stdout, _) = ChildProcess.Run(psi);
+            var (exit, stdout, _) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
             return exit == 0 ? stdout.Trim() : null;
         }
         catch (System.ComponentModel.Win32Exception)
         {
             return null;
         }
-    }
-}
-
-/// <summary>
-/// Builds a service's image with <c>dotnet publish -t:PublishContainer</c> for linux-x64 and pushes it straight to
-/// the registry, with the registry login passed in the environment: no docker or podman needed.
-/// </summary>
-internal sealed class DotnetImagePublisher : IImagePublisher
-{
-    public void Publish(string projectPath, string repositoryUri, string tag, RegistryLogin login)
-    {
-        var (exit, stdout, stderr) = ChildProcess.Run(
-            StartInfo(projectPath, repositoryUri, tag, login)
-        );
-        if (exit != 0)
-            throw new InvalidOperationException(
-                $"Publishing {Path.GetFileName(projectPath)} to {repositoryUri} failed (exit {exit}):\n{stdout}{stderr}"
-            );
-    }
-
-    internal static ProcessStartInfo StartInfo(
-        string projectPath,
-        string repositoryUri,
-        string tag,
-        RegistryLogin login
-    )
-    {
-        var slash = repositoryUri.IndexOf('/');
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
-        };
-        foreach (
-            var arg in new[]
-            {
-                "publish",
-                projectPath,
-                "-c",
-                "Release",
-                "--os",
-                "linux",
-                "--arch",
-                "x64",
-                "-t:PublishContainer",
-                $"-p:ContainerRegistry={repositoryUri[..slash]}",
-                $"-p:ContainerRepository={repositoryUri[(slash + 1)..]}",
-                $"-p:ContainerImageTags={tag}",
-            }
-        )
-            psi.ArgumentList.Add(arg);
-        psi.Environment["DOTNET_CONTAINER_REGISTRY_UNAME"] = login.User;
-        psi.Environment["DOTNET_CONTAINER_REGISTRY_PWORD"] = login.Password;
-        return psi;
     }
 }

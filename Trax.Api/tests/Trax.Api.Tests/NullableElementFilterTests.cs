@@ -1,8 +1,10 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Tests.AuthE2E;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -17,7 +19,7 @@ public class NullableElementFilterTests
 {
     private const string Database = "trax_api_posture_nullable_elements";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task StartAsync()
@@ -47,12 +49,14 @@ public class NullableElementFilterTests
     }
 
     [OneTimeTearDown]
-    public void StopAsync() => _host.Dispose();
+    public void StopAsync() => _host?.Dispose();
 
     private Task<string> FilterAsync(string where) =>
-        _host.PostAsync(
-            $"{{ discover {{ nullableElementRows(where: {{ scores: {where} }}, order: [{{ id: ASC }}]) {{ nodes {{ id }} }} }} }}"
-        );
+        _host
+            .NotNull()
+            .PostAsync(
+                $"{{ discover {{ nullableElementRows(where: {{ scores: {where} }}, order: [{{ id: ASC }}]) {{ nodes {{ id }} }} }} }}"
+            );
 
     [TestCase("{ some: { eq: 3 } }", new[] { 3 })]
     [TestCase("{ some: { eq: null } }", new[] { 3 })]
@@ -69,7 +73,7 @@ public class NullableElementFilterTests
 
         json.Should().NotContain("\"errors\"");
         foreach (var id in ids)
-            json.Should().Contain($"{{\"id\":{id}}}");
+            json.Should().Contain(string.Create(CultureInfo.InvariantCulture, $"{{\"id\":{id}}}"));
         json.Split("\"id\"").Length.Should().Be(ids.Length + 1);
     }
 

@@ -25,10 +25,10 @@ public class NoOpPersistedOperationValidatorTests
     {
         var validator = new NoOpPersistedOperationValidator();
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         Func<Task> act = () => validator.ValidateAsync("query Q { x }", cts.Token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 }

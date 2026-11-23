@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.JunctionEvents;
 
@@ -134,9 +135,11 @@ public static class TraxRedaction
         foreach (var property in typeInfo.Properties)
             if (IsSensitive(typeInfo.Type, property))
                 property.CustomConverter = (JsonConverter)
-                    Activator.CreateInstance(
-                        typeof(RedactingConverter<>).MakeGenericType(property.PropertyType)
-                    )!;
+                    Activator
+                        .CreateInstance(
+                            typeof(RedactingConverter<>).MakeGenericType(property.PropertyType)
+                        )
+                        .NotNull();
     }
 
     /// <summary>
@@ -173,7 +176,10 @@ public static class TraxRedaction
         foreach (var contract in declaringType.GetInterfaces())
         {
             var declared = contract.GetProperty(clrMember.Name);
-            if (declared is not null && declared.IsDefined(typeof(TraxSensitiveAttribute), false))
+            if (
+                declared is not null
+                && declared.IsDefined(typeof(TraxSensitiveAttribute), inherit: false)
+            )
                 return true;
         }
 
@@ -182,7 +188,7 @@ public static class TraxRedaction
 
     private static readonly string EffectAssembly = typeof(TraxSensitiveAttribute)
         .Assembly.GetName()
-        .Name!;
+        .Name.NotNull();
 
     private const BindingFlags InstanceMembers =
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -225,7 +231,11 @@ public static class TraxRedaction
     {
         ArgumentNullException.ThrowIfNull(type);
         var loaded = LoadedTypes();
-        return loaded.Reaches.GetOrAdd(type, t => Reach(t, [], loaded.Types));
+        return loaded.Reaches.GetOrAdd(
+            type,
+            static (t, types) => Reach(t, [], types),
+            loaded.Types
+        );
     }
 
     private static Loaded LoadedTypes()
@@ -237,7 +247,7 @@ public static class TraxRedaction
             AppDomain.CurrentDomain.AssemblyLoad += (_, args) => OnLoad(args.LoadedAssembly);
 
         var built = Scan();
-        return Interlocked.CompareExchange(ref _loaded, built, null) ?? built;
+        return Interlocked.CompareExchange(ref _loaded, built, comparand: null) ?? built;
     }
 
     /// <summary>Drops what was worked out when an assembly that can hold a marked type loads.</summary>
@@ -252,15 +262,15 @@ public static class TraxRedaction
                 return;
 
             if (
-                assembly.GetName().Name == EffectAssembly
+                string.Equals(assembly.GetName().Name, EffectAssembly, StringComparison.Ordinal)
                 || assembly
                     .GetReferencedAssemblies()
                     .Any(r =>
-                        r.Name == EffectAssembly
+                        string.Equals(r.Name, EffectAssembly, StringComparison.Ordinal)
                         || r.Name is { } name && current.Assemblies.Contains(name)
                     )
             )
-                Interlocked.CompareExchange(ref _loaded, null, current);
+                Interlocked.CompareExchange(ref _loaded, value: null, current);
         }
         catch
         {
@@ -276,34 +286,13 @@ public static class TraxRedaction
             .Where(a => !a.IsDynamic && !IsFramework(a))
             .ToList();
 
-        var references = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var assembly in assemblies)
-        {
-            try
-            {
-                var name = assembly.GetName().Name;
-                if (name is null)
-                    continue;
-                if (!references.TryGetValue(name, out var list))
-                    references[name] = list = [];
-                list.AddRange(
-                    assembly.GetReferencedAssemblies().Select(r => r.Name).OfType<string>()
-                );
-            }
-            catch
-            {
-                // An assembly whose references cannot be read cannot be told apart; it is
-                // looked into below as if it referenced Trax.Effect.
-                if (assembly.GetName().Name is { } name)
-                    references[name] = [EffectAssembly];
-            }
-        }
+        var references = ReferencesOf(assemblies);
 
         var reaching = new Dictionary<string, bool>(StringComparer.Ordinal);
 
         bool ReachesEffect(string name)
         {
-            if (name == EffectAssembly)
+            if (string.Equals(name, EffectAssembly, StringComparison.Ordinal))
                 return true;
             if (reaching.TryGetValue(name, out var known))
                 return known;
@@ -311,7 +300,7 @@ public static class TraxRedaction
                 return false;
 
             reaching[name] = false;
-            var reaches = referenced.Any(ReachesEffect);
+            var reaches = referenced.Exists(ReachesEffect);
             reaching[name] = reaches;
             return reaches;
         }
@@ -382,6 +371,41 @@ public static class TraxRedaction
         if (IsFramework(type.Assembly))
             return HeldByCollection(type, seen, loaded);
 
+        return DeclaresSensitiveMember(type, seen, loaded);
+    }
+
+    // The names of the assemblies each of the given assemblies references.
+    private static Dictionary<string, List<string>> ReferencesOf(List<Assembly> assemblies)
+    {
+        var references = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var assembly in assemblies)
+        {
+            try
+            {
+                var name = assembly.GetName().Name;
+                if (name is null)
+                    continue;
+                if (!references.TryGetValue(name, out var list))
+                    references[name] = list = [];
+                list.AddRange(
+                    assembly.GetReferencedAssemblies().Select(r => r.Name).OfType<string>()
+                );
+            }
+            catch
+            {
+                // An assembly whose references cannot be read cannot be told apart; it is
+                // looked into below as if it referenced Trax.Effect.
+                if (assembly.GetName().Name is { } name)
+                    references[name] = [EffectAssembly];
+            }
+        }
+        return references;
+    }
+
+    // Whether the type or a base type declares a member marked [TraxSensitive], a property whose
+    // constructor parameter or interface property is marked, or a field whose type reaches a mark.
+    private static bool DeclaresSensitiveMember(Type type, HashSet<Type> seen, Type[] loaded)
+    {
         for (
             var current = type;
             current is not null && current != typeof(object);
@@ -404,7 +428,9 @@ public static class TraxRedaction
                     || current
                         .GetInterfaces()
                         .Select(i => i.GetProperty(property.Name))
-                        .Any(p => p?.IsDefined(typeof(TraxSensitiveAttribute), false) == true)
+                        .Any(p =>
+                            p?.IsDefined(typeof(TraxSensitiveAttribute), inherit: false) == true
+                        )
                 )
                     return true;
 
@@ -451,7 +477,7 @@ public static class TraxRedaction
 
         return items.Count == 0
             ? Reach(typeof(object), seen, loaded)
-            : items.Any(item => Reach(item, seen, loaded));
+            : items.Exists(item => Reach(item, seen, loaded));
     }
 
     /// <summary>
@@ -463,8 +489,8 @@ public static class TraxRedaction
         || assembly.GetName().Name is { } name
             && (
                 name.StartsWith("System.", StringComparison.Ordinal)
-                || name == "System"
-                || name == "netstandard"
+                || string.Equals(name, "System", StringComparison.Ordinal)
+                || string.Equals(name, "netstandard", StringComparison.Ordinal)
             );
 
     /// <summary>
@@ -485,7 +511,7 @@ public static class TraxRedaction
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            writer.WriteBoolean(MarkerProperty, true);
+            writer.WriteBoolean(MarkerProperty, value: true);
             writer.WriteEndObject();
         }
     }

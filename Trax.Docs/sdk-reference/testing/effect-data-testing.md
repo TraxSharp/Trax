@@ -10,6 +10,11 @@ source:
   - Trax.Effect/src/Trax.Effect.Data.Testing/DomainDataLayerGuardFixture.cs
   - Trax.Effect/src/Trax.Effect.Data.Testing/OwnerScopeCensusOptions.cs
   - Trax.Effect/src/Trax.Effect.Data.Testing/TraxInvariants.cs
+  - Trax.Effect/src/Trax.Effect.Data.Testing/InvokingState.cs
+  - Trax.Effect/src/Trax.Effect.Data.Testing/TimedState.cs
+  - Trax.Effect/src/Trax.Effect.Data.Testing/KeptState.cs
+  - Trax.Effect/src/Trax.Effect.Data.Testing/TraxInvariantViolation.cs
+  - Trax.Effect/src/Trax.Effect.Data.Testing/LeavesStuckRunsAttribute.cs
 parent: Testing
 grand_parent: SDK Reference
 nav_order: 2

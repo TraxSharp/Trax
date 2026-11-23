@@ -1,28 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using Ingest.Contracts;
+using Trax.Core.Extensions;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.StateMachine.Tests.Fakes;
-
-public enum IngestState
-{
-    Idle,
-    Fetching,
-    NeedsReview,
-    Fetched,
-    FetchFailed,
-    Cancelled,
-    Approved,
-}
-
-public enum IngestTrigger
-{
-    Start,
-    Retry,
-    Abandon,
-    Approve,
-}
 
 /// <summary>
 /// One stage of an ingest: <c>Fetching</c> invokes <see cref="IFetchTrain"/>, a sure output goes to
@@ -72,7 +54,7 @@ public static class IngestMachine
         m.In(IngestState.Fetching)
             .Context<SourceContext>()
             .Invokes<IFetchTrain, FetchInput, FetchOutput>(ctx => new FetchInput(
-                ctx["source"]!.GetValue<string>()
+                ctx["source"].NotNull().GetValue<string>()
             ))
             .OnDone(
                 IngestState.NeedsReview,
@@ -103,6 +85,12 @@ public static class IngestMachine
             .On(IngestTrigger.Retry)
             .To(IngestState.Fetching);
 
+        AddDifferential(m);
+
+        return m.Build();
+    }
+
+    private static void AddDifferential(MachineBuilder<IngestState, IngestTrigger> m) =>
         m.Differential(d =>
             d.OutcomeSample(
                     IngestState.Fetching,
@@ -117,7 +105,4 @@ public static class IngestMachine
                     new FetchOutput { Fingerprint = "", Unsure = false }
                 )
         );
-
-        return m.Build();
-    }
 }

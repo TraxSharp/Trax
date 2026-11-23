@@ -28,7 +28,8 @@ public class SignalRConsecutiveRunTests
                 Name = "T.IDoThing",
                 ExternalId = externalId,
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         metadata.TrainState = TrainState.Completed;
         return metadata;
@@ -36,11 +37,14 @@ public class SignalRConsecutiveRunTests
 
     private static async Task RunOnce(IServiceProvider services, string externalId)
     {
-        using var scope = services.CreateScope();
+        var scope = services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var runner = scope.ServiceProvider.GetRequiredService<ILifecycleHookRunner>();
         try
         {
-            await runner.OnCompleted(NewRun(externalId), CancellationToken.None);
+            await runner
+                .OnCompleted(NewRun(externalId), CancellationToken.None)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -52,8 +56,10 @@ public class SignalRConsecutiveRunTests
     [Test]
     public async Task TwoConsecutiveRuns_BothRunsEventsReachTheClient()
     {
-        await using var server = await SignalRTestServer.StartAsync(throughAddTrax: true);
-        await using var connection = server.CreateClient();
+        var server = await SignalRTestServer.StartAsync(throughAddTrax: true);
+        await using var serverDisposal = server.ConfigureAwait(false);
+        var connection = server.CreateClient();
+        await using var connectionDisposal = connection.ConfigureAwait(false);
 
         var received = new ConcurrentQueue<TraxClientEvent>();
         var secondRunArrived = new TaskCompletionSource(
@@ -64,16 +70,19 @@ public class SignalRConsecutiveRunTests
             evt =>
             {
                 received.Enqueue(evt);
-                if (evt.ExternalId == "run-2" && evt.EventType == "Completed")
+                if (
+                    string.Equals(evt.ExternalId, "run-2", StringComparison.Ordinal)
+                    && string.Equals(evt.EventType, "Completed", StringComparison.Ordinal)
+                )
                     secondRunArrived.TrySetResult();
             }
         );
-        await connection.StartAsync().WaitAsync(Timeout);
+        await connection.StartAsync().WaitAsync(Timeout, TimeProvider.System);
 
         await RunOnce(server.Host.Services, "run-1");
         await RunOnce(server.Host.Services, "run-2");
 
-        await secondRunArrived.Task.WaitAsync(Timeout);
+        await secondRunArrived.Task.WaitAsync(Timeout, TimeProvider.System);
         received.Select(e => e.ExternalId).Should().Contain(["run-1", "run-2"]);
     }
 }

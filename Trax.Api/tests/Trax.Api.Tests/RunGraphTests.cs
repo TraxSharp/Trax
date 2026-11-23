@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore.Storage;
 using NSubstitute;
 using Trax.Api.Services.Runs;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -45,7 +46,10 @@ public class RunGraphTests
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
 
-        graph!.ChainChanged.Should().BeTrue("the run recorded a chain the host no longer declares");
+        graph
+            .NotNull()
+            .ChainChanged.Should()
+            .BeTrue("the run recorded a chain the host no longer declares");
         graph.Hash.Should().Be(After.Hash, "the graph is still the chain as declared now");
         graph.Nodes.Select(n => n.Id).Should().Equal("Ship#0", "Fetch#0");
         graph.UnmatchedSteps.Should().BeEmpty("every step's node id still names a node");
@@ -59,18 +63,19 @@ public class RunGraphTests
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
 
-        graph!.ChainChanged.Should().BeFalse();
+        graph.NotNull().ChainChanged.Should().BeFalse();
     }
 
     [Test]
     public async Task A_run_that_recorded_no_hash_has_nothing_to_compare()
     {
-        var (factory, run) = await SeedAsync(null);
+        var (factory, run) = await SeedAsync(chainHash: null);
         await using var db = await factory.CreateDbContextAsync(default);
 
         var graph = await RunGraphs.ReadAsync(db, GraphsServing(After), run, default);
 
-        graph!
+        graph
+            .NotNull()
             .ChainChanged.Should()
             .BeFalse("a run from before hashes were recorded cannot tell, and is not flagged");
     }
@@ -88,7 +93,7 @@ public class RunGraphTests
             default
         );
 
-        graph!.HasGraph.Should().BeFalse();
+        graph.NotNull().HasGraph.Should().BeFalse();
         graph.ChainChanged.Should().BeFalse("nothing is drawn, so nothing is drawn wrongly");
     }
 
@@ -104,42 +109,46 @@ public class RunGraphTests
     )
     {
         var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
-        await using var db = await factory.CreateDbContextAsync(default);
-        var run = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = Train,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null,
-            }
-        );
-        run.TrainState = TrainState.Completed;
-        run.EndTime = DateTime.UtcNow;
-        run.ChainHash = chainHash;
-        await db.Track(run);
-        await db.SaveChanges(default);
-
-        var position = 0;
-        foreach (var (node, name) in new[] { ("Fetch#0", "Fetch"), ("Ship#0", "Ship") })
-            db.JunctionRuns.Add(
-                new JunctionRun
+        var db = await factory.CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
                 {
-                    MetadataId = run.Id,
-                    Position = position++,
-                    Kind = JunctionRunKind.Junction,
-                    Name = name,
-                    State = JunctionRunState.Completed,
-                    StartedAt = DateTime.UtcNow,
-                    NodeId = node,
-                }
+                    Name = Train,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                },
+                TimeProvider.System
             );
-        await db.SaveChanges(default);
-        return (factory, run.Id);
+            run.TrainState = TrainState.Completed;
+            run.EndTime = TimeProvider.System.GetUtcNow().UtcDateTime;
+            run.ChainHash = chainHash;
+            await db.Track(run).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
+
+            var position = 0;
+            foreach (var (node, name) in new[] { ("Fetch#0", "Fetch"), ("Ship#0", "Ship") })
+                db.JunctionRuns.Add(
+                    new JunctionRun
+                    {
+                        MetadataId = run.Id,
+                        Position = position++,
+                        Kind = JunctionRunKind.Junction,
+                        Name = name,
+                        State = JunctionRunState.Completed,
+                        StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                        NodeId = node,
+                    }
+                );
+            await db.SaveChanges(default).ConfigureAwait(false);
+            return (factory, run.Id);
+        }
     }
 
     private static ChainGraph Graph(params ChainGraphNode[] nodes) =>
         new("Acme.ShippingTrain", "Order", "Order", nodes, []);
 
     private static ChainGraphNode Node(string id, string junction) =>
-        new(id, ChainStepKind.Chain, junction, "Order", "Order", false, []);
+        new(id, ChainStepKind.Chain, junction, "Order", "Order", Opaque: false, []);
 }

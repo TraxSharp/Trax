@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Snippets.Tests.Infrastructure;
 
 /// <summary>
@@ -19,17 +21,21 @@ namespace Trax.Docs.Snippets.Tests.Infrastructure;
 /// need not show them and may.
 /// </para>
 /// </summary>
-public static class Excerpts
+public static partial class Excerpts
 {
-    private static readonly Regex RegionStart = new(
+    [GeneratedRegex(
         @"^\s*(?://\s*|<!--\s*)?#region(?:\s+(?<name>.*?))?\s*(?:-->)?\s*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex RegionStart { get; }
 
-    private static readonly Regex RegionEnd = new(
+    [GeneratedRegex(
         @"^\s*(?://\s*|<!--\s*)?#endregion\b.*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex RegionEnd { get; }
 
     private static readonly HashSet<string> Elisions = new(StringComparer.Ordinal)
     {
@@ -53,7 +59,7 @@ public static class Excerpts
 
         if (
             fence.From.StartsWith('/')
-            || fence.From.Contains('\\')
+            || fence.From.Contains('\\', StringComparison.Ordinal)
             || fence.From.Split('/').Any(s => s is ".." or ".")
         )
             return $"{where}: the path must be relative to the repository root, forward "
@@ -90,7 +96,10 @@ public static class Excerpts
             var (start, chunk) = chunks[c];
             var at = Find(target, chunk, from);
             if (at < 0)
-                return $"chunk {c + 1} of {chunks.Count} (fence line {start + 1}) does not occur "
+                return string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"chunk {c + 1} of {chunks.Count} (fence line {start + 1}) does not occur "
+                    )
                     + (c == 0 ? "in the file" : "after the previous chunk")
                     + (region is null ? "" : $" region '{region}'")
                     + ". It reads:\n      "
@@ -106,10 +115,10 @@ public static class Excerpts
     /// the fence, region marker lines and blank lines at its ends dropped, and its common
     /// indentation removed.
     /// </summary>
-    public static List<(int Start, List<string> Lines)> Chunks(string code)
+    public static IReadOnlyList<(int Start, List<string> Lines)> Chunks(string code)
     {
         var chunks = new List<(int, List<string>)>();
-        var lines = code.Replace("\r\n", "\n").Split('\n');
+        var lines = code.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var current = new List<(int Index, string Text)>();
 
         void Flush()
@@ -140,17 +149,19 @@ public static class Excerpts
     /// when it is null, with region marker lines left out. Null, with the reason, when the
     /// region is not in the file or is never closed.
     /// </summary>
-    public static List<string>? Region(string source, string? region, out string? problem)
+    public static IReadOnlyList<string>? Region(string source, string? region, out string? problem)
     {
         problem = null;
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
 
         if (region is null)
             return lines.Where(l => !IsRegionMarker(l)).ToList();
 
         var open = Array.FindIndex(
             lines,
-            l => RegionStart.Match(l) is { Success: true } m && m.Groups["name"].Value == region
+            l =>
+                RegionStart.Match(l) is { Success: true } m
+                && string.Equals(m.Groups["name"].Value, region, StringComparison.Ordinal)
         );
         if (open < 0)
         {
@@ -192,7 +203,7 @@ public static class Excerpts
     {
         for (var i = from; i + chunk.Count <= target.Count; i++)
         {
-            if (target[i].Trim() != chunk[0].Trim())
+            if (!string.Equals(target[i].Trim(), chunk[0].Trim(), StringComparison.Ordinal))
                 continue;
             if (
                 Dedent(target.GetRange(i, chunk.Count)).SequenceEqual(chunk, StringComparer.Ordinal)

@@ -13,7 +13,7 @@ public class SendMessageTests
     [Test]
     public async Task ValidateSender_CallerIsParticipant_ReturnsInput()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var input = new SendMessageInput { ChatRoomId = roomId, Content = "Hello!" };
 
@@ -25,7 +25,7 @@ public class SendMessageTests
     [Test]
     public async Task ValidateSender_CallerNotParticipant_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new ValidateSenderJunction(db, ChatUsers.Bob);
 
@@ -37,7 +37,7 @@ public class SendMessageTests
     [Test]
     public async Task ValidateSender_EmptyContent_Throws()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new ValidateSenderJunction(db, ChatUsers.Alice);
 
@@ -49,12 +49,13 @@ public class SendMessageTests
     [Test]
     public async Task PersistMessage_StoresTheMessageAsTheCallers()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         var junction = new PersistMessageJunction(
             db,
             ChatUsers.Alice,
-            NullLogger<PersistMessageJunction>.Instance
+            NullLogger<PersistMessageJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var result = await junction.Run(

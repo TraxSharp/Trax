@@ -36,8 +36,15 @@ public class OrderFilterTests
 
     private static async Task<List<string>> OwnersSeenBy(IShopfrontCaller caller)
     {
-        await using var db = TestDatabase.NewContext(caller);
-        return await db.Orders.Select(o => o.CustomerId).OrderBy(c => c).ToListAsync();
+        var db = TestDatabase.NewContext(caller);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .Orders.Select(o => o.CustomerId)
+                .OrderBy(c => c)
+                .ToListAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     [Test]

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -140,50 +141,14 @@ public class OperationsFailureMaskingTests
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        services.AddAuthentication();
-                        services.AddAuthorization();
-
-                        services.AddSingleton<TraxMarker>();
-                        services.AddSingleton(discovery);
-                        services.AddSingleton(Substitute.For<IEffectRegistry>());
-                        services.AddSingleton(dataContextFactory);
-
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .AllowAnonymousOperations()
-                        );
-
-                        services.AddScoped(_ => Substitute.For<ITraxHealthService>());
-                        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
-                        if (execution is not null)
-                            services.AddScoped(_ => execution);
-                        else
-                            services.AddScoped<ITrainExecutionService>(
-                                sp => new TrainExecutionService(
-                                    discovery,
-                                    Substitute.For<IRunExecutor>(),
-                                    Substitute.For<IConcurrencyLimiter>(),
-                                    dataContextFactory,
-                                    new MediatorConfiguration(),
-                                    sp
-                                )
-                            );
-                        services.AddScoped(_ => submitter);
-                        // What AddMediator registers: the API's train authorization consults it.
-                        services.AddScoped(_ => Substitute.For<ITrustedExecutionScope>());
-                        services.AddScoped<IOperationsService>(sp => new OperationsService(
+                        ConfigureMaskingServices(
+                            services,
+                            execution,
+                            submitter,
                             discovery,
-                            dataContextFactory,
-                            new SchedulerConfiguration(),
-                            sp.GetRequiredService<ITrainExecutionService>(),
-                            sp
-                        ));
-                    })
+                            dataContextFactory
+                        )
+                    )
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -194,8 +159,55 @@ public class OperationsFailureMaskingTests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureMaskingServices(
+        IServiceCollection services,
+        ITrainExecutionService? execution,
+        IJobSubmitter submitter,
+        ITrainDiscoveryService discovery,
+        IDataContextProviderFactory dataContextFactory
+    )
+    {
+        services.AddLogging();
+        services.AddRouting();
+        services.AddAuthentication();
+        services.AddAuthorization();
+
+        services.AddSingleton<TraxMarker>();
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddSingleton(dataContextFactory);
+
+        services.AddTraxGraphQL(graphql =>
+            graphql.ExposeOperationQueries().ExposeOperationMutations().AllowAnonymousOperations()
+        );
+
+        services.AddScoped(_ => Substitute.For<ITraxHealthService>());
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        if (execution is not null)
+            services.AddScoped(_ => execution);
+        else
+            services.AddScoped<ITrainExecutionService>(sp => new TrainExecutionService(
+                discovery,
+                Substitute.For<IRunExecutor>(),
+                Substitute.For<IConcurrencyLimiter>(),
+                dataContextFactory,
+                new MediatorConfiguration(),
+                sp
+            ));
+        services.AddScoped(_ => submitter);
+        // What AddMediator registers: the API's train authorization consults it.
+        services.AddScoped(_ => Substitute.For<ITrustedExecutionScope>());
+        services.AddScoped<IOperationsService>(sp => new OperationsService(
+            discovery,
+            dataContextFactory,
+            new SchedulerConfiguration(),
+            sp.GetRequiredService<ITrainExecutionService>(),
+            sp
+        ));
     }
 
     /// <summary>
@@ -214,7 +226,9 @@ public class OperationsFailureMaskingTests
             if (failWith is not null)
                 throw failWith;
             Submitted.Add(metadataId);
-            return Task.FromResult($"job-{metadataId}");
+            return Task.FromResult(
+                string.Create(CultureInfo.InvariantCulture, $"job-{metadataId}")
+            );
         }
     }
 

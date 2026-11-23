@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -52,25 +53,15 @@ public sealed class TwoNodes : IAsyncDisposable
         var nameA = $"{database}_node_a";
         var nameB = $"{database}_node_b";
 
-        await E2EHost.RecreateDatabaseAsync(database);
-        var a = await E2EHost.StartAsync(
-            database,
-            charge,
-            options with
-            {
-                ApplicationName = nameA,
-            }
-        );
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
+        var a = await E2EHost
+            .StartAsync(database, charge, options with { ApplicationName = nameA })
+            .ConfigureAwait(false);
         try
         {
-            var b = await E2EHost.StartAsync(
-                database,
-                charge,
-                options with
-                {
-                    ApplicationName = nameB,
-                }
-            );
+            var b = await E2EHost
+                .StartAsync(database, charge, options with { ApplicationName = nameB })
+                .ConfigureAwait(false);
             return new TwoNodes(database, a, b, nameA, nameB);
         }
         catch
@@ -93,19 +84,26 @@ public sealed class TwoNodes : IAsyncDisposable
     /// </summary>
     public async Task<long> TerminateAsync(IHost node)
     {
-        await using var admin = new NpgsqlConnection(E2EHost.ConnectionString(Database));
-        await admin.OpenAsync();
-        await using var terminate = new NpgsqlCommand(
-            "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
-                + "WHERE application_name = @name AND datname = current_database()",
-            admin
-        );
-        terminate.Parameters.AddWithValue("name", ApplicationNameOf(node));
-        var terminated = (long)(await terminate.ExecuteScalarAsync())!;
+        var admin = new NpgsqlConnection(E2EHost.ConnectionString(Database));
+        await using (admin.ConfigureAwait(false))
+        {
+            await admin.OpenAsync().ConfigureAwait(false);
+            var terminate = new NpgsqlCommand(
+                "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
+                    + "WHERE application_name = @name AND datname = current_database()",
+                admin
+            );
+            await using (terminate.ConfigureAwait(false))
+            {
+                terminate.Parameters.AddWithValue("name", ApplicationNameOf(node));
+                var terminated = (long)
+                    (await terminate.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
 
-        // The pool still holds the dead connections; the next command must open a fresh one.
-        NpgsqlConnection.ClearAllPools();
-        return terminated;
+                // The pool still holds the dead connections; the next command must open a fresh one.
+                NpgsqlConnection.ClearAllPools();
+                return terminated;
+            }
+        }
     }
 
     /// <summary>Stops both nodes and drops the database.</summary>
@@ -116,11 +114,11 @@ public sealed class TwoNodes : IAsyncDisposable
             try
             {
                 using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await node.StopAsync(stop.Token);
+                await node.StopAsync(stop.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { }
             node.Dispose();
         }
-        await E2EHost.DropDatabaseAsync(Database);
+        await E2EHost.DropDatabaseAsync(Database).ConfigureAwait(false);
     }
 }

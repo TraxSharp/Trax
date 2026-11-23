@@ -24,7 +24,9 @@ public class ConfigMutations
         CancellationToken ct
     )
     {
-        var result = await operationsService.UpdateSchedulerConfigAsync(input, ct);
+        var result = await operationsService
+            .UpdateSchedulerConfigAsync(input, ct)
+            .ConfigureAwait(false);
         return new OperationResponse(result.Success, result.Count, result.Message);
     }
 
@@ -47,7 +49,7 @@ public class ConfigMutations
     {
         if (logLevels is null)
             return new SetLogLevelsResponse(
-                false,
+                Success: false,
                 0,
                 [],
                 "This host registers no log level service, so log levels cannot be changed at "
@@ -56,7 +58,7 @@ public class ConfigMutations
 
         if (levels.Count > OperationsService.MaxBatchSize)
             return new SetLogLevelsResponse(
-                false,
+                Success: false,
                 0,
                 [],
                 $"At most {OperationsService.MaxBatchSize} log levels can be set at once."

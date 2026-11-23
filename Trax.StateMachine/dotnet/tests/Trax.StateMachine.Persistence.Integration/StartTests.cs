@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -24,18 +25,18 @@ public class StartTests(StoreProvider provider)
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-    private InstanceHost _host = null!;
-    private RecordingLauncher _launcher = null!;
+    private InstanceHost? _host;
+    private RecordingLauncher? _launcher;
 
     [SetUp]
     public void SetUp()
     {
         _launcher = new RecordingLauncher();
-        _host = InstanceHost.Create(provider, launcher: _launcher);
+        _host = InstanceHost.Create(provider, launcher: _launcher.NotNull());
     }
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static string NewUser() => $"u-{Guid.NewGuid():N}";
 
@@ -49,8 +50,12 @@ public class StartTests(StoreProvider provider)
         string requestId
     )
     {
-        using var scope = _host.Scope();
-        return await _host.Service(scope, machine).Start(actor, input, requestId);
+        using var scope = _host.NotNull().Scope();
+        return await _host
+            .NotNull()
+            .Service(scope, machine)
+            .Start(actor, input, requestId)
+            .ConfigureAwait(false);
     }
 
     private static StartOutcome.Started Started(StartOutcome outcome) =>
@@ -69,8 +74,8 @@ public class StartTests(StoreProvider provider)
         started.Revision.Should().Be(1);
         started.Created.Should().BeTrue();
         started.Snapshot.State.Should().Be(nameof(ListState.Drafting));
-        started.Snapshot.Context["title"]!.GetValue<string>().Should().Be("milk");
-        (await _host.UserRows(user, StartableMachine.Id))
+        started.Snapshot.Context["title"].NotNull().GetValue<string>().Should().Be("milk");
+        (await _host.NotNull().UserRows(user, StartableMachine.Id))
             .Should()
             .ContainSingle()
             .Which.Id.Should()
@@ -112,7 +117,7 @@ public class StartTests(StoreProvider provider)
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
             .Be(code, $"start validates its declared input record, never the context. See {Adr}");
-        (await _host.UserRows(user, StartableMachine.Id)).Should().BeEmpty();
+        (await _host.NotNull().UserRows(user, StartableMachine.Id)).Should().BeEmpty();
     }
 
     [Test]
@@ -167,7 +172,7 @@ public class StartTests(StoreProvider provider)
             .BeOfType<StartOutcome.Rejected>(
                 $"a start without a usable request id cannot be retried safely. See {Adr}"
             );
-        (await _host.UserRows(user, StartableMachine.Id)).Should().BeEmpty();
+        (await _host.NotNull().UserRows(user, StartableMachine.Id)).Should().BeEmpty();
     }
 
     [Test]
@@ -182,7 +187,7 @@ public class StartTests(StoreProvider provider)
             .Id.Should()
             .Be(first.Id, $"a retried start returns the instance it created. See {Adr}");
         retry.Created.Should().BeFalse();
-        (await _host.UserRows(user, StartableMachine.Id)).Should().ContainSingle();
+        (await _host.NotNull().UserRows(user, StartableMachine.Id)).Should().ContainSingle();
     }
 
     [Test]
@@ -199,7 +204,7 @@ public class StartTests(StoreProvider provider)
                 RefusalCode.RequestIdReused,
                 $"one request id names one start, told apart by its input's fingerprint. See {Adr}"
             );
-        (await _host.UserRows(user, StartableMachine.Id)).Should().ContainSingle();
+        (await _host.NotNull().UserRows(user, StartableMachine.Id)).Should().ContainSingle();
     }
 
     [Test]
@@ -212,8 +217,8 @@ public class StartTests(StoreProvider provider)
         var his = Started(await Start(StartableMachine.Id, new Actor.Client(bob), Note(), "s1"));
 
         his.Id.Should().NotBe(hers.Id, $"a request id is scoped to its owner. See {Adr}");
-        using var scope = _host.Scope();
-        var service = _host.Service(scope, StartableMachine.Id);
+        using var scope = _host.NotNull().Scope();
+        var service = _host.NotNull().Service(scope, StartableMachine.Id);
         (await service.Load(alice, his.Id)).Should().BeOfType<LoadResult.NotFound>();
         (await service.Load(bob, hers.Id)).Should().BeOfType<LoadResult.NotFound>();
     }
@@ -231,8 +236,8 @@ public class StartTests(StoreProvider provider)
         note.Created.Should().BeTrue();
         twin.Created.Should()
             .BeTrue($"the request id is unique per owner kind, user and machine. See {Adr}");
-        (await _host.UserRows(user, StartableMachine.Id)).Should().ContainSingle();
-        (await _host.UserRows(user, StartableTwinMachine.Id)).Should().ContainSingle();
+        (await _host.NotNull().UserRows(user, StartableMachine.Id)).Should().ContainSingle();
+        (await _host.NotNull().UserRows(user, StartableTwinMachine.Id)).Should().ContainSingle();
     }
 
     [TestCase("", TestName = "{m}(unauthenticated)")]
@@ -251,7 +256,7 @@ public class StartTests(StoreProvider provider)
         )
             .Should()
             .BeOfType<StartOutcome.Rejected>($"an instance needs a real owner. See {Adr}");
-        (await _host.UserRows(userKey, StartableMachine.Id)).Should().BeEmpty();
+        (await _host.NotNull().UserRows(userKey, StartableMachine.Id)).Should().BeEmpty();
     }
 
     [Test]
@@ -268,11 +273,11 @@ public class StartTests(StoreProvider provider)
             )
         );
 
-        var row = (await _host.Rows(started.Id)).Single();
+        var row = (await _host.NotNull().Rows(started.Id)).Single();
         row.InvokeToken.Should()
             .NotBeNull($"starting in an invoking state queues its run. See {Adr}");
-        (await _host.Entries(row.InvokeToken!)).Should().ContainSingle();
-        _launcher.Launches.Should().ContainSingle();
+        (await _host.NotNull().Entries(row.InvokeToken.NotNull())).Should().ContainSingle();
+        _launcher.NotNull().Launches.Should().ContainSingle();
 
         // The machine allows one live run per owner: a second start is refused and inserts nothing.
         (
@@ -287,8 +292,8 @@ public class StartTests(StoreProvider provider)
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
             .Be(RefusalCode.InvokeLimitReached);
-        (await _host.UserRows(user, InvokingStartMachine.Id)).Should().ContainSingle();
-        _launcher.Launches.Should().ContainSingle();
+        (await _host.NotNull().UserRows(user, InvokingStartMachine.Id)).Should().ContainSingle();
+        _launcher.NotNull().Launches.Should().ContainSingle();
     }
 
     [Test]
@@ -306,7 +311,7 @@ public class StartTests(StoreProvider provider)
                 "s1"
             )
         );
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .SnapshotDrafts.Where(x => x.Id == started.Id)
@@ -332,18 +337,18 @@ public class StartTests(StoreProvider provider)
     public async Task Start_on_a_system_owned_machine_is_refused()
     {
         var user = NewUser();
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         var service = new RuledSystemTurnstileMachine().CreateService(
             scope.ServiceProvider.GetRequiredService<ISnapshotStore>(),
             scope.ServiceProvider.GetRequiredService<IEffectClaimStore>()
         );
 
-        (await service.Start(new Actor.Client(user), null, "s1"))
+        (await service.Start(new Actor.Client(user), input: null, "s1"))
             .Should()
             .BeOfType<StartOutcome.Rejected>(
                 $"only code creates a system-owned instance. See {Adr}"
             );
-        (await _host.UserRows(user, RuledSystemTurnstileMachine.Id)).Should().BeEmpty();
+        (await _host.NotNull().UserRows(user, RuledSystemTurnstileMachine.Id)).Should().BeEmpty();
     }
 
     [Test]
@@ -362,7 +367,8 @@ public class StartTests(StoreProvider provider)
                     {
                         using var scope = host.Scope();
                         return await host.Service(scope, StartableMachine.Id)
-                            .Start(new Actor.Client(user), Note(), "s1");
+                            .Start(new Actor.Client(user), Note(), "s1")
+                            .ConfigureAwait(false);
                     })
                 )
         );
@@ -382,31 +388,7 @@ public class StartTests(StoreProvider provider)
     {
         if (provider == StoreProvider.Postgres)
         {
-            await using var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
-            await conn.OpenAsync();
-            await using var column = conn.CreateCommand();
-            column.CommandText =
-                "SELECT count(*) FROM information_schema.columns "
-                + "WHERE table_schema = 'trax' AND table_name = 'snapshot_draft' AND column_name = 'start_request_id'";
-            ((long)(await column.ExecuteScalarAsync())!)
-                .Should()
-                .Be(1, $"start keeps its request id on the row. See {Adr}");
-
-            await using var index = conn.CreateCommand();
-            index.CommandText =
-                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' AND tablename = 'snapshot_draft' "
-                + "AND indexdef LIKE '%start_request_id%'";
-            var definitions = new List<string>();
-            await using (var reader = await index.ExecuteReaderAsync())
-                while (await reader.ReadAsync())
-                    definitions.Add(reader.GetString(0));
-            definitions
-                .Should()
-                .ContainSingle()
-                .Which.Should()
-                .StartWith("CREATE UNIQUE INDEX")
-                .And.Contain("user_key")
-                .And.Contain("machine");
+            await AssertPostgresStartRequestIdIndex();
             return;
         }
 
@@ -415,16 +397,19 @@ public class StartTests(StoreProvider provider)
         {
             var connectionString = $"Data Source={file}";
             await SqliteMigrator.Migrate(connectionString);
-            await using var conn = new SqliteConnection(connectionString);
+            var conn = new SqliteConnection(connectionString);
+            await using var connDisposal = conn.ConfigureAwait(false);
             await conn.OpenAsync();
-            await using var column = conn.CreateCommand();
+            var column = conn.CreateCommand();
+            await using var columnDisposal = column.ConfigureAwait(false);
             column.CommandText =
                 "SELECT count(*) FROM pragma_table_info('snapshot_draft') WHERE name = 'start_request_id'";
-            ((long)(await column.ExecuteScalarAsync())!)
+            ((long)(await column.ExecuteScalarAsync()).NotNull())
                 .Should()
                 .Be(1, $"start keeps its request id on the row. See {Adr}");
 
-            await using var index = conn.CreateCommand();
+            var index = conn.CreateCommand();
+            await using var indexDisposal = index.ConfigureAwait(false);
             index.CommandText =
                 "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'snapshot_draft' "
                 + "AND sql LIKE '%start_request_id%'";
@@ -438,5 +423,38 @@ public class StartTests(StoreProvider provider)
             SqliteConnection.ClearAllPools();
             File.Delete(file);
         }
+    }
+
+    private static async Task AssertPostgresStartRequestIdIndex()
+    {
+        var conn = new NpgsqlConnection(PostgresSetup.ConnectionString);
+        await using var connDisposal = conn.ConfigureAwait(false);
+        await conn.OpenAsync().ConfigureAwait(false);
+        var column = conn.CreateCommand();
+        await using var columnDisposal = column.ConfigureAwait(false);
+        column.CommandText =
+            "SELECT count(*) FROM information_schema.columns "
+            + "WHERE table_schema = 'trax' AND table_name = 'snapshot_draft' AND column_name = 'start_request_id'";
+        ((long)(await column.ExecuteScalarAsync().ConfigureAwait(false)).NotNull())
+            .Should()
+            .Be(1, $"start keeps its request id on the row. See {Adr}");
+
+        var index = conn.CreateCommand();
+        await using var indexDisposal = index.ConfigureAwait(false);
+        index.CommandText =
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'trax' AND tablename = 'snapshot_draft' "
+            + "AND indexdef LIKE '%start_request_id%'";
+        var definitions = new List<string>();
+        var reader = await index.ExecuteReaderAsync().ConfigureAwait(false);
+        await using (reader.ConfigureAwait(false))
+            while (await reader.ReadAsync().ConfigureAwait(false))
+                definitions.Add(reader.GetString(0));
+        definitions
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .StartWith("CREATE UNIQUE INDEX")
+            .And.Contain("user_key")
+            .And.Contain("machine");
     }
 }

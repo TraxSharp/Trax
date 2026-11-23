@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Trax.Core.Extensions;
 using Trax.Mediator.Extensions;
 
 namespace Trax.Mediator.Tests.Meta.Tests;
@@ -144,7 +145,7 @@ public class BuilderOrderDiagnosticsTests
         obsolete
             .Should()
             .NotBeNull("every public member of BuilderOrderExtensions exists only to be refused");
-        obsolete!.IsError.Should().BeTrue();
+        obsolete.NotNull().IsError.Should().BeTrue();
 
         var call = () => method.Invoke(null, new object?[method.GetParameters().Length]);
 
@@ -162,7 +163,7 @@ public class BuilderOrderDiagnosticsTests
             new CSharpParseOptions(LanguageVersion.Latest)
         );
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
 

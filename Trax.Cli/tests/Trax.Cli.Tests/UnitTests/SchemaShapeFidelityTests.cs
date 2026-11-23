@@ -13,7 +13,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class SchemaShapeFidelityTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -29,158 +29,179 @@ public class SchemaShapeFidelityTests
             Directory.Delete(_dir, recursive: true);
     }
 
-    private ApiSchema ParseGraphQL(string sdl)
+    private async Task<ApiSchema> ParseGraphQLAsync(string sdl)
     {
         var path = Path.Combine(_dir, $"{Guid.NewGuid():N}.graphql");
-        File.WriteAllText(path, sdl);
-        return new GraphQLSchemaParser().Parse(path);
+        await File.WriteAllTextAsync(path, sdl).ConfigureAwait(false);
+        return await new GraphQLSchemaParser().ParseAsync(path).ConfigureAwait(false);
     }
 
-    private ApiSchema ParseOpenApi(string yaml)
+    private async Task<ApiSchema> ParseOpenApiAsync(string yaml)
     {
         var path = Path.Combine(_dir, $"{Guid.NewGuid():N}.yaml");
-        File.WriteAllText(path, yaml);
-        return new OpenApiSchemaParser().Parse(path);
+        await File.WriteAllTextAsync(path, yaml).ConfigureAwait(false);
+        return await new OpenApiSchemaParser().ParseAsync(path).ConfigureAwait(false);
     }
 
     [Test]
-    public void GraphQL_fields_added_by_extend_type_Query_and_Mutation_become_operations()
+    public async Task GraphQL_fields_added_by_extend_type_Query_and_Mutation_become_operations()
     {
-        var schema = ParseGraphQL(
-            """
-            type Player { id: ID! name: String! }
-            type Query { players: [Player!]! }
-            type Mutation { renamePlayer(id: ID!, name: String!): Player! }
-            extend type Query { playerCount: Int! }
-            extend type Mutation { deletePlayer(id: ID!): Boolean! }
-            extend type Player { score: Int }
-            """
-        );
+        var schema = await ParseGraphQLAsync(
+                """
+                type Player { id: ID! name: String! }
+                type Query { players: [Player!]! }
+                type Mutation { renamePlayer(id: ID!, name: String!): Player! }
+                extend type Query { playerCount: Int! }
+                extend type Mutation { deletePlayer(id: ID!): Boolean! }
+                extend type Player { score: Int }
+                """
+            )
+            .ConfigureAwait(false);
 
         schema
             .Operations.Select(o => o.Name)
             .Should()
             .BeEquivalentTo(["Players", "RenamePlayer", "PlayerCount", "DeletePlayer"]);
         schema
-            .Types.Single(t => t.Name == "Player")
+            .Types.Single(t => string.Equals(t.Name, "Player", StringComparison.Ordinal))
             .Fields.Select(f => f.Name)
             .Should()
             .Equal("Id", "Name", "Score");
     }
 
     [Test]
-    public void GraphQL_extension_of_a_type_the_schema_never_defines_is_refused()
+    public async Task GraphQL_extension_of_a_type_the_schema_never_defines_is_refused()
     {
-        var act = () => ParseGraphQL("extend type Query { playerCount: Int! }");
+        var act = async () =>
+            await ParseGraphQLAsync("extend type Query { playerCount: Int! }")
+                .ConfigureAwait(false);
 
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*extends 'Query'*never defines*");
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*extends 'Query'*never defines*");
     }
 
     [Test]
-    public void GraphQL_single_list_of_input_objects_argument_stays_a_list()
+    public async Task GraphQL_single_list_of_input_objects_argument_stays_a_list()
     {
-        var schema = ParseGraphQL(
-            """
-            type Player { id: ID! name: String! }
-            input PlayerInput { name: String! }
-            type Query { players: [Player!]! }
-            type Mutation {
-              createPlayers(inputs: [PlayerInput!]!): [Player!]!
-              createPlayer(input: PlayerInput!): Player!
-            }
-            """
-        );
+        var schema = await ParseGraphQLAsync(
+                """
+                type Player { id: ID! name: String! }
+                input PlayerInput { name: String! }
+                type Query { players: [Player!]! }
+                type Mutation {
+                  createPlayers(inputs: [PlayerInput!]!): [Player!]!
+                  createPlayer(input: PlayerInput!): Player!
+                }
+                """
+            )
+            .ConfigureAwait(false);
 
-        var batch = schema.Operations.Single(o => o.Name == "CreatePlayers").InputType;
+        var batch = schema
+            .Operations.Single(o =>
+                string.Equals(o.Name, "CreatePlayers", StringComparison.Ordinal)
+            )
+            .InputType;
         batch
             .Fields.Select(f => (f.Name, f.TypeName))
             .Should()
             .Equal(("Inputs", "List<PlayerInput>"));
-        var single = schema.Operations.Single(o => o.Name == "CreatePlayer").InputType;
+        var single = schema
+            .Operations.Single(o => string.Equals(o.Name, "CreatePlayer", StringComparison.Ordinal))
+            .InputType;
         single.Fields.Select(f => (f.Name, f.TypeName)).Should().Equal(("Name", "string"));
     }
 
     [Test]
-    public void OpenApi_nullable_enum_does_not_turn_null_into_an_enum_member()
+    public async Task OpenApi_nullable_enum_does_not_turn_null_into_an_enum_member()
     {
-        var schema = ParseOpenApi(
-            """
-            openapi: 3.0.1
-            info: { title: t, version: "1" }
-            paths: {}
-            components:
-              schemas:
-                Status:
-                  type: string
-                  nullable: true
-                  enum: [active, banned, null]
-                Player:
-                  type: object
-                  properties:
-                    mood:
-                      type: string
-                      nullable: true
-                      enum: [happy, null]
-            """
-        );
-
-        schema.Enums.Single(e => e.Name == "Status").Values.Should().Equal("Active", "Banned");
-        schema.Enums.Single(e => e.Name == "Mood").Values.Should().Equal("Happy");
-    }
-
-    [Test]
-    public void OpenApi_string_enum_with_a_value_that_is_not_a_string_is_refused()
-    {
-        var act = () =>
-            ParseOpenApi(
+        var schema = await ParseOpenApiAsync(
                 """
                 openapi: 3.0.1
                 info: { title: t, version: "1" }
                 paths: {}
                 components:
                   schemas:
-                    Flag:
+                    Status:
                       type: string
-                      enum: [on, { a: 1 }]
+                      nullable: true
+                      enum: [active, banned, null]
+                    Player:
+                      type: object
+                      properties:
+                        mood:
+                          type: string
+                          nullable: true
+                          enum: [happy, null]
                 """
-            );
+            )
+            .ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*'Flag'*not a string*");
+        schema
+            .Enums.Single(e => string.Equals(e.Name, "Status", StringComparison.Ordinal))
+            .Values.Should()
+            .Equal("Active", "Banned");
+        schema
+            .Enums.Single(e => string.Equals(e.Name, "Mood", StringComparison.Ordinal))
+            .Values.Should()
+            .Equal("Happy");
     }
 
     [Test]
-    public void OpenApi_ref_to_a_primitive_component_keeps_the_primitive_type()
+    public async Task OpenApi_string_enum_with_a_value_that_is_not_a_string_is_refused()
     {
-        var schema = ParseOpenApi(
-            """
-            openapi: 3.0.1
-            info: { title: t, version: "1" }
-            paths:
-              /players/{id}/name:
-                get:
-                  operationId: getPlayerName
-                  parameters:
-                    - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/PlayerId' } }
-                  responses:
-                    "200":
-                      description: ok
-                      content:
-                        application/json:
-                          schema: { $ref: '#/components/schemas/PlayerName' }
-            components:
-              schemas:
-                Player:
-                  type: object
-                  properties:
-                    id: { $ref: '#/components/schemas/PlayerId' }
-                    score: { $ref: '#/components/schemas/Score' }
-                PlayerId: { type: string, format: uuid }
-                PlayerName: { type: string }
-                Score: { type: integer, format: int64 }
-            """
-        );
+        var act = async () =>
+            await ParseOpenApiAsync(
+                    """
+                    openapi: 3.0.1
+                    info: { title: t, version: "1" }
+                    paths: {}
+                    components:
+                      schemas:
+                        Flag:
+                          type: string
+                          enum: [on, { a: 1 }]
+                    """
+                )
+                .ConfigureAwait(false);
+
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*'Flag'*not a string*");
+    }
+
+    [Test]
+    public async Task OpenApi_ref_to_a_primitive_component_keeps_the_primitive_type()
+    {
+        var schema = await ParseOpenApiAsync(
+                """
+                openapi: 3.0.1
+                info: { title: t, version: "1" }
+                paths:
+                  /players/{id}/name:
+                    get:
+                      operationId: getPlayerName
+                      parameters:
+                        - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/PlayerId' } }
+                      responses:
+                        "200":
+                          description: ok
+                          content:
+                            application/json:
+                              schema: { $ref: '#/components/schemas/PlayerName' }
+                components:
+                  schemas:
+                    Player:
+                      type: object
+                      properties:
+                        id: { $ref: '#/components/schemas/PlayerId' }
+                        score: { $ref: '#/components/schemas/Score' }
+                    PlayerId: { type: string, format: uuid }
+                    PlayerName: { type: string }
+                    Score: { type: integer, format: int64 }
+                """
+            )
+            .ConfigureAwait(false);
 
         var operation = schema.Operations.Single();
         operation.InputType.Fields.Single().TypeName.Should().Be("Guid");
@@ -190,7 +211,7 @@ public class SchemaShapeFidelityTests
             .Should()
             .Equal(("Value", "string"));
         schema
-            .Types.Single(t => t.Name == "Player")
+            .Types.Single(t => string.Equals(t.Name, "Player", StringComparison.Ordinal))
             .Fields.Select(f => f.TypeName)
             .Should()
             .Equal("Guid", "long");
@@ -210,31 +231,35 @@ public class SchemaShapeFidelityTests
             PlayerId: { type: string, format: uuid }
         """;
 
-    private ApiSchema ParseBody(string body, string extra = "") =>
-        ParseOpenApi(
-            $$"""
-            openapi: 3.0.1
-            info: { title: t, version: "1" }
-            paths:
-              /players/batch:
-                post:
-                  operationId: createPlayers
-                  {{extra}}
-                  requestBody:
-                    required: true
-                    content:
-                      application/json:
-                        schema: {{body}}
-                  responses:
-                    "204": { description: ok }
-            {{PlayerComponent}}
-            """
-        );
+    private async Task<ApiSchema> ParseBodyAsync(string body, string extra = "") =>
+        await ParseOpenApiAsync(
+                $$"""
+                openapi: 3.0.1
+                info: { title: t, version: "1" }
+                paths:
+                  /players/batch:
+                    post:
+                      operationId: createPlayers
+                      {{extra}}
+                      requestBody:
+                        required: true
+                        content:
+                          application/json:
+                            schema: {{body}}
+                      responses:
+                        "204": { description: ok }
+                {{PlayerComponent}}
+                """
+            )
+            .ConfigureAwait(false);
 
     [Test]
-    public void OpenApi_inline_array_request_body_reaches_the_train_input()
+    public async Task OpenApi_inline_array_request_body_reaches_the_train_input()
     {
-        var input = ParseBody("{ type: array, items: { $ref: '#/components/schemas/Player' } }")
+        var input = (
+            await ParseBodyAsync("{ type: array, items: { $ref: '#/components/schemas/Player' } }")
+                .ConfigureAwait(false)
+        )
             .Operations.Single()
             .InputType;
 
@@ -248,9 +273,9 @@ public class SchemaShapeFidelityTests
         "Dictionary<string, int>"
     )]
     [TestCase("{ $ref: '#/components/schemas/PlayerId' }", "Guid")]
-    public void OpenApi_request_body_without_properties_is_one_field(string body, string type)
+    public async Task OpenApi_request_body_without_properties_is_one_field(string body, string type)
     {
-        ParseBody(body)
+        (await ParseBodyAsync(body).ConfigureAwait(false))
             .Operations.Single()
             .InputType.Fields.Select(f => (f.Name, f.TypeName))
             .Should()
@@ -258,9 +283,15 @@ public class SchemaShapeFidelityTests
     }
 
     [Test]
-    public void OpenApi_request_body_field_takes_the_codegen_body_name()
+    public async Task OpenApi_request_body_field_takes_the_codegen_body_name()
     {
-        ParseBody("{ type: array, items: { type: string } }", "x-codegen-request-body-name: names")
+        (
+            await ParseBodyAsync(
+                    "{ type: array, items: { type: string } }",
+                    "x-codegen-request-body-name: names"
+                )
+                .ConfigureAwait(false)
+        )
             .Operations.Single()
             .InputType.Fields.Select(f => (f.Name, f.TypeName))
             .Should()
@@ -268,9 +299,9 @@ public class SchemaShapeFidelityTests
     }
 
     [Test]
-    public void OpenApi_ref_to_an_array_component_request_body_keeps_its_items()
+    public async Task OpenApi_ref_to_an_array_component_request_body_keeps_its_items()
     {
-        ParseBody("{ $ref: '#/components/schemas/Players' }")
+        (await ParseBodyAsync("{ $ref: '#/components/schemas/Players' }").ConfigureAwait(false))
             .Operations.Single()
             .InputType.Fields.Select(f => (f.Name, f.TypeName))
             .Should()
@@ -278,10 +309,13 @@ public class SchemaShapeFidelityTests
     }
 
     [Test]
-    public void OpenApi_inline_allOf_request_body_spreads_every_member()
+    public async Task OpenApi_inline_allOf_request_body_spreads_every_member()
     {
-        ParseBody(
-            "{ allOf: [ { $ref: '#/components/schemas/Player' }, { type: object, properties: { team: { type: string } } } ] }"
+        (
+            await ParseBodyAsync(
+                    "{ allOf: [ { $ref: '#/components/schemas/Player' }, { type: object, properties: { team: { type: string } } } ] }"
+                )
+                .ConfigureAwait(false)
         )
             .Operations.Single()
             .InputType.Fields.Select(f => f.Name)
@@ -290,9 +324,12 @@ public class SchemaShapeFidelityTests
     }
 
     [Test]
-    public void OpenApi_empty_object_request_body_adds_no_field()
+    public async Task OpenApi_empty_object_request_body_adds_no_field()
     {
-        ParseBody("{ type: object }").Operations.Single().InputType.Fields.Should().BeEmpty();
+        (await ParseBodyAsync("{ type: object }").ConfigureAwait(false))
+            .Operations.Single()
+            .InputType.Fields.Should()
+            .BeEmpty();
     }
 
     [TestCase("settings", "Settings")]

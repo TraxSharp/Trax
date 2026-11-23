@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Reqnroll;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Reqnroll;
 using FeatureScenario = Trax.StateMachine.Gherkin.Reqnroll.FeatureScenario;
@@ -59,14 +60,14 @@ public class CustomStepsTests
             Then Ada's order is a draft
         """;
 
-    private static readonly Dictionary<string, string> Keys = new()
+    private static readonly Dictionary<string, string> Keys = new(StringComparer.Ordinal)
     {
         ["Ada"] = E2EHost.AliceKey,
         ["Bo"] = E2EHost.CarolKey,
     };
 
-    private IHost _host = null!;
-    private string _directory = null!;
+    private IHost? _host;
+    private string? _directory;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -77,24 +78,31 @@ public class CustomStepsTests
         );
         derived.Problems.Should().BeEmpty();
         _directory = Directory.CreateTempSubdirectory("trax-custom-steps-").FullName;
-        File.WriteAllText(Path.Combine(_directory, "host.json"), derived.Host!);
+        await File.WriteAllTextAsync(
+                Path.Combine(_directory.NotNull(), "host.json"),
+                derived.Host.NotNull()
+            )
+            .ConfigureAwait(false);
         foreach (var (id, ir) in derived.Irs)
-            File.WriteAllText(Path.Combine(_directory, $"{id}.ir.json"), ir);
+            await File.WriteAllTextAsync(Path.Combine(_directory.NotNull(), $"{id}.ir.json"), ir)
+                .ConfigureAwait(false);
 
-        await E2EHost.RecreateDatabaseAsync(Database);
-        _host = await E2EHost.StartAsync(
-            Database,
-            new CountingCharge(),
-            new E2EHostOptions { Machines = o => o.ServeFeatures(_directory) }
-        );
+        await E2EHost.RecreateDatabaseAsync(Database).ConfigureAwait(false);
+        _host = await E2EHost
+            .StartAsync(
+                Database,
+                new CountingCharge(),
+                new E2EHostOptions { Machines = o => o.ServeFeatures(_directory.NotNull()) }
+            )
+            .ConfigureAwait(false);
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
-        Directory.Delete(_directory, recursive: true);
+        Directory.Delete(_directory.NotNull(), recursive: true);
     }
 
     [Test]
@@ -108,13 +116,21 @@ public class CustomStepsTests
                     var person = match.Groups["person"].Value;
                     var id = scenario.InstanceOf(person, "c-order");
                     id.Should().NotBeNull();
-                    var order = await Get(scenario, person, id!.Value);
+                    var order = await Get(scenario, person, id.NotNull().Value)
+                        .ConfigureAwait(false);
                     order.Should().NotBeNull("the order is the person's own");
-                    order!["problem"].Should().BeNull();
-                    order["context"]!["loaves"]!
+                    order.NotNull()["problem"].Should().BeNull();
+                    order["context"]
+                        .NotNull()["loaves"]
+                        .NotNull()
                         .GetValue<int>()
                         .Should()
-                        .Be(int.Parse(match.Groups["n"].Value));
+                        .Be(
+                            int.Parse(
+                                match.Groups["n"].Value,
+                                System.Globalization.CultureInfo.InvariantCulture
+                            )
+                        );
                 }
             )
             .Then(
@@ -123,10 +139,11 @@ public class CustomStepsTests
                 {
                     scenario.InstanceOf("Bo", "c-order").Should().BeNull();
                     var order = await Get(
-                        scenario,
-                        "Bo",
-                        scenario.InstanceOf("Ada", "c-order")!.Value
-                    );
+                            scenario,
+                            "Bo",
+                            scenario.InstanceOf("Ada", "c-order").NotNull().Value
+                        )
+                        .ConfigureAwait(false);
                     order.Should().BeNull("another user's id is answered as an unknown one");
                 }
             );
@@ -196,7 +213,9 @@ public class CustomStepsTests
                             break;
                         default:
                             using (var request = new HttpRequestMessage(HttpMethod.Get, "/"))
-                                (await scenario.SendAsync("Cy", request)).Dispose();
+                                (
+                                    await scenario.SendAsync("Cy", request).ConfigureAwait(false)
+                                ).Dispose();
                             break;
                     }
                 }
@@ -328,12 +347,15 @@ public class CustomStepsTests
     private TraxFeatureDriverOptions Options() =>
         new()
         {
-            Host = _host.Services,
-            Client = _host.GetTestServer().CreateClient(),
+            Host = _host.NotNull().Services,
+            Client = _host.NotNull().GetTestServer().CreateClient(),
             Glossary = FeatureGlossary.Read(Glossary),
             Credential = (_, person, _) =>
                 new FeatureCredential(
-                    new Dictionary<string, string> { ["X-Api-Key"] = Keys[person] }
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["X-Api-Key"] = Keys[person],
+                    }
                 ),
         };
 
@@ -357,10 +379,13 @@ public class CustomStepsTests
                 }
             ),
         };
-        using var response = await scenario.SendAsync(person, request);
-        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
+        using var response = await scenario.SendAsync(person, request).ConfigureAwait(false);
+        var body = JsonNode
+            .Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false))
+            .NotNull()
+            .AsObject();
         body["errors"].Should().BeNull("the host answers the read");
-        var orders = body["data"]!["machines"]!["cOrder"]!.AsObject();
+        var orders = body["data"].NotNull()["machines"].NotNull()["cOrder"].NotNull().AsObject();
         orders.ContainsKey("get").Should().BeTrue();
         return orders["get"];
     }

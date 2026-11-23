@@ -324,11 +324,11 @@ public class EffectRegistryTests
     #region Test Helpers
 
     // Dummy types for testing - never actually instantiated
-    private class FakeFactory;
+    private sealed class FakeFactory;
 
-    private class AnotherFakeFactory;
+    private static class AnotherFakeFactory;
 
-    private class UntrackedFactory;
+    private static class UntrackedFactory;
 
     #endregion
 }

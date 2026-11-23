@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -21,42 +22,46 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
     private const string Adr =
         "Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md";
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InvokeHost.Create(provider);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Leaving_and_reentering_the_invoking_state_cancels_the_run_and_queues_a_new_one()
     {
         var key = MachineKey.Of("partition", Guid.NewGuid().ToString());
-        var started = await _host.Start<PartitionMachine>(key);
-        var first = (await _host.Runs(started.Id)).Single();
+        var started = await _host.NotNull().Start<PartitionMachine>(key);
+        var first = (await _host.NotNull().Runs(started.Id)).Single();
 
         (await Advance<PartitionMachine>(key, "Stop"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
             .Be("Idle");
-        (await _host.Runs(started.Id))
+        (await _host.NotNull().Runs(started.Id))
             .Single()
             .Status.Should()
             .Be(WorkQueueStatus.Cancelled, $"leaving the state cancels its run. See {Adr}");
-        (await _host.Row(started.Id, PartitionMachine.MachineId))!.InvokeToken.Should().BeNull();
+        (await _host.NotNull().Row(started.Id, PartitionMachine.MachineId))
+            .NotNull()
+            .InvokeToken.Should()
+            .BeNull();
 
         (await Advance<PartitionMachine>(key, "Go"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
             .Be("Running");
-        var runs = await _host.Runs(started.Id);
+        var runs = await _host.NotNull().Runs(started.Id);
         runs.Should().HaveCount(2, "entering the state again queues a new run");
         runs[1].ExternalId.Should().NotBe(first.ExternalId);
         runs[1].InvokingOwnerKind.Should().Be(SnapshotOwnerKind.System);
-        (await _host.Row(started.Id, PartitionMachine.MachineId))!
+        (await _host.NotNull().Row(started.Id, PartitionMachine.MachineId))
+            .NotNull()
             .InvokeToken.Should()
             .Be(runs[1].ExternalId, "the token names the new entry's run");
     }
@@ -65,8 +70,8 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
     public async Task An_outcome_trigger_is_refused_and_nothing_is_written()
     {
         var key = MachineKey.Of("partition", Guid.NewGuid().ToString());
-        var started = await _host.Start<PartitionMachine>(key);
-        var before = await _host.Row(started.Id, PartitionMachine.MachineId);
+        var started = await _host.NotNull().Start<PartitionMachine>(key);
+        var before = await _host.NotNull().Row(started.Id, PartitionMachine.MachineId);
 
         (await Advance<PartitionMachine>(key, "Running.done"))
             .Should()
@@ -74,19 +79,19 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
             .Which.Reason.Should()
             .Be(RefusalCode.OutcomeBound, $"only the run's outcome applies it. See {Adr}");
 
-        var after = await _host.Row(started.Id, PartitionMachine.MachineId);
-        after!.State.Should().Be("Running");
+        var after = await _host.NotNull().Row(started.Id, PartitionMachine.MachineId);
+        after.NotNull().State.Should().Be("Running");
         after
             .ConcurrencyToken.Should()
-            .Be(before!.ConcurrencyToken, "a refused advance writes nothing");
-        (await _host.Runs(started.Id)).Should().ContainSingle();
+            .Be(before.NotNull().ConcurrencyToken, "a refused advance writes nothing");
+        (await _host.NotNull().Runs(started.Id)).Should().ContainSingle();
     }
 
     [Test]
     public async Task A_trigger_with_no_edge_from_the_state_is_a_no_transition()
     {
         var key = MachineKey.Of("partition", Guid.NewGuid().ToString());
-        await _host.Start<PartitionMachine>(key);
+        await _host.NotNull().Start<PartitionMachine>(key);
 
         (await Advance<PartitionMachine>(key, "Retry"))
             .Should()
@@ -116,9 +121,10 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
     private async Task<AdvanceOutcome> Advance<TMachine>(MachineKey key, string trigger)
         where TMachine : IMachine
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         return await scope
             .ServiceProvider.GetRequiredService<IMachineInstances>()
-            .Advance<TMachine>(key, trigger);
+            .Advance<TMachine>(key, trigger)
+            .ConfigureAwait(false);
     }
 }

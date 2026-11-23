@@ -1,0 +1,2013 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using DiagnosticResult = Microsoft.CodeAnalysis.Testing.DiagnosticResult;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.UseRegexSourceGeneratorAnalyzer,
+    Trax.Analyzers.Rules.UseRegexSourceGeneratorFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public class UseRegexSourceGeneratorAnalyzerTests
+{
+    private static CodeFixTest CreateTest()
+    {
+        var test = new CodeFixTest();
+        test.UseFrameworkSourceGenerators = true;
+        return test;
+    }
+
+    /// <summary>
+    /// The code fixer generates a partial property when the language supports them,
+    /// so the tests that expect a partial method must use a language version that does not.
+    /// </summary>
+    private static CodeFixTest CreatePartialMethodTest()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net70;
+        test.LanguageVersion = LanguageVersion.CSharp11;
+        return test;
+    }
+
+    [Fact]
+    public Task NewRegex_Options_Timeout()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex_Options()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.ExplicitCapture)|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_Options_Timeout()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("test", "testpattern", RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1))|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch("test");
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_Options()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("test", "testpattern", RegexOptions.ExplicitCapture)|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch("test");
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("test", "testpattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch("test");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexReplace_Options_Timeout()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                string a = {|TRX0110:Regex.Replace("test", "testpattern", "newValue", RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1))|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                string a = MyRegex().Replace("test", "newValue");
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexReplace_Options()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                string a = {|TRX0110:Regex.Replace("test", "testpattern", "newValue", RegexOptions.ExplicitCapture)|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                string a = MyRegex().Replace("test", "newValue");
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexReplace()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                string a = {|TRX0110:Regex.Replace("test", "testpattern", "newValue")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                string a = MyRegex().Replace("test", "newValue");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexReplace_MatchEvaluator()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                string a = {|TRX0110:Regex.Replace("test", "testpattern", evaluator: match => "")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                string a = MyRegex().Replace("test", evaluator: match => "");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("TimeSpan.Zero")]
+    [InlineData("TimeSpan.FromMilliseconds(-2)")]
+    public Task Timeout_NotSupportedByTheGenerator_NoDiagnostic(string timeout)
+    {
+        var test = CreateTest();
+
+        // The generator of .NET 11 requires C# 12, which is not the default language version of every supported Roslyn version
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net70;
+
+        // GeneratedRegex only accepts an infinite or strictly positive match timeout
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = new Regex("testpattern", RegexOptions.None, {{timeout}});
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("TimeSpan.FromMilliseconds(10)", "10")]
+    [InlineData("TimeSpan.FromSeconds(10.5)", "10500")]
+    [InlineData("TimeSpan.FromMinutes(1)", "60000")]
+    [InlineData("TimeSpan.FromHours(1)", "3600000")]
+    [InlineData("TimeSpan.FromDays(1)", "86400000")]
+    [InlineData("new TimeSpan(10000)", "1")]
+    [InlineData("new TimeSpan(1, 2, 3)", "3723000")]
+    [InlineData("new TimeSpan(1, 2, 3, 4)", "93784000")]
+    [InlineData("new TimeSpan(1, 2, 3, 4, 5)", "93784005")]
+    public Task Timeout(string timeout, string milliseconds)
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.None, {{timeout}})|};
+            }
+            """;
+        test.FixedCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern", RegexOptions.None, matchTimeoutMilliseconds: {{milliseconds}})]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("TimeSpan.FromSeconds(1, 500)", "1500")]
+    [InlineData("TimeSpan.FromSeconds(milliseconds: 500, seconds: 1)", "1500")]
+    [InlineData("TimeSpan.FromMilliseconds(1, 2000)", "3")]
+    [InlineData("TimeSpan.FromMinutes(1, 30)", "90000")]
+    [InlineData("TimeSpan.FromHours(1, 2, 3, 4)", "3723004")]
+    [InlineData("TimeSpan.FromDays(1, 2, 3, 4)", "93784000")]
+    [InlineData("new TimeSpan(seconds: 3, minutes: 2, hours: 1)", "3723000")]
+    [InlineData("new TimeSpan(1, 2, 3, 4, 5, 6000)", "93784011")]
+    public Task Timeout_MultipleComponents(string timeout, string milliseconds)
+    {
+        var test = CreateTest();
+
+        // The TimeSpan.FromXXX overloads taking multiple components were added in .NET 9, and the code fixer
+        // generates a partial method for the language versions that do not support partial properties
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net90;
+        test.LanguageVersion = LanguageVersion.CSharp12;
+
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.None, {{timeout}})|};
+            }
+            """;
+        test.FixedCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern", RegexOptions.None, matchTimeoutMilliseconds: {{milliseconds}})]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("new TimeSpan(1)")]
+    [InlineData("TimeSpan.FromMilliseconds(0.5)")]
+    [InlineData("TimeSpan.MaxValue")]
+    [InlineData("TimeSpan.FromDays(30)")]
+    [InlineData("TimeSpan.FromDays(int.MaxValue)")]
+    [InlineData("new TimeSpan(int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue)")]
+    [InlineData("TimeSpan.Zero.Add(TimeSpan.FromSeconds(1))")]
+    public Task Timeout_NotRepresentableInMilliseconds_NoDiagnostic(string timeout)
+    {
+        var test = CreateTest();
+
+        // The generator of .NET 11 requires C# 12, which is not the default language version of every supported Roslyn version
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net70;
+
+        // The generated attribute takes an Int32 number of milliseconds, so a duration that is not an exact
+        // number of milliseconds, or that is too long, cannot be converted without changing the timeout
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = new Regex("testpattern", RegexOptions.None, {{timeout}});
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("System.Threading.Timeout.InfiniteTimeSpan")]
+    [InlineData("Regex.InfiniteMatchTimeout")]
+    public Task New_Timeout_Infinite(string timeout)
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.None, {{timeout}})|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern", RegexOptions.None, matchTimeoutMilliseconds: -1)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("System.Threading.Timeout.InfiniteTimeSpan")]
+    [InlineData("Regex.InfiniteMatchTimeout")]
+    public Task Static_Timeout_Infinite(string timeout)
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("input", "testpattern", RegexOptions.None, {{timeout}})|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch("input");
+
+                [GeneratedRegex("testpattern", RegexOptions.None, matchTimeoutMilliseconds: -1)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task GenerateUniqueMethodName()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("input", "testpattern")|};
+
+                private static Regex MyRegex() => throw null;
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex_().IsMatch("input");
+
+                private static Regex MyRegex() => throw null;
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NonConstantPattern()
+    {
+        var test = CreateTest();
+
+        // The generator of .NET 11 requires C# 12, which is not the default language version of every supported Roslyn version
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net70;
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                void A(string pattern) => Regex.IsMatch("input", pattern);
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NestedTypeShouldAddPartialToAllAncestorTypes()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                private partial class Inner1
+                {
+                    class Inner
+                    {
+                        bool a = {|TRX0110:Regex.IsMatch("input", "testpattern")|};
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                private partial class Inner1
+                {
+                    partial class Inner
+                    {
+                        bool a = MyRegex().IsMatch("input");
+
+                        [GeneratedRegex("testpattern")]
+                        private static partial Regex MyRegex();
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#if CSHARP14_OR_GREATER
+    [Fact]
+    public Task NewRegex_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex_ExpressionStatement_PartialMethod()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                void A()
+                {
+                    {|TRX0110:new Regex("[a-z]+")|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                void A()
+                {
+                    MyRegex();
+                }
+
+                [GeneratedRegex("[a-z]+")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex_Options_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.ExplicitCapture)|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture)]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex_Options_Timeout_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex("testpattern", RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("test", "testpattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex.IsMatch("test");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_Options_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("test", "testpattern", RegexOptions.ExplicitCapture)|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex.IsMatch("test");
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture)]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexReplace_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                string a = {|TRX0110:Regex.Replace("test", "testpattern", "newValue")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                string a = MyRegex.Replace("test", "newValue");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NestedTypeShouldAddPartialToAllAncestorTypes_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                private partial class Inner1
+                {
+                    class Inner
+                    {
+                        bool a = {|TRX0110:Regex.IsMatch("input", "testpattern")|};
+                    }
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                private partial class Inner1
+                {
+                    partial class Inner
+                    {
+                        bool a = MyRegex.IsMatch("input");
+
+                        [GeneratedRegex("testpattern")]
+                        private static partial Regex MyRegex { get; }
+                    }
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_NamedArgumentsInReverseOrder_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch(pattern: "testpattern", input: "test")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex.IsMatch(input: "test");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#endif
+    [Fact]
+    public Task Field_SuggestFieldName()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                private static readonly Regex SampleRegex = {|TRX0110:new Regex("pattern")|};
+
+                void M()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                private static readonly Regex SampleRegex = SampleRegex_();
+
+                void M()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex SampleRegex_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_SuggestFieldNameWithoutRegexSuffix()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                private static readonly Regex EmailPattern = {|TRX0110:new Regex("pattern")|};
+
+                void M()
+                {
+                    _ = EmailPattern.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                private static readonly Regex EmailPattern = EmailPattern_();
+
+                void M()
+                {
+                    _ = EmailPattern.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex EmailPattern_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Variable_SuggestPascalCaseName()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Foo
+            {
+                void A()
+                {
+                    Regex sampleRegex = {|TRX0110:new Regex("pattern")|};
+                    _ = sampleRegex.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Foo
+            {
+                void A()
+                {
+                    Regex sampleRegex = SampleRegex();
+                    _ = sampleRegex.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex SampleRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Variable_AlreadyPascalCase()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Foo
+            {
+                void A()
+                {
+                    Regex EmailRegex = {|TRX0110:new Regex("pattern")|};
+                    _ = EmailRegex.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Foo
+            {
+                void A()
+                {
+                    Regex EmailRegex = EmailRegex_();
+                    _ = EmailRegex.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex EmailRegex_();
+            }
+            """;
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task StaticMethod_UseDefaultName()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch("test", "testpattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch("test");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#if CSHARP14_OR_GREATER
+    [Fact]
+    public Task Field_RemoveAndReplaceWithProperty_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                private static readonly Regex SampleRegex = {|TRX0110:new Regex("pattern")|};
+
+                void M()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+
+                void M()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex SampleRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Variable_RemoveAndReplaceWithProperty_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Foo
+            {
+                void A()
+                {
+                    Regex sampleRegex = {|TRX0110:new Regex("pattern")|};
+                    _ = sampleRegex.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Foo
+            {
+                void A()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex SampleRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PropertyInitializer_RemoveAndReplaceWithProperty_PartialMethod()
+    {
+        var test = new CodeFixTest();
+        test.UseFrameworkSourceGenerators = true;
+        test.CodeActionIndex = 1;
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                public Regex SampleRegex { get; } = {|TRX0110:new Regex("pattern")|};
+
+                void M()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                public Regex SampleRegex { get; } = SampleRegex_();
+
+                void M()
+                {
+                    _ = SampleRegex.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex SampleRegex_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PropertyInitializer_NoReferences_RemoveAndReplaceWithProperty_PartialMethod()
+    {
+        var test = new CodeFixTest();
+        test.UseFrameworkSourceGenerators = true;
+        test.CodeActionIndex = 1;
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                public Regex EmailRegex { get; } = {|TRX0110:new Regex("pattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                public Regex EmailRegex { get; } = EmailRegex_();
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex EmailRegex_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PropertyInitializer_WithOptions_RemoveAndReplaceWithProperty_PartialMethod()
+    {
+        var test = new CodeFixTest();
+        test.UseFrameworkSourceGenerators = true;
+        test.CodeActionIndex = 1;
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                public Regex Pattern { get; } = {|TRX0110:new Regex("pattern", RegexOptions.IgnoreCase)|};
+
+                void M()
+                {
+                    _ = Pattern.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                public Regex Pattern { get; } = Pattern_();
+
+                void M()
+                {
+                    _ = Pattern.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern", RegexOptions.IgnoreCase)]
+                private static partial Regex Pattern_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task PropertyInitializer_PartialMethod()
+    {
+        var test = new CodeFixTest();
+        test.UseFrameworkSourceGenerators = true;
+        test.CodeActionIndex = 1;
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                public Regex Pattern { get; } = {|TRX0110:new Regex("pattern")|};
+
+                void M()
+                {
+                    _ = Pattern.IsMatch("value");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+                public Regex Pattern { get; } = Pattern_();
+
+                void M()
+                {
+                    _ = Pattern.IsMatch("value");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex Pattern_();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Field_MultipleReferences_RemoveAndReplaceWithProperty_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Sample
+            {
+                private static readonly Regex EmailPattern = {|TRX0110:new Regex("pattern")|};
+
+                void M1()
+                {
+                    _ = EmailPattern.IsMatch("value1");
+                }
+
+                void M2()
+                {
+                    _ = EmailPattern.IsMatch("value2");
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Sample
+            {
+
+                void M1()
+                {
+                    _ = EmailPattern.IsMatch("value1");
+                }
+
+                void M2()
+                {
+                    _ = EmailPattern.IsMatch("value2");
+                }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex EmailPattern { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#endif
+    [Fact]
+    public Task TopLevelStatement_NewRegex_PartialMethod()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            var emailRegex = {|TRX0110:new Regex("pattern")|};
+            emailRegex.Match("value");
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            var emailRegex = EmailRegex();
+            emailRegex.Match("value");
+
+            partial class Program
+            {
+                [GeneratedRegex("pattern")]
+                private static partial Regex EmailRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#if CSHARP14_OR_GREATER
+    [Fact]
+    public Task TopLevelStatement_NewRegex_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            var emailRegex = {|TRX0110:new Regex("pattern")|};
+            emailRegex.Match("value");
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+            EmailRegex.Match("value");
+
+            partial class Program
+            {
+                [GeneratedRegex("pattern")]
+                private static partial Regex EmailRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task TopLevelStatement_StaticMethod_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            var result = {|TRX0110:Regex.IsMatch("test", "pattern")|};
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            var result = MyRegex.IsMatch("test");
+
+            partial class Program
+            {
+                [GeneratedRegex("pattern")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task TopLevelStatement_WithExistingProgramClass_PartialProperty()
+    {
+        var test = CreateTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            var result = {|TRX0110:Regex.IsMatch("test", "pattern")|};
+
+            partial class Program
+            {
+                private static void Helper() { }
+            }
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            var result = MyRegex.IsMatch("test");
+
+            partial class Program
+            {
+                private static void Helper() { }
+
+                [GeneratedRegex("pattern")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#endif
+    [Fact]
+    public Task TopLevelStatement_StaticMethod_PartialMethod()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            var result = {|TRX0110:Regex.IsMatch("test", "pattern")|};
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            var result = MyRegex().IsMatch("test");
+
+            partial class Program
+            {
+                [GeneratedRegex("pattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task BatchFix_MultipleRegex()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test1
+            {
+                Regex a = {|TRX0110:new Regex("pattern1")|};
+            }
+
+            class Test2
+            {
+                Regex b = {|TRX0110:new Regex("pattern2")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test1
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("pattern1")]
+                private static partial Regex MyRegex();
+            }
+
+            partial class Test2
+            {
+                Regex b = MyRegex();
+
+                [GeneratedRegex("pattern2")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_NamedArgumentsInReverseOrder()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch(pattern: "testpattern", input: "test")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch(input: "test");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_Options_Timeout_NamedArgumentsInReverseOrder()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool a = {|TRX0110:Regex.IsMatch(matchTimeout: TimeSpan.FromSeconds(1), options: RegexOptions.ExplicitCapture, pattern: "testpattern", input: "test")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                bool a = MyRegex().IsMatch(input: "test");
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexReplace_NamedArgumentsInReverseOrder()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                string a = {|TRX0110:Regex.Replace(replacement: "replacement", pattern: "testpattern", input: "test")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                string a = MyRegex().Replace(replacement: "replacement", input: "test");
+
+                [GeneratedRegex("testpattern")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_NonConstantPatternPassedAsNamedArgument()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool A(string pattern) => Regex.IsMatch(pattern: pattern, input: "test");
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex_Options_Timeout_NamedArgumentsInReverseOrder()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                Regex a = {|TRX0110:new Regex(matchTimeout: TimeSpan.FromSeconds(1), options: RegexOptions.ExplicitCapture, pattern: "testpattern")|};
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                Regex a = MyRegex();
+
+                [GeneratedRegex("testpattern", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("\"ab\"", "\"ab\"")]
+    [InlineData("\"a\\\\d\"", "@\"a\\d\"")]
+    [InlineData("@\"a\\\"\"b\"", "@\"a\\\"\"b\"")]
+    [InlineData("\"a\\nb\"", "\"a\\nb\"")]
+    [InlineData("\"a\\\\\\nb\"", "\"a\\\\\\nb\"")]
+    [InlineData("\"a\" + \"b\"", "\"ab\"")]
+    public Task LocalConstantPattern(string pattern, string literal)
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = $$"""
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                void M()
+                {
+                    const string Pattern = {{pattern}};
+                    _ = {|TRX0110:new Regex(Pattern)|};
+                }
+            }
+            """;
+        test.FixedCode = $$"""
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                void M()
+                {
+                    const string Pattern = {{pattern}};
+                    _ = MyRegex();
+                }
+
+                [GeneratedRegex({{literal}})]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task LocalConstantInPatternExpression()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                const string Suffix = "c";
+
+                void M()
+                {
+                    const string Prefix = "a";
+                    _ = {|TRX0110:Regex.IsMatch("input", Prefix + "b" + Suffix)|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                const string Suffix = "c";
+
+                void M()
+                {
+                    const string Prefix = "a";
+                    _ = MyRegex().IsMatch("input");
+                }
+
+                [GeneratedRegex("abc")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ConstantFieldPattern()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                const string Pattern = "a";
+
+                void M()
+                {
+                    _ = {|TRX0110:new Regex(Pattern + "b", RegexOptions.IgnoreCase)|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                const string Pattern = "a";
+
+                void M()
+                {
+                    _ = MyRegex();
+                }
+
+                [GeneratedRegex(Pattern + "b", RegexOptions.IgnoreCase)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("RegexOptions.IgnoreCase | RegexOptions.CultureInvariant", "RegexOptions.IgnoreCase | RegexOptions.CultureInvariant")]
+    [InlineData("RegexOptions.CultureInvariant | RegexOptions.IgnoreCase", "RegexOptions.IgnoreCase | RegexOptions.CultureInvariant")]
+    [InlineData("RegexOptions.None", "RegexOptions.None")]
+    [InlineData("(RegexOptions)1", "RegexOptions.IgnoreCase")]
+    public Task LocalConstantOptions(string options, string expectedOptions)
+    {
+        var test = CreatePartialMethodTest();
+        test.TestCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                void M()
+                {
+                    const RegexOptions Options = {{options}};
+                    _ = {|TRX0110:new Regex("a", Options, TimeSpan.FromSeconds(1))|};
+                }
+            }
+            """;
+        test.FixedCode = $$"""
+            using System;
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                void M()
+                {
+                    const RegexOptions Options = {{options}};
+                    _ = MyRegex();
+                }
+
+                [GeneratedRegex("a", {{expectedOptions}}, matchTimeoutMilliseconds: 1000)]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task TopLevelStatement_LocalConstantPattern()
+    {
+        var test = CreatePartialMethodTest();
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            const string Pattern = "a";
+            _ = {|TRX0110:Regex.IsMatch("input", Pattern)|};
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            const string Pattern = "a";
+            _ = MyRegex().IsMatch("input");
+
+            partial class Program
+            {
+                [GeneratedRegex("a")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1645")]
+    public Task NewRegex_InvalidPattern_NoDiagnostic()
+    {
+        var test = new CodeFixTest();
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                private static Regex Value = new Regex("+=tr");
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NewRegex_InvalidOptions_NoDiagnostic()
+    {
+        var test = new CodeFixTest();
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                private static Regex Value = new Regex("a", RegexOptions.ECMAScript | RegexOptions.Singleline);
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task RegexIsMatch_InvalidPattern_NoDiagnostic()
+    {
+        var test = new CodeFixTest();
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                bool A(string value) => Regex.IsMatch(value, "(");
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1692")]
+    public Task NewRegex_InAttributeOfType()
+    {
+        var test = CreatePartialMethodTest();
+        // The code does not compile, so the compiler diagnostics cannot be verified
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class A : Attribute { public Regex Value { get; set; } }
+
+            [A(Value = {|TRX0110:new Regex("a")|})]
+            class Test
+            {
+            }
+            """;
+        test.FixedCode = """
+            using System;
+            using System.Text.RegularExpressions;
+
+            class A : Attribute { public Regex Value { get; set; } }
+
+            [A(Value = MyRegex())]
+            partial class Test
+            {
+                [GeneratedRegex("a")]
+                private static partial Regex MyRegex();
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+#if CSHARP14_OR_GREATER
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1681")]
+    public Task NewRegex_VariableDeclaredAsEmbeddedStatement_KeepVariable()
+    {
+        var test = CreateTest();
+        // The code does not compile, so the compiler diagnostics cannot be verified
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            class Test
+            {
+                void A(object obj)
+                {
+                    lock (obj) Regex value = {|TRX0110:new Regex("a")|};
+                }
+            }
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            partial class Test
+            {
+                void A(object obj)
+                {
+                    lock (obj) Regex value = Value;
+                }
+
+                [GeneratedRegex("a")]
+                private static partial Regex Value { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1677")]
+    public Task NewRegex_TopLevelVariableDeclaredAsEmbeddedStatement_KeepVariable()
+    {
+        var test = CreateTest();
+        // The code does not compile, so the compiler diagnostics cannot be verified
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;
+
+            lock (new object()) Regex value = {|TRX0110:new Regex("a")|};
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;
+
+            lock (new object()) Regex value = Value;
+
+            partial class Program
+            {
+                [GeneratedRegex("a")]
+                private static partial Regex Value { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1687")]
+    public Task NewRegex_SyntaxErrors_KeepVariable()
+    {
+        var test = CreateTest();
+        // The code does not compile, so the compiler diagnostics cannot be verified
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        // The syntax tree of the invalid code is not the same once the fixed code is parsed again
+        test.CodeActionValidationMode = CodeActionValidationMode.None;
+        test.TestState.OutputKind = OutputKind.ConsoleApplication;
+        test.TestCode = """
+            using System.Text.RegularExpressions;T x={|TRX0110:new Regex(""|};T m{{x
+            """;
+        test.FixedCode = """
+            using System.Text.RegularExpressions;T x= MyRegex; T m{{xpartial class Program
+            {
+                [GeneratedRegex("")]
+                private static partial Regex MyRegex { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+#endif
+}

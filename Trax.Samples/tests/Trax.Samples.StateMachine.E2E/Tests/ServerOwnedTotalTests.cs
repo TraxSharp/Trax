@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
 
@@ -49,7 +50,9 @@ public class ServerOwnedTotalTests : StateMachineTestFixture
             .ProblemCode.Should()
             .Be(StateMachineClient.NotServed);
 
-        (await Machines.LoadAsync(Alice, Checkout, id)).Context["total"]!
+        (await Machines.LoadAsync(Alice, Checkout, id))
+            .Context["total"]
+            .NotNull()
             .GetValue<long>()
             .Should()
             .Be(1998);
@@ -67,6 +70,6 @@ public class ServerOwnedTotalTests : StateMachineTestFixture
         var charge = Charges.For(book).Should().ContainSingle().Subject;
         charge.AmountCents.Should().Be(3 * 999);
         charge.Items.Should().Equal(book, "pen", "lamp");
-        paid.Context["total"]!.GetValue<long>().Should().Be(3 * 999);
+        paid.Context["total"].NotNull().GetValue<long>().Should().Be(3 * 999);
     }
 }

@@ -7,6 +7,7 @@ using NSubstitute.ReturnsExtensions;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 
@@ -24,9 +25,9 @@ namespace Trax.Api.Tests.GraphQLClient.IntegrationTests;
 [TestFixture]
 public class ExecutorEdgePathsTests
 {
-    private GraphQLTestServerFixture _fixture = null!;
-    private ServiceProvider _services = null!;
-    private IGraphQLClientExecutor _executor = null!;
+    private GraphQLTestServerFixture? _fixture;
+    private ServiceProvider? _services;
+    private IGraphQLClientExecutor? _executor;
 
     [SetUp]
     public void SetUp()
@@ -34,18 +35,18 @@ public class ExecutorEdgePathsTests
         _fixture = new GraphQLTestServerFixture();
         var services = new ServiceCollection();
         services
-            .AddTraxGraphQLClient(_fixture.BaseAddress)
-            .ConfigureHttpClient(_fixture.CreateHttpClient())
+            .AddTraxGraphQLClient(_fixture.NotNull().BaseAddress)
+            .ConfigureHttpClient(_fixture.NotNull().CreateHttpClient())
             .WithStrictness(ResponseStrictness.ThrowOnDrift);
         _services = services.BuildServiceProvider();
-        _executor = _services.GetRequiredService<IGraphQLClientExecutor>();
+        _executor = _services.NotNull().GetRequiredService<IGraphQLClientExecutor>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _services.Dispose();
-        _fixture.Dispose();
+        _services?.Dispose();
+        _fixture?.Dispose();
     }
 
     [Test]
@@ -59,10 +60,12 @@ public class ExecutorEdgePathsTests
             .ValidateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(GraphQLParser.AST.OperationType.Subscription));
 
-        var subscriptionConfig = _services.GetRequiredService<IGraphQLClientConfiguration>();
+        var subscriptionConfig = _services
+            .NotNull()
+            .GetRequiredService<IGraphQLClientConfiguration>();
         var executor = new GraphQLClientExecutor(stubValidator, subscriptionConfig);
 
-        var act = async () => await executor.Run(new AllItemsRequest());
+        var act = async () => await executor.Run(new AllItemsRequest()).ConfigureAwait(false);
 
         var ex = await act.Should().ThrowAsync<NotSupportedException>();
         ex.Which.Message.Should().Contain("Subscription");
@@ -74,7 +77,7 @@ public class ExecutorEdgePathsTests
         // With ThrowOnDrift configured, a default-extractor request with a field-set mismatch
         // would throw. A custom extractor opts out via UsesDefaultExtractor = false; this test
         // proves that path actually skips the shape check.
-        var result = await _executor.Run(new CustomExtractorRequest { Id = "player-1" });
+        var result = await _executor.NotNull().Run(new CustomExtractorRequest { Id = "player-1" });
 
         result.UpperName.Should().Be("ARAGORN");
     }
@@ -144,7 +147,7 @@ file sealed class CustomExtractorRequest : IGraphQLClientRequest<UpperNameProjec
 
     public UpperNameProjection Extract(JsonElement data, JsonSerializerOptions options)
     {
-        var name = data.GetProperty("player").GetProperty("name").GetString()!;
+        var name = data.GetProperty("player").GetProperty("name").GetString().NotNull();
         return new UpperNameProjection(name.ToUpperInvariant());
     }
 }

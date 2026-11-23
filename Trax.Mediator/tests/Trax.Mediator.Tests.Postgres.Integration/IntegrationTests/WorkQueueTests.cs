@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -24,7 +25,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -32,7 +34,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -44,12 +47,14 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.TrainName.Should().Be("Trax.Core.Tests.TestTrain");
+        found.NotNull().TrainName.Should().Be("Trax.Core.Tests.TestTrain");
         found.Input.Should().Be("""{"value": "test"}""");
         found.InputTypeName.Should().Be("Trax.Core.Tests.TestInput");
         found.Status.Should().Be(WorkQueueStatus.Queued);
         found.ExternalId.Should().NotBeNullOrEmpty();
-        found.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+        found
+            .CreatedAt.Should()
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
         found.DispatchedAt.Should().BeNull();
         found.ManifestId.Should().BeNull();
         found.MetadataId.Should().BeNull();
@@ -63,7 +68,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -72,7 +78,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"priority-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = 15,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -84,7 +91,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Priority.Should().Be(15);
+        found.NotNull().Priority.Should().Be(15);
     }
 
     [Theory]
@@ -94,7 +101,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -103,7 +111,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"clamp-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = 50,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -115,7 +124,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Priority.Should().Be(WorkQueue.MaxPriority);
+        found.NotNull().Priority.Should().Be(WorkQueue.MaxPriority);
     }
 
     [Theory]
@@ -125,7 +134,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -134,7 +144,8 @@ public class WorkQueueTests : TestSetup
                 Input = """{"value":"negative-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = -5,
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -146,7 +157,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Priority.Should().Be(WorkQueue.MinPriority);
+        found.NotNull().Priority.Should().Be(WorkQueue.MinPriority);
     }
 
     [Theory]
@@ -156,14 +167,15 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var manifestGroup = new ManifestGroup
         {
             Name = $"test-group-{Guid.NewGuid():N}",
             Priority = 0,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+            UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
         };
         context.ManifestGroups.Add(manifestGroup);
         await context.SaveChanges(CancellationToken.None);
@@ -185,11 +197,12 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(WorkQueueTests).FullName!,
+                TrainName = typeof(WorkQueueTests).FullName.NotNull(),
                 Input = """{"value":"test"}""",
                 InputTypeName = typeof(WorkQueueTests).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(entry);
@@ -203,9 +216,9 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.ManifestId.Should().Be(manifest.Id);
+        found.NotNull().ManifestId.Should().Be(manifest.Id);
         found.Manifest.Should().NotBeNull();
-        found.Manifest!.Id.Should().Be(manifest.Id);
+        found.Manifest.NotNull().Id.Should().Be(manifest.Id);
     }
 
     [Theory]
@@ -215,7 +228,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -223,7 +237,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.AdHocTrain",
                 Input = """{"key":"value"}""",
                 InputTypeName = "Trax.Core.Tests.AdHocInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -235,7 +250,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.ManifestId.Should().BeNull();
+        found.NotNull().ManifestId.Should().BeNull();
         found.Manifest.Should().BeNull();
     }
 
@@ -246,7 +261,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -254,7 +270,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"dispatch-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(entry);
@@ -266,7 +283,8 @@ public class WorkQueueTests : TestSetup
                 Name = "Trax.Core.Tests.TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { value = "dispatch-test" },
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(metadata);
@@ -275,7 +293,7 @@ public class WorkQueueTests : TestSetup
         // Act
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadata.Id;
-        entry.DispatchedAt = DateTime.UtcNow;
+        entry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
         await context.SaveChanges(CancellationToken.None);
         context.Reset();
 
@@ -285,11 +303,11 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Status.Should().Be(WorkQueueStatus.Dispatched);
+        found.NotNull().Status.Should().Be(WorkQueueStatus.Dispatched);
         found.MetadataId.Should().Be(metadata.Id);
         found.DispatchedAt.Should().NotBeNull();
         found.Metadata.Should().NotBeNull();
-        found.Metadata!.Id.Should().Be(metadata.Id);
+        found.Metadata.NotNull().Id.Should().Be(metadata.Id);
     }
 
     [Theory]
@@ -299,7 +317,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -307,7 +326,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"cancel-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(entry);
@@ -323,7 +343,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Status.Should().Be(WorkQueueStatus.Cancelled);
+        found.NotNull().Status.Should().Be(WorkQueueStatus.Cancelled);
         found.DispatchedAt.Should().BeNull();
         found.MetadataId.Should().BeNull();
     }
@@ -335,7 +355,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var queuedEntry = WorkQueue.Create(
             new CreateWorkQueue
@@ -343,7 +364,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.QueuedTrain",
                 Input = """{"status":"queued"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         var cancelledEntry = WorkQueue.Create(
@@ -352,7 +374,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.CancelledTrain",
                 Input = """{"status":"cancelled"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
-            }
+            },
+            TimeProvider.System
         );
 
         await context.Track(queuedEntry);
@@ -385,7 +408,8 @@ public class WorkQueueTests : TestSetup
         var postgresContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
 
-        using var context = (IDataContext)postgresContextFactory.Create();
+        var context = (IDataContext)postgresContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var complexJson =
             """{"name":"test","nested":{"key":"value","numbers":[1,2,3]},"enabled":true}""";
@@ -396,7 +420,8 @@ public class WorkQueueTests : TestSetup
                 TrainName = "Trax.Core.Tests.JsonTestTrain",
                 Input = complexJson,
                 InputTypeName = "Trax.Core.Tests.ComplexInput",
-            }
+            },
+            TimeProvider.System
         );
 
         // Act
@@ -408,7 +433,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.Input.Should().NotBeNull();
+        found.NotNull().Input.Should().NotBeNull();
         // JSONB normalizes whitespace but preserves data
         found.Input.Should().Contain("\"name\"");
         found.Input.Should().Contain("\"test\"");

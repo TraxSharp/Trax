@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -53,21 +54,23 @@ public class MultipleAwsWorkerRegistrationsTests
 
         var routing = provider.GetRequiredService<JobSubmitterRoutingConfiguration>();
         routing
-            .GetRegistration(typeof(IFirstTrain).FullName!)!
+            .GetRegistration(typeof(IFirstTrain).FullName.NotNull())
+            .NotNull()
             .Description.Should()
             .Contain("gpu-function");
         routing
-            .GetRegistration(typeof(ISecondTrain).FullName!)!
+            .GetRegistration(typeof(ISecondTrain).FullName.NotNull())
+            .NotNull()
             .Description.Should()
             .Contain("cpu-function");
 
         using var scope = provider.CreateScope();
         routing
-            .ResolveSubmitter(scope.ServiceProvider, typeof(IFirstTrain).FullName!)
+            .ResolveSubmitter(scope.ServiceProvider, typeof(IFirstTrain).FullName.NotNull())
             .Should()
             .BeOfType<LambdaJobSubmitter>();
         routing
-            .ResolveSubmitter(scope.ServiceProvider, typeof(ISecondTrain).FullName!)
+            .ResolveSubmitter(scope.ServiceProvider, typeof(ISecondTrain).FullName.NotNull())
             .Should()
             .BeOfType<LambdaJobSubmitter>();
 
@@ -110,21 +113,23 @@ public class MultipleAwsWorkerRegistrationsTests
 
         var routing = provider.GetRequiredService<JobSubmitterRoutingConfiguration>();
         routing
-            .GetRegistration(typeof(IFirstTrain).FullName!)!
+            .GetRegistration(typeof(IFirstTrain).FullName.NotNull())
+            .NotNull()
             .Description.Should()
             .Contain("first");
         routing
-            .GetRegistration(typeof(ISecondTrain).FullName!)!
+            .GetRegistration(typeof(ISecondTrain).FullName.NotNull())
+            .NotNull()
             .Description.Should()
             .Contain("second");
 
         using var scope = provider.CreateScope();
         routing
-            .ResolveSubmitter(scope.ServiceProvider, typeof(IFirstTrain).FullName!)
+            .ResolveSubmitter(scope.ServiceProvider, typeof(IFirstTrain).FullName.NotNull())
             .Should()
             .BeOfType<SqsJobSubmitter>();
         routing
-            .ResolveSubmitter(scope.ServiceProvider, typeof(ISecondTrain).FullName!)
+            .ResolveSubmitter(scope.ServiceProvider, typeof(ISecondTrain).FullName.NotNull())
             .Should()
             .BeOfType<SqsJobSubmitter>();
 

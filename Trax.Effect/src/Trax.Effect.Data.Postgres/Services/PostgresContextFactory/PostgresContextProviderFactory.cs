@@ -34,7 +34,7 @@ namespace Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
 /// );
 /// ```
 /// </remarks>
-internal class PostgresContextProviderFactory(
+internal sealed class PostgresContextProviderFactory(
     IDbContextFactory<PostgresContext.PostgresContext> dbContextFactory
 ) : IDataContextProviderFactory
 {
@@ -98,7 +98,9 @@ internal class PostgresContextProviderFactory(
     /// </remarks>
     public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
     {
-        var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var context = await dbContextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         Interlocked.Increment(ref _count);
 

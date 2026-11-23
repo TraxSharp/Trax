@@ -5,19 +5,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Cli.Tests.Fakes;
 
-public enum GaugeState
-{
-    Idle,
-    Reading,
-}
-
-public enum GaugeTrigger
-{
-    Lower,
-    Raise,
-    Settle,
-}
-
 /// <summary>
 /// A machine whose guards are <c>LessThan</c>, <c>AtLeast</c> and <c>AtMost</c> (<c>lt</c>, <c>gte</c>,
 /// <c>lte</c>), sampled on each side of every bound, so the committed differential corpus holds both runtimes to

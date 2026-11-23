@@ -4,6 +4,7 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -36,8 +37,8 @@ public class FieldNameCollisionTests
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
         ex.Message.Should()
             .Contain("'teams'")
-            .And.Contain(typeof(ITeamsTrain).FullName!)
-            .And.Contain(typeof(Team).FullName!);
+            .And.Contain(typeof(ITeamsTrain).FullName.NotNull())
+            .And.Contain(typeof(Team).FullName.NotNull());
     }
 
     [Test]
@@ -56,8 +57,8 @@ public class FieldNameCollisionTests
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
         ex.Message.Should()
             .Contain("'teams'")
-            .And.Contain(typeof(TeamContext).FullName!)
-            .And.Contain(typeof(SecondTeamContext).FullName!);
+            .And.Contain(typeof(TeamContext).FullName.NotNull())
+            .And.Contain(typeof(SecondTeamContext).FullName.NotNull());
     }
 
     [Test]
@@ -74,7 +75,7 @@ public class FieldNameCollisionTests
         ex.Message.Should()
             .Contain("'teams'")
             .And.Contain("namespace 'teams'")
-            .And.Contain(typeof(Team).FullName!);
+            .And.Contain(typeof(Team).FullName.NotNull());
     }
 
     /// <summary>
@@ -93,8 +94,8 @@ public class FieldNameCollisionTests
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
         ex.Message.Should()
             .Contain("'FooMutationResponse'")
-            .And.Contain(typeof(IFooTrain).FullName!)
-            .And.Contain(typeof(IFooMutationTrain).FullName!);
+            .And.Contain(typeof(IFooTrain).FullName.NotNull())
+            .And.Contain(typeof(IFooMutationTrain).FullName.NotNull());
     }
 
     /// <summary>
@@ -115,7 +116,7 @@ public class FieldNameCollisionTests
         executor.Schema.Types.Select(t => t.Name).Should().Contain("BarMutationResponse");
         executor
             .Schema.Types.OfType<ObjectType>()
-            .Single(t => t.Name == "BarResponse")
+            .Single(t => string.Equals(t.Name, "BarResponse", StringComparison.Ordinal))
             .RuntimeType.Should()
             .Be<BarResult>();
     }
@@ -134,8 +135,8 @@ public class FieldNameCollisionTests
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
         ex.Message.Should()
             .Contain("DiscoverQueries.teams")
-            .And.Contain(typeof(CollisionResolvers).FullName!)
-            .And.Contain(typeof(Team).FullName!);
+            .And.Contain(typeof(CollisionResolvers).FullName.NotNull())
+            .And.Contain(typeof(Team).FullName.NotNull());
     }
 
     /// <summary>An extension that names its target by CLR type is checked the same way.</summary>
@@ -151,7 +152,9 @@ public class FieldNameCollisionTests
             );
 
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
-        ex.Message.Should().Contain("DiscoverQueries.teams").And.Contain(typeof(Team).FullName!);
+        ex.Message.Should()
+            .Contain("DiscoverQueries.teams")
+            .And.Contain(typeof(Team).FullName.NotNull());
     }
 
     /// <summary>
@@ -171,7 +174,9 @@ public class FieldNameCollisionTests
             );
 
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
-        ex.Message.Should().Contain("DiscoverQueries.teams").And.Contain(typeof(Team).FullName!);
+        ex.Message.Should()
+            .Contain("DiscoverQueries.teams")
+            .And.Contain(typeof(Team).FullName.NotNull());
     }
 
     /// <summary>
@@ -226,8 +231,8 @@ public class FieldNameCollisionTests
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
         ex.Message.Should()
             .Contain("RootQuery.duplicated")
-            .And.Contain(typeof(CollisionResolvers).FullName!)
-            .And.Contain(typeof(OtherCollisionResolvers).FullName!);
+            .And.Contain(typeof(CollisionResolvers).FullName.NotNull())
+            .And.Contain(typeof(OtherCollisionResolvers).FullName.NotNull());
     }
 
     [Test]
@@ -243,7 +248,7 @@ public class FieldNameCollisionTests
         var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
         ex.Message.Should()
             .Contain("RootQuery.operations")
-            .And.Contain(typeof(CollisionResolvers).FullName!);
+            .And.Contain(typeof(CollisionResolvers).FullName.NotNull());
     }
 
     [Test]

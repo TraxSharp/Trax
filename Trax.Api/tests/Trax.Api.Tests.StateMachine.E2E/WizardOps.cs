@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
@@ -80,7 +81,10 @@ public static class WizardOps
         string? secret = null
     )
     {
-        var fields = $"title: {Literal(title)}, pages: {pages}";
+        var fields = string.Create(
+            CultureInfo.InvariantCulture,
+            $"title: {Literal(title)}, pages: {pages}"
+        );
         if (note is not null)
             fields += $", note_text: {Literal(note)}";
         if (secret is not null)
@@ -183,9 +187,10 @@ public static class WizardOps
     )
     {
         using var doc = await host.PostAsync(
-            Start(title, requestId ?? NewRequestId()),
-            apiKey: apiKey
-        );
+                Start(title, requestId ?? NewRequestId()),
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         var result = Result(doc, "start");
         if (result.ProblemCode is { } code)
             Assert.Fail($"start was refused: {code} {result.ProblemMessage}");
@@ -204,9 +209,10 @@ public static class WizardOps
     )
     {
         using var doc = await host.PostAsync(
-            Event(field, id, requestId ?? NewRequestId(), input, clientResult),
-            apiKey: apiKey
-        );
+                Event(field, id, requestId ?? NewRequestId(), input, clientResult),
+                apiKey: apiKey
+            )
+            .ConfigureAwait(false);
         return Result(doc, field);
     }
 
@@ -220,7 +226,8 @@ public static class WizardOps
         string? requestId = null
     )
     {
-        var result = await host.SendWizardEventAsync(apiKey, field, id, input, requestId);
+        var result = await host.SendWizardEventAsync(apiKey, field, id, input, requestId)
+            .ConfigureAwait(false);
         if (result.ProblemCode is { } code)
             Assert.Fail($"{field} was refused: {code} {result.ProblemMessage}");
         return result;
@@ -229,78 +236,22 @@ public static class WizardOps
     /// <summary>Starts a wizard and describes it, so it waits in <see cref="WizardState.Paying"/>.</summary>
     public static async Task<MachineResult> WizardInPayingAsync(this IHost host, string apiKey)
     {
-        var started = await host.StartWizardAsync(apiKey);
-        return await host.AdvanceWizardAsync(apiKey, "describe", started.Id, DetailsInput());
+        var started = await host.StartWizardAsync(apiKey).ConfigureAwait(false);
+        return await host.AdvanceWizardAsync(apiKey, "describe", started.Id, DetailsInput())
+            .ConfigureAwait(false);
     }
 
     /// <summary>Starts a wizard, describes it and pays, so it waits in <see cref="WizardState.Approving"/>.</summary>
     public static async Task<MachineResult> WizardInApprovingAsync(this IHost host, string apiKey)
     {
-        var paying = await host.WizardInPayingAsync(apiKey);
-        return await host.AdvanceWizardAsync(apiKey, "pay", paying.Id);
+        var paying = await host.WizardInPayingAsync(apiKey).ConfigureAwait(false);
+        return await host.AdvanceWizardAsync(apiKey, "pay", paying.Id).ConfigureAwait(false);
     }
 
     /// <summary>The answer of <c>get</c> for <paramref name="apiKey"/>'s caller.</summary>
     public static async Task<JsonElement> GetWizardAsync(this IHost host, string? apiKey, Guid id)
     {
-        using var doc = await host.PostAsync(Get(id), apiKey: apiKey);
+        using var doc = await host.PostAsync(Get(id), apiKey: apiKey).ConfigureAwait(false);
         return ReadGet(doc);
     }
-}
-
-/// <summary>One answer of a typed machine mutation: the server's snapshot, or the problem it refused with.</summary>
-public sealed record MachineResult(JsonElement Raw)
-{
-    /// <summary>The instance's id.</summary>
-    public Guid Id =>
-        Raw.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
-            ? Guid.Parse(id.GetString()!)
-            : Guid.Empty;
-
-    /// <summary>The revision the server recorded, or null when the answer carries none.</summary>
-    public long? Revision =>
-        Raw.TryGetProperty("revision", out var revision)
-            ? revision.ValueKind switch
-            {
-                JsonValueKind.Number => revision.GetInt64(),
-                JsonValueKind.String => long.Parse(revision.GetString()!),
-                _ => null,
-            }
-            : null;
-
-    /// <summary>The state, as the schema spells it.</summary>
-    public string? State =>
-        Raw.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.String
-            ? state.GetString()
-            : null;
-
-    /// <summary>The context object.</summary>
-    public JsonElement Context => Raw.GetProperty("context");
-
-    /// <summary>The refusal's code, or null when the server accepted.</summary>
-    public string? ProblemCode =>
-        Raw.TryGetProperty("problem", out var problem) && problem.ValueKind == JsonValueKind.Object
-            ? problem.GetProperty("code").GetString()
-            : null;
-
-    /// <summary>The refusal's message, or null when the server accepted.</summary>
-    public string? ProblemMessage =>
-        Raw.TryGetProperty("problem", out var problem) && problem.ValueKind == JsonValueKind.Object
-            ? problem.GetProperty("message").GetString()
-            : null;
-
-    /// <summary>
-    /// Whether the state is <paramref name="state"/>, however the schema spells an enum value
-    /// (<c>BuildFailed</c> or <c>BUILD_FAILED</c>).
-    /// </summary>
-    public bool StateIs(WizardState state) => SameName(State, state.ToString());
-
-    /// <summary>Compares two enum spellings, ignoring case and underscores.</summary>
-    public static bool SameName(string? a, string b) =>
-        a is not null
-        && string.Equals(
-            a.Replace("_", "", StringComparison.Ordinal),
-            b.Replace("_", "", StringComparison.Ordinal),
-            StringComparison.OrdinalIgnoreCase
-        );
 }

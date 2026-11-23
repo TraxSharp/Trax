@@ -12,4 +12,4 @@ namespace Trax.Effect.Data.Utils;
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class UtcValueConverter()
-    : ValueConverter<DateTime, DateTime>(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc)) { }
+    : ValueConverter<DateTime, DateTime>(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));

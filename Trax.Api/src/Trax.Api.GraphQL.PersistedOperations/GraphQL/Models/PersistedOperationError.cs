@@ -59,8 +59,8 @@ public sealed record PersistedOperationError(
                 failure.Message,
                 locs,
                 path,
-                null,
-                null
+                OldFingerprint: null,
+                NewFingerprint: null
             );
         }
     }
@@ -81,7 +81,15 @@ public sealed record PersistedOperationError(
 
     internal static PersistedOperationError FromNotBroadcast(
         PersistedOperationNotBroadcastException ex
-    ) => new(ex.Code, ex.Message, Locations: null, Path: null, null, null);
+    ) =>
+        new(
+            ex.Code,
+            ex.Message,
+            Locations: null,
+            Path: null,
+            OldFingerprint: null,
+            NewFingerprint: null
+        );
 
     /// <summary>Build a NOT_FOUND error.</summary>
     public static PersistedOperationError NotFound(string id) =>
@@ -94,7 +102,3 @@ public sealed record PersistedOperationError(
             NewFingerprint: null
         );
 }
-
-/// <summary>1-based location in the candidate document.</summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public sealed record PersistedOperationErrorLocation(int Line, int Column);

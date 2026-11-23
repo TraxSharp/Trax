@@ -1,18 +1,5 @@
 namespace Trax.Client;
 
-/// <summary>What a document's one operation is.</summary>
-public enum TraxOperationKind
-{
-    /// <summary>A <c>query</c>.</summary>
-    Query,
-
-    /// <summary>A <c>mutation</c>.</summary>
-    Mutation,
-
-    /// <summary>A <c>subscription</c>: a stream, followed with <see cref="TraxClient.Subscribe{TVariables, TResult}"/>.</summary>
-    Subscription,
-}
-
 /// <summary>
 /// One document a client sends: its operation's name and kind, the id a host registers it under, and its text exactly
 /// as the id was computed from it.
@@ -32,12 +19,3 @@ public sealed record TraxDocument<TVariables, TResult>(
     string? Id,
     string Text
 ) : TraxDocument(Name, Kind, Id, Text);
-
-/// <summary>The variables of a document that declares none. Sent as <c>{}</c>.</summary>
-public sealed record TraxNoVariables
-{
-    /// <summary>The one value.</summary>
-    public static readonly TraxNoVariables Instance = new();
-
-    private TraxNoVariables() { }
-}

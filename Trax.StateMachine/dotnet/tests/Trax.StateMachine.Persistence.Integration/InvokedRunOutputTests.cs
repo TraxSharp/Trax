@@ -27,7 +27,8 @@ public class InvokedRunOutputTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 InvokedBy = new InvokedBy("ingest", Guid.NewGuid(), SnapshotOwnerKind.System),
-            }
+            },
+            TimeProvider.System
         );
 
     [Test]

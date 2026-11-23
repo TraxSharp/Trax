@@ -123,21 +123,7 @@ public static class ServiceExtensions
         Action<NpgsqlDataSourceBuilder>? configureDataSource
     )
     {
-        // Migrate the database schema to the latest version, unless SkipMigrations() or TRAX_MIGRATIONS=skip says
-        // not to; a process started with --trax-migrate always does (TraxMigrate).
-        // A process started to export its client manifest opens no database, and refuses to serve if it is not
-        // exporting after all (TraxClientExport).
-        // The same holds for a process exporting what it needs from its deployment (TraxDeployExport).
-        var export =
-            TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection)
-            | TraxDeployExport.SkipsDatabase(configurationBuilder.ServiceCollection);
-        DeployFact.Add(configurationBuilder.ServiceCollection, DeployFact.Database, "postgres");
-        DeployFact.Add(
-            configurationBuilder.ServiceCollection,
-            DeployFact.MigratesOnStart,
-            configurationBuilder.MigrationsDisabled ? "false" : "true"
-        );
-        if (!export && TraxMigrate.ShouldMigrate(configurationBuilder))
+        if (MigratesOnStart(configurationBuilder))
             DatabaseMigrator.Migrate(connectionString).Wait();
 
         // The data source is built by the container, once per service provider, so the provider
@@ -149,8 +135,75 @@ public static class ServiceExtensions
             ModelBuilderExtensions.BuildDataSource(connectionString, configureDataSource)
         );
 
+        AddPostgresContext(configurationBuilder.ServiceCollection);
+
+        // Register the PostgresContextProviderFactory
+        configurationBuilder.AddEffect<IDataContextProviderFactory, PostgresContextProviderFactory>(
+            toggleable: false
+        );
+
+        // The rows a run's checkpoints are stored in and resumed from (Trax.Docs/adr/0047).
+        configurationBuilder.ServiceCollection.TryAddSingleton<
+            Trax.Effect.Services.Checkpoints.ICheckpointRows,
+            Trax.Effect.Data.Checkpoints.CheckpointRows
+        >();
+
+        // The row this host rewrites every 15 seconds, so an idle host can be told from a dead one.
+        Trax.Effect.Data.Services.HostHeartbeats.HostHeartbeatService.Register(
+            configurationBuilder.ServiceCollection
+        );
+
+        // Register the SQL dialect for provider-specific raw SQL
+        configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
+
+        AddNoticeListeners(
+            configurationBuilder.ServiceCollection,
+            connectionString,
+            configureDataSource
+        );
+
+        // Configure a feature's own DbContext, if it brings one, against this same Postgres data source, so it needs no
+        // host AddDbContext call. A feature table normally ships on IDataContext instead.
+        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(sp =>
+        {
+            var dataSource = sp.GetRequiredService<NpgsqlDataSource>();
+            return new DelegateFeatureDbConfigurator(options => options.UseNpgsql(dataSource));
+        });
+
+        configurationBuilder.HasDatabaseProvider = true;
+        configurationBuilder.HasDataProvider = true;
+
+        var promoted =
+            configurationBuilder as TraxEffectBuilderWithData
+            ?? new TraxEffectBuilderWithData(configurationBuilder);
+        return promoted;
+    }
+
+    // Records the deploy facts, and whether this process migrates the database as it starts.
+    private static bool MigratesOnStart(TraxEffectBuilder configurationBuilder)
+    {
+        var services = configurationBuilder.ServiceCollection;
+
+        // Migrate the database schema to the latest version, unless SkipMigrations() or TRAX_MIGRATIONS=skip says
+        // not to; a process started with --trax-migrate always does (TraxMigrate).
+        // A process started to export its client manifest opens no database, and refuses to serve if it is not
+        // exporting after all (TraxClientExport).
+        // The same holds for a process exporting what it needs from its deployment (TraxDeployExport).
+        var export =
+            TraxClientExport.SkipsDatabase(services) | TraxDeployExport.SkipsDatabase(services);
+        DeployFact.Add(services, DeployFact.Database, "postgres");
+        DeployFact.Add(
+            services,
+            DeployFact.MigratesOnStart,
+            configurationBuilder.MigrationsDisabled ? "false" : "true"
+        );
+        return !export && TraxMigrate.ShouldMigrate(configurationBuilder);
+    }
+
+    private static void AddPostgresContext(IServiceCollection services)
+    {
         // Register the DbContextFactory
-        configurationBuilder.ServiceCollection.AddDbContextFactory<PostgresContext>(
+        services.AddDbContextFactory<PostgresContext>(
             (sp, options) =>
             {
                 options
@@ -179,59 +232,34 @@ public static class ServiceExtensions
         );
 
         // Register PostgresContext directly for injection (created from the factory)
-        configurationBuilder.ServiceCollection.AddScoped<IDataContext, PostgresContext>(sp =>
+        services.AddScoped<IDataContext, PostgresContext>(sp =>
             sp.GetRequiredService<IDbContextFactory<PostgresContext>>().CreateDbContext()
         );
+    }
 
-        // Register the PostgresContextProviderFactory
-        configurationBuilder.AddEffect<IDataContextProviderFactory, PostgresContextProviderFactory>(
-            toggleable: false
-        );
-
-        // The rows a run's checkpoints are stored in and resumed from (Trax.Docs/adr/0047).
-        configurationBuilder.ServiceCollection.TryAddSingleton<
-            Trax.Effect.Services.Checkpoints.ICheckpointRows,
-            Trax.Effect.Data.Checkpoints.CheckpointRows
-        >();
-
-        // The row this host rewrites every 15 seconds, so an idle host can be told from a dead one.
-        Trax.Effect.Data.Services.HostHeartbeats.HostHeartbeatService.Register(
-            configurationBuilder.ServiceCollection
-        );
-
-        // Register the SQL dialect for provider-specific raw SQL
-        configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
-
+    private static void AddNoticeListeners(
+        IServiceCollection services,
+        string connectionString,
+        Action<NpgsqlDataSourceBuilder>? configureDataSource
+    )
+    {
         // The notice a dispatcher on any host wakes on when work is queued. Built by the container
         // so the provider that owns it disposes its data source.
-        configurationBuilder.ServiceCollection.AddSingleton<IQueuedWorkListener>(
-            _ => new PostgresQueuedWorkListener(connectionString, configureDataSource)
-        );
+        services.AddSingleton<IQueuedWorkListener>(_ => new PostgresQueuedWorkListener(
+            connectionString,
+            configureDataSource
+        ));
 
         // The notice a state machine's outcome reconciler on any host wakes on when a run it waits on ends.
-        configurationBuilder.ServiceCollection.AddSingleton<IInvokedRunListener>(
-            _ => new PostgresInvokedRunListener(connectionString, configureDataSource)
-        );
+        services.AddSingleton<IInvokedRunListener>(_ => new PostgresInvokedRunListener(
+            connectionString,
+            configureDataSource
+        ));
 
         // The notice a state-machine change listener hears for every committed write to an instance's row.
-        configurationBuilder.ServiceCollection.AddSingleton<ISnapshotNoticeSource>(
-            _ => new PostgresSnapshotNoticeSource(connectionString, configureDataSource)
-        );
-
-        // Configure a feature's own DbContext, if it brings one, against this same Postgres data source, so it needs no
-        // host AddDbContext call. A feature table normally ships on IDataContext instead.
-        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(sp =>
-        {
-            var dataSource = sp.GetRequiredService<NpgsqlDataSource>();
-            return new DelegateFeatureDbConfigurator(options => options.UseNpgsql(dataSource));
-        });
-
-        configurationBuilder.HasDatabaseProvider = true;
-        configurationBuilder.HasDataProvider = true;
-
-        var promoted =
-            configurationBuilder as TraxEffectBuilderWithData
-            ?? new TraxEffectBuilderWithData(configurationBuilder);
-        return promoted;
+        services.AddSingleton<ISnapshotNoticeSource>(_ => new PostgresSnapshotNoticeSource(
+            connectionString,
+            configureDataSource
+        ));
     }
 }

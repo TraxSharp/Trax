@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 
 /// <summary>
@@ -17,6 +19,3 @@ public sealed record ValidationFailure(
     public static ValidationFailure FromMessage(string message) =>
         new(message, Array.Empty<ValidationFailureLocation>(), Array.Empty<object>());
 }
-
-/// <summary>1-based location in the source document.</summary>
-public readonly record struct ValidationFailureLocation(int Line, int Column);

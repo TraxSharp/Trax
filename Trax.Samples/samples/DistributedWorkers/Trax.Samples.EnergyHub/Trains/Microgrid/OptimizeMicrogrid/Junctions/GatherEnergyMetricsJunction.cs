@@ -13,7 +13,7 @@ public class GatherEnergyMetricsJunction(ILogger<GatherEnergyMetricsJunction> lo
             input.GridZone
         );
 
-        await Task.Delay(300);
+        await Task.Delay(300, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{GridZone}] Metrics collected — solar: 142 kWh, battery: 67%, demand: 95 kWh",

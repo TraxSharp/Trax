@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -33,13 +34,13 @@ public class TransitionHistoryTests(StoreProvider provider)
 
     private const string User = "history-user";
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InstanceHost.Create(provider, launcher: new RecordingLauncher());
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private static JsonObject Source => new() { ["source"] = "repo" };
 
@@ -63,7 +64,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     private Task<List<SnapshotTransition>> History(
         Guid id,
         SnapshotOwnerKind kind = SnapshotOwnerKind.User
-    ) => HistoryOf(_host, id, kind);
+    ) => HistoryOf(_host.NotNull(), id, kind);
 
     private static async Task<List<SnapshotTransition>> HistoryOf(
         InstanceHost host,
@@ -71,8 +72,8 @@ public class TransitionHistoryTests(StoreProvider provider)
         SnapshotOwnerKind kind = SnapshotOwnerKind.User
     )
     {
-        var rowId = await host.RowId(id, kind);
-        return await RowHistory(host, rowId);
+        var rowId = await host.RowId(id, kind).ConfigureAwait(false);
+        return await RowHistory(host, rowId).ConfigureAwait(false);
     }
 
     private static async Task<List<SnapshotTransition>> RowHistory(InstanceHost host, long rowId)
@@ -83,7 +84,8 @@ public class TransitionHistoryTests(StoreProvider provider)
             .SnapshotTransitions.AsNoTracking()
             .Where(t => t.DraftRowId == rowId)
             .OrderBy(t => t.Revision)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     // Makes one write and returns the one row of history it added, asserting it is exactly one, at the revision the
@@ -94,15 +96,18 @@ public class TransitionHistoryTests(StoreProvider provider)
         SnapshotOwnerKind kind = SnapshotOwnerKind.User
     )
     {
-        var before = await History(id, kind);
-        await write();
-        var after = await History(id, kind);
+        var before = await History(id, kind).ConfigureAwait(false);
+        await write().ConfigureAwait(false);
+        var after = await History(id, kind).ConfigureAwait(false);
         var added = after.Skip(before.Count).ToList();
         added.Should().ContainSingle($"one snapshot write adds one row of history. See {Adr}");
         after.Take(before.Count).Should().BeEquivalentTo(before, "history is only appended to");
         added[0]
             .Revision.Should()
-            .Be(await _host.Revision(id, kind), "the row carries the revision the write gave");
+            .Be(
+                await _host.NotNull().Revision(id, kind).ConfigureAwait(false),
+                "the row carries the revision the write gave"
+            );
         return added[0];
     }
 
@@ -111,15 +116,21 @@ public class TransitionHistoryTests(StoreProvider provider)
     private async Task<Guid> Seeded(string json)
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, json);
+        await _host.NotNull().SeedDraft(User, id, json).ConfigureAwait(false);
         return id;
     }
 
     private async Task<Guid> Saved(string machine, string json)
     {
         var id = Guid.NewGuid();
-        using var scope = _host.Scope();
-        (await _host.Service(scope, machine).Autosave(User, id, json))
+        using var scope = _host.NotNull().Scope();
+        (
+            await _host
+                .NotNull()
+                .Service(scope, machine)
+                .Autosave(User, id, json)
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeOfType<AutosaveResult.Saved>();
         return id;
@@ -133,15 +144,22 @@ public class TransitionHistoryTests(StoreProvider provider)
         string? requestId = null
     )
     {
-        using var scope = _host.Scope();
-        return await _host.Service(scope, machine).Advance(User, id, trigger, input, requestId);
+        using var scope = _host.NotNull().Scope();
+        return await _host
+            .NotNull()
+            .Service(scope, machine)
+            .Advance(User, id, trigger, input, requestId)
+            .ConfigureAwait(false);
     }
 
     private async Task<Guid> DraftInBuilding()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, BuildMachine.Json("Draft", Source));
-        (await Advance(BuildMachine.Id, id, "Build"))
+        await _host
+            .NotNull()
+            .SeedDraft(User, id, BuildMachine.Json("Draft", Source))
+            .ConfigureAwait(false);
+        (await Advance(BuildMachine.Id, id, "Build").ConfigureAwait(false))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()
@@ -151,11 +169,12 @@ public class TransitionHistoryTests(StoreProvider provider)
 
     private async Task CancelEntry(string token)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .WorkQueues.Where(w => w.ExternalId == token)
-            .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled));
+            .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled))
+            .ConfigureAwait(false);
     }
 
     #region One test per write site
@@ -164,10 +183,11 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task Every_creation_starts_the_history_at_revision_one()
     {
         var saved = await Saved(PlainHatchMachine.Id, PlainHatchMachine.Json(HatchState.Shut));
-        var system = (await _host.Start<SystemTurnstileMachine>(NewKey())).Id;
+        var system = (await _host.NotNull().Start<SystemTurnstileMachine>(NewKey())).Id;
         StartOutcome started;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             started = await _host
+                .NotNull()
                 .Service(scope, StartableMachine.Id)
                 .Start(
                     new Actor.Client(User),
@@ -202,32 +222,37 @@ public class TransitionHistoryTests(StoreProvider provider)
     [TestCase("update-with-request")]
     public async Task An_autosave_adds_a_save(string write)
     {
-        var (machine, first, second) =
-            write == "upsert"
-                ? (
-                    PlainHatchMachine.Id,
-                    PlainHatchMachine.Json(HatchState.Shut),
-                    PlainHatchMachine.Json(HatchState.Open)
-                )
-                : (
-                    LedgerMachine.Id,
-                    LedgerMachine.Json(LedgerState.Open),
-                    LedgerMachine.Json(LedgerState.Counting, 1, 2)
-                );
+        var (machine, first, second) = string.Equals(write, "upsert", StringComparison.Ordinal)
+            ? (
+                PlainHatchMachine.Id,
+                PlainHatchMachine.Json(HatchState.Shut),
+                PlainHatchMachine.Json(HatchState.Open)
+            )
+            : (
+                LedgerMachine.Id,
+                LedgerMachine.Json(LedgerState.Open),
+                LedgerMachine.Json(LedgerState.Counting, 1, 2)
+            );
         var id = await Saved(machine, first);
         // The guarded save keeps the request the row recorded; that must not make the save look like its command.
-        if (write != "upsert")
+        if (!string.Equals(write, "upsert", StringComparison.Ordinal))
             (await Advance(machine, id, nameof(LedgerTrigger.Count), requestId: "r1"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
-        var stateBefore = (await _host.Rows(id)).Single().State;
+        var stateBefore = (await _host.NotNull().Rows(id)).Single().State;
 
         var row = await OneRowFor(
             id,
             async () =>
             {
-                using var scope = _host.Scope();
-                (await _host.Service(scope, machine).Autosave(User, id, second))
+                using var scope = _host.NotNull().Scope();
+                (
+                    await _host
+                        .NotNull()
+                        .Service(scope, machine)
+                        .Autosave(User, id, second)
+                        .ConfigureAwait(false)
+                )
                     .Should()
                     .BeOfType<AutosaveResult.Saved>();
             }
@@ -247,7 +272,7 @@ public class TransitionHistoryTests(StoreProvider provider)
         var row = await OneRowFor(
             id,
             async () =>
-                (await Advance("turnstile", id, "Coin", Quarter))
+                (await Advance("turnstile", id, "Coin", Quarter).ConfigureAwait(false))
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>()
         );
@@ -260,7 +285,7 @@ public class TransitionHistoryTests(StoreProvider provider)
         row.InvokeToken.Should().BeNull("the turnstile starts no run");
         row.At.Should()
             .Be(
-                (await _host.Rows(id)).Single().UpdatedAt,
+                (await _host.NotNull().Rows(id)).Single().UpdatedAt,
                 "the row's time is the write's updated_at"
             );
     }
@@ -269,12 +294,12 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task Entering_an_invoking_state_records_the_run_it_started()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, BuildMachine.Json("Draft", Source));
+        await _host.NotNull().SeedDraft(User, id, BuildMachine.Json("Draft", Source));
 
         var row = await OneRowFor(
             id,
             async () =>
-                (await Advance(BuildMachine.Id, id, "Build"))
+                (await Advance(BuildMachine.Id, id, "Build").ConfigureAwait(false))
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>()
         );
@@ -284,7 +309,7 @@ public class TransitionHistoryTests(StoreProvider provider)
         row.InvokeToken.Should()
             .NotBeNull()
             .And.Be(
-                (await _host.Rows(id)).Single().InvokeToken,
+                (await _host.NotNull().Rows(id)).Single().InvokeToken,
                 $"the history names the run entering the state queued. See {Adr}"
             );
     }
@@ -297,7 +322,7 @@ public class TransitionHistoryTests(StoreProvider provider)
         var row = await OneRowFor(
             id,
             async () =>
-                (await Advance(BuildMachine.Id, id, "StopBuild"))
+                (await Advance(BuildMachine.Id, id, "StopBuild").ConfigureAwait(false))
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>()
         );
@@ -312,19 +337,21 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task A_send_adds_one_row_for_the_record_and_none_for_the_mark()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, OrderMachine.ReviewSnapshot(1, 2));
-        var r0 = await _host.Revision(id);
+        await _host.NotNull().SeedDraft(User, id, OrderMachine.ReviewSnapshot(1, 2));
+        var r0 = await _host.NotNull().Revision(id);
 
         var row = await OneRowFor(
             id,
             async () =>
             {
-                using var scope = _host.Scope();
+                using var scope = _host.NotNull().Scope();
                 (
                     await scope
                         .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                        .EffectRunner("order")!
+                        .EffectRunner("order")
+                        .NotNull()
                         .Run(User, id, "send-1")
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
@@ -343,17 +370,18 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task A_system_advance_is_the_hosts_command()
     {
         var key = NewKey();
-        var id = (await _host.Start<SystemTurnstileMachine>(key)).Id;
+        var id = (await _host.NotNull().Start<SystemTurnstileMachine>(key)).Id;
 
         var row = await OneRowFor(
             id,
             async () =>
             {
-                using var scope = _host.Scope();
+                using var scope = _host.NotNull().Scope();
                 (
                     await scope
                         .ServiceProvider.GetRequiredService<IMachineInstances>()
                         .Advance<SystemTurnstileMachine>(key, "Coin", Quarter)
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
@@ -370,18 +398,19 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task An_outcome_applied_by_the_hook_is_the_machines()
     {
         var id = await DraftInBuilding();
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
         await CancelEntry(token);
 
         var row = await OneRowFor(
             id,
             async () =>
             {
-                using var scope = _host.Scope();
+                using var scope = _host.NotNull().Scope();
                 (
                     await scope
                         .ServiceProvider.GetRequiredService<IInvokedRunOutcomes>()
                         .Deliver(token)
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .Be("BuildCancelled");
@@ -399,16 +428,17 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task An_outcome_applied_by_the_reconciler_adds_one_row()
     {
         var id = await DraftInBuilding();
-        await CancelEntry((await _host.Rows(id)).Single().InvokeToken!);
+        await CancelEntry((await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull());
 
         var row = await OneRowFor(
             id,
             async () =>
             {
-                using var scope = _host.Scope();
+                using var scope = _host.NotNull().Scope();
                 await scope
                     .ServiceProvider.GetRequiredService<InvokeOutcomeReconciler>()
-                    .SweepOnce(CancellationToken.None);
+                    .SweepOnce(CancellationToken.None)
+                    .ConfigureAwait(false);
             }
         );
 
@@ -420,15 +450,17 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task A_stranded_outcome_adds_one_row_in_the_same_state()
     {
         var id = await DraftInBuilding();
-        var token = (await _host.Rows(id)).Single().InvokeToken!;
+        var token = (await _host.NotNull().Rows(id)).Single().InvokeToken.NotNull();
 
         var row = await OneRowFor(
             id,
             async () =>
             {
-                using var scope = _host.Scope();
-                var store = _host.Instances(scope);
-                var stored = await store.Get(DraftOwner.User(User), BuildMachine.Id, id);
+                using var scope = _host.NotNull().Scope();
+                var store = _host.NotNull().Instances(scope);
+                var stored = await store
+                    .Get(DraftOwner.User(User), BuildMachine.Id, id)
+                    .ConfigureAwait(false);
                 var building = new Snapshot
                 {
                     Machine = BuildMachine.Id,
@@ -436,7 +468,13 @@ public class TransitionHistoryTests(StoreProvider provider)
                     State = "Building",
                     Context = Source,
                 };
-                (await store.StrandByInvokeToken(token, building, stored!.Token)).Should().BeTrue();
+                (
+                    await store
+                        .StrandByInvokeToken(token, building, stored.NotNull().Token)
+                        .ConfigureAwait(false)
+                )
+                    .Should()
+                    .BeTrue();
             }
         );
 
@@ -450,24 +488,35 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task A_timer_fire_is_the_machines()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, ReminderMachine.Json("Idle"));
-        using (var scope = _host.Scope())
+        await _host.NotNull().SeedDraft(User, id, ReminderMachine.Json("Idle"));
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Service(scope, ReminderMachine.Id)
                     .Advance(new Actor.Client(User, "Editor"), id, "Open")
             )
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
-        (await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1))).Should().Be(1);
+        (
+            await RawSql.SetDueAt(
+                _host.NotNull(),
+                id,
+                (await RawSql.Now(_host.NotNull())).AddMinutes(-1)
+            )
+        )
+            .Should()
+            .Be(1);
 
         var row = await OneRowFor(
             id,
             async () =>
                 (
                     await _host
+                        .NotNull()
                         .Services.GetRequiredService<InvokeOutcomeReconciler>()
                         .FireDueTimersOnce(CancellationToken.None)
+                        .ConfigureAwait(false)
                 )
                     .Should()
                     .Contain(r => r.InstanceId == id && r.Outcome == TimerFireResult.Fired)
@@ -484,20 +533,22 @@ public class TransitionHistoryTests(StoreProvider provider)
     public async Task A_spawn_starts_the_childs_history_and_names_the_child_on_the_parents()
     {
         var id = Guid.NewGuid();
-        await _host.Seed(User, id, ConsignmentMachine.At(ConsignmentState.Open));
+        await _host.NotNull().Seed(User, id, ConsignmentMachine.At(ConsignmentState.Open));
 
         var row = await OneRowFor(
             id,
             async () =>
-                (await Advance(ConsignmentMachine.Id, id, "Pack"))
+                (await Advance(ConsignmentMachine.Id, id, "Pack").ConfigureAwait(false))
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>()
         );
 
-        var parent = (await _host.Rows(id)).Single();
+        var parent = (await _host.NotNull().Rows(id)).Single();
         row.InvokeToken.Should()
             .Be(parent.InvokeToken, $"the parent's row names what it spawned. See {Adr}");
-        var childId = Guid.Parse(JsonNode.Parse(parent.Context)!["parcelId"]!.GetValue<string>());
+        var childId = Guid.Parse(
+            JsonNode.Parse(parent.Context).NotNull()["parcelId"].NotNull().GetValue<string>()
+        );
         var child = (await History(childId)).Should().ContainSingle().Subject;
         child.Kind.Should().Be(SnapshotTransitionKind.Start);
         child.Actor.Should().Be(SnapshotTransitionActor.Machine, "the parent spawned it");
@@ -515,20 +566,26 @@ public class TransitionHistoryTests(StoreProvider provider)
             id,
             async () =>
             {
-                using var scope = _host.Scope();
+                using var scope = _host.NotNull().Scope();
                 var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-                var token = (await store.Get(User, "turnstile", id))!.Token;
+                var token = (await store.Get(User, "turnstile", id).ConfigureAwait(false))
+                    .NotNull()
+                    .Token;
                 var wrote = write switch
                 {
-                    "Update" => await store.Update(User, id, UnlockedTurnstile, token),
-                    "UpdateWithRequest" => await store.UpdateWithRequest(
-                        User,
-                        id,
-                        UnlockedTurnstile,
-                        token,
-                        new AppliedRequest("r1", "Coin", "Locked")
-                    ),
-                    _ => await store.Upsert(User, id, UnlockedTurnstile),
+                    "Update" => await store
+                        .Update(User, id, UnlockedTurnstile, token)
+                        .ConfigureAwait(false),
+                    "UpdateWithRequest" => await store
+                        .UpdateWithRequest(
+                            User,
+                            id,
+                            UnlockedTurnstile,
+                            token,
+                            new AppliedRequest("r1", "Coin", "Locked")
+                        )
+                        .ConfigureAwait(false),
+                    _ => await store.Upsert(User, id, UnlockedTurnstile).ConfigureAwait(false),
                 };
                 wrote.Should().BeTrue();
             }
@@ -536,7 +593,7 @@ public class TransitionHistoryTests(StoreProvider provider)
 
         row.Kind.Should()
             .Be(
-                write == "UpdateWithRequest"
+                string.Equals(write, "UpdateWithRequest", StringComparison.Ordinal)
                     ? SnapshotTransitionKind.Command
                     : SnapshotTransitionKind.Save,
                 $"host code writing through the store is a save, or the command its request names. See {Adr}"
@@ -556,17 +613,18 @@ public class TransitionHistoryTests(StoreProvider provider)
     {
         var id = Guid.NewGuid();
         Guid concurrency;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
         {
-            var store = _host.Instances(scope);
+            var store = _host.NotNull().Instances(scope);
             (await store.Insert(DraftOwner.System, id, Turnstile("Locked"))).Should().BeTrue();
-            concurrency = (await store.Get(DraftOwner.System, "turnstile", id))!.Token;
+            concurrency = (await store.Get(DraftOwner.System, "turnstile", id)).NotNull().Token;
         }
         var before = await History(id, SnapshotOwnerKind.System);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await _host
+                    .NotNull()
                     .Instances(scope)
                     .SetInvokeToken(
                         DraftOwner.System,
@@ -593,7 +651,7 @@ public class TransitionHistoryTests(StoreProvider provider)
         (await Advance("turnstile", id, "Coin", new JsonObject { ["coin"] = "penny" }))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>();
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -612,12 +670,14 @@ public class TransitionHistoryTests(StoreProvider provider)
     {
         var id = await Seeded(TestTurnstile.InitialJson);
         Guid token;
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             token = (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
                     .Get(User, "turnstile", id)
-            )!.Token;
+            )
+                .NotNull()
+                .Token;
 
         var writes = await Task.WhenAll(
                 Enumerable
@@ -625,14 +685,15 @@ public class TransitionHistoryTests(StoreProvider provider)
                     .Select(_ =>
                         Task.Run(async () =>
                         {
-                            using var scope = _host.Scope();
+                            using var scope = _host.NotNull().Scope();
                             return await scope
                                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                                .Update(User, id, UnlockedTurnstile, token);
+                                .Update(User, id, UnlockedTurnstile, token)
+                                .ConfigureAwait(false);
                         })
                     )
             )
-            .WaitAsync(TimeSpan.FromSeconds(60));
+            .WaitAsync(TimeSpan.FromSeconds(60), TimeProvider.System);
 
         writes.Count(w => w).Should().Be(1, "one token admits one write");
         (await History(id))
@@ -652,15 +713,20 @@ public class TransitionHistoryTests(StoreProvider provider)
         (await Advance("turnstile", id, "Coin", Quarter))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        var rowId = await _host.RowId(id);
-        (await RowHistory(_host, rowId)).Should().HaveCount(2);
+        var rowId = await _host.NotNull().RowId(id);
+        (await RowHistory(_host.NotNull(), rowId)).Should().HaveCount(2);
 
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, "turnstile").Discard(new Actor.Client(User), id, "d1"))
+        using (var scope = _host.NotNull().Scope())
+            (
+                await _host
+                    .NotNull()
+                    .Service(scope, "turnstile")
+                    .Discard(new Actor.Client(User), id, "d1")
+            )
                 .Should()
                 .BeOfType<DiscardOutcome.Discarded>();
 
-        (await RowHistory(_host, rowId))
+        (await RowHistory(_host.NotNull(), rowId))
             .Should()
             .BeEmpty($"the history is deleted with the instance. See {Adr}");
     }
@@ -673,7 +739,11 @@ public class TransitionHistoryTests(StoreProvider provider)
         await host.SeedDraft(User, id, TestTurnstile.UnlockedJson);
         var rowId = await host.RowId(id);
         (await RowHistory(host, rowId)).Should().ContainSingle();
-        await host.Backdate(id, SnapshotOwnerKind.User, DateTimeOffset.UtcNow.AddDays(-2));
+        await host.Backdate(
+            id,
+            SnapshotOwnerKind.User,
+            TimeProvider.System.GetUtcNow().AddDays(-2)
+        );
 
         await host.Services.GetRequiredService<DraftSweeper>().SweepOnce();
 
@@ -690,12 +760,16 @@ public class TransitionHistoryTests(StoreProvider provider)
         (await Advance("turnstile", id, "Coin", Quarter))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
-        var first = await _host.RowId(id);
+        var first = await _host.NotNull().RowId(id);
 
-        (await _host.Execute($"DELETE FROM {_host.DraftTable} WHERE row_id = @p0", first))
+        (
+            await _host
+                .NotNull()
+                .Execute($"DELETE FROM {_host.NotNull().DraftTable} WHERE row_id = @p0", first)
+        )
             .Should()
             .Be(1);
-        (await RowHistory(_host, first))
+        (await RowHistory(_host.NotNull(), first))
             .Should()
             .BeEmpty(
                 $"the database deletes the history with its row, whoever deletes it. See {Adr}"
@@ -709,87 +783,4 @@ public class TransitionHistoryTests(StoreProvider provider)
     }
 
     #endregion
-}
-
-/// <summary>
-/// The InMemory provider has no transaction and no foreign key, so the store writes the history and removes it with
-/// the instance itself. Enforces
-/// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
-/// </summary>
-[Property(
-    "adr",
-    "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
-)]
-public class TransitionHistoryInMemoryTests
-{
-    private const string Adr =
-        "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md";
-
-    private const string User = "history-user";
-
-    [Test]
-    public async Task The_InMemory_provider_records_and_removes_the_history_too()
-    {
-        var quarter = new JsonObject { ["coin"] = "quarter" };
-        var services = new ServiceCollection();
-        services.AddScoped<IOrderCharge, CountingEffect>();
-        services.AddTrax(trax =>
-            trax.AddEffects(effects => effects.UseInMemory())
-                .AddStateMachines(typeof(OrderMachine).Assembly)
-        );
-        await using var host = services.BuildServiceProvider();
-        var id = Guid.NewGuid();
-
-        async Task<List<SnapshotTransition>> Rows()
-        {
-            await using var scope = host.CreateAsyncScope();
-            return await scope
-                .ServiceProvider.GetRequiredService<IDataContext>()
-                .SnapshotTransitions.AsNoTracking()
-                .OrderBy(t => t.Revision)
-                .ToListAsync();
-        }
-
-        await using (var scope = host.CreateAsyncScope())
-        {
-            var turnstile = scope
-                .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                .Service("turnstile")!;
-            (
-                await scope
-                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                    .Upsert(User, id, TestDb.Parse(TestTurnstile.InitialJson))
-            )
-                .Should()
-                .BeTrue();
-            (await turnstile.Advance(User, id, "Coin", quarter))
-                .Should()
-                .BeOfType<AdvanceOutcome.Advanced>();
-        }
-
-        var rows = await Rows();
-        rows.Select(t => (t.Revision, t.Kind, t.Trigger))
-            .Should()
-            .Equal(
-                [
-                    (1L, SnapshotTransitionKind.Start, null),
-                    (2L, SnapshotTransitionKind.Command, "Coin"),
-                ],
-                $"InMemory writes the same history. See {Adr}"
-            );
-
-        await using (var scope = host.CreateAsyncScope())
-            (
-                await scope
-                    .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .Service("turnstile")!
-                    .Discard(new Actor.Client(User), id, "d1")
-            )
-                .Should()
-                .BeOfType<DiscardOutcome.Discarded>();
-
-        (await Rows())
-            .Should()
-            .BeEmpty("InMemory enforces no foreign key, so the store removes it");
-    }
 }

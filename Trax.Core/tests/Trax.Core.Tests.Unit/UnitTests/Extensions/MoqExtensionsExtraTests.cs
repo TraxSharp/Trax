@@ -38,7 +38,7 @@ public class MoqExtensionsExtraTests : TestSetup
     [Test]
     public void GetMockedTypeFromObject_NullArgument_Throws()
     {
-        object obj = null!;
+        var obj = Null.Of<object>();
 
         Action act = () => obj.GetMockedTypeFromObject();
 
@@ -53,14 +53,14 @@ public class MoqExtensionsExtraTests : TestSetup
         type.IsMoqProxy().Should().BeFalse();
     }
 
-    private class PlainClass { }
+    private sealed class PlainClass;
 
-    private class HasNullMockProperty
+    private sealed class HasNullMockProperty
     {
-        public object? Mock => null;
+        public static object? Mock => null;
     }
 
-    private class HasMockWithoutMockedType
+    private sealed class HasMockWithoutMockedType
     {
         public object Mock { get; } = new object();
     }

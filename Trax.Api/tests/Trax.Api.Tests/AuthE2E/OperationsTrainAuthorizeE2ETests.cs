@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -10,6 +11,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -39,12 +41,12 @@ namespace Trax.Api.Tests.AuthE2E;
 public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
 {
     private string Database => "trax_api_operations_train_authorize" + (withApiKeys ? "_keys" : "");
-    private static readonly string TrainName = typeof(IPlaceOrderTrain).FullName!;
+    private static readonly string TrainName = typeof(IPlaceOrderTrain).FullName.NotNull();
 
-    private IHost _host = null!;
-    private string _customer = null!;
-    private string _staff = null!;
-    private string _staffCustomer = null!;
+    private IHost? _host;
+    private string? _customer;
+    private string? _staff;
+    private string? _staffCustomer;
 
     [OneTimeSetUp]
     public async Task StartHost()
@@ -52,53 +54,14 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         AuthE2EHost.EnsureDatabaseExists(Database);
         var connectionString = AuthE2EHost
             .ConnectionString(Database)
-            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20");
+            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20", StringComparison.Ordinal);
 
         _host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-                        // A second scheme, so there is no default one and each request's
-                        // user comes from the scheme that authenticated it.
-                        if (withApiKeys)
-                            services.AddTraxApiKeyAuth(keys =>
-                                keys.Add(
-                                    "ops-train-authorize-key-at-least-32-characters",
-                                    id: "ops",
-                                    "Staff"
-                                )
-                            );
-                        services.AddTraxJwtAuth(jwt =>
-                            jwt.UseSymmetricKey(
-                                AuthE2EHost.JwtIssuer,
-                                AuthE2EHost.JwtAudience,
-                                AuthE2EHost.JwtKey
-                            )
-                        );
-                        services.AddAuthorization(o =>
-                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
-                        );
-                        services.AddTrax(trax =>
-                            trax.AddEffects(effects =>
-                                    effects
-                                        .UsePostgres(connectionString)
-                                        .SaveTrainParameters()
-                                        .AddDecisionRecording()
-                                )
-                                .AddMediator(typeof(AuthE2EHost).Assembly)
-                                .AddScheduler(scheduler => scheduler)
-                        );
-                        services.AddTraxApi();
-                        services.AddTraxGraphQL(graphql =>
-                            graphql
-                                .ExposeOperationQueries()
-                                .ExposeOperationMutations()
-                                .GateOperations(roles: "Staff")
-                        );
-                    })
+                        ConfigureHostServices(services, connectionString)
+                    )
                     .Configure(app =>
                     {
                         app.UseRouting();
@@ -108,18 +71,51 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                     })
             )
             .Build();
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
 
         _customer = AuthE2EHost.SignJwt("customer-1", "Customer One", "Customer");
         _staff = AuthE2EHost.SignJwt("staff-1", "Staff One", "Staff");
         _staffCustomer = AuthE2EHost.SignJwt("staff-2", "Staff Two", "Staff", "Customer");
     }
 
+    private void ConfigureHostServices(IServiceCollection services, string connectionString)
+    {
+        services.AddLogging();
+        services.AddRouting();
+        // A second scheme, so there is no default one and each request's
+        // user comes from the scheme that authenticated it.
+        if (withApiKeys)
+            services.AddTraxApiKeyAuth(keys =>
+                keys.Add("ops-train-authorize-key-at-least-32-characters", id: "ops", "Staff")
+            );
+        services.AddTraxJwtAuth(jwt =>
+            jwt.UseSymmetricKey(AuthE2EHost.JwtIssuer, AuthE2EHost.JwtAudience, AuthE2EHost.JwtKey)
+        );
+        services.AddAuthorization(o => o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin")));
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                    effects
+                        .UsePostgres(connectionString)
+                        .SaveTrainParameters()
+                        .AddDecisionRecording()
+                )
+                .AddMediator(typeof(AuthE2EHost).Assembly)
+                .AddScheduler(scheduler => scheduler)
+        );
+        services.AddTraxApi();
+        services.AddTraxGraphQL(graphql =>
+            graphql
+                .ExposeOperationQueries()
+                .ExposeOperationMutations()
+                .GateOperations(roles: "Staff")
+        );
+    }
+
     [OneTimeTearDown]
     public async Task StopHost()
     {
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -128,19 +124,13 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     {
         var (run, sku) = await CustomerFailedOrderAsync();
 
-        using var doc = await PostAsync(
-            $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }""",
-            _staff
-        );
+        using var doc = await PostAsync(RequeueExecution(run), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
         (await QueuedWithAsync(sku)).Should().Be(0, "a refused requeue queues nothing");
 
         // A caller in both the gate's role and the train's may.
-        using var allowed = await PostAsync(
-            $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }""",
-            _staffCustomer
-        );
+        using var allowed = await PostAsync(RequeueExecution(run), _staffCustomer.NotNull());
         ErrorCodes(allowed).Should().BeEmpty(allowed.RootElement.GetRawText());
         allowed
             .RootElement.GetProperty("data")
@@ -153,20 +143,26 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         (await QueuedWithAsync(sku)).Should().Be(1, "the allowed requeue queues the run's input");
     }
 
+    private static string RequeueExecution(long run) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""mutation { operations { requeueExecution(id: {{run}}) { success message } } }"""
+        );
+
     [Test]
     public async Task QueueTrain_ByStaffOutsideTheTrainsRole_IsRefused()
     {
         var sku = Guid.NewGuid().ToString("N");
         var before = await LastRunIdAsync();
 
-        using var doc = await PostAsync(QueueTrain(sku), _staff);
+        using var doc = await PostAsync(QueueTrain(sku), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
         (await QueuedWithAsync(sku)).Should().Be(0, "a refused queueTrain queues nothing");
         (await DirectRunsAfterAsync(before)).Should().Be(0, "a refused queueTrain starts no run");
 
         // A caller in both the gate's role and the train's may.
-        using var allowed = await PostAsync(QueueTrain(sku), _staffCustomer);
+        using var allowed = await PostAsync(QueueTrain(sku), _staffCustomer.NotNull());
         Succeeded(allowed, "workQueue", "queueTrain");
         (await QueuedWithAsync(sku))
             .Should()
@@ -179,14 +175,14 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         var sku = Guid.NewGuid().ToString("N");
         var before = await LastRunIdAsync();
 
-        using var doc = await PostAsync(RunTrain(sku), _staff);
+        using var doc = await PostAsync(RunTrain(sku), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
         (await DirectRunsAfterAsync(before)).Should().Be(0, "a refused runTrain writes no run");
         (await QueuedWithAsync(sku)).Should().Be(0, "a refused runTrain queues nothing");
 
         // A caller in both the gate's role and the train's may.
-        using var allowed = await PostAsync(RunTrain(sku), _staffCustomer);
+        using var allowed = await PostAsync(RunTrain(sku), _staffCustomer.NotNull());
         Succeeded(allowed, "workQueue", "runTrain");
         (await DirectRunsAfterAsync(before)).Should().Be(1, "the allowed runTrain writes its run");
     }
@@ -215,19 +211,22 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
         // where the train's [TraxAuthorize] applies.
         var run = await CheckpointedFailedOrderAsync();
 
-        using var doc = await PostAsync(ResumeExecution(run), _staff);
+        using var doc = await PostAsync(ResumeExecution(run), _staff.NotNull());
 
         ErrorCodes(doc).Should().Contain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
         (await ResumesOfAsync(run)).Should().Be(0, "a refused resume queues nothing");
 
         // A caller in both the gate's role and the train's may.
-        using var allowed = await PostAsync(ResumeExecution(run), _staffCustomer);
+        using var allowed = await PostAsync(ResumeExecution(run), _staffCustomer.NotNull());
         Succeeded(allowed, "resumeExecution");
         (await ResumesOfAsync(run)).Should().Be(1, "the allowed resume queues one entry");
     }
 
     private static string ResumeExecution(long run) =>
-        $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }""";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""mutation { operations { resumeExecution(id: {{run}}) { success message } } }"""
+        );
 
     /// <summary>
     /// A run of <see cref="ICheckpointedOrderTrain"/> that wrote its checkpoint and then failed.
@@ -236,33 +235,51 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     private async Task<long> CheckpointedFailedOrderAsync()
     {
         long run;
-        using (var scope = _host.Services.CreateScope())
+        var scope = _host.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var train = scope.ServiceProvider.GetRequiredService<ICheckpointedOrderTrain>();
             var act = async () =>
-                await train.Run(new PlaceOrderInput { Sku = Guid.NewGuid().ToString("N") });
-            await act.Should().ThrowAsync<InvalidOperationException>();
-            run = ((ServiceTrain<PlaceOrderInput, PlaceOrderOutput>)train).Metadata!.Id;
+                await train
+                    .Run(new PlaceOrderInput { Sku = Guid.NewGuid().ToString("N") })
+                    .ConfigureAwait(false);
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+            run = ((ServiceTrain<PlaceOrderInput, PlaceOrderOutput>)train).Metadata.NotNull().Id;
         }
 
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        (await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == run))
-            .TrainState.Should()
-            .Be(TrainState.Failed);
-        (await db.Checkpoints.AsNoTracking().CountAsync(c => c.MetadataId == run))
-            .Should()
-            .Be(1, "the run checkpointed before it failed");
-        return run;
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            (await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == run).ConfigureAwait(false))
+                .TrainState.Should()
+                .Be(TrainState.Failed);
+            (
+                await db
+                    .Checkpoints.AsNoTracking()
+                    .CountAsync(c => c.MetadataId == run)
+                    .ConfigureAwait(false)
+            )
+                .Should()
+                .Be(1, "the run checkpointed before it failed");
+            return run;
+        }
     }
 
     private async Task<int> ResumesOfAsync(long run)
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await db.WorkQueues.CountAsync(q => q.ResumeFrom == run);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db.WorkQueues.CountAsync(q => q.ResumeFrom == run).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -273,36 +290,45 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     {
         var sku = Guid.NewGuid().ToString("N");
         using var doc = await PostAsync(
-            $$"""mutation { dispatch { shop { placeOrder(input: { sku: "{{sku}}" }) { externalId } } } }""",
-            _customer
-        );
+                $$"""mutation { dispatch { shop { placeOrder(input: { sku: "{{sku}}" }) { externalId } } } }""",
+                _customer.NotNull()
+            )
+            .ConfigureAwait(false);
         ErrorCodes(doc).Should().NotContain("TRAX_AUTHORIZATION", doc.RootElement.GetRawText());
 
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        // Found by its input: a requeued run the scheduler dispatched may be newer.
-        var id = await ((DbContext)db)
-            .Database.SqlQuery<long>(
-                $"SELECT id AS \"Value\" FROM trax.metadata WHERE input::text LIKE {"%" + sku + "%"}"
-            )
-            .SingleAsync();
-        var run = await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == id)
-            .Select(m => new { m.Id, m.TrainState })
-            .SingleAsync();
-        run.TrainState.Should().Be(TrainState.Failed);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // Found by its input: a requeued run the scheduler dispatched may be newer.
+            var id = await ((DbContext)db)
+                .Database.SqlQuery<long>(
+                    $"SELECT id AS \"Value\" FROM trax.metadata WHERE input::text LIKE {"%" + sku + "%"}"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+            var run = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == id)
+                .Select(m => new { m.Id, m.TrainState })
+                .SingleAsync()
+                .ConfigureAwait(false);
+            run.TrainState.Should().Be(TrainState.Failed);
 
-        // The run records its starter, so a requeue keeps it and enqueues through the mediator's
-        // options overload, as the reported requeue did.
-        var starter = await ((DbContext)db)
-            .Database.SqlQuery<string?>(
-                $"SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {run.Id}"
-            )
-            .SingleAsync();
-        starter.Should().NotBeNull("a GraphQL run records its caller as the starter");
-        return (run.Id, sku);
+            // The run records its starter, so a requeue keeps it and enqueues through the mediator's
+            // options overload, as the reported requeue did.
+            var starter = await ((DbContext)db)
+                .Database.SqlQuery<string?>(
+                    $"SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {run.Id}"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+            starter.Should().NotBeNull("a GraphQL run records its caller as the starter");
+            return (run.Id, sku);
+        }
     }
 
     /// <summary>
@@ -311,26 +337,40 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     /// </summary>
     private async Task<int> QueuedWithAsync(string sku)
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        // The column is jsonb, so it is matched as text.
-        return await ((DbContext)db)
-            .Database.SqlQuery<int>(
-                $"SELECT count(*)::int AS \"Value\" FROM trax.work_queue WHERE input::text LIKE {"%" + sku + "%"}"
-            )
-            .SingleAsync();
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // The column is jsonb, so it is matched as text.
+            return await ((DbContext)db)
+                .Database.SqlQuery<int>(
+                    $"SELECT count(*)::int AS \"Value\" FROM trax.work_queue WHERE input::text LIKE {"%" + sku + "%"}"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>The newest run's id, so a check can look only at runs written after it.</summary>
     private async Task<long> LastRunIdAsync()
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await ((DbContext)db)
-            .Database.SqlQuery<long>($"SELECT coalesce(max(id), 0) AS \"Value\" FROM trax.metadata")
-            .SingleAsync();
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await ((DbContext)db)
+                .Database.SqlQuery<long>(
+                    $"SELECT coalesce(max(id), 0) AS \"Value\" FROM trax.metadata"
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -340,22 +380,30 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
     /// </summary>
     private async Task<int> DirectRunsAfterAsync(long after)
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await ((DbContext)db)
-            .Database.SqlQuery<int>(
-                $"""
-                SELECT count(*)::int AS "Value" FROM trax.metadata m
-                WHERE m.name = {TrainName} AND m.id > {after}
-                  AND NOT EXISTS (SELECT 1 FROM trax.work_queue q WHERE q.external_id = m.external_id)
-                """
-            )
-            .SingleAsync();
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await ((DbContext)db)
+                .Database.SqlQuery<int>(
+                    $"""
+                    SELECT count(*)::int AS "Value" FROM trax.metadata m
+                    WHERE m.name = {TrainName} AND m.id > {after}
+                      AND NOT EXISTS (SELECT 1 FROM trax.work_queue q WHERE q.external_id = m.external_id)
+                    """
+                )
+                .SingleAsync()
+                .ConfigureAwait(false);
+        }
     }
 
     private Task<JsonDocument> PostAsync(string query, string token) =>
-        _host.PostGraphQLAsync(query, r => r.Headers.Authorization = new("Bearer", token));
+        _host
+            .NotNull()
+            .PostGraphQLAsync(query, r => r.Headers.Authorization = new("Bearer", token));
 
     private static List<string?> ErrorCodes(JsonDocument response) =>
         response.RootElement.TryGetProperty("errors", out var errors)
@@ -368,66 +416,4 @@ public class OperationsTrainAuthorizeE2ETests(bool withApiKeys)
                 )
                 .ToList()
             : [];
-}
-
-public record PlaceOrderInput : IManifestProperties
-{
-    public required string Sku { get; init; }
-}
-
-public record PlaceOrderOutput
-{
-    public required string OrderId { get; init; }
-}
-
-public interface IPlaceOrderTrain : IServiceTrain<PlaceOrderInput, PlaceOrderOutput>;
-
-/// <summary>Placed only by a customer, and it always fails, so there is a run to requeue.</summary>
-[TraxAuthorize(Roles = "Customer")]
-[TraxMutation(GraphQLOperation.Run, Namespace = "shop")]
-public class PlaceOrderTrain : ServiceTrain<PlaceOrderInput, PlaceOrderOutput>, IPlaceOrderTrain
-{
-    protected override Task<Either<Exception, PlaceOrderOutput>> Junctions() =>
-        Chain<RejectOrderJunction>().Resolve();
-}
-
-internal sealed class RejectOrderJunction : Junction<PlaceOrderInput, PlaceOrderOutput>
-{
-    public override Task<PlaceOrderOutput> Run(PlaceOrderInput input) =>
-        throw new InvalidOperationException("Out of stock.");
-}
-
-public sealed record StockHold
-{
-    public required string Sku { get; init; }
-}
-
-public interface ICheckpointedOrderTrain : IServiceTrain<PlaceOrderInput, PlaceOrderOutput>;
-
-/// <summary>
-/// Placed only by a customer: it holds the stock, checkpoints the hold, then fails, so there is a
-/// run to resume.
-/// </summary>
-[TraxAuthorize(Roles = "Customer")]
-public class CheckpointedOrderTrain
-    : ServiceTrain<PlaceOrderInput, PlaceOrderOutput>,
-        ICheckpointedOrderTrain
-{
-    protected override Task<Either<Exception, PlaceOrderOutput>> Junctions() =>
-        Chain<HoldStockJunction>()
-            .Checkpoint<StockHold>()
-            .Chain<ChargeHeldOrderJunction>()
-            .Resolve();
-}
-
-internal sealed class HoldStockJunction : Junction<PlaceOrderInput, StockHold>
-{
-    public override Task<StockHold> Run(PlaceOrderInput input) =>
-        Task.FromResult(new StockHold { Sku = input.Sku });
-}
-
-internal sealed class ChargeHeldOrderJunction : Junction<StockHold, PlaceOrderOutput>
-{
-    public override Task<PlaceOrderOutput> Run(StockHold input) =>
-        throw new InvalidOperationException("Card declined.");
 }

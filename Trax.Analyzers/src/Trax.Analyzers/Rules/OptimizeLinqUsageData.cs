@@ -1,0 +1,29 @@
+﻿namespace Trax.Analyzers.Rules;
+
+internal enum OptimizeLinqUsageData
+{
+    None,
+    UseLengthProperty,
+    UseLongLengthProperty,
+    UseCountProperty,
+    UseFindMethod,
+    UseFindMethodWithConversion,
+    UseIndexer,
+    UseIndexerFirst,
+    UseIndexerLast,
+    DuplicatedOrderBy,
+    CombineWhereWithNextMethod,
+    UseFalse,
+    UseTrue,
+    UseAny,
+    UseNotAny,
+    UseTakeAndCount,
+    UseSkipAndNotAny,
+    UseSkipAndAny,
+    UseCastInsteadOfSelect,
+    UseTrueForAllMethod,
+    UseTrueForAllMethodWithConversion,
+    UseExistsMethod,
+    UseExistsMethodWithConversion,
+    UseOrder,
+}

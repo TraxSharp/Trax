@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -32,76 +34,50 @@ public class SqliteSnapshotChangePollTests
             .NotBeNull(
                 $"AddStateMachines on SQLite registers a polling change listener. See {Adr}"
             );
-        var hosted = host
-            .Services.GetServices<IHostedService>()
-            .Where(h => h is ISnapshotChangeListener)
-            .ToList();
-        foreach (var service in hosted)
-            await service.StartAsync(CancellationToken.None);
+        var hosted = await StartListeners(host);
 
         using var stop = new CancellationTokenSource();
         var heard = Channel.CreateUnbounded<long>();
         var listening = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var reading = Task.Run(async () =>
-        {
-            try
-            {
-                await foreach (var change in listener!.ChangesAsync(stop.Token))
-                    if (change is SnapshotChange.Row(var rowId))
-                        heard.Writer.TryWrite(rowId);
-                    else
-                        listening.TrySetResult();
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested)
-            {
-                // Stopped by the test.
-            }
-        });
-
-        async Task<bool> Hears(long rowId)
-        {
-            using var timeout = new CancellationTokenSource(HearWithin);
-            try
-            {
-                while (true)
-                    if (await heard.Reader.ReadAsync(timeout.Token) == rowId)
-                        return true;
-            }
-            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
-            {
-                return false;
-            }
-        }
+        var reading = ReadAll(listener, stop, heard, listening);
 
         try
         {
             // The first change is a reload, once the poll has taken its baseline: every write after it is reported.
-            await listening.Task.WaitAsync(HearWithin);
+            await listening.Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None);
 
             var id = Guid.NewGuid();
             await host.SeedDraft(User, id, TestTurnstile.InitialJson);
             var first = (await host.Rows(id)).Single().RowId;
-            (await Hears(first)).Should().BeTrue($"the insert is revision 1. See {Adr}");
+            (await Hears(heard, first)).Should().BeTrue($"the insert is revision 1. See {Adr}");
 
             using (var scope = host.Scope())
                 (
                     await host.Service(scope, "turnstile")
-                        .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                        .Advance(
+                            User,
+                            id,
+                            "Coin",
+                            new JsonObject { ["coin"] = "quarter" },
+                            cancellationToken: CancellationToken.None
+                        )
                 )
                     .Should()
                     .BeOfType<AdvanceOutcome.Advanced>();
-            (await Hears(first)).Should().BeTrue("the advance is a new revision");
+            (await Hears(heard, first)).Should().BeTrue("the advance is a new revision");
 
             using (var scope = host.Scope())
-                await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
-            (await Hears(first)).Should().BeTrue("a delete is reported");
+                await scope
+                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                    .Delete(User, id, CancellationToken.None);
+            (await Hears(heard, first)).Should().BeTrue("a delete is reported");
 
             await host.SeedDraft(User, id, TestTurnstile.InitialJson);
             var second = (await host.Rows(id)).Single().RowId;
             second.Should().NotBe(first, "a re-created row is a new incarnation");
-            (await Hears(second)).Should().BeTrue("the re-created row is reported");
+            (await Hears(heard, second)).Should().BeTrue("the re-created row is reported");
         }
         finally
         {
@@ -109,6 +85,62 @@ public class SqliteSnapshotChangePollTests
             await reading;
             foreach (var service in hosted)
                 await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task<List<IHostedService>> StartListeners(InstanceHost host)
+    {
+        var hosted = host
+            .Services.GetServices<IHostedService>()
+            .Where(h => h is ISnapshotChangeListener)
+            .ToList();
+        foreach (var service in hosted)
+            await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        return hosted;
+    }
+
+    private static Task ReadAll(
+        ISnapshotChangeListener? listener,
+        CancellationTokenSource stop,
+        Channel<long> heard,
+        TaskCompletionSource listening
+    ) =>
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await foreach (
+                        var change in listener
+                            .NotNull()
+                            .ChangesAsync(stop.Token)
+                            .ConfigureAwait(false)
+                    )
+                        if (change is SnapshotChange.Row(var rowId))
+                            heard.Writer.TryWrite(rowId);
+                        else
+                            listening.TrySetResult();
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested)
+                {
+                    // Stopped by the test.
+                }
+            },
+            CancellationToken.None
+        );
+
+    private static async Task<bool> Hears(Channel<long> heard, long rowId)
+    {
+        using var timeout = new CancellationTokenSource(HearWithin);
+        try
+        {
+            while (true)
+                if (await heard.Reader.ReadAsync(timeout.Token).ConfigureAwait(false) == rowId)
+                    return true;
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            return false;
         }
     }
 
@@ -132,29 +164,22 @@ public class SqliteSnapshotChangePollTests
         var listening = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var reading = Task.Run(async () =>
-        {
-            try
-            {
-                await foreach (
-                    var change in listener.ChangesAsync(stop.Token, () => new([watched]))
-                )
-                    if (change is SnapshotChange.Row(var rowId))
-                        heard.Writer.TryWrite(rowId);
-                    else
-                        listening.TrySetResult();
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-        });
+        var reading = ReadWatched(listener, stop, heard, listening, watched);
 
         try
         {
-            await listening.Task.WaitAsync(HearWithin);
+            await listening.Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None);
             foreach (var id in new[] { otherId, watchedId })
                 using (var scope = host.Scope())
                     (
                         await host.Service(scope, "turnstile")
-                            .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                            .Advance(
+                                User,
+                                id,
+                                "Coin",
+                                new JsonObject { ["coin"] = "quarter" },
+                                cancellationToken: CancellationToken.None
+                            )
                     )
                         .Should()
                         .BeOfType<AdvanceOutcome.Advanced>();
@@ -164,11 +189,16 @@ public class SqliteSnapshotChangePollTests
                 .Should()
                 .Be(watched, $"only the rows a reader watches are polled and reported. See {Adr}");
             // negative-wait: several polls pass, and the unwatched row must not be reported.
-            await Task.Delay(500);
+            await Task.Delay(500, CancellationToken.None);
             heard
                 .Reader.TryRead(out var more)
                 .Should()
-                .BeFalse($"row {other} is not watched, yet {more} was reported");
+                .BeFalse(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"row {other} is not watched, yet {more} was reported"
+                    )
+                );
         }
         finally
         {
@@ -177,6 +207,33 @@ public class SqliteSnapshotChangePollTests
             await listener.StopAsync(CancellationToken.None);
         }
     }
+
+    private static Task ReadWatched(
+        SnapshotChangeListener listener,
+        CancellationTokenSource stop,
+        Channel<long> heard,
+        TaskCompletionSource listening,
+        long watched
+    ) =>
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await foreach (
+                        var change in listener
+                            .ChangesAsync(stop.Token, () => new([watched]))
+                            .ConfigureAwait(false)
+                    )
+                        if (change is SnapshotChange.Row(var rowId))
+                            heard.Writer.TryWrite(rowId);
+                        else
+                            listening.TrySetResult();
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+            },
+            CancellationToken.None
+        );
 
     [Test]
     public async Task Polling_stops_when_the_last_reader_leaves_and_starts_again_with_the_next()
@@ -192,17 +249,24 @@ public class SqliteSnapshotChangePollTests
             var listening = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            var reading = Task.Run(async () =>
-            {
-                try
+            var reading = Task.Run(
+                async () =>
                 {
-                    await foreach (var change in listener.ChangesAsync(stop.Token))
-                        if (change is SnapshotChange.Reload)
-                            listening.TrySetResult();
-                }
-                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-            });
-            await listening.Task.WaitAsync(HearWithin);
+                    try
+                    {
+                        await foreach (
+                            var change in listener.ChangesAsync(stop.Token).ConfigureAwait(false)
+                        )
+                            if (change is SnapshotChange.Reload)
+                                listening.TrySetResult();
+                    }
+                    catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+                },
+                CancellationToken.None
+            );
+            await listening
+                .Task.WaitAsync(HearWithin, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
             return (stop, reading);
         }
 
@@ -213,10 +277,10 @@ public class SqliteSnapshotChangePollTests
 
             await first.CancelAsync();
             await firstReading;
-            var deadline = DateTime.UtcNow + HearWithin;
-            while (listener.IsPolling && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + HearWithin;
+            while (listener.IsPolling && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
                 // allowed-delay: polls until the listener's loop has ended.
-                await Task.Delay(50);
+                await Task.Delay(50, CancellationToken.None);
             listener
                 .IsPolling.Should()
                 .BeFalse($"with no reader left, nothing polls the table. See {Adr}");
@@ -253,8 +317,8 @@ public class SqliteSnapshotChangePollTests
             listener.IsPolling.Should().BeTrue("a watch is open");
 
             await watch.DisposeAsync();
-            var deadline = DateTime.UtcNow + HearWithin;
-            while (listener.IsPolling && DateTime.UtcNow < deadline)
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + HearWithin;
+            while (listener.IsPolling && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
                 // allowed-delay: polls until the listener's loop has ended.
                 await Task.Delay(50);
             listener
@@ -301,59 +365,77 @@ public class SqliteSnapshotChangePollTests
         listener.PollInterval = TimeSpan.FromMilliseconds(200);
         var hub = host.Services.GetRequiredService<SnapshotWatchHub>();
 
-        async Task<(Guid Id, long RowId)> Saved()
-        {
-            var id = Guid.NewGuid();
-            await host.SeedDraft(User, id, TestTurnstile.InitialJson);
-            return (id, (await host.Rows(id)).Single().RowId);
-        }
-
         try
         {
             // Another watch keeps the poll running, with a baseline that has none of the rows below.
-            var (_, other) = await Saved();
+            var (_, other) = await Saved(host).ConfigureAwait(false);
             var keeping = hub.Watch(other);
             using (var first = new CancellationTokenSource(HearWithin))
-                await keeping.Changes.ReadAsync(first.Token);
-            await using var all = watchAll ? hub.WatchAll(null) : null;
-            if (all is not null)
-                using (var first = new CancellationTokenSource(HearWithin))
-                    (await all.Changes.ReadAsync(first.Token))
-                        .Kind.Should()
-                        .Be(SnapshotRowChangeKind.Reload);
-
-            // Each row joins the watched set and is deleted at once, most often before the next poll reads it.
-            for (var i = 0; i < 3; i++)
+                await keeping.Changes.ReadAsync(first.Token).ConfigureAwait(false);
+            var all = watchAll ? hub.WatchAll(machine: null) : null;
+            try
             {
-                var (id, rowId) = await Saved();
-                var watch = hub.Watch(rowId);
-                using (var first = new CancellationTokenSource(HearWithin))
-                    (await watch.Changes.ReadAsync(first.Token))
-                        .Kind.Should()
-                        .Be(SnapshotRowChangeKind.Changed);
-                using (var scope = host.Scope())
-                    await scope
-                        .ServiceProvider.GetRequiredService<ISnapshotStore>()
-                        .Delete(User, id);
+                if (all is not null)
+                    using (var first = new CancellationTokenSource(HearWithin))
+                        (await all.Changes.ReadAsync(first.Token).ConfigureAwait(false))
+                            .Kind.Should()
+                            .Be(SnapshotRowChangeKind.Reload);
 
-                // Within two polls, and a second for the hub's re-read on a slow machine.
-                using var next = new CancellationTokenSource(
-                    listener.PollInterval * 2 + TimeSpan.FromSeconds(1)
-                );
-                (await watch.Changes.ReadAsync(next.Token))
-                    .Kind.Should()
-                    .Be(
-                        SnapshotRowChangeKind.Gone,
-                        $"the next poll reports a watched row that is missing, though it never saw it. See {Adr}"
-                    );
-                await watch.DisposeAsync();
+                // Each row joins the watched set and is deleted at once, most often before the next poll reads it.
+                for (var i = 0; i < 3; i++)
+                {
+                    await AssertWatchedRowGone(host, hub, listener).ConfigureAwait(false);
+                }
+                await keeping.DisposeAsync().ConfigureAwait(false);
             }
-            await keeping.DisposeAsync();
+            finally
+            {
+                if (all is not null)
+                    await all.DisposeAsync().ConfigureAwait(false);
+            }
         }
         finally
         {
-            await hub.StopAsync(CancellationToken.None);
-            await listener.StopAsync(CancellationToken.None);
+            await hub.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await listener.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<(Guid Id, long RowId)> Saved(InstanceHost host)
+    {
+        var id = Guid.NewGuid();
+        await host.SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (id, (await host.Rows(id).ConfigureAwait(false)).Single().RowId);
+    }
+
+    private static async Task AssertWatchedRowGone(
+        InstanceHost host,
+        SnapshotWatchHub hub,
+        SnapshotChangeListener listener
+    )
+    {
+        var (id, rowId) = await Saved(host).ConfigureAwait(false);
+        var watch = hub.Watch(rowId);
+        using (var first = new CancellationTokenSource(HearWithin))
+            (await watch.Changes.ReadAsync(first.Token).ConfigureAwait(false))
+                .Kind.Should()
+                .Be(SnapshotRowChangeKind.Changed);
+        using (var scope = host.Scope())
+            await scope
+                .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                .Delete(User, id)
+                .ConfigureAwait(false);
+
+        // Within two polls, and a second for the hub's re-read on a slow machine.
+        using var next = new CancellationTokenSource(
+            listener.PollInterval * 2 + TimeSpan.FromSeconds(1)
+        );
+        (await watch.Changes.ReadAsync(next.Token).ConfigureAwait(false))
+            .Kind.Should()
+            .Be(
+                SnapshotRowChangeKind.Gone,
+                $"the next poll reports a watched row that is missing, though it never saw it. See {Adr}"
+            );
+        await watch.DisposeAsync().ConfigureAwait(false);
     }
 }

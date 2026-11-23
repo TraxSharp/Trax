@@ -46,17 +46,17 @@ public abstract class CrossSchemaGuardFixture
 
     /// <summary>
     /// Whether the scan roots are expected to hold at least one cross-schema
-    /// <c>[ExtendObjectType]</c> resolver. Defaults to <c>true</c>, so a scan that finds none,
+    /// <c>[ExtendObjectType]</c> resolver. Defaults to <see langword="true"/>, so a scan that finds none,
     /// usually because <see cref="ArchitectureGuardOptions.SourceScanRoots"/> point somewhere the
-    /// code is not, fails instead of passing on nothing. Override to <c>false</c> in a repo that
+    /// code is not, fails instead of passing on nothing. Override to <see langword="false"/> in a repo that
     /// has no cross-schema edges.
     /// </summary>
     protected virtual bool ExpectsCrossSchemaResolvers => true;
 
     /// <summary>
     /// Whether the scan roots are expected to hold at least one <c>[Parent]</c> resolver on an
-    /// <c>[ExtendObjectType]</c> class. Defaults to <c>true</c> for the same reason as
-    /// <see cref="ExpectsCrossSchemaResolvers"/>; override to <c>false</c> in a repo that has none.
+    /// <c>[ExtendObjectType]</c> class. Defaults to <see langword="true"/> for the same reason as
+    /// <see cref="ExpectsCrossSchemaResolvers"/>; override to <see langword="false"/> in a repo that has none.
     /// </summary>
     protected virtual bool ExpectsParentResolvers => true;
 

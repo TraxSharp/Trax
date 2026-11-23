@@ -20,13 +20,14 @@ public class PostgresWorkQueuePromotionTests : TestSetup
 {
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(10);
 
-    private IWorkQueuePromotion Promotion => new WorkQueuePromotion(DataContextFactory);
+    private IWorkQueuePromotion Promotion =>
+        new WorkQueuePromotion(DataContextFactory, TestTime.Clock);
 
     [Test]
     public async Task CancelStaleAsync_deletes_what_an_earlier_pass_cancelled_once_past_the_retention()
     {
         // Retention is 30 days from creation. Rows are aged rather than a clock advanced: the
-        // sweep reads DateTime.UtcNow, and created_at is what it measures from.
+        // sweep reads its clock (a fixed one here), and created_at is what it measures from.
         var run = Guid.NewGuid().ToString("N");
         await StageMany($"Postgres.Expired.{run}", 1000, age: TimeSpan.FromDays(31));
         await StageMany($"Postgres.Fresh.{run}", 1000, age: TimeSpan.FromHours(1));
@@ -80,7 +81,10 @@ public class PostgresWorkQueuePromotionTests : TestSetup
         bool confirmed = false
     )
     {
-        using var context = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        var context = await DataContextFactory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         for (var i = 0; i < count; i++)
         {
@@ -90,27 +94,32 @@ public class PostgresWorkQueuePromotionTests : TestSetup
                     TrainName = trainName,
                     InputTypeName = "Postgres.Input",
                     DeferPromotion = true,
-                }
+                },
+                TestTime.Clock
             );
-            entry.CreatedAt = DateTime.UtcNow - age;
+            entry.CreatedAt = TestTime.UtcDateTime - age;
             entry.Status = status;
             if (confirmed)
                 entry.ConfirmedAt = entry.CreatedAt;
-            await context.Track(entry);
+            await context.Track(entry).ConfigureAwait(false);
         }
 
-        await context.SaveChanges(CancellationToken.None);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
     {
-        using var context = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        var context = await DataContextFactory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var statuses = await context
             .WorkQueues.AsNoTracking()
             .Where(w => w.TrainName == trainName)
             .Select(w => w.Status)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         return statuses.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
     }

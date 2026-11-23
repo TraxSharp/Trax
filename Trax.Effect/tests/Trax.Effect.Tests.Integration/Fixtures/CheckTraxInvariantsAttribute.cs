@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using NUnit.Framework.Interfaces;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 
 [assembly: Trax.Effect.Tests.Integration.Fixtures.CheckTraxInvariants]
@@ -31,7 +32,8 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
                 .SetBasePath(AppContext.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build()
-                .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                .NotNull()
         )
     );
 
@@ -39,7 +41,9 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 
     public ActionTargets Targets => ActionTargets.Test;
 
-    public void BeforeTest(ITest test) => _before = Find();
+    // ITestAction is synchronous, and the check runs between tests, never inside one, so it
+    // waits here. Every await below is ConfigureAwait(false).
+    public void BeforeTest(ITest test) => _before = FindAsync().GetAwaiter().GetResult();
 
     public void AfterTest(ITest test)
     {
@@ -49,30 +53,31 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         )
             return;
 
-        var added = Find().Except(_before).ToList();
+        var added = FindAsync().GetAwaiter().GetResult().Except(_before).ToList();
         if (added.Count > 0)
             Assert.Fail(TraxInvariants.Describe(added));
     }
 
-    // ITestAction is synchronous, and the check runs between tests, never inside one.
-    private static IReadOnlyList<TraxInvariantViolation> Find() =>
-        (
-            IsMigrated()
-                ? TraxInvariants
+    private static async Task<IReadOnlyList<TraxInvariantViolation>> FindAsync()
+    {
+        var found = new List<TraxInvariantViolation>();
+        if (await IsMigratedAsync().ConfigureAwait(false))
+            found.AddRange(
+                await TraxInvariants
                     .FindViolationsAsync(ConnectionString.Value)
-                    .GetAwaiter()
-                    .GetResult()
-                : []
-        )
-            .Concat(CheckpointHost.OpenOnSqlite.SelectMany(FindOnSqlite))
-            .ToList();
+                    .ConfigureAwait(false)
+            );
+        foreach (var file in CheckpointHost.OpenOnSqlite)
+            found.AddRange(await FindOnSqliteAsync(file).ConfigureAwait(false));
+        return found;
+    }
 
     // A SQLite host's file, while its fixture keeps it open. Read on an unpooled connection that
     // may not create the file, so the check neither holds the file open nor makes one that a host
     // has not; each violation names the file, since two files can hold the same row id.
-    private static IEnumerable<TraxInvariantViolation> FindOnSqlite(string file)
+    private static async Task<IReadOnlyList<TraxInvariantViolation>> FindOnSqliteAsync(string file)
     {
-        using var connection = new SqliteConnection(
+        var connection = new SqliteConnection(
             new SqliteConnectionStringBuilder
             {
                 DataSource = file,
@@ -80,39 +85,40 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
                 Pooling = false,
             }.ConnectionString
         );
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         try
         {
-            connection.Open();
+            await connection.OpenAsync().ConfigureAwait(false);
         }
         catch (SqliteException)
         {
             return [];
         }
 
-        using (var migrated = connection.CreateCommand())
+        var migrated = connection.CreateCommand();
+        await using (migrated.ConfigureAwait(false))
         {
             migrated.CommandText =
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('work_queue', 'checkpoint')";
-            if ((long)migrated.ExecuteScalar()! < 2)
+            if ((long)(await migrated.ExecuteScalarAsync().ConfigureAwait(false)).NotNull() < 2)
                 return [];
         }
 
-        return TraxInvariants
-            .FindViolationsAsync(connection, [])
-            .GetAwaiter()
-            .GetResult()
+        return (await TraxInvariants.FindViolationsAsync(connection, []).ConfigureAwait(false))
             .Select(v => v with { Detail = $"{v.Detail} (in {Path.GetFileName(file)})" })
             .ToList();
     }
 
     // The first host to start migrates the shared database, so before it nothing can be stuck.
-    private static bool IsMigrated()
+    private static async Task<bool> IsMigratedAsync()
     {
-        using var connection = new NpgsqlConnection(ConnectionString.Value);
-        connection.Open();
-        using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(ConnectionString.Value);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT to_regclass('trax.work_queue') IS NOT NULL AND to_regclass('trax.effect_claim') IS NOT NULL";
-        return (bool)command.ExecuteScalar()!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -16,28 +17,30 @@ public partial class RunAndQueueExecutionTests
     [Test]
     public async Task TrainBus_InputWithNoTrain_TellsTheHostWhereItLookedAndHowToFixIt()
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _serviceProvider.NotNull().CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
-        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+        var act = async () =>
+            await bus.RunAsync<Unit>(new InputWithNoTrain()).ConfigureAwait(false);
 
         var thrown = (await act.Should().ThrowAsync<NoTrainForInputException>()).Which;
-        thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName!);
+        thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName.NotNull());
         thrown.Message.Should().Contain(typeof(RunAndQueueExecutionTests).Assembly.GetName().Name);
         thrown.Message.Should().Contain("ScanAssemblies(");
         thrown.InputType.Should().Be(typeof(InputWithNoTrain));
         thrown
             .ScannedAssemblies.Should()
-            .Contain(typeof(RunAndQueueExecutionTests).Assembly.GetName().Name!);
+            .Contain(typeof(RunAndQueueExecutionTests).Assembly.GetName().Name.NotNull());
     }
 
     [Test]
     public async Task TrainBus_InputWithNoTrain_IsNotATrainException()
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _serviceProvider.NotNull().CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
-        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+        var act = async () =>
+            await bus.RunAsync<Unit>(new InputWithNoTrain()).ConfigureAwait(false);
 
         var thrown = (await act.Should().ThrowAsync<Exception>()).Which;
         thrown
@@ -62,10 +65,11 @@ public partial class RunAndQueueExecutionTests
         await using var scope = provider.CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
-        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+        var act = async () =>
+            await bus.RunAsync<Unit>(new InputWithNoTrain()).ConfigureAwait(false);
 
         var thrown = (await act.Should().ThrowAsync<NoTrainForInputException>()).Which;
-        thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName!);
+        thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName.NotNull());
         thrown.ScannedAssemblies.Should().BeEmpty();
         thrown
             .Message.Should()
@@ -77,7 +81,8 @@ public partial class RunAndQueueExecutionTests
 
     private sealed class EmptyRegistry : ITrainRegistry
     {
-        public Dictionary<Type, Type> InputTypeToTrain { get; set; } = [];
+        public IReadOnlyDictionary<Type, Type> InputTypeToTrain { get; set; } =
+            new Dictionary<Type, Type>();
     }
 
     /// <summary>No train in any scanned assembly takes this.</summary>

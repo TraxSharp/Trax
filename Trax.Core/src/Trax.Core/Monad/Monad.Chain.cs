@@ -66,7 +66,7 @@ public partial class Monad<TInput, TReturn>
         }
         else
         {
-            var outValue = result.Unwrap()!;
+            var outValue = result.Unwrap().NotNull();
 
             if (typeof(TOut).IsTuple())
                 this.AddTupleToMemory(outValue);
@@ -217,7 +217,7 @@ public partial class Monad<TInput, TReturn>
 
         var result = chainMethod.Invoke(this, [junctionInstance]);
 
-        return (Task<Monad<TInput, TReturn>>)result!;
+        return (Task<Monad<TInput, TReturn>>)result.NotNull();
     }
 
     #endregion
@@ -278,7 +278,7 @@ public partial class Monad<TInput, TReturn>
     )
     {
         if (instance is not null)
-            Recorder!.NoteInstance(instance);
+            Recorder.NotNull().NoteInstance(instance);
 
         return recorded;
     }
@@ -304,7 +304,7 @@ public partial class Monad<TInput, TReturn>
 
         // A short circuit sets the run's result while the chain runs on, so two branches doing it
         // would race for the result.
-        if (kind == ChainStepKind.ShortCircuit && Recorder!.InBranch)
+        if (kind == ChainStepKind.ShortCircuit && Recorder.NotNull().InBranch)
             Recorder.RefuseStep(
                 kind,
                 junction,
@@ -325,25 +325,29 @@ public partial class Monad<TInput, TReturn>
             // alongside everything else instead of throwing out of DeclaredChain. The step is
             // still recorded, without types, so every later step keeps its written position.
             // Whether such a type could be built is beside the point, so that is not asked.
-            Recorder!.RefuseStep(
-                kind,
-                junction,
-                $"{kind} names {junction.Name}, which does not implement IJunction<TIn, TOut>."
-            );
-            Recorder.Record(kind, junction, null, null);
+            Recorder
+                .NotNull()
+                .RefuseStep(
+                    kind,
+                    junction,
+                    $"{kind} names {junction.Name}, which does not implement IJunction<TIn, TOut>."
+                );
+            Recorder.Record(kind, junction, tIn: null, tOut: null);
 
             return new MonadTask<TInput, TReturn>(Task.FromResult(this));
         }
 
         if (!built)
-            Recorder!.Record(kind, junction, tIn, tOut);
+            Recorder.NotNull().Record(kind, junction, tIn, tOut);
         else if (MonadExtensions.JunctionConstructorProblem(junction) is { } problem)
         {
-            Recorder!.RefuseStep(kind, junction, $"{kind}<{junction.ReadableName()}>: {problem}");
+            Recorder
+                .NotNull()
+                .RefuseStep(kind, junction, $"{kind}<{junction.ReadableName()}>: {problem}");
             Recorder.Record(kind, junction, tIn, tOut);
         }
         else
-            Recorder!.RecordBuilt(kind, junction, tIn, tOut);
+            Recorder.NotNull().RecordBuilt(kind, junction, tIn, tOut);
 
         return new MonadTask<TInput, TReturn>(Task.FromResult(this));
     }
@@ -358,7 +362,7 @@ public partial class Monad<TInput, TReturn>
         Type tOut
     )
     {
-        Recorder!.Record(kind, typeof(TJunction), tIn, tOut);
+        Recorder.NotNull().Record(kind, typeof(TJunction), tIn, tOut);
 
         return new MonadTask<TInput, TReturn>(Task.FromResult(this));
     }

@@ -4,16 +4,16 @@ description: "The deprecated Trax.Core.Analyzers package, its CHAIN001 and CHAIN
 type: reference
 area: tooling
 nav_order: 4
-source:
-  - Trax.Core/src/Trax.Core.Analyzers
 ---
 
 # Trax.Core.Analyzers
 
-A Roslyn analyzer package, deprecated. It still ships on nuget.org, marked as a development
-dependency, so it applies only to the project that references it and does not flow to that
-project's consumers. `Trax.Core` does not depend on it. Its NuGet description says it is
-deprecated and that there is no reason to install it; an existing reference can be removed.
+A Roslyn analyzer package, deprecated and no longer built. Its last release stays on nuget.org,
+marked as a development dependency, so it applies only to the project that references it and does
+not flow to that project's consumers. `Trax.Core` does not depend on it. Its NuGet description says
+it is deprecated and that there is no reason to install it; an existing reference can be removed.
+The analyzers Trax builds now are [Trax.Analyzers](/docs/reference/analyzers), which do not check
+chains.
 
 | | |
 |---|---|

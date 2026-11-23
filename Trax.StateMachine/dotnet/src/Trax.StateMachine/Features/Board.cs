@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Features;
 
@@ -35,14 +36,27 @@ internal static class Board
 
     internal static Drawn Draw(IReadOnlyDictionary<string, JsonObject> irs, HostFile host)
     {
-        var stickies = new Dictionary<string, Sticky>(StringComparer.Ordinal);
-        var links = new HashSet<Link>();
-        IReadOnlyList<Provenance> Of(string machine, string part) =>
+        var drawing = new Drawing(host);
+        foreach (var (id, ir) in irs.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+            drawing.DrawMachine(id, ir);
+        drawing.DrawPolicies();
+        drawing.DrawViews();
+        return drawing.Result();
+    }
+
+    // The stickies and links drawn so far, and the host file they come from.
+    private sealed class Drawing(HostFile host)
+    {
+        private readonly Dictionary<string, Sticky> _stickies = new(StringComparer.Ordinal);
+        private readonly HashSet<Link> _links = [];
+
+        private IReadOnlyList<Provenance> Of(string machine, string part) =>
             host.Provenance.GetValueOrDefault(machine)?.GetValueOrDefault(part) ?? [];
-        string Add(Kind kind, string machine, string id, string label, string? part = null)
+
+        private string Add(Kind kind, string machine, string id, string label, string? part = null)
         {
-            if (!stickies.ContainsKey(id))
-                stickies[id] = new Sticky(
+            if (!_stickies.ContainsKey(id))
+                _stickies[id] = new Sticky(
                     id,
                     kind,
                     machine,
@@ -52,7 +66,7 @@ internal static class Board
             return id;
         }
 
-        foreach (var (id, ir) in irs.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        internal void DrawMachine(string id, JsonObject ir)
         {
             var entry = host.Machines[id];
             var aggregate = Add(
@@ -65,15 +79,22 @@ internal static class Board
                 "start"
             );
             if (entry.Start is { } start)
-                links.Add(
+                _links.Add(
                     new Link(Add(Kind.Actor, id, $"actor:{Who(start)}", Who(start)), aggregate)
                 );
 
+            DrawTransitions(id, ir, entry, aggregate);
+            DrawTimers(id, ir, aggregate);
+            DrawOutcomes(id, ir, aggregate);
+        }
+
+        private void DrawTransitions(string id, JsonObject ir, HostMachine entry, string aggregate)
+        {
             foreach (var edge in ir["transitions"]?.AsArray() ?? [])
             {
-                var from = edge!["from"]!.GetValue<string>();
-                var trigger = edge["trigger"]!.GetValue<string>();
-                var to = edge["to"]!.GetValue<string>();
+                var from = edge.NotNull()["from"].NotNull().GetValue<string>();
+                var trigger = edge["trigger"].NotNull().GetValue<string>();
+                var to = edge["to"].NotNull().GetValue<string>();
                 var command = Add(
                     Kind.Command,
                     id,
@@ -82,7 +103,7 @@ internal static class Board
                     $"command {trigger}"
                 );
                 if (entry.Triggers.GetValueOrDefault(trigger) is { Client: { } rule })
-                    links.Add(
+                    _links.Add(
                         new Link(Add(Kind.Actor, id, $"actor:{Who(rule)}", Who(rule)), command)
                     );
                 var happened = Add(
@@ -92,10 +113,10 @@ internal static class Board
                     $"{from} → {to}",
                     $"edge {from} {trigger} {to}"
                 );
-                links.Add(new Link(command, happened));
-                links.Add(new Link(happened, aggregate));
+                _links.Add(new Link(command, happened));
+                _links.Add(new Link(happened, aggregate));
                 if (edge["guard"] is not null)
-                    links.Add(
+                    _links.Add(
                         new Link(
                             Add(
                                 Kind.Policy,
@@ -108,13 +129,17 @@ internal static class Board
                         )
                     );
             }
+        }
 
+        private void DrawTimers(string id, JsonObject ir, string aggregate)
+        {
             foreach (var timer in ir["timers"]?.AsArray() ?? [])
             {
-                var state = timer!["state"]!.GetValue<string>();
-                var to = timer["target"]!.GetValue<string>();
+                var state = timer.NotNull()["state"].NotNull().GetValue<string>();
+                var to = timer["target"].NotNull().GetValue<string>();
                 var after =
-                    timer["after"]?.GetValue<string>() ?? $"{timer["field"]!["name"]} later";
+                    timer["after"]?.GetValue<string>()
+                    ?? $"{timer["field"].NotNull()["name"]} later";
                 var rule = Add(
                     Kind.Policy,
                     id,
@@ -129,18 +154,21 @@ internal static class Board
                     $"{state} → {to}",
                     $"timer {state}"
                 );
-                links.Add(new Link(rule, happened));
-                links.Add(new Link(happened, aggregate));
+                _links.Add(new Link(rule, happened));
+                _links.Add(new Link(happened, aggregate));
             }
+        }
 
+        private void DrawOutcomes(string id, JsonObject ir, string aggregate)
+        {
             // The IR keys outcomes by "<state>.<kind>".
             foreach (var (_, outcome) in ir["outcomes"] as JsonObject ?? [])
             {
-                var state = outcome!["state"]!.GetValue<string>();
-                var kind = outcome["outcome"]!.GetValue<string>();
-                foreach (var edge in outcome["edges"]!.AsArray())
+                var state = outcome.NotNull()["state"].NotNull().GetValue<string>();
+                var kind = outcome["outcome"].NotNull().GetValue<string>();
+                foreach (var edge in outcome["edges"].NotNull().AsArray())
                 {
-                    var to = edge!["to"]!.GetValue<string>();
+                    var to = edge.NotNull()["to"].NotNull().GetValue<string>();
                     var happened = Add(
                         Kind.Event,
                         id,
@@ -148,69 +176,78 @@ internal static class Board
                         $"{state} {kind} → {to}",
                         $"outcome {state} {kind}"
                     );
-                    links.Add(new Link(happened, aggregate));
+                    _links.Add(new Link(happened, aggregate));
                 }
             }
         }
 
-        foreach (var policy in host.Policies)
+        internal void DrawPolicies()
         {
-            var rule = Add(
-                Kind.Policy,
-                policy.Target,
-                $"policy:{policy.When}:{policy.Enters}:{policy.Target}:{policy.Trigger}",
-                $"when {policy.When} is {policy.Enters}, {policy.Trigger} {policy.Target}",
-                $"policy {policy.When} {policy.Enters}"
-            );
-            foreach (
-                var cause in stickies
-                    .Values.Where(s =>
-                        s.Kind == Kind.Event
-                        && s.Machine == policy.When
-                        && s.Label.EndsWith($"→ {policy.Enters}", StringComparison.Ordinal)
-                    )
-                    .ToList()
-            )
-                links.Add(new Link(cause.Id, rule));
-            links.Add(new Link(rule, $"command:{policy.Target}:{policy.Trigger}"));
-        }
-
-        foreach (var view in host.Views.Values)
-        {
-            var shown = Add(
-                Kind.View,
-                view.Reads[0].Machine,
-                $"view:{view.Name}",
-                view.Name,
-                $"view {view.Name}"
-            );
-            foreach (var read in view.Reads)
-                links.Add(new Link($"aggregate:{read.Machine}", shown));
-            links.Add(
-                new Link(
-                    shown,
-                    Add(
-                        Kind.Actor,
-                        view.Reads[0].Machine,
-                        $"actor:{Who(view.Readers)}",
-                        Who(view.Readers)
-                    )
+            foreach (var policy in host.Policies)
+            {
+                var rule = Add(
+                    Kind.Policy,
+                    policy.Target,
+                    $"policy:{policy.When}:{policy.Enters}:{policy.Target}:{policy.Trigger}",
+                    $"when {policy.When} is {policy.Enters}, {policy.Trigger} {policy.Target}",
+                    $"policy {policy.When} {policy.Enters}"
+                );
+                foreach (
+                    var cause in _stickies
+                        .Values.Where(s =>
+                            s.Kind == Kind.Event
+                            && string.Equals(s.Machine, policy.When, StringComparison.Ordinal)
+                            && s.Label.EndsWith($"→ {policy.Enters}", StringComparison.Ordinal)
+                        )
+                        .ToList()
                 )
-            );
+                    _links.Add(new Link(cause.Id, rule));
+                _links.Add(new Link(rule, $"command:{policy.Target}:{policy.Trigger}"));
+            }
         }
 
-        return new Drawn(
-            stickies
-                .Values.OrderBy(s => s.Machine, StringComparer.Ordinal)
-                .ThenBy(s => s.Kind)
-                .ThenBy(s => s.Id, StringComparer.Ordinal)
-                .ToList(),
-            links
-                .Where(l => stickies.ContainsKey(l.From) && stickies.ContainsKey(l.To))
-                .OrderBy(l => l.From, StringComparer.Ordinal)
-                .ThenBy(l => l.To, StringComparer.Ordinal)
-                .ToList()
-        );
+        internal void DrawViews()
+        {
+            foreach (var view in host.Views.Values)
+            {
+                var shown = Add(
+                    Kind.View,
+                    view.Reads[0].Machine,
+                    $"view:{view.Name}",
+                    view.Name,
+                    $"view {view.Name}"
+                );
+                foreach (var read in view.Reads)
+                    _links.Add(new Link($"aggregate:{read.Machine}", shown));
+                _links.Add(
+                    new Link(
+                        shown,
+                        Add(
+                            Kind.Actor,
+                            view.Reads[0].Machine,
+                            $"actor:{Who(view.Readers)}",
+                            Who(view.Readers)
+                        )
+                    )
+                );
+            }
+        }
+
+        internal Drawn Result()
+        {
+            return new Drawn(
+                _stickies
+                    .Values.OrderBy(s => s.Machine, StringComparer.Ordinal)
+                    .ThenBy(s => s.Kind)
+                    .ThenBy(s => s.Id, StringComparer.Ordinal)
+                    .ToList(),
+                _links
+                    .Where(l => _stickies.ContainsKey(l.From) && _stickies.ContainsKey(l.To))
+                    .OrderBy(l => l.From, StringComparer.Ordinal)
+                    .ThenBy(l => l.To, StringComparer.Ordinal)
+                    .ToList()
+            );
+        }
     }
 
     // An actor sticky names who a rule admits: its roles, or anyone signed in.

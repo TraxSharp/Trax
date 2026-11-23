@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
@@ -32,16 +33,13 @@ public sealed class RecordingCharge : ICharge
     /// no other test uses in its cart, so it sees only its own charges.
     /// </summary>
     public IReadOnlyList<Charged> For(string item) =>
-        _charges.Where(c => c.Items.Contains(item)).ToList();
+        _charges.Where(c => c.Items.Contains(item, StringComparer.Ordinal)).ToList();
 
     private static IReadOnlyList<string> Items(Snapshot snapshot) =>
-        snapshot.Context["items"]!.AsArray().Select(i => i!.GetValue<string>()).ToList();
+        snapshot
+            .Context["items"]
+            .NotNull()
+            .AsArray()
+            .Select(i => i.NotNull().GetValue<string>())
+            .ToList();
 }
-
-/// <summary>One charge: the state it was made from, the amount in cents, the items and the receipt.</summary>
-public sealed record Charged(
-    string State,
-    long AmountCents,
-    IReadOnlyList<string> Items,
-    string Receipt
-);

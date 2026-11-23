@@ -42,7 +42,10 @@ public class OidcBuilderTests
         builder.AddScope("email");
         builder.AddScope("email");
 
-        builder.Scopes.Count(s => s == "email").Should().Be(1);
+        builder
+            .Scopes.Count(s => string.Equals(s, "email", StringComparison.Ordinal))
+            .Should()
+            .Be(1);
     }
 
     [Test]

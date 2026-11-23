@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.DeadLetterCleanupPollingService;
@@ -70,18 +71,18 @@ public class PollingIntervalLiveTests
         try
         {
             // The first cycle runs at start.
-            await first.Task.WaitAsync(SyncTimeout);
+            await first.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
 
             // An hour-long wait is under way; the operator shortens the interval.
             config.JobDispatcherPollingInterval = TimeSpan.FromMilliseconds(50);
 
             // The new interval applies to the wait already under way; before, this waited an hour.
-            await second.Task.WaitAsync(SyncTimeout);
+            await second.Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None);
         }
         finally
         {
-            cts.Cancel();
-            await service.StopAsync(CancellationToken.None);
+            await cts.CancelAsync().ConfigureAwait(false);
+            await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -130,7 +131,7 @@ public class PollingIntervalLiveTests
         FakeDeadLetterCleanupTrain? train = null;
         train = new FakeDeadLetterCleanupTrain(() =>
         {
-            if (train!.Runs == 1)
+            if (train.NotNull().Runs == 1)
                 first.TrySetResult();
             else
                 second.TrySetResult();
@@ -200,21 +201,25 @@ public class PollingIntervalLiveTests
     )
     {
         using var cts = new CancellationTokenSource();
-        await service.StartAsync(cts.Token);
+        await service.StartAsync(cts.Token).ConfigureAwait(false);
         try
         {
             // The first cycle runs at start, then an hour-long wait begins.
-            await first.Task.WaitAsync(SyncTimeout);
+            await first
+                .Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
 
             shorten();
 
             // The next cycle runs after the new interval, not after the hour.
-            await second.Task.WaitAsync(SyncTimeout);
+            await second
+                .Task.WaitAsync(SyncTimeout, TimeProvider.System, CancellationToken.None)
+                .ConfigureAwait(false);
         }
         finally
         {
-            cts.Cancel();
-            await service.StopAsync(CancellationToken.None);
+            await cts.CancelAsync().ConfigureAwait(false);
+            await service.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
 

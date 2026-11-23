@@ -1,6 +1,8 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -23,7 +25,7 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteDisabledManifestDispatchTests : TestSetup
 {
-    private DateTime _createdAt = DateTime.UtcNow.AddMinutes(-10);
+    private DateTime _createdAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10);
 
     [Test]
     public async Task Entries_held_by_disabled_manifests_do_not_take_the_groups_share_of_a_cycle()
@@ -40,7 +42,11 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
             var held = new List<long>();
             for (var i = 0; i < 2; i++)
             {
-                var disabled = await SaveManifestAsync($"off{i}", isEnabled: false, group.Id);
+                var disabled = await SaveManifestAsync(
+                    string.Create(CultureInfo.InvariantCulture, $"off{i}"),
+                    isEnabled: false,
+                    group.Id
+                );
                 await QueueScheduledEntryAsync(disabled.Id);
                 held.Add(disabled.Id);
             }
@@ -135,17 +141,18 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 ManifestId = manifestId,
-            }
+            },
+            TimeProvider.System
         );
         // Distinct created_at values in the order queued, so the held entries rank ahead of the
         // enabled one.
         entry.CreatedAt = _createdAt = _createdAt.AddSeconds(1);
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -162,8 +169,8 @@ public class SqliteDisabledManifestDispatchTests : TestSetup
             }
         );
         manifest.ManifestGroupId = groupId;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }

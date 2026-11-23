@@ -37,7 +37,7 @@ public static class RichExportMachine
         public string? Note { get; init; }
     }
 
-    private sealed class ThingEffect { }
+    private sealed class ThingEffect;
 
     public static readonly BuiltMachine<RState, RTrigger> Built = Build();
 
@@ -60,22 +60,7 @@ public static class RichExportMachine
         m.In(RState.A)
             .Context<Ctx>()
             .On(RTrigger.Set1)
-            .When(
-                All(
-                    new Rule.Present(RuleSource.Context, "total"),
-                    new Rule.Absent(RuleSource.Context, "note"),
-                    new Rule.OfType(RuleSource.Context, "total", JsonFieldType.Number),
-                    new Rule.NonEmpty(RuleSource.Context, "name"),
-                    new Rule.OneOf(RuleSource.Input, "kind", ["x"]),
-                    new Rule.Compare(RuleSource.Context, "total", CompareOp.GreaterThan, 0),
-                    new Rule.Compare(RuleSource.Context, "total", CompareOp.GreaterOrEqual, 0),
-                    new Rule.Compare(RuleSource.Context, "total", CompareOp.LessThan, 9),
-                    new Rule.Compare(RuleSource.Context, "total", CompareOp.LessOrEqual, 9),
-                    new Rule.Compare(RuleSource.Context, "total", CompareOp.EqualTo, 0),
-                    new Rule.Count(RuleSource.Context, "items", CompareOp.GreaterThan, -1),
-                    Any(new Rule.Custom("c"))
-                )
-            )
+            .When(EveryRuleKind())
             .Reduce(Set((Ctx c) => c.Total).ToValue(1))
             .To(RState.B)
             .On(RTrigger.Set2)
@@ -106,4 +91,21 @@ public static class RichExportMachine
 
         return m.Build();
     }
+
+    // One rule of every kind the IR exports.
+    private static Rule EveryRuleKind() =>
+        All(
+            new Rule.Present(RuleSource.Context, "total"),
+            new Rule.Absent(RuleSource.Context, "note"),
+            new Rule.OfType(RuleSource.Context, "total", JsonFieldType.Number),
+            new Rule.NonEmpty(RuleSource.Context, "name"),
+            new Rule.OneOf(RuleSource.Input, "kind", ["x"]),
+            new Rule.Compare(RuleSource.Context, "total", CompareOp.GreaterThan, 0),
+            new Rule.Compare(RuleSource.Context, "total", CompareOp.GreaterOrEqual, 0),
+            new Rule.Compare(RuleSource.Context, "total", CompareOp.LessThan, 9),
+            new Rule.Compare(RuleSource.Context, "total", CompareOp.LessOrEqual, 9),
+            new Rule.Compare(RuleSource.Context, "total", CompareOp.EqualTo, 0),
+            new Rule.Count(RuleSource.Context, "items", CompareOp.GreaterThan, -1),
+            Any(new Rule.Custom("c"))
+        );
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectRegistry;
@@ -22,13 +23,14 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class DataChangeSubscriptionTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [TearDown]
     public async Task TearDown()
     {
         if (_provider is not null)
-            await _provider.DisposeAsync();
+            if (_provider is not null)
+                await _provider.DisposeAsync();
     }
 
     private async Task<IRequestExecutor> BuildExecutorAsync()
@@ -52,8 +54,10 @@ public class DataChangeSubscriptionTests
 
         _provider = services.BuildServiceProvider();
         return await _provider
+            .NotNull()
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -98,7 +102,7 @@ public class DataChangeSubscriptionTests
         );
         var reader = Task.Run(async () =>
         {
-            await foreach (var item in stream.ReadResultsAsync())
+            await foreach (var item in stream.ReadResultsAsync().ConfigureAwait(false))
             {
                 received.TrySetResult(item);
                 break;
@@ -107,13 +111,16 @@ public class DataChangeSubscriptionTests
 
         // Publish until the subscriber picks it up: ExecuteAsync returns before the topic
         // subscription is guaranteed registered, so a single publish can race ahead of it.
-        var sender = _provider.GetRequiredService<ITopicEventSender>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!received.Task.IsCompleted && DateTime.UtcNow < deadline)
+        var sender = _provider.NotNull().GetRequiredService<ITopicEventSender>();
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (!received.Task.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             await sender.SendAsync(
                 nameof(LifecycleSubscriptions.OnDataChanged),
-                new DataChangedEvent(ChangeDomain.WorkQueue, DateTime.UtcNow)
+                new DataChangedEvent(
+                    ChangeDomain.WorkQueue,
+                    TimeProvider.System.GetUtcNow().UtcDateTime
+                )
             );
             // allowed-delay: poll/re-publish interval, not a sleep-for-sync. Re-sends because
             // ExecuteAsync can return before the topic subscription is registered; WhenAny wakes
@@ -127,8 +134,9 @@ public class DataChangeSubscriptionTests
         var payload = await received.Task;
         payload.Errors.Should().BeNullOrEmpty();
 
-        var data = (IReadOnlyDictionary<string, object?>)payload.DataMap()["onDataChanged"]!;
-        data["domain"]!.ToString().Should().Be("WORK_QUEUE");
+        var data =
+            (IReadOnlyDictionary<string, object?>)payload.DataMap()["onDataChanged"].NotNull();
+        data["domain"].NotNull().ToString().Should().Be("WORK_QUEUE");
 
         await stream.DisposeAsync();
         await reader;

@@ -18,7 +18,7 @@ namespace Trax.Api.Auth.Jwt;
 /// <item><c>role</c>, <see cref="ClaimTypes.Role"/>, and <c>roles</c> claims → <see cref="TraxPrincipal.Roles"/>.</item>
 /// <item>Any claim not in the Trax reserved set is carried verbatim on <see cref="TraxPrincipal.Claims"/>.</item>
 /// </list>
-/// Returns <c>null</c> when the token has no identifying subject. The handler
+/// Returns <see langword="null"/> when the token has no identifying subject. The handler
 /// translates that into <see cref="Microsoft.AspNetCore.Authentication.AuthenticateResult.Fail(string)"/>.
 /// </para>
 /// </remarks>

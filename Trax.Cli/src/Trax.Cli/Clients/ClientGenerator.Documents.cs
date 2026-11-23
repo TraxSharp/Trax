@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using GraphQLParser.AST;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
@@ -51,23 +52,7 @@ internal sealed partial class ClientGenerator
             )
         );
         var used = new HashSet<string>(StringComparer.Ordinal);
-        string resultType;
-        IReadOnlyList<string> path;
-        if (operation.Trains is [var single])
-        {
-            resultType = selections.Of(
-                SdlTypes.ParseType(single.Train.Answer, $"the train '{single.Train.Field}'")!,
-                single.Field.SelectionSet,
-                owner,
-                used
-            );
-            path = single.Path;
-        }
-        else
-        {
-            resultType = Several(operation, selections, owner, used);
-            path = [operation.Root];
-        }
+        var (resultType, path) = ResultOf(operation, selections, owner, used);
 
         var variables = operation.Operation.Variables?.Items ?? [];
         var (parameters, values) = Signature(
@@ -104,7 +89,7 @@ internal sealed partial class ClientGenerator
             .Distinct(StringComparer.Ordinal)
             .ToList();
         if (requirements.Count > 0)
-            sb.Append(TypeScript.Doc(string.Join(" ", requirements)));
+            sb.Append(TypeScript.Doc(string.Join(' ', requirements)));
         sb.Append(
             $"export function {function}({string.Join(", ", parameters)}): Promise<{result}> {{\n"
         );
@@ -113,6 +98,30 @@ internal sealed partial class ClientGenerator
         );
         sb.Append("}\n");
         return sb.ToString();
+    }
+
+    // The type of what the operation answers, and the path to it in the answer: its one train's
+    // field, or the root that holds several.
+    private static (string Type, IReadOnlyList<string> Path) ResultOf(
+        ClientOperation operation,
+        SelectionTypes selections,
+        string owner,
+        HashSet<string> used
+    )
+    {
+        if (operation.Trains is [var single])
+            return (
+                selections.Of(
+                    SdlTypes
+                        .ParseType(single.Train.Answer, $"the train '{single.Train.Field}'")
+                        .NotNull(),
+                    single.Field.SelectionSet,
+                    owner,
+                    used
+                ),
+                single.Path
+            );
+        return (Several(operation, selections, owner, used), [operation.Root]);
     }
 
     // What a query of several trains answers: each train under its key, inside its namespace when it has one.
@@ -124,7 +133,12 @@ internal sealed partial class ClientGenerator
     )
     {
         var sb = new StringBuilder("{\n");
-        foreach (var group in operation.Trains.GroupBy(t => t.Path.Count == 2 ? null : t.Path[1]))
+        foreach (
+            var group in operation.Trains.GroupBy(
+                t => t.Path.Count == 2 ? null : t.Path[1],
+                StringComparer.Ordinal
+            )
+        )
         {
             var indent = group.Key is null ? 2 : 4;
             if (group.Key is not null)
@@ -135,10 +149,9 @@ internal sealed partial class ClientGenerator
                     .Append(": ")
                     .Append(
                         selections.Of(
-                            SdlTypes.ParseType(
-                                train.Train.Answer,
-                                $"the train '{train.Train.Field}'"
-                            )!,
+                            SdlTypes
+                                .ParseType(train.Train.Answer, $"the train '{train.Train.Field}'")
+                                .NotNull(),
                             train.Field.SelectionSet,
                             owner,
                             used,
@@ -177,7 +190,7 @@ internal sealed partial class ClientGenerator
                 $"/** The fragment '{EscapeDocText(name)}' on {EscapeDocText(on)} ({EscapeDocText(source)}): the fields it selects. */\n"
             );
             body.Append(
-                $"export type {name} = {selections.Of(SdlTypes.ParseType(on + "!", $"the fragment '{name}'")!, definition.SelectionSet, $"the fragment {name}", used)};\n\n"
+                $"export type {name} = {selections.Of(SdlTypes.ParseType(on + "!", $"the fragment '{name}'").NotNull(), definition.SelectionSet, $"the fragment {name}", used)};\n\n"
             );
         }
         var sb = new StringBuilder(Header).Append("import \"./format.g\";\n");
@@ -203,9 +216,14 @@ internal sealed partial class ClientGenerator
                         text = o.Text,
                     }),
                 },
-                new JsonSerializerOptions { WriteIndented = true }
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                }
             )
-            .Replace("\r\n", "\n") + "\n";
+            .Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
 
     // The manifest's types plus the root and namespace types that hold each exposed train and query model, so an editor
     // checks and completes a document against what the host serves.
@@ -236,7 +254,7 @@ internal sealed partial class ClientGenerator
                 sb.Append($"  {TrainField(train)}\n");
             var namespaces = trains
                 .Where(t => t.Namespace is not null)
-                .Select(t => t.Namespace!)
+                .Select(t => t.Namespace.NotNull())
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToList();
@@ -248,7 +266,7 @@ internal sealed partial class ClientGenerator
                 sb.Append($"type {holder}{TypeScript.Upper(ns)} {{\n");
                 foreach (
                     var train in trains
-                        .Where(t => t.Namespace == ns)
+                        .Where(t => string.Equals(t.Namespace, ns, StringComparison.Ordinal))
                         .OrderBy(t => t.Field, StringComparer.Ordinal)
                 )
                     sb.Append($"  {TrainField(train)}\n");
@@ -259,7 +277,11 @@ internal sealed partial class ClientGenerator
         foreach (var (kind, type) in roots)
             sb.Append($"  {kind}: {type}\n");
         sb.Append("}\n\n");
-        sb.Append(WithoutDirectives((manifest.Types ?? "").Replace("\r\n", "\n").Trim()))
+        sb.Append(
+                WithoutDirectives(
+                    (manifest.Types ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Trim()
+                )
+            )
             .Append('\n');
         return sb.ToString();
     }
@@ -271,14 +293,16 @@ internal sealed partial class ClientGenerator
             '\n',
             sdl.Split('\n')
                 .Select(line =>
-                    line.TrimStart().StartsWith('"') ? line : DirectiveUse().Replace(line, "")
+                    line.TrimStart().StartsWith('"') ? line : DirectiveUse.Replace(line, "")
                 )
         );
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\s+@[_A-Za-z][_0-9A-Za-z]*(?:\((?:[^()""]|""(?:[^""\\]|\\.)*"")*\))?"
+        @"\s+@[_A-Za-z][_0-9A-Za-z]*(?:\((?:[^()""]|""(?:[^""\\]|\\.)*"")*\))?",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial System.Text.RegularExpressions.Regex DirectiveUse();
+    private static partial System.Text.RegularExpressions.Regex DirectiveUse { get; }
 
     private static string TrainField(ClientManifestTrain train)
     {

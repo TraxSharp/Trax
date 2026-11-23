@@ -120,7 +120,7 @@ public class EntityKeyResolverTests
     [Test]
     public void GetKeyPropertyNames_NullType_Throws()
     {
-        var act = () => EntityKeyResolver.GetKeyPropertyNames(null!);
+        var act = () => EntityKeyResolver.GetKeyPropertyNames(Null.Of<Type>());
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -198,7 +198,7 @@ public class EntityKeyResolverTests
         public string Slug { get; set; } = "";
     }
 
-    private sealed class Empty;
+    private static class Empty;
 
     private sealed class PrivateId
     {

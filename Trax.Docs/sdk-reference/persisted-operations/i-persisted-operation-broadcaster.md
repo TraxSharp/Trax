@@ -11,6 +11,7 @@ namespace: Trax.Api.GraphQL.PersistedOperations.Broadcasting
 source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Broadcasting/IPersistedOperationBroadcaster.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Broadcasting/PersistedOperationChangedMessage.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Broadcasting/PersistedOperationChangeType.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Broadcasting/RabbitMqPersistedOperationBroadcaster.cs
 ---
 

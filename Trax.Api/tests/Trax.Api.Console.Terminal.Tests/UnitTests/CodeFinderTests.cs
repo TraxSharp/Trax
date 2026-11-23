@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Code;
 using Trax.Api.Console.Terminal.Connection;
 
@@ -11,49 +12,55 @@ namespace Trax.Api.Console.Terminal.Tests.UnitTests;
 [TestFixture]
 public class CodeFinderTests
 {
-    private DirectoryInfo _root = null!;
+    private DirectoryInfo? _root;
 
     [SetUp]
-    public void Checkout()
+    public async Task Checkout()
     {
         _root = Directory.CreateTempSubdirectory("trax-console-code-");
-        Write(
+        await WriteAsync(
             "src/Shop/Trains/IShipOrderTrain.cs",
             "namespace Shop.Trains;\npublic interface IShipOrderTrain { }\n"
         );
-        Write(
+        await WriteAsync(
             "src/Shop/Trains/ShipOrderTrain.cs",
             "namespace Shop.Trains;\n\n// The train.\ninternal sealed class ShipOrderTrain : IShipOrderTrain { }\n"
         );
-        Write("src/Shop/Junctions/ChargeCard.cs", "namespace Shop;\npublic class ChargeCard { }\n");
-        Write("src/Shop/bin/Debug/Copy.cs", "public class ChargeCard { }\n");
+        await WriteAsync(
+            "src/Shop/Junctions/ChargeCard.cs",
+            "namespace Shop;\npublic class ChargeCard { }\n"
+        );
+        await WriteAsync("src/Shop/bin/Debug/Copy.cs", "public class ChargeCard { }\n");
     }
 
     [TearDown]
-    public void Remove() => _root.Delete(recursive: true);
+    public void Remove() => _root.NotNull().Delete(recursive: true);
 
     [Test]
     public async Task A_train_named_by_its_interface_opens_at_its_class()
     {
-        var found = await CodeFinder.FindAsync(_root.FullName, "Shop.Trains.IShipOrderTrain");
+        var found = await CodeFinder.FindAsync(
+            _root.NotNull().FullName,
+            "Shop.Trains.IShipOrderTrain"
+        );
 
         found.Should().NotBeNull();
-        Path.GetFileName(found!.Path).Should().Be("ShipOrderTrain.cs");
+        Path.GetFileName(found.NotNull().Path).Should().Be("ShipOrderTrain.cs");
         found.Line.Should().Be(4);
     }
 
     [Test]
     public async Task A_junction_is_found_by_its_name_and_build_output_is_not_searched()
     {
-        var found = await CodeFinder.FindAsync(_root.FullName, "ChargeCard");
+        var found = await CodeFinder.FindAsync(_root.NotNull().FullName, "ChargeCard");
 
-        found!.Path.Should().EndWith(Path.Combine("Junctions", "ChargeCard.cs"));
+        found.NotNull().Path.Should().EndWith(Path.Combine("Junctions", "ChargeCard.cs"));
     }
 
     [TestCase("Missing")]
     [TestCase("not a name; rm -rf")]
     public async Task A_name_with_no_declaration_finds_nothing(string name) =>
-        (await CodeFinder.FindAsync(_root.FullName, name)).Should().BeNull();
+        (await CodeFinder.FindAsync(_root.NotNull().FullName, name)).Should().BeNull();
 
     [Test]
     public async Task A_link_to_a_file_or_a_directory_is_not_followed()
@@ -61,17 +68,23 @@ public class CodeFinderTests
         var outside = Directory.CreateTempSubdirectory("trax-console-outside-");
         try
         {
-            File.WriteAllText(Path.Combine(outside.FullName, "Secret.cs"), "class Leaked { }\n");
+            await File.WriteAllTextAsync(
+                    Path.Combine(outside.FullName, "Secret.cs"),
+                    "class Leaked { }\n"
+                )
+                .ConfigureAwait(false);
             File.CreateSymbolicLink(
-                Path.Combine(_root.FullName, "src", "Linked.cs"),
+                Path.Combine(_root.NotNull().FullName, "src", "Linked.cs"),
                 Path.Combine(outside.FullName, "Secret.cs")
             );
             Directory.CreateSymbolicLink(
-                Path.Combine(_root.FullName, "src", "away"),
+                Path.Combine(_root.NotNull().FullName, "src", "away"),
                 outside.FullName
             );
 
-            (await CodeFinder.FindAsync(_root.FullName, "Leaked")).Should().BeNull();
+            (await CodeFinder.FindAsync(_root.NotNull().FullName, "Leaked").ConfigureAwait(false))
+                .Should()
+                .BeNull();
         }
         finally
         {
@@ -83,7 +96,11 @@ public class CodeFinderTests
     public async Task A_search_that_is_cancelled_stops() =>
         await FluentActions
             .Awaiting(() =>
-                CodeFinder.FindAsync(_root.FullName, "Missing", new CancellationToken(true))
+                CodeFinder.FindAsync(
+                    _root.NotNull().FullName,
+                    "Missing",
+                    new CancellationToken(canceled: true)
+                )
             )
             .Should()
             .ThrowAsync<OperationCanceledException>();
@@ -91,9 +108,12 @@ public class CodeFinderTests
     [Test]
     public void The_search_starts_at_the_checkout_the_console_runs_in()
     {
-        Directory.CreateDirectory(Path.Combine(_root.FullName, ".git"));
+        Directory.CreateDirectory(Path.Combine(_root.NotNull().FullName, ".git"));
 
-        CodeFinder.Root(Path.Combine(_root.FullName, "src", "Shop")).Should().Be(_root.FullName);
+        CodeFinder
+            .Root(Path.Combine(_root.NotNull().FullName, "src", "Shop"))
+            .Should()
+            .Be(_root.NotNull().FullName);
     }
 
     [TestCase("nvim", new[] { "+4", "/x/A.cs" })]
@@ -146,8 +166,14 @@ public class CodeFinderTests
     [Test]
     public void The_editor_is_VISUAL_then_EDITOR_then_vi()
     {
-        CodeFinder.Editor(n => n == "VISUAL" ? "code" : "nano").Should().Be("code");
-        CodeFinder.Editor(n => n == "EDITOR" ? "nano" : null).Should().Be("nano");
+        CodeFinder
+            .Editor(n => string.Equals(n, "VISUAL", StringComparison.Ordinal) ? "code" : "nano")
+            .Should()
+            .Be("code");
+        CodeFinder
+            .Editor(n => string.Equals(n, "EDITOR", StringComparison.Ordinal) ? "nano" : null)
+            .Should()
+            .Be("nano");
         CodeFinder.Editor(_ => null).Should().Be("vi");
     }
 
@@ -156,7 +182,10 @@ public class CodeFinderTests
     [TestCase("\t\n")]
     public void A_blank_editor_is_not_set(string blank)
     {
-        CodeFinder.Editor(n => n == "VISUAL" ? blank : "nano").Should().Be("nano");
+        CodeFinder
+            .Editor(n => string.Equals(n, "VISUAL", StringComparison.Ordinal) ? blank : "nano")
+            .Should()
+            .Be("nano");
         CodeFinder.Editor(_ => blank).Should().Be("vi");
     }
 
@@ -164,7 +193,10 @@ public class CodeFinderTests
     public void A_bare_name_is_found_in_an_absolute_PATH_entry_only()
     {
         var tried = new List<string>();
-        var env = new Dictionary<string, string> { ["PATH"] = ":.:bin:/opt/a:/opt/b/" };
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["PATH"] = ":.:bin:/opt/a:/opt/b/",
+        };
 
         CodeFinder
             .Command(
@@ -174,7 +206,7 @@ public class CodeFinderTests
                 runnable: p =>
                 {
                     tried.Add(p);
-                    return p == "/opt/b/vim";
+                    return string.Equals(p, "/opt/b/vim", StringComparison.Ordinal);
                 }
             )
             .Should()
@@ -190,17 +222,21 @@ public class CodeFinderTests
             Assert.Ignore("Unix file modes.");
             return;
         }
-        var planted = Path.Combine(_root.FullName, "vim");
+        var planted = Path.Combine(_root.NotNull().FullName, "vim");
         File.WriteAllText(planted, "#!/bin/sh\n");
         File.SetUnixFileMode(planted, UnixFileMode.UserRead | UnixFileMode.UserExecute);
         var previous = Directory.GetCurrentDirectory();
         try
         {
-            Directory.SetCurrentDirectory(_root.FullName);
+            Directory.SetCurrentDirectory(_root.NotNull().FullName);
 
             FluentActions
                 .Invoking(() =>
-                    CodeFinder.Command("vim", n => n == "PATH" ? ":." : null, windows: false)
+                    CodeFinder.Command(
+                        "vim",
+                        n => string.Equals(n, "PATH", StringComparison.Ordinal) ? ":." : null,
+                        windows: false
+                    )
                 )
                 .Should()
                 .Throw<InvalidOperationException>()
@@ -220,20 +256,31 @@ public class CodeFinderTests
             Assert.Ignore("Unix file modes.");
             return;
         }
-        var bin = Directory.CreateDirectory(Path.Combine(_root.FullName, "bin")).FullName;
+        var bin = Directory.CreateDirectory(Path.Combine(_root.NotNull().FullName, "bin")).FullName;
         var file = Path.Combine(bin, "vim");
         File.WriteAllText(file, "");
         File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
         FluentActions
             .Invoking(() =>
-                CodeFinder.Command("vim", n => n == "PATH" ? bin : null, windows: false)
+                CodeFinder.Command(
+                    "vim",
+                    n => string.Equals(n, "PATH", StringComparison.Ordinal) ? bin : null,
+                    windows: false
+                )
             )
             .Should()
             .Throw<InvalidOperationException>();
 
         File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserExecute);
-        CodeFinder.Command("vim", n => n == "PATH" ? bin : null, windows: false).Should().Be(file);
+        CodeFinder
+            .Command(
+                "vim",
+                n => string.Equals(n, "PATH", StringComparison.Ordinal) ? bin : null,
+                windows: false
+            )
+            .Should()
+            .Be(file);
     }
 
     [TestCase("./vim")]
@@ -268,7 +315,7 @@ public class CodeFinderTests
     [Test]
     public void On_Windows_a_bare_name_is_found_on_the_path_with_its_extension()
     {
-        var env = new Dictionary<string, string>
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PATH"] =
                 @"bin;C:\Windows;""C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin""",
@@ -285,7 +332,7 @@ public class CodeFinderTests
                 runnable: p =>
                 {
                     tried.Add(p);
-                    return p == there;
+                    return string.Equals(p, there, StringComparison.Ordinal);
                 }
             )
             .Should()
@@ -320,14 +367,15 @@ public class CodeFinderTests
             .WithMessage("*relative path*");
     }
 
-    private static string? UnixPath(string name) => name == "PATH" ? "/usr/bin" : null;
+    private static string? UnixPath(string name) =>
+        string.Equals(name, "PATH", StringComparison.Ordinal) ? "/usr/bin" : null;
 
     private static bool AnyFile(string path) => true;
 
-    private void Write(string path, string text)
+    private async Task WriteAsync(string path, string text)
     {
-        var full = Path.Combine(_root.FullName, path);
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, text);
+        var full = Path.Combine(_root.NotNull().FullName, path);
+        Directory.CreateDirectory(Path.GetDirectoryName(full).NotNull());
+        await File.WriteAllTextAsync(full, text).ConfigureAwait(false);
     }
 }

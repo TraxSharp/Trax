@@ -14,7 +14,7 @@ public class TrainTests
         var train = new UnitTrain();
 
         // Act
-        var result = await train.Run(Trax.Core.Functional.Unit.Default);
+        var result = await train.Run(Trax.Core.Functional.Unit.Default, CancellationToken.None);
 
         // Assert
         result.Should().Be(Trax.Core.Functional.Unit.Default);
@@ -28,17 +28,18 @@ public class TrainTests
 
         // Act
         await Assert.ThrowsAsync<NotImplementedException>(async () =>
-            await train.Run(Trax.Core.Functional.Unit.Default)
+            await train.Run(Functional.Unit.Default, CancellationToken.None).ConfigureAwait(false)
         );
     }
 
-    private class UnitTrain : Train<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
+    private sealed class UnitTrain : Train<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
     {
         protected override async Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             Resolve();
     }
 
-    private class NotImplementedTrain : Train<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
+    private sealed class NotImplementedTrain
+        : Train<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
     {
         protected override async Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             new NotImplementedException();

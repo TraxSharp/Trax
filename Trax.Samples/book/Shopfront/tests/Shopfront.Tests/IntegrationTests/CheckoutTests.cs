@@ -3,13 +3,14 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shopfront.Auth;
+using Trax.Core.Extensions;
 
 namespace Shopfront.Tests.IntegrationTests;
 
 [TestFixture]
 public class CheckoutTests
 {
-    private WebApplicationFactory<Program> _app = null!;
+    private WebApplicationFactory<Program>? _app;
 
     [SetUp]
     public async Task StartTheApplication()
@@ -22,39 +23,46 @@ public class CheckoutTests
     }
 
     [TearDown]
-    public ValueTask StopTheApplication() => _app.DisposeAsync();
+    public async ValueTask StopTheApplication()
+    {
+        if (_app is not null)
+            await _app.DisposeAsync().ConfigureAwait(false);
+    }
 
     private HttpClient SignedIn(string user)
     {
-        var client = _app.CreateClient();
+        var client = _app.NotNull().CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            DevJwt.Mint(user, Roles.Customer)
+            DevJwt.Mint(user, Roles.Customer, TimeProvider.System)
         );
         return client;
     }
 
     private static async Task<JsonElement> Send(HttpClient client, string id, string mutation)
     {
-        var response = await client.Post(
-            $"mutation($id: UUID!) {{ machines {{ checkout {{ {mutation} {{ state problem {{ code message }} }} }} }} }}",
-            new { id }
-        );
+        var response = await client
+            .Post(
+                $"mutation($id: UUID!) {{ machines {{ checkout {{ {mutation} {{ state problem {{ code message }} }} }} }} }}",
+                new { id }
+            )
+            .ConfigureAwait(false);
         return response.GetProperty("data").GetProperty("machines").GetProperty("checkout");
     }
 
     private static async Task<string> Start(HttpClient client)
     {
-        var response = await client.Post(
-            "mutation { machines { checkout { start(requestId: \"s\") { id } } } }"
-        );
+        var response = await client
+            .Post("mutation { machines { checkout { start(requestId: \"s\") { id } } } }")
+            .ConfigureAwait(false);
         return response
             .GetProperty("data")
             .GetProperty("machines")
             .GetProperty("checkout")
             .GetProperty("start")
             .GetProperty("id")
-            .GetString()!;
+            .GetString()
+            .NotNull();
     }
 
     [Test]
@@ -63,9 +71,21 @@ public class CheckoutTests
         var ada = SignedIn("ada");
         var id = await Start(ada);
 
-        await Send(ada, id, "setLines(id: $id, input: { lines: [{ sku: \"MUG\", quantity: 2 }] }, requestId: \"a\")");
-        await Send(ada, id, "setAddress(id: $id, input: { address: \"1 Main St\" }, requestId: \"b\")");
-        await Send(ada, id, "choosePayment(id: $id, input: { paymentToken: \"tok_visa\" }, requestId: \"c\")");
+        await Send(
+            ada,
+            id,
+            "setLines(id: $id, input: { lines: [{ sku: \"MUG\", quantity: 2 }] }, requestId: \"a\")"
+        );
+        await Send(
+            ada,
+            id,
+            "setAddress(id: $id, input: { address: \"1 Main St\" }, requestId: \"b\")"
+        );
+        await Send(
+            ada,
+            id,
+            "choosePayment(id: $id, input: { paymentToken: \"tok_visa\" }, requestId: \"c\")"
+        );
         var placed = await Send(ada, id, "placeOrder(id: $id, requestId: \"d\")");
 
         placed.GetProperty("placeOrder").GetProperty("state").GetString().Should().Be("Placing");
@@ -104,6 +124,9 @@ public class CheckoutTests
             "setLines(id: $id, input: { lines: [] }, requestId: \"a\")"
         );
 
-        hers.GetProperty("setLines").GetProperty("state").ValueKind.Should().Be(JsonValueKind.Null, "a checkout is its owner's");
+        hers.GetProperty("setLines")
+            .GetProperty("state")
+            .ValueKind.Should()
+            .Be(JsonValueKind.Null, "a checkout is its owner's");
     }
 }

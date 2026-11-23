@@ -3,6 +3,8 @@ title: Exclusion Windows
 description: Exclusion windows that skip a manifest on days of the week, dates, date ranges or daily time windows, how they combine and interact with misfire policies.
 source:
   - Trax.Effect/src/Trax.Effect/Models/Manifest/Exclusion.cs
+  - Trax.Effect/src/Trax.Effect/Models/Manifest/ExclusionType.cs
+  - Trax.Effect/src/Trax.Effect/Models/Manifest/Exclude.cs
 type: reference
 area: scheduling
 nav_order: 2

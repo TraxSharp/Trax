@@ -1,0 +1,118 @@
+using Trax.Analyzers.Configurations;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class CommaAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.MissingCommaInObjectInitializer,
+        title: "Add a comma after the last value",
+        messageFormat: "Add comma after the last value",
+        RuleCategories.Style,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.MissingCommaInObjectInitializer));
+
+    private static readonly ConfigurationDefinition<bool> IgnoreCatchAllArmConfiguration = new([Rule.Id + ".ignore_catch_all_arm", Rule.Id + ".IgnoreCatchAllArm"], defaultValue: false);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    private static readonly ImmutableArray<SyntaxKind> ObjectInitializerKinds = ImmutableArray.Create(SyntaxKind.ObjectInitializerExpression, SyntaxKind.ArrayInitializerExpression, SyntaxKind.CollectionInitializerExpression);
+
+    /// <inheritdoc/>
+    public override void Initialize(AnalysisContext context)
+    {
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
+
+        context.RegisterSyntaxNodeAction(HandleObjectInitializer, ObjectInitializerKinds);
+        context.RegisterSyntaxNodeAction(HandleAnonymousObjectInitializer, SyntaxKind.AnonymousObjectCreationExpression);
+        context.RegisterSyntaxNodeAction(HandleEnumDeclaration, SyntaxKind.EnumDeclaration);
+        context.RegisterSyntaxNodeAction(HandleWithExpression, SyntaxKind.WithExpression);
+        context.RegisterSyntaxNodeAction(HandleSwitchExpression, SyntaxKind.SwitchExpression);
+        context.RegisterSyntaxNodeAction(HandleRecursivePattern, SyntaxKind.RecursivePattern);
+        context.RegisterSyntaxNodeAction(HandleCollectionExpression, SyntaxKind.CollectionExpression);
+    }
+
+    private static void HandleSeparatedList<T>(SyntaxNodeAnalysisContext context, SyntaxNode node, SeparatedSyntaxList<T> elements) where T : SyntaxNode
+    {
+        if (elements.Count == 0)
+            return;
+
+        if (elements.Count == elements.SeparatorCount || !node.SpansMultipleLines(context.CancellationToken))
+            return;
+
+        var lastMember = elements[^1];
+        context.ReportDiagnostic(Rule, lastMember);
+    }
+
+    private void HandleCollectionExpression(SyntaxNodeAnalysisContext context)
+    {
+        var node = (CollectionExpressionSyntax)context.Node;
+        if (node.Elements.Count == 0)
+            return;
+
+        if (node.Elements.Count == node.Elements.SeparatorCount || !node.SpansMultipleLines(context.CancellationToken))
+            return;
+
+        var lastElement = node.Elements[^1];
+        if (lastElement.GetEndLine(context.CancellationToken) == node.CloseBracketToken.GetEndLine(context.CancellationToken))
+            return;
+
+        context.ReportDiagnostic(Rule, lastElement);
+    }
+
+    private void HandleSwitchExpression(SyntaxNodeAnalysisContext context)
+    {
+        var node = (SwitchExpressionSyntax)context.Node;
+        var options = context.Options.GetConfigurationValue(node, IgnoreCatchAllArmConfiguration);
+        if (options is true)
+        {
+            var last = node.Arms.LastOrDefault();
+            if (last is not null && last.Pattern is DiscardPatternSyntax)
+                return;
+        }
+
+        HandleSeparatedList(context, node, node.Arms);
+    }
+
+    private void HandleWithExpression(SyntaxNodeAnalysisContext context)
+    {
+        var node = (WithExpressionSyntax)context.Node;
+        if (node.Initializer is null)
+            return;
+
+        HandleSeparatedList(context, node, node.Initializer.Expressions);
+    }
+
+    private static void HandleEnumDeclaration(SyntaxNodeAnalysisContext context)
+    {
+        var node = (EnumDeclarationSyntax)context.Node;
+        HandleSeparatedList(context, node, node.Members);
+    }
+
+    private static void HandleObjectInitializer(SyntaxNodeAnalysisContext context)
+    {
+        var node = (InitializerExpressionSyntax)context.Node;
+        HandleSeparatedList(context, node, node.Expressions);
+    }
+
+    private static void HandleAnonymousObjectInitializer(SyntaxNodeAnalysisContext context)
+    {
+        var node = (AnonymousObjectCreationExpressionSyntax)context.Node;
+        HandleSeparatedList(context, node, node.Initializers);
+    }
+
+    private static void HandleRecursivePattern(SyntaxNodeAnalysisContext context)
+    {
+        var node = (RecursivePatternSyntax)context.Node;
+        if (node.PropertyPatternClause is null)
+            return;
+
+        HandleSeparatedList(context, node, node.PropertyPatternClause.Subpatterns);
+    }
+}

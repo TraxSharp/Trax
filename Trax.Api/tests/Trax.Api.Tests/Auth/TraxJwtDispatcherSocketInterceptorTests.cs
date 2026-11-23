@@ -9,6 +9,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -77,7 +78,9 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
@@ -98,14 +101,16 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.Identity!.IsAuthenticated.Should().BeTrue();
+        http.User.Identity.NotNull().IsAuthenticated.Should().BeTrue();
         http.User.Identity.AuthenticationType.Should().Be("a");
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("a:alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId).NotNull().Value.Should().Be("a:alice");
     }
 
     [Test]
@@ -122,13 +127,15 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.Identity!.AuthenticationType.Should().Be("b");
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("b:bob");
+        http.User.Identity.NotNull().AuthenticationType.Should().Be("b");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId).NotNull().Value.Should().Be("b:bob");
     }
 
     [Test]
@@ -147,7 +154,9 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         var result = await interceptor.OnConnectAsync(
             session,
-            Payload(new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, null)),
+            Payload(
+                new TraxJwtDispatcherSocketInterceptor.ConnectionInitPayload(token, Bearer: null)
+            ),
             CancellationToken.None
         );
 
@@ -178,6 +187,6 @@ public class TraxJwtDispatcherSocketInterceptorTests
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("a:alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId).NotNull().Value.Should().Be("a:alice");
     }
 }

@@ -26,7 +26,7 @@ public class LocalRunExecutor : IRunExecutor
     private readonly IDataContextProviderFactory dataContextFactory;
 
     /// <summary>
-    /// Where the lifecycle hooks of a run this executor closes are built from. <c>null</c> when the
+    /// Where the lifecycle hooks of a run this executor closes are built from. <see langword="null"/> when the
     /// executor was constructed by hand rather than by <c>AddMediator</c>; such a run's outcome is
     /// then recorded on its row but not published.
     /// </summary>
@@ -58,10 +58,9 @@ public class LocalRunExecutor : IRunExecutor
     /// </summary>
     private static readonly ConcurrentDictionary<Type, MethodInfo> RunBoxedMethodCache = new();
 
-    private static readonly MethodInfo RunBoxedDefinition = typeof(LocalRunExecutor).GetMethod(
-        nameof(RunBoxedAsync),
-        BindingFlags.NonPublic | BindingFlags.Instance
-    )!;
+    private static readonly MethodInfo RunBoxedDefinition = typeof(LocalRunExecutor)
+        .GetMethod(nameof(RunBoxedAsync), BindingFlags.NonPublic | BindingFlags.Instance)
+        .NotNull();
 
     /// <summary>
     /// Resolves the train registered under <paramref name="trainName"/>, then creates and saves a
@@ -111,19 +110,14 @@ public class LocalRunExecutor : IRunExecutor
 
         async Task<Metadata> CreatePendingAsync(CancellationToken token)
         {
-            var metadata = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = trainName,
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                    StarterHash = starterHash,
-                }
-            );
+            var metadata = Metadata.Create(PendingMetadataRequest(trainName, starterHash));
 
-            using var dataContext = await dataContextFactory.CreateDbContextAsync(token);
-            await dataContext.Track(metadata);
-            await dataContext.SaveChanges(token);
+            var dataContext = await dataContextFactory
+                .CreateDbContextAsync(token)
+                .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
+            await dataContext.Track(metadata).ConfigureAwait(false);
+            await dataContext.SaveChanges(token).ConfigureAwait(false);
 
             pending = metadata;
             return metadata;
@@ -138,20 +132,24 @@ public class LocalRunExecutor : IRunExecutor
 
         try
         {
-            output = await (Task<object?>)
-                runBoxed.Invoke(
-                    this,
-                    [
-                        trainName,
-                        input,
-                        (Func<CancellationToken, Task<Metadata>>)CreatePendingAsync,
-                        ct,
-                    ]
-                )!;
+            output = await (
+                (Task<object?>)
+                    runBoxed
+                        .Invoke(
+                            this,
+                            [
+                                trainName,
+                                input,
+                                (Func<CancellationToken, Task<Metadata>>)CreatePendingAsync,
+                                ct,
+                            ]
+                        )
+                        .NotNull()
+            ).ConfigureAwait(false);
         }
         catch (Exception ex) when (pending is not null)
         {
-            await CloseIfStillPendingAsync(pending.Id, ex);
+            await CloseIfStillPendingAsync(pending.Id, ex).ConfigureAwait(false);
             throw;
         }
 
@@ -164,6 +162,15 @@ public class LocalRunExecutor : IRunExecutor
         );
     }
 
+    private static CreateMetadata PendingMetadataRequest(string trainName, string? starterHash) =>
+        new()
+        {
+            Name = trainName,
+            ExternalId = Guid.NewGuid().ToString("N"),
+            Input = null,
+            StarterHash = starterHash,
+        };
+
     private async Task<object?> RunBoxedAsync<TOut>(
         string trainName,
         object input,
@@ -172,7 +179,8 @@ public class LocalRunExecutor : IRunExecutor
     )
     {
         if (trainBus is DefaultTrainBus bus)
-            return await bus.RunByNameAsPendingAsync<TOut>(trainName, input, createPending, ct);
+            return await bus.RunByNameAsPendingAsync<TOut>(trainName, input, createPending, ct)
+                .ConfigureAwait(false);
 
         // The interface's own body only throws, so a bus that keeps it would fail every run after
         // its record was written.
@@ -183,8 +191,10 @@ public class LocalRunExecutor : IRunExecutor
                     + "bus AddMediator registers."
             );
 
-        var metadata = await createPending(ct);
-        return await trainBus.RunByNameAsync<TOut>(trainName, input, ct, metadata);
+        var metadata = await createPending(ct).ConfigureAwait(false);
+        return await trainBus
+            .RunByNameAsync<TOut>(trainName, input, ct, metadata)
+            .ConfigureAwait(false);
     }
 
     private static readonly ConcurrentDictionary<Type, bool> ImplementsRunByNameCache = new();
@@ -205,8 +215,11 @@ public class LocalRunExecutor : IRunExecutor
                     var declared = map.InterfaceMethods[i];
 
                     if (
-                        declared.Name == nameof(ITrainBus.RunByNameAsync)
-                        && declared.IsGenericMethodDefinition
+                        string.Equals(
+                            declared.Name,
+                            nameof(ITrainBus.RunByNameAsync),
+                            StringComparison.Ordinal
+                        ) && declared.IsGenericMethodDefinition
                     )
                         return map.TargetMethods[i].DeclaringType != typeof(ITrainBus);
                 }
@@ -231,14 +244,14 @@ public class LocalRunExecutor : IRunExecutor
         TrainState closed;
         try
         {
-            using var dataContext = await dataContextFactory.CreateDbContextAsync(
-                CancellationToken.None
-            );
+            var dataContext = await dataContextFactory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            await using var dataContextDisposal = dataContext.ConfigureAwait(false);
 
-            var metadata = await dataContext.Metadatas.FirstOrDefaultAsync(
-                m => m.Id == metadataId,
-                CancellationToken.None
-            );
+            var metadata = await dataContext
+                .Metadatas.FirstOrDefaultAsync(m => m.Id == metadataId, CancellationToken.None)
+                .ConfigureAwait(false);
 
             if (metadata is null || metadata.TrainState != TrainState.Pending)
                 return;
@@ -251,8 +264,10 @@ public class LocalRunExecutor : IRunExecutor
                 metadata.TrainState = TrainState.Failed;
             }
 
-            metadata.EndTime = DateTime.UtcNow;
-            await dataContext.SaveChanges(CancellationToken.None);
+            metadata.EndTime = (services?.GetService<TimeProvider>() ?? TimeProvider.System)
+                .GetUtcNow()
+                .UtcDateTime;
+            await dataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             closed = metadata.TrainState;
         }
         catch (Exception)
@@ -270,8 +285,12 @@ public class LocalRunExecutor : IRunExecutor
             services.GetService<ILogger<LocalRunExecutor>>()
             ?? NullLogger<LocalRunExecutor>.Instance;
         if (closed == TrainState.Cancelled)
-            await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadataId], logger);
+            await OutOfTrainOutcomes
+                .PublishCancelledAsync(services, [metadataId], logger)
+                .ConfigureAwait(false);
         else
-            await OutOfTrainOutcomes.PublishFailedAsync(services, [metadataId], logger);
+            await OutOfTrainOutcomes
+                .PublishFailedAsync(services, [metadataId], logger)
+                .ConfigureAwait(false);
     }
 }

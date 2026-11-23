@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Cli.Schema.OpenApi;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -9,19 +10,20 @@ public class OpenApiCoverageGapTests
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
 
     [Test]
-    public void Parse_MalformedDocument_Throws()
+    public async Task Parse_MalformedDocument_Throws()
     {
         var path = Path.GetTempFileName();
         try
         {
+            await
             // Empty/invalid OpenAPI document — reader returns null and the parser
             // converts diagnostic errors into InvalidOperationException.
-            File.WriteAllText(path, "{}");
+            File.WriteAllTextAsync(path, "{}");
             var parser = new OpenApiSchemaParser();
 
-            Action act = () => parser.Parse(path);
+            Func<Task> act = () => parser.ParseAsync(path);
 
-            act.Should().Throw<Exception>();
+            await act.Should().ThrowAsync<Exception>().ConfigureAwait(false);
         }
         finally
         {
@@ -30,37 +32,49 @@ public class OpenApiCoverageGapTests
     }
 
     [Test]
-    public void Parse_InlineResponseObject_BuildsOutputType()
+    public async Task Parse_InlineResponseObject_BuildsOutputType()
     {
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("inline-response-object.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("inline-response-object.json"))
+            .ConfigureAwait(false);
 
-        var listOp = schema.Operations.Single(o => o.Name == "ListWidgets");
+        var listOp = schema.Operations.Single(o =>
+            string.Equals(o.Name, "ListWidgets", StringComparison.Ordinal)
+        );
         listOp.OutputType.Should().NotBeNull();
-        listOp.OutputType!.Name.Should().Be("ListWidgetsOutput");
+        listOp.OutputType.NotNull().Name.Should().Be("ListWidgetsOutput");
         listOp.OutputType.Fields.Should().Contain(f => f.Name == "Count");
         listOp.OutputType.Fields.Should().Contain(f => f.Name == "Label");
 
         // No content => Unit output
-        var noContentOp = schema.Operations.Single(o => o.Name == "NoContent");
-        noContentOp.OutputType!.Name.Should().Be("Unit");
+        var noContentOp = schema.Operations.Single(o =>
+            string.Equals(o.Name, "NoContent", StringComparison.Ordinal)
+        );
+        noContentOp.OutputType.NotNull().Name.Should().Be("Unit");
         noContentOp.OutputType.IsBuiltIn.Should().BeTrue();
 
         // Non-JSON (binary) => Unit output
-        var binaryOp = schema.Operations.Single(o => o.Name == "BinaryDownload");
-        binaryOp.OutputType!.Name.Should().Be("Unit");
+        var binaryOp = schema.Operations.Single(o =>
+            string.Equals(o.Name, "BinaryDownload", StringComparison.Ordinal)
+        );
+        binaryOp.OutputType.NotNull().Name.Should().Be("Unit");
         binaryOp.OutputType.IsBuiltIn.Should().BeTrue();
     }
 
     [Test]
-    public void Parse_RefRequestBody_PullsFieldsIntoInput()
+    public async Task Parse_RefRequestBody_PullsFieldsIntoInput()
     {
         var parser = new OpenApiSchemaParser();
-        var schema = parser.Parse(FixturePath("refbody-input.json"));
+        var schema = await parser
+            .ParseAsync(FixturePath("refbody-input.json"))
+            .ConfigureAwait(false);
 
-        var op = schema.Operations.Single(o => o.Name == "CreateThing");
+        var op = schema.Operations.Single(o =>
+            string.Equals(o.Name, "CreateThing", StringComparison.Ordinal)
+        );
         op.InputType.Should().NotBeNull();
-        op.InputType!.Fields.Should().Contain(f => f.Name == "Name");
+        op.InputType.NotNull().Fields.Should().Contain(f => f.Name == "Name");
         op.InputType.Fields.Should().Contain(f => f.Name == "Color");
     }
 }

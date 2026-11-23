@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Services.Checkpoints;
@@ -56,7 +57,7 @@ public class DeclaredChainsTests
         );
 
         second.Should().NotBeNull("a failed read is not remembered, so the next run reads again");
-        second!.Checkpoints.Should().BeTrue();
+        second.NotNull().Checkpoints.Should().BeTrue();
 
         DeclaredChains
             .For(

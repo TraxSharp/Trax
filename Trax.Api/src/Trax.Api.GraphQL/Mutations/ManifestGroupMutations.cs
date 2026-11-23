@@ -14,7 +14,7 @@ public class ManifestGroupMutations
 {
     /// <summary>
     /// Patches mutable settings on a manifest group. Each field on <paramref name="input"/>
-    /// is independent; passing <c>null</c> leaves a field unchanged.
+    /// is independent; passing <see langword="null"/> leaves a field unchanged.
     /// </summary>
     public async Task<OperationResponse> UpdateManifestGroup(
         long id,
@@ -23,7 +23,9 @@ public class ManifestGroupMutations
         CancellationToken ct
     )
     {
-        var result = await operationsService.UpdateManifestGroupAsync(id, input, ct);
+        var result = await operationsService
+            .UpdateManifestGroupAsync(id, input, ct)
+            .ConfigureAwait(false);
         return ToResponse(result);
     }
 
@@ -37,7 +39,12 @@ public class ManifestGroupMutations
         bool enabled,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.SetManifestGroupsEnabledAsync(ids, enabled, ct));
+    ) =>
+        ToResponse(
+            await operationsService
+                .SetManifestGroupsEnabledAsync(ids, enabled, ct)
+                .ConfigureAwait(false)
+        );
 
     /// <summary>
     /// Enables or disables every manifest group. A field of its own so that "all" is never what an
@@ -47,7 +54,12 @@ public class ManifestGroupMutations
         bool enabled,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    ) => ToResponse(await operationsService.SetAllManifestGroupsEnabledAsync(enabled, ct));
+    ) =>
+        ToResponse(
+            await operationsService
+                .SetAllManifestGroupsEnabledAsync(enabled, ct)
+                .ConfigureAwait(false)
+        );
 
     private static OperationResponse ToResponse(OperationResult result) =>
         new(result.Success, result.Count, result.Message) { Id = result.Id };

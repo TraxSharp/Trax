@@ -8,15 +8,15 @@ nav_order: 3
 
 # Packages
 
-Trax ships as 48 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
+Trax ships as 49 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
 
 Every package releases at the same version, so install them all at one version. The site is published from the latest release, and the nuget.org link shows that release and its dependencies.
 
 ## Requirements
 
 Every library package targets `net10.0`, so every project that references one must target it too;
-there is no `net8.0` or `net9.0` build. `Trax.Core.Analyzers` targets `netstandard2.0`, as Roslyn
-analyzers do.
+there is no `net8.0` or `net9.0` build. `Trax.Analyzers` and `Trax.Analyzers.Annotations` target
+`netstandard2.0`, as Roslyn analyzers and their attributes do.
 
 The packages depend on EF Core, Npgsql, HotChocolate and `Microsoft.Extensions.*`, and NuGet
 resolves those. A project that also pins one of them directly has to pin at least the version Trax
@@ -68,7 +68,6 @@ dotnet add package Trax.Api.Dashboard
 |---|---|---|---|
 | [Trax.Core](https://www.nuget.org/packages/Trax.Core) | Trains, junctions and chains: `Train<TIn, TOut>`, `Junction<TIn, TOut>`, `Chain`, `ShortCircuit`, `Resolve`, Memory. No DI container or database needed. See [Core](/docs/core). | `Trax.Core.Train`, `Trax.Core.Junction`, and `Trax.Core.Functional` for `Either` and `Unit` | Nothing. Every other Trax package builds on it. |
 | [Trax.Core.Testing](https://www.nuget.org/packages/Trax.Core.Testing) | Architecture-guard infrastructure and hygiene checkers: `HygieneGuards`, `RepoConventionGuards`, `VocabularyGuards`, `GuardResult`. See [Architecture Guards](/docs/reference/architecture-guards). | `Trax.Core.Testing`, `Trax.Core.Testing.Guards`, `Trax.Core.Testing.Fixtures` | A test project. The other `*.Testing` guard packages build on it. |
-| [Trax.Core.Analyzers](https://www.nuget.org/packages/Trax.Core.Analyzers) | Deprecated. The Roslyn analyzer for CHAIN001 and CHAIN002 no longer reports anything; the host checks every chain at startup instead. Do not install it. See [Analyzer](/docs/core/analyzer). | | |
 
 ## Trax.Effect
 
@@ -137,6 +136,17 @@ dotnet add package Trax.Api.Dashboard
 | [Trax.Api.Auth.Oidc](https://www.nuget.org/packages/Trax.Api.Auth.Oidc) | `AddTraxOidcAuth(...)`: the browser-facing OpenID Connect code flow, with a session cookie. See [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth). | `Trax.Api.Auth.Oidc` | A host that browsers sign in to. Token-based API clients use `Trax.Api.Auth.Jwt` instead. |
 | [Trax.Api.Auth.Jwt.Testing](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Testing) | `TestJwksServer` and `TestTokenIssuer`: a local JWKS endpoint and signed tokens for integration tests. See [JWT Testing](/docs/sdk-reference/api-auth/test-jwks-server). | `Trax.Api.Auth.Jwt.Testing` | `Trax.Api.Auth.Jwt`, in a test project. |
 | [Trax.Api.Auth.Jwt.Cognito.Issuer](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Cognito.Issuer) | `CreateCognitoIssuer()` on `TestJwksServer`: tokens shaped like Cognito's, for testing `UseCognito`. See [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-token-issuer). | `Trax.Api.Auth.Jwt.Cognito.Issuer` | `Trax.Api.Auth.Jwt.Testing` and `Trax.Api.Auth.Jwt.Cognito`, in a test project. |
+
+`Trax.Core.Analyzers`, the Roslyn analyzer for CHAIN001 and CHAIN002, is no longer built. Its last
+release reports nothing and the host checks every chain at startup instead; remove a reference to
+it. See [Trax.Core.Analyzers](/docs/core/analyzer).
+
+## Analyzers
+
+| Package | What it is for | Import | Pairs with |
+|---|---|---|---|
+| [Trax.Analyzers](https://www.nuget.org/packages/Trax.Analyzers) | Opt-in Roslyn rules, every one an error: culture and comparer bugs, async and cancellation mistakes, regex timeouts, the null-forgiving operator, and bans on reading the clock, chance or the console. A development dependency; it adds no runtime reference. See [Trax.Analyzers](/docs/reference/analyzers). | None; reference it with `PrivateAssets="all"` | Any project, Trax or not. |
+| [Trax.Analyzers.Annotations](https://www.nuget.org/packages/Trax.Analyzers.Annotations) | Attributes that tune the rules from your own code: a parameter whose arguments must be named, a culture-insensitive type, a call to leave out of the blocking-call or cancellation-token checks. They are conditional and leave no reference in the compiled assembly. | `Trax.Analyzers.Annotations` | `Trax.Analyzers`. |
 
 ## Tools and templates
 

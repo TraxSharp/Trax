@@ -12,7 +12,7 @@ namespace Trax.Api.Auth.Oidc;
 /// any custom claims the IdP includes are already populated.
 /// </param>
 /// <param name="IdToken">Raw id-token string, if the handler retained it.</param>
-/// <param name="AccessToken">Access token, if one was issued. May be <c>null</c>.</param>
+/// <param name="AccessToken">Access token, if one was issued. May be <see langword="null"/>.</param>
 /// <remarks>
 /// NO WARRANTY. Trax auth is plumbing, not a security product. You are solely
 /// responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.

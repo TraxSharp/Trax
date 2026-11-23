@@ -81,7 +81,7 @@ public class IntrospectionTests
             .ContainSingle(t => t.Name == "Review.after")
             .Which.Should()
             .Be(
-                new MachineTrigger("Review.after", TriggerKind.Timer, null),
+                new MachineTrigger("Review.after", TriggerKind.Timer, InputType: null),
                 "a timer is server-only and takes no input (Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)"
             );
     }

@@ -19,7 +19,7 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class MigrationsAreDocumentedTests
+public partial class MigrationsAreDocumentedTests
 {
     private const string Guide = "reference/schema-migrations.md";
 
@@ -93,14 +93,18 @@ public class MigrationsAreDocumentedTests
         ["Sqlite/019_decision"] = BeforeTheGuard,
     };
 
-    private static readonly Regex Heading = new(
+    [GeneratedRegex(
         @"^#{1,6} (?<text>.*)$",
-        RegexOptions.Compiled | RegexOptions.Multiline
-    );
+        RegexOptions.Multiline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Heading { get; }
 
-    private static readonly Regex Parenthesis = new(@"\((?<inner>[^)]*)\)", RegexOptions.Compiled);
+    [GeneratedRegex(@"\((?<inner>[^)]*)\)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Parenthesis { get; }
 
-    private static readonly Regex Token = new(@"SQLite|\b\d{3}\b", RegexOptions.Compiled);
+    [GeneratedRegex(@"SQLite|\b\d{3}\b", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Token { get; }
 
     [Test]
     public void Every_Migration_IsNamed_InTheGuide()
@@ -132,7 +136,9 @@ public class MigrationsAreDocumentedTests
                 missing.Add(key);
         }
 
-        var stale = NotInTheGuide.Keys.Except(leftOut).OrderBy(k => k, StringComparer.Ordinal);
+        var stale = NotInTheGuide
+            .Keys.Except(leftOut, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
 
         missing
             .Should()
@@ -183,7 +189,7 @@ public class MigrationsAreDocumentedTests
                 var sqlite = text[..parenthesis.Index].Contains("SQLite", StringComparison.Ordinal);
                 foreach (Match token in Token.Matches(parenthesis.Groups["inner"].Value))
                 {
-                    if (token.Value == "SQLite")
+                    if (string.Equals(token.Value, "SQLite", StringComparison.Ordinal))
                         sqlite = true;
                     else
                         named.Add((sqlite ? "Sqlite" : "Postgres", token.Value));
@@ -197,7 +203,7 @@ public class MigrationsAreDocumentedTests
     /// <summary>Every shipped migration script, by provider, without its extension.</summary>
     private static IEnumerable<(string Provider, string Script)> Scripts()
     {
-        var monorepo = Directory.GetParent(RepoRoot.Path)!.FullName;
+        var monorepo = RepoRoot.Monorepo;
         foreach (var provider in new[] { "Postgres", "Sqlite" })
         {
             var folder = Path.Combine(

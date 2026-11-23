@@ -65,10 +65,11 @@ public sealed class DemoTokenIssuer
     /// <summary>The key's bytes, a copy.</summary>
     public byte[] SigningKey => (byte[])_signingKey.Clone();
 
-    /// <summary>A one-hour token for <paramref name="subject"/> with <paramref name="role"/>.</summary>
+    /// <summary>A token for <paramref name="subject"/> with <paramref name="role"/>, good for an hour from <paramref name="clock"/>'s now.</summary>
     /// <exception cref="ArgumentException">The role is not one of <see cref="Roles"/>, or the subject is not a plain name.</exception>
-    public string Mint(string subject, string role)
+    public string Mint(string subject, string role, TimeProvider clock)
     {
+        ArgumentNullException.ThrowIfNull(clock);
         if (role is null || !Roles.Contains(role))
             throw new ArgumentException($"'{role}' is not a role of this sample.", nameof(role));
         if (
@@ -90,7 +91,7 @@ public sealed class DemoTokenIssuer
                     new("name", subject),
                     new("role", role),
                 ]),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Expires = clock.GetUtcNow().UtcDateTime.AddHours(1),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(_signingKey),
                     SecurityAlgorithms.HmacSha256

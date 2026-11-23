@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -93,7 +94,11 @@ internal sealed class MachinesScreen : View
                 {
                     if (
                         e is TraxStreamEvent<OnMachineInstanceChangedResult>.Next next
-                        && next.Data.OnMachineInstanceChanged.Machine == Selected?.Name
+                        && string.Equals(
+                            next.Data.OnMachineInstanceChanged.Machine,
+                            Selected?.Name,
+                            StringComparison.Ordinal
+                        )
                     )
                         Soon();
                     else if (e is TraxStreamEvent<OnMachineInstanceChangedResult>.Resumed)
@@ -127,17 +132,32 @@ internal sealed class MachinesScreen : View
                     return;
                 }
                 var selected = Selected?.Name;
-                _machines = machines.Where(m => !m.SystemOwned).OrderBy(m => m.Name).ToList();
+                _machines = machines
+                    .Where(m => !m.SystemOwned)
+                    .OrderBy(m => m.Name, StringComparer.Ordinal)
+                    .ToList();
                 _machineNames.Clear();
                 foreach (var machine in _machines)
-                    _machineNames.Add(TerminalText.Line($"{machine.Name} v{machine.Version}"));
+                    _machineNames.Add(
+                        TerminalText.Line(
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{machine.Name} v{machine.Version}"
+                            )
+                        )
+                    );
                 if (_machines.Count == 0)
                 {
                     _graph.Clear();
                     _instancesHeader.Text = "This host serves no machines.";
                     return;
                 }
-                var at = Math.Max(0, _machines.ToList().FindIndex(m => m.Name == selected));
+                var at = Math.Max(
+                    0,
+                    _machines
+                        .ToList()
+                        .FindIndex(m => string.Equals(m.Name, selected, StringComparison.Ordinal))
+                );
                 _machineList.SelectedItem = at;
                 ShowMachine();
             },
@@ -160,7 +180,11 @@ internal sealed class MachinesScreen : View
         var vertical = _context.VerticalGraphs;
         Ui.Start(
             _context.App,
-            () => Task.Run(() => MachineGraph.Lines(machine, vertical: vertical)),
+            () =>
+                Task.Run(
+                    () => MachineGraph.Lines(machine, vertical: vertical),
+                    cancellationToken: CancellationToken.None
+                ),
             lines =>
             {
                 if (draw != Volatile.Read(ref _drawing))
@@ -173,7 +197,8 @@ internal sealed class MachinesScreen : View
             {
                 if (draw == Volatile.Read(ref _drawing))
                     _graph.Add(TerminalText.Line(message));
-            }
+            },
+            cancellation: CancellationToken.None
         );
     }
 
@@ -183,7 +208,7 @@ internal sealed class MachinesScreen : View
             return;
         var stuck = _stuckOnly;
         var load = Interlocked.Increment(ref _loading);
-        if (_instancesOf != machine.Name)
+        if (!string.Equals(_instancesOf, machine.Name, StringComparison.Ordinal))
         {
             _instancesOf = machine.Name;
             _instances = [];
@@ -217,24 +242,12 @@ internal sealed class MachinesScreen : View
                 _instances = page.Items;
                 _instanceLines.Clear();
                 foreach (var i in page.Items)
-                    _instanceLines.Add(
-                        TerminalText.Line(
-                            $"{i.State, -20} {Wire.Name(i.OwnerKind).ToLowerInvariant(), -6} {i.Id}  since {Wire.Time(i.InStateSince)}"
-                                + (
-                                    i.Stuck ? "  STUCK"
-                                    : i.Overdue ? "  overdue"
-                                    : ""
-                                )
-                                + (
-                                    i.WaitingOn?.ExecutionId is { } run
-                                        ? $"  waits on run {run}"
-                                        : ""
-                                )
-                        )
-                    );
+                    _instanceLines.Add(TerminalText.Line(InstanceLine(i)));
                 _instancesHeader.Text =
-                    $"{page.TotalCount}{(page.IsCountCapped ? "+" : "")} instances{(stuck ? " stuck" : "")}"
-                    + (page.TotalCount > InstancesShown ? $", the first {InstancesShown}" : "");
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{page.TotalCount}{(page.IsCountCapped ? "+" : "")} instances{(stuck ? " stuck" : "")}"
+                    ) + (page.TotalCount > InstancesShown ? $", the first {InstancesShown}" : "");
             },
             message =>
             {
@@ -244,6 +257,21 @@ internal sealed class MachinesScreen : View
             _context.Closed
         );
     }
+
+    private static string InstanceLine(
+        MachineInstancesAttentionResultOperationsMachineInstancesItems i
+    ) =>
+        $"{i.State, -20} {Wire.Name(i.OwnerKind).ToLowerInvariant(), -6} {i.Id}  since {Wire.Time(i.InStateSince)}"
+        + (
+            i.Stuck ? "  STUCK"
+            : i.Overdue ? "  overdue"
+            : ""
+        )
+        + (
+            i.WaitingOn?.ExecutionId is { } run
+                ? string.Create(CultureInfo.InvariantCulture, $"  waits on run {run}")
+                : ""
+        );
 
     private void Soon()
     {
@@ -265,13 +293,13 @@ internal sealed class MachinesScreen : View
     {
         if (VimKeys.Window(_context, key))
             return true;
-        if (Ui.Typed(key) == "r")
+        if (string.Equals(Ui.Typed(key), "r", StringComparison.Ordinal))
         {
             _context.VerticalGraphs = !_context.VerticalGraphs;
             ShowGraph();
             return true;
         }
-        if (Ui.Typed(key) == "s")
+        if (string.Equals(Ui.Typed(key), "s", StringComparison.Ordinal))
         {
             _stuckOnly = !_stuckOnly;
             LoadInstances();
@@ -286,7 +314,7 @@ internal sealed class MachinesScreen : View
         )
             return false;
         var window = new MachineInstanceWindow(_context, machine, _instances[index]);
-        _context.App.Run(window);
+        Ui.RunModal(_context.App, window);
         var run = window.RunToTrace;
         window.Dispose();
         if (run is { } id)

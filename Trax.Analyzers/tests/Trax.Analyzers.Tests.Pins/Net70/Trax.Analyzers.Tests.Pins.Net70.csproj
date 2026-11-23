@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ReferenceAssemblies.Net.Net70. -->
+  <Import Project="../Pins.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETCore.App.Ref" Version="7.0.0" />
+  </ItemGroup>
+</Project>

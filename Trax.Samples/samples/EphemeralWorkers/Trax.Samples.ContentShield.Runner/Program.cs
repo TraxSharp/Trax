@@ -8,4 +8,6 @@
 
 using Trax.Samples.ContentShield.Runner;
 
-await new Function().RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args]);
+await new Function()
+    .RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args])
+    .ConfigureAwait(false);

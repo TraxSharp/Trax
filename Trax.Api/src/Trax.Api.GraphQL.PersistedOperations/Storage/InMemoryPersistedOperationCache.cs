@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Caching.Memory;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 
@@ -85,7 +86,10 @@ internal sealed class InMemoryPersistedOperationCache : IPersistedOperationCache
     ) => _cache.Set(Key(generation, tenantKey, id), new Entry(document, readAt), _ttl);
 
     private static string Key(long generation, string? tenantKey, string id) =>
-        $"trax:po:{generation}:{tenantKey ?? string.Empty}:{id}";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"trax:po:{generation}:{tenantKey ?? string.Empty}:{id}"
+        );
 
     private sealed record Entry(string Document, long ReadAt);
 }

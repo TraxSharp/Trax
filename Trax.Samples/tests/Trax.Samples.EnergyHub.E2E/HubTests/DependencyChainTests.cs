@@ -25,34 +25,7 @@ public class DependencyChainTests : HubTestFixture
 
         try
         {
-            // Find the solar manifest and enqueue work for it.
-            var solarManifest = await DataContext
-                .Manifests.AsNoTracking()
-                .FirstAsync(m => m.ExternalId == ManifestNames.MonitorSolarProduction);
-
-            var input = new MonitorSolarProductionInput
-            {
-                ArrayId = "SPA-001",
-                Region = "somerset",
-            };
-
-            var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = solarManifest.Name,
-                    Input = JsonSerializer.Serialize(
-                        input,
-                        TraxJsonSerializationOptions.ManifestProperties
-                    ),
-                    InputTypeName = typeof(MonitorSolarProductionInput).FullName,
-                    ManifestId = solarManifest.Id,
-                    Priority = 20,
-                }
-            );
-
-            await DataContext.Track(entry);
-            await DataContext.SaveChanges(CancellationToken.None);
-            DataContext.Reset();
+            var solarManifest = await EnqueueSolarProductionAsync();
 
             // Wait for solar production to complete.
             await TrainStatePoller.WaitForMetadataByManifestId(
@@ -84,5 +57,37 @@ public class DependencyChainTests : HubTestFixture
         {
             DisableManifestManager();
         }
+    }
+
+    private async Task<Trax.Effect.Models.Manifest.Manifest> EnqueueSolarProductionAsync()
+    {
+        // Find the solar manifest and enqueue work for it.
+        var solarManifest = await DataContext
+            .Manifests.AsNoTracking()
+            .FirstAsync(m => m.ExternalId == ManifestNames.MonitorSolarProduction)
+            .ConfigureAwait(false);
+
+        var input = new MonitorSolarProductionInput { ArrayId = "SPA-001", Region = "somerset" };
+
+        var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = solarManifest.Name,
+                Input = JsonSerializer.Serialize(
+                    input,
+                    TraxJsonSerializationOptions.ManifestProperties
+                ),
+                InputTypeName = typeof(MonitorSolarProductionInput).FullName,
+                ManifestId = solarManifest.Id,
+                Priority = 20,
+            },
+            TimeProvider.System
+        );
+
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+
+        return solarManifest;
     }
 }

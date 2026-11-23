@@ -28,6 +28,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -51,6 +52,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -74,6 +76,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -102,6 +105,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -134,6 +138,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -161,6 +166,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -184,6 +190,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -207,6 +214,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -234,6 +242,7 @@ public class HttpRetryHelperTests
             new { },
             options,
             NullLogger.Instance,
+            TimeProvider.System,
             CancellationToken.None
         );
 
@@ -255,7 +264,7 @@ public class HttpRetryHelperTests
         };
         using var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
 
-        var delay = HttpRetryHelper.ComputeDelay(0, response, options);
+        var delay = HttpRetryHelper.ComputeDelay(0, response, options, TimeProvider.System);
 
         // Base delay * 2^0 = 1s, with ±25% jitter → 0.75s to 1.25s
         delay.TotalMilliseconds.Should().BeInRange(750, 1250);
@@ -271,7 +280,7 @@ public class HttpRetryHelperTests
         };
         using var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
 
-        var delay = HttpRetryHelper.ComputeDelay(3, response, options);
+        var delay = HttpRetryHelper.ComputeDelay(3, response, options, TimeProvider.System);
 
         // Base delay * 2^3 = 8s, with ±25% jitter → 6s to 10s
         delay.TotalMilliseconds.Should().BeInRange(6000, 10000);
@@ -287,7 +296,7 @@ public class HttpRetryHelperTests
         };
         using var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
 
-        var delay = HttpRetryHelper.ComputeDelay(10, response, options);
+        var delay = HttpRetryHelper.ComputeDelay(10, response, options, TimeProvider.System);
 
         delay.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(30));
     }
@@ -303,7 +312,7 @@ public class HttpRetryHelperTests
         using var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
         response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(5));
 
-        var delay = HttpRetryHelper.ComputeDelay(0, response, options);
+        var delay = HttpRetryHelper.ComputeDelay(0, response, options, TimeProvider.System);
 
         delay.Should().Be(TimeSpan.FromSeconds(5));
     }
@@ -319,7 +328,7 @@ public class HttpRetryHelperTests
         using var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
         response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(30));
 
-        var delay = HttpRetryHelper.ComputeDelay(0, response, options);
+        var delay = HttpRetryHelper.ComputeDelay(0, response, options, TimeProvider.System);
 
         delay.Should().Be(TimeSpan.FromSeconds(10));
     }
@@ -336,7 +345,7 @@ public class HttpRetryHelperTests
 
         var delays = Enumerable
             .Range(0, 20)
-            .Select(_ => HttpRetryHelper.ComputeDelay(2, response, options))
+            .Select(_ => HttpRetryHelper.ComputeDelay(2, response, options, TimeProvider.System))
             .ToList();
 
         // With jitter, we should get at least some variation
@@ -368,13 +377,16 @@ public class HttpRetryHelperTests
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
         var act = async () =>
-            await HttpRetryHelper.PostWithRetryAsync(
-                client,
-                new { },
-                options,
-                NullLogger.Instance,
-                cts.Token
-            );
+            await HttpRetryHelper
+                .PostWithRetryAsync(
+                    client,
+                    new { },
+                    options,
+                    NullLogger.Instance,
+                    TimeProvider.System,
+                    cts.Token
+                )
+                .ConfigureAwait(false);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -383,7 +395,7 @@ public class HttpRetryHelperTests
 
     #region SequentialHandler
 
-    private class SequentialHandler(List<HttpStatusCode> statusCodes) : HttpMessageHandler
+    private sealed class SequentialHandler(List<HttpStatusCode> statusCodes) : HttpMessageHandler
     {
         private int _callIndex;
         public int RequestCount => _callIndex;

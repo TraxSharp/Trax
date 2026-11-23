@@ -3,13 +3,6 @@ using System.Text.Json.Nodes;
 namespace Trax.StateMachine;
 
 /// <summary>
-/// The result of migrating a snapshot one version forward: the (possibly transformed) state token and
-/// context for the next version.
-/// </summary>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/migrations">SDK reference</seealso>
-public sealed record MigrationResult(string State, JsonObject Context);
-
-/// <summary>
 /// The static description of a machine — its states, edges, and per-state context rules. This
 /// lives in <b>code</b> (not in the snapshot): the snapshot is data, the definition is the program
 /// that interprets it. The C# definition here and the TypeScript definition of the same machine are
@@ -35,7 +28,7 @@ public sealed class MachineDefinition<TState, TTrigger>
     public required IReadOnlyList<TransitionDefinition<TState, TTrigger>> Transitions { get; init; }
 
     /// <summary>
-    /// Per-state context validators. A validator returns <c>null</c> when the context is legal for
+    /// Per-state context validators. A validator returns <see langword="null"/> when the context is legal for
     /// that state, or a human-readable message when it is not. A state with no entry accepts any
     /// context. These are what make the discriminated-union guarantee real at the JSON boundary.
     /// </summary>

@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Sqs.Configuration;
@@ -13,7 +15,11 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SqsJobSubmitterTests
 {
-    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     #region Helpers
 
@@ -24,7 +30,7 @@ public class SqsJobSubmitterTests
     {
         var options = new SqsWorkerOptions { QueueUrl = queueUrl, MessageGroupId = messageGroupId };
         var client = new MockSqsClient();
-        return (new SqsJobSubmitter(client, options), client);
+        return (new SqsJobSubmitter(client, options, TimeProvider.System), client);
     }
 
     #endregion
@@ -38,12 +44,13 @@ public class SqsJobSubmitterTests
         var client = new MockSqsClient();
         var submitter = new SqsJobSubmitter(
             client,
-            new SqsWorkerOptions { QueueUrl = "https://sqs/q", SigningKey = key }
+            new SqsWorkerOptions { QueueUrl = "https://sqs/q", SigningKey = key },
+            TimeProvider.System
         );
 
         await submitter.EnqueueAsync(42);
 
-        var attribute = client.LastRequest!.MessageAttributes[
+        var attribute = client.LastRequest.NotNull().MessageAttributes[
             Trax.Scheduler.Services.RequestSigning.RunnerRequestSignature.HeaderName
         ];
         (
@@ -74,7 +81,7 @@ public class SqsJobSubmitterTests
 
         await submitter.EnqueueAsync(42);
 
-        client.LastRequest!.MessageAttributes.Should().BeNullOrEmpty();
+        client.LastRequest.NotNull().MessageAttributes.Should().BeNullOrEmpty();
     }
 
     #endregion
@@ -106,12 +113,12 @@ public class SqsJobSubmitterTests
         // Assert
         client.LastRequest.Should().NotBeNull();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(42);
+        request.NotNull().MetadataId.Should().Be(42);
         request.Input.Should().BeNull();
         request.InputType.Should().BeNull();
     }
@@ -127,7 +134,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.QueueUrl.Should().Be(queueUrl);
+        client.LastRequest.NotNull().QueueUrl.Should().Be(queueUrl);
     }
 
     #endregion
@@ -146,12 +153,12 @@ public class SqsJobSubmitterTests
 
         // Assert
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
         request.Should().NotBeNull();
-        request!.MetadataId.Should().Be(50);
+        request.NotNull().MetadataId.Should().Be(50);
         request.Input.Should().NotBeNull();
         request.Input.Should().Contain("hello-world");
         request.InputType.Should().Be(typeof(SchedulerTestInput).FullName);
@@ -169,7 +176,7 @@ public class SqsJobSubmitterTests
 
         // Assert
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
@@ -178,7 +185,7 @@ public class SqsJobSubmitterTests
             input.GetType(),
             TraxJsonSerializationOptions.ManifestProperties
         );
-        request!.Input.Should().Be(expectedJson);
+        request.NotNull().Input.Should().Be(expectedJson);
     }
 
     [Test]
@@ -212,26 +219,26 @@ public class SqsJobSubmitterTests
 
         // Assert
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(
-            client.LastRequest!.MessageBody,
+            client.LastRequest.NotNull().MessageBody,
             WebOptions
         );
 
-        request!.MetadataId.Should().Be(99);
+        request.NotNull().MetadataId.Should().Be(99);
         request.Input.Should().BeNull();
     }
 
     [Test]
-    public void EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
+    public async Task EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
     {
         // Arrange
         var (submitter, client) = CreateSubmitter();
         client.ThrowOnSend = true;
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync().ConfigureAwait(false);
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(1, cts.Token);
-        act.Should().ThrowAsync<OperationCanceledException>();
+        var act = async () => await submitter.EnqueueAsync(1, cts.Token).ConfigureAwait(false);
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -239,15 +246,15 @@ public class SqsJobSubmitterTests
     #region Error Handling Tests
 
     [Test]
-    public void EnqueueAsync_WhenSqsThrows_PropagatesException()
+    public async Task EnqueueAsync_WhenSqsThrows_PropagatesException()
     {
         // Arrange
         var (submitter, client) = CreateSubmitter();
         client.ThrowOnSend = true;
 
         // Act & Assert
-        var act = async () => await submitter.EnqueueAsync(42);
-        act.Should().ThrowAsync<AmazonSQSException>();
+        var act = async () => await submitter.EnqueueAsync(42).ConfigureAwait(false);
+        await act.Should().ThrowAsync<AmazonSQSException>().ConfigureAwait(false);
     }
 
     #endregion
@@ -266,7 +273,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.MessageGroupId.Should().NotBeNullOrEmpty();
+        client.LastRequest.NotNull().MessageGroupId.Should().NotBeNullOrEmpty();
         client.LastRequest.MessageDeduplicationId.Should().NotBeNullOrEmpty();
     }
 
@@ -283,7 +290,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.MessageGroupId.Should().Be("my-group");
+        client.LastRequest.NotNull().MessageGroupId.Should().Be("my-group");
     }
 
     [Test]
@@ -296,7 +303,7 @@ public class SqsJobSubmitterTests
         await submitter.EnqueueAsync(42);
 
         // Assert
-        client.LastRequest!.MessageGroupId.Should().BeNull();
+        client.LastRequest.NotNull().MessageGroupId.Should().BeNull();
         client.LastRequest.MessageDeduplicationId.Should().BeNull();
     }
 
@@ -309,7 +316,7 @@ public class SqsJobSubmitterTests
     {
         // Arrange
         var (submitter, _) = CreateSubmitter();
-        var jobIds = new HashSet<string>();
+        var jobIds = new HashSet<string>(StringComparer.Ordinal);
 
         // Act
         for (var i = 0; i < 10; i++)
@@ -326,7 +333,7 @@ public class SqsJobSubmitterTests
 
     #region MockSqsClient
 
-    private class MockSqsClient : IAmazonSQS
+    private sealed class MockSqsClient : IAmazonSQS
     {
         private int _messageCounter;
 
@@ -351,7 +358,10 @@ public class SqsJobSubmitterTests
             LastRequest = request;
             AllRequests.Add(request);
 
-            var messageId = $"mock-msg-{Interlocked.Increment(ref _messageCounter)}";
+            var messageId = string.Create(
+                CultureInfo.InvariantCulture,
+                $"mock-msg-{Interlocked.Increment(ref _messageCounter)}"
+            );
             return Task.FromResult(new SendMessageResponse { MessageId = messageId });
         }
 

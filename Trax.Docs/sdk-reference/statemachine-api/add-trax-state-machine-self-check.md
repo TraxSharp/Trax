@@ -10,6 +10,7 @@ package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineSelfCheckHealthCheck.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineHealthCheckExtensions.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotSelfCheck.cs
 ---
 

@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
@@ -77,7 +79,7 @@ public class MetadataCleanupConfiguration
     internal IReadOnlyList<string> TrainTypeWhitelist => _trainTypes;
 
     /// <summary>
-    /// Each whitelisted name against the retention it was added with, or <c>null</c> for
+    /// Each whitelisted name against the retention it was added with, or <see langword="null"/> for
     /// <see cref="RetentionPeriod"/>.
     /// </summary>
     internal IReadOnlyDictionary<string, TimeSpan?> TrainTypeRetentions => _retentions;
@@ -88,7 +90,7 @@ public class MetadataCleanupConfiguration
     /// </summary>
     /// <typeparam name="TTrain">The train class type to clean up</typeparam>
     public void AddTrainType<TTrain>()
-        where TTrain : class => Add(typeof(TTrain).FullName!, null);
+        where TTrain : class => Add(typeof(TTrain).FullName.NotNull(), retention: null);
 
     /// <summary>
     /// Adds a train type to the cleanup whitelist by its class name, retained for
@@ -105,7 +107,7 @@ public class MetadataCleanupConfiguration
     /// retention.
     /// </exception>
     public void AddTrainType<TTrain>(TimeSpan retention)
-        where TTrain : class => Add(typeof(TTrain).FullName!, retention);
+        where TTrain : class => Add(typeof(TTrain).FullName.NotNull(), retention);
 
     /// <summary>
     /// Adds a train type to the cleanup whitelist by name string, retained for
@@ -114,7 +116,7 @@ public class MetadataCleanupConfiguration
     /// <param name="trainTypeName">
     /// The train type name as it appears in the metadata <c>name</c> column.
     /// </param>
-    public void AddTrainType(string trainTypeName) => Add(trainTypeName, null);
+    public void AddTrainType(string trainTypeName) => Add(trainTypeName, retention: null);
 
     /// <summary>
     /// Adds a train type to the cleanup whitelist by name string, retained for
@@ -149,7 +151,10 @@ public class MetadataCleanupConfiguration
         // and the dispatcher alone writes a row every poll. Lengthening one is exactly the
         // unbounded growth that rule exists to prevent, so it is refused rather than ignored:
         // silently dropping a 30-day retention is discovered a month later, if at all.
-        if (retention is not null && AdminTrains.FullNames.Contains(trainTypeName))
+        if (
+            retention is not null
+            && AdminTrains.FullNames.Contains(trainTypeName, StringComparer.Ordinal)
+        )
             throw new InvalidOperationException(
                 $"'{trainTypeName}' is an internal scheduler train and is always cleaned up at "
                     + $"{nameof(RetentionPeriod)}. It cannot be given a retention of its own."

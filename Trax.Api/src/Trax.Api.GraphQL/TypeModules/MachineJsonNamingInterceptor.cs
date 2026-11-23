@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using HotChocolate.Configuration;
 using HotChocolate.Types.Descriptors.Configurations;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.TypeModules;
@@ -65,7 +66,7 @@ internal sealed class MachineJsonNamingInterceptor(
         type = Nullable.GetUnderlyingType(type) ?? type;
         if (type.IsArray)
         {
-            Add(records, type.GetElementType()!);
+            Add(records, type.GetElementType().NotNull());
             return;
         }
         if (type.IsGenericType)

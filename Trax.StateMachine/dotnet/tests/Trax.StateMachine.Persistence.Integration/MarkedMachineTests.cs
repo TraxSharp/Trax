@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
@@ -29,18 +30,22 @@ public class MarkedMachineTests
     {
         var assembly = Build(typeof(MarkableRuledMachine), marked: true);
 
-        Served(assembly).Should().ContainSingle().Which.Name.Should().Be("Machine");
-        (await StartingHost.StartScanning(_ => { }, assembly))
+        (await Served(assembly).ConfigureAwait(false))
+            .Should()
+            .ContainSingle()
+            .Which.Name.Should()
+            .Be("Machine");
+        (await StartingHost.StartScanning(_ => { }, assembly).ConfigureAwait(false))
             .Should()
             .BeNull($"a marked machine with every rule declared starts. See {Adr}");
     }
 
     [Test]
-    public void An_unmarked_machine_is_not_served()
+    public async Task An_unmarked_machine_is_not_served()
     {
         var assembly = Build(typeof(MarkableRuledMachine), marked: false);
 
-        Served(assembly)
+        (await Served(assembly).ConfigureAwait(false))
             .Should()
             .BeEmpty($"a machine without the attribute has no client surface. See {Adr}");
     }
@@ -52,11 +57,14 @@ public class MarkedMachineTests
         var instance = Marked.Machine<MarkablePartlyRuledMachine>();
 
         // By type, as an instance, and through a factory: every way a host registers an IMachine.
-        var byType = ServedRegistering(s => s.AddSingleton(typeof(IMachine), type));
-        var asInstance = ServedRegistering(s => s.AddSingleton<IMachine>(instance));
-        var byFactory = ServedRegistering(s =>
-            s.AddSingleton<IMachine>(_ => Marked.Machine<MarkableRuledMachine>())
-        );
+        var byType = await ServedRegistering(s => s.AddSingleton(typeof(IMachine), type))
+            .ConfigureAwait(false);
+        var asInstance = await ServedRegistering(s => s.AddSingleton<IMachine>(instance))
+            .ConfigureAwait(false);
+        var byFactory = await ServedRegistering(s =>
+                s.AddSingleton<IMachine>(_ => Marked.Machine<MarkableRuledMachine>())
+            )
+            .ConfigureAwait(false);
 
         byType
             .Should()
@@ -66,7 +74,11 @@ public class MarkedMachineTests
             );
         asInstance.Should().Equal([instance.GetType()]);
         byFactory.Should().Equal([type]);
-        (await StartingHost.Start(_ => { }, Marked.Machine<MarkableRuledMachine>()))
+        (
+            await StartingHost
+                .Start(_ => { }, Marked.Machine<MarkableRuledMachine>())
+                .ConfigureAwait(false)
+        )
             .Should()
             .BeNull($"a marked machine registered by hand starts like a scanned one. See {Adr}");
     }
@@ -109,7 +121,7 @@ public class MarkedMachineTests
     }
 
     [Test]
-    public void The_attribute_on_an_abstract_machine_refuses_the_host_rather_than_serving_its_subclass()
+    public async Task The_attribute_on_an_abstract_machine_refuses_the_host_rather_than_serving_its_subclass()
     {
         var module = NewModule();
         var marked = Define(
@@ -123,44 +135,53 @@ public class MarkedMachineTests
 
         var act = () => Served(module.Assembly);
 
-        act.Should()
-            .Throw<InvalidOperationException>(
-                $"the attribute is not inherited, so on a base type it would serve nothing. See {Adr}"
-            )
+        (
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>(
+                    $"the attribute is not inherited, so on a base type it would serve nothing. See {Adr}"
+                )
+                .ConfigureAwait(false)
+        )
             .Which.Message.Should()
             .Contain("MarkedBase")
             .And.Contain("[TraxMachine]");
     }
 
     [Test]
-    public void The_attribute_on_a_class_that_is_no_machine_refuses_the_host()
+    public async Task The_attribute_on_a_class_that_is_no_machine_refuses_the_host()
     {
         var module = NewModule();
         Define(module, "NotAMachine", typeof(object), marked: true);
 
         var act = () => Served(module.Assembly);
 
-        act.Should()
-            .Throw<InvalidOperationException>(
-                $"the attribute on a class that is no machine would serve nothing. See {Adr}"
-            )
+        (
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>(
+                    $"the attribute on a class that is no machine would serve nothing. See {Adr}"
+                )
+                .ConfigureAwait(false)
+        )
             .Which.Message.Should()
             .Contain("NotAMachine")
             .And.Contain("[TraxMachine]");
     }
 
     [Test]
-    public void The_attribute_on_an_open_generic_machine_refuses_the_host()
+    public async Task The_attribute_on_an_open_generic_machine_refuses_the_host()
     {
         var module = NewModule();
         Define(module, "OpenMachine", typeof(MarkableRuledMachine), marked: true, generic: true);
 
         var act = () => Served(module.Assembly);
 
-        act.Should()
-            .Throw<InvalidOperationException>(
-                $"an open generic machine cannot be built, so the attribute on it would serve nothing. See {Adr}"
-            )
+        (
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>(
+                    $"an open generic machine cannot be built, so the attribute on it would serve nothing. See {Adr}"
+                )
+                .ConfigureAwait(false)
+        )
             .Which.Message.Should()
             .Contain("OpenMachine")
             .And.Contain("[TraxMachine]");
@@ -173,13 +194,15 @@ public class MarkedMachineTests
         var marked = Define(module, "MarkedMachine", typeof(MarkableRuledMachine), marked: true);
         Define(module, "UnmarkedSubclass", marked, marked: false);
 
-        Served(module.Assembly)
+        (await Served(module.Assembly).ConfigureAwait(false))
             .Should()
             .Equal(
                 [marked],
                 $"the attribute is not inherited: only the marked type itself is served. See {Adr}"
             );
-        var refusal = await StartingHost.StartScanning(_ => { }, module.Assembly);
+        var refusal = await StartingHost
+            .StartScanning(_ => { }, module.Assembly)
+            .ConfigureAwait(false);
 
         refusal
             .Should()
@@ -226,7 +249,7 @@ public class MarkedMachineTests
         var refusal = await StartingHost.Start(
             _ => { },
             new MarkableRuledMachine(),
-            (IMachine)Activator.CreateInstance(served)!
+            (IMachine)Activator.CreateInstance(served).NotNull()
         );
 
         refusal
@@ -236,8 +259,8 @@ public class MarkedMachineTests
             )
             .Which.Message.Should()
             .Contain($"'{MarkableRuledMachine.Id}'")
-            .And.Contain(typeof(MarkableRuledMachine).FullName!)
-            .And.Contain(served.FullName!)
+            .And.Contain(typeof(MarkableRuledMachine).FullName.NotNull())
+            .And.Contain(served.FullName.NotNull())
             .And.Contain($"Register only {served.FullName}");
     }
 
@@ -250,8 +273,8 @@ public class MarkedMachineTests
 
         var refusal = await StartingHost.Start(
             _ => { },
-            (IMachine)Activator.CreateInstance(first)!,
-            (IMachine)Activator.CreateInstance(second)!
+            (IMachine)Activator.CreateInstance(first).NotNull(),
+            (IMachine)Activator.CreateInstance(second).NotNull()
         );
 
         refusal
@@ -260,8 +283,8 @@ public class MarkedMachineTests
                 $"every machine is looked up by its id, so two types under one id break every machine request. See {Adr}"
             )
             .Which.Message.Should()
-            .Contain(first.FullName!)
-            .And.Contain(second.FullName!)
+            .Contain(first.FullName.NotNull())
+            .And.Contain(second.FullName.NotNull())
             .And.Contain("another id");
     }
 
@@ -273,44 +296,48 @@ public class MarkedMachineTests
 
         var refusal = await StartingHost.Start(
             _ => { },
-            (IMachine)Activator.CreateInstance(served)!,
-            (IMachine)Activator.CreateInstance(served)!
+            (IMachine)Activator.CreateInstance(served).NotNull(),
+            (IMachine)Activator.CreateInstance(served).NotNull()
         );
 
         refusal.Should().BeNull($"one type registered twice is one machine. See {Adr}");
-        ServedRegistering(s =>
-            {
-                s.AddSingleton(typeof(IMachine), served);
-                s.AddSingleton(typeof(IMachine), served);
-            })
-            .Should()
-            .Equal([served], $"a machine registered twice is served once. See {Adr}");
+        (
+            await ServedRegistering(s =>
+                {
+                    s.AddSingleton(typeof(IMachine), served);
+                    s.AddSingleton(typeof(IMachine), served);
+                })
+                .ConfigureAwait(false)
+        ).Should().Equal([served], $"a machine registered twice is served once. See {Adr}");
     }
 
     // The machines a host that scans only the assembly serves.
-    private static IReadOnlyList<Type> Served(Assembly assembly)
+    private static async Task<IReadOnlyList<Type>> Served(Assembly assembly)
     {
         var services = new ServiceCollection();
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UseInMemory()).AddStateMachines(assembly)
         );
-        return ServedBy(services);
+        return await ServedBy(services).ConfigureAwait(false);
     }
 
     // The machines a host serves that scans no assembly and registers its machines with register.
-    private static IReadOnlyList<Type> ServedRegistering(Action<IServiceCollection> register)
+    private static async Task<IReadOnlyList<Type>> ServedRegistering(
+        Action<IServiceCollection> register
+    )
     {
         var services = new ServiceCollection();
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UseInMemory()).AddStateMachines()
         );
         register(services);
-        return ServedBy(services);
+        return await ServedBy(services).ConfigureAwait(false);
     }
 
-    private static IReadOnlyList<Type> ServedBy(IServiceCollection services)
+    private static async Task<IReadOnlyList<Type>> ServedBy(IServiceCollection services)
     {
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         return StateMachineOptions
             .Served(provider.GetServices<IMachine>())
             .Select(m => m.GetType())
@@ -346,7 +373,7 @@ public class MarkedMachineTests
             name,
             TypeAttributes.Public
                 | TypeAttributes.Class
-                | (isAbstract ? TypeAttributes.Abstract : 0),
+                | (isAbstract ? TypeAttributes.Abstract : TypeAttributes.AnsiClass),
             parent
         );
         if (generic)
@@ -355,7 +382,7 @@ public class MarkedMachineTests
         if (marked)
             type.SetCustomAttribute(
                 new CustomAttributeBuilder(
-                    typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes)!,
+                    typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes).NotNull(),
                     []
                 )
             );

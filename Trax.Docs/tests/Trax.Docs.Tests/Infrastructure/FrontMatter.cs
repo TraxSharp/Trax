@@ -7,22 +7,28 @@ namespace Trax.Docs.Tests.Infrastructure;
 /// dropped. Anything else (nested maps, block scalars) is kept as its raw text and not
 /// interpreted, which no docs field needs.
 /// </summary>
-internal sealed class FrontMatter
+internal sealed partial class FrontMatter
 {
-    private static readonly Regex Block = new(
+    [GeneratedRegex(
         @"\A---[ \t]*\n(?:(?<body>.*?)\n)?---[ \t]*(?:\n|\z)",
-        RegexOptions.Compiled | RegexOptions.Singleline
-    );
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Block { get; }
 
-    private static readonly Regex KeyLine = new(
+    [GeneratedRegex(
         @"^(?<key>[A-Za-z_][A-Za-z0-9_-]*):(?:[ \t]+(?<value>.*?))?[ \t]*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex KeyLine { get; }
 
-    private static readonly Regex ListItem = new(
+    [GeneratedRegex(
         @"^[ \t]+-[ \t]+(?<item>.*?)[ \t]*$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex ListItem { get; }
 
     private readonly Dictionary<string, List<string>> _values;
 
@@ -59,7 +65,7 @@ internal sealed class FrontMatter
     public static FrontMatter Of(string markdown)
     {
         var values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var match = Block.Match(markdown.Replace("\r\n", "\n"));
+        var match = Block.Match(markdown.Replace("\r\n", "\n", StringComparison.Ordinal));
         var result = new FrontMatter(match.Success, values);
         if (!match.Success)
             return result;
@@ -116,8 +122,8 @@ internal sealed class FrontMatter
     }
 
     /// <summary>The page's front matter, read from its file.</summary>
-    public static FrontMatter OfPage(string page) =>
-        Of(File.ReadAllText(RepoRoot.Combine(page.Split('/'))));
+    public static async Task<FrontMatter> OfPageAsync(string page) =>
+        Of(await File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/'))).ConfigureAwait(false));
 
     private static string Unquote(string value)
     {

@@ -16,6 +16,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -53,61 +54,60 @@ public class JwtAuthHandlerIntegrationTests
                             );
                         }
                     })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints
-                                .MapGet(
-                                    "/protected",
-                                    (ClaimsPrincipal user) =>
-                                        Results.Ok(
-                                            new ProtectedResponse
-                                            {
-                                                Name = user.Identity?.Name,
-                                                PrincipalId = user.FindFirst(
-                                                    TraxAuthClaimTypes.PrincipalId
-                                                )?.Value,
-                                                PrincipalType = user.FindFirst(
-                                                    TraxAuthClaimTypes.PrincipalType
-                                                )?.Value,
-                                                Roles = user.FindAll(ClaimTypes.Role)
-                                                    .Select(c => c.Value)
-                                                    .ToArray(),
-                                            }
-                                        )
-                                )
-                                .RequireAuthorization(JwtDefaults.PolicyName);
-
-                            endpoints.MapGet("/anonymous", () => Results.Ok("ok")).AllowAnonymous();
-
-                            endpoints.MapGet(
-                                "/authresult",
-                                async (HttpContext ctx) =>
-                                {
-                                    var result = await ctx.AuthenticateAsync(
-                                        JwtDefaults.SchemeName
-                                    );
-                                    return Results.Ok(
-                                        new AuthResultResponse
-                                        {
-                                            Succeeded = result.Succeeded,
-                                            None = result.None,
-                                            FailureMessage = result.Failure?.Message,
-                                        }
-                                    );
-                                }
-                            );
-                        });
-                    })
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapGet(
+                    "/protected",
+                    (ClaimsPrincipal user) =>
+                        Results.Ok(
+                            new ProtectedResponse
+                            {
+                                Name = user.Identity?.Name,
+                                PrincipalId = user.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value,
+                                PrincipalType = user.FindFirst(
+                                    TraxAuthClaimTypes.PrincipalType
+                                )?.Value,
+                                Roles = user.FindAll(ClaimTypes.Role)
+                                    .Select(c => c.Value)
+                                    .ToArray(),
+                            }
+                        )
+                )
+                .RequireAuthorization(JwtDefaults.PolicyName);
+
+            endpoints.MapGet("/anonymous", () => Results.Ok("ok")).AllowAnonymous();
+
+            endpoints.MapGet(
+                "/authresult",
+                async (HttpContext ctx) =>
+                {
+                    var result = await ctx.AuthenticateAsync(JwtDefaults.SchemeName)
+                        .ConfigureAwait(false);
+                    return Results.Ok(
+                        new AuthResultResponse
+                        {
+                            Succeeded = result.Succeeded,
+                            None = result.None,
+                            FailureMessage = result.Failure?.Message,
+                        }
+                    );
+                }
+            );
+        });
     }
 
     private static string SignToken(
@@ -124,8 +124,8 @@ public class JwtAuthHandlerIntegrationTests
             issuer: issuer ?? Issuer,
             audience: audience ?? Audience,
             claims: claims,
-            notBefore: notBefore ?? DateTime.UtcNow.AddMinutes(-1),
-            expires: expires ?? DateTime.UtcNow.AddMinutes(5),
+            notBefore: notBefore ?? TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+            expires: expires ?? TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -172,7 +172,7 @@ public class JwtAuthHandlerIntegrationTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("TraxJwt:alice");
+        response.NotNull().PrincipalId.Should().Be("TraxJwt:alice");
         response.Name.Should().Be("Alice Liddell");
         response.PrincipalType.Should().Be(JwtDefaults.PrincipalType);
         response.Roles.Should().Contain("Admin");
@@ -186,8 +186,8 @@ public class JwtAuthHandlerIntegrationTests
 
         var token = SignToken(
             new[] { new Claim("sub", "alice") },
-            notBefore: DateTime.UtcNow.AddHours(-2),
-            expires: DateTime.UtcNow.AddHours(-1)
+            notBefore: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
         );
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -239,8 +239,8 @@ public class JwtAuthHandlerIntegrationTests
             issuer: Issuer,
             audience: Audience,
             claims: new[] { new Claim("sub", "alice") },
-            notBefore: DateTime.UtcNow.AddMinutes(-1),
-            expires: DateTime.UtcNow.AddMinutes(5),
+            notBefore: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1),
+            expires: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
             signingCredentials: creds
         );
         var signed = new JwtSecurityTokenHandler().WriteToken(token);
@@ -293,7 +293,7 @@ public class JwtAuthHandlerIntegrationTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.PrincipalId.Should().Be("TraxJwt:override-id");
+        response.NotNull().PrincipalId.Should().Be("TraxJwt:override-id");
         response.Name.Should().Be("Overridden");
     }
 

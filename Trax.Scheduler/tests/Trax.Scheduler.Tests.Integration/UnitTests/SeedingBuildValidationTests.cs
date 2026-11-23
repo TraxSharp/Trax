@@ -170,7 +170,7 @@ public class SeedingBuildValidationTests
                         "l-a",
                         new SchedulerTestInput(),
                         Every.Minutes(5),
-                        o => o.Group("limited", g => g.MaxActiveJobs(null))
+                        o => o.Group("limited", g => g.MaxActiveJobs(max: null))
                     )
                     .Schedule<ISchedulerTestTrain, SchedulerTestInput, Unit>(
                         "l-b",

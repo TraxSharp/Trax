@@ -1,0 +1,41 @@
+using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Trax.Core.Decisions;
+using Trax.Core.Exceptions;
+using Trax.Core.Functional;
+using Trax.Core.Junction;
+using Trax.Effect.Data.Decisions;
+using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
+using Trax.Effect.Extensions;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.Decisions;
+using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.EffectProvider;
+using Trax.Effect.Services.ServiceTrain;
+
+namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
+
+public class Ship : Junction<Order, string>
+{
+    private static int _ran;
+
+    /// <summary>How many times a Ship junction has run since it was last set.</summary>
+    public static int Ran
+    {
+        get => Volatile.Read(ref _ran);
+        set => Volatile.Write(ref _ran, value);
+    }
+
+    public override Task<string> Run(Order input)
+    {
+        Interlocked.Increment(ref _ran);
+        return Task.FromResult("shipped");
+    }
+}

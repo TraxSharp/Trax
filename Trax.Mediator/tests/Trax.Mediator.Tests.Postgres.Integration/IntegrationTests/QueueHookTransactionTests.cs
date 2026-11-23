@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -41,31 +42,42 @@ public class QueueHookTransactionTests : TestSetup
     private async Task<long> CountMarkersAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.LongCountAsync(w =>
-            w.TrainName!.StartsWith("QueueTx.Marker")
-        );
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.LongCountAsync(w =>
+                w.TrainName != null && w.TrainName.StartsWith("QueueTx.Marker")
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>The enqueue's own row for a test train.</summary>
     private async Task<long> CountEnqueuedAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.WorkQueues.LongCountAsync(w =>
-            w.TrainName!.Contains("QueueHookTransactionTests")
-        );
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .WorkQueues.LongCountAsync(w =>
+                w.TrainName != null && w.TrainName.Contains("QueueHookTransactionTests")
+            )
+            .ConfigureAwait(false);
     }
 
     [SetUp]
     public async Task ClearAsync()
     {
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context
             .WorkQueues.Where(w =>
-                w.TrainName!.StartsWith("QueueTx.Marker")
-                || w.TrainName!.Contains("QueueHookTransactionTests")
+                w.TrainName != null && w.TrainName.StartsWith("QueueTx.Marker")
+                || w.TrainName != null && w.TrainName.Contains("QueueHookTransactionTests")
             )
             .ExecuteDeleteAsync();
     }
@@ -79,7 +91,7 @@ public class QueueHookTransactionTests : TestSetup
     public async Task Hook_write_through_the_ambient_context_commits_with_the_queue_row()
     {
         await Execution.QueueAsync(
-            typeof(IAmbientWritingTrain).FullName!,
+            typeof(IAmbientWritingTrain).FullName.NotNull(),
             "{\"Value\":\"commit\"}"
         );
 
@@ -93,10 +105,12 @@ public class QueueHookTransactionTests : TestSetup
     public async Task Throwing_hook_rolls_back_a_write_it_had_already_made()
     {
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IAmbientThenThrowTrain).FullName!,
-                "{\"Value\":\"boom\"}"
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IAmbientThenThrowTrain).FullName.NotNull(),
+                    "{\"Value\":\"boom\"}"
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<Exception>()).WithMessage(
             "*hook rejected the mutation*",
@@ -117,10 +131,12 @@ public class QueueHookTransactionTests : TestSetup
     public async Task Throwing_hook_rolls_back_a_write_it_had_already_flushed()
     {
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IAmbientFlushThenThrowTrain).FullName!,
-                "{\"Value\":\"flushed\"}"
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IAmbientFlushThenThrowTrain).FullName.NotNull(),
+                    "{\"Value\":\"flushed\"}"
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
             "*after flushing*"
@@ -144,10 +160,12 @@ public class QueueHookTransactionTests : TestSetup
     public async Task Hook_write_through_its_own_context_is_NOT_rolled_back()
     {
         var act = async () =>
-            await Execution.QueueAsync(
-                typeof(IOwnContextThenThrowTrain).FullName!,
-                "{\"Value\":\"boom\"}"
-            );
+            await Execution
+                .QueueAsync(
+                    typeof(IOwnContextThenThrowTrain).FullName.NotNull(),
+                    "{\"Value\":\"boom\"}"
+                )
+                .ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<Exception>()).WithMessage(
             "*hook rejected the mutation*",
@@ -170,7 +188,7 @@ public class QueueHookTransactionTests : TestSetup
         ObservingProbe.Reset();
         var accessor = Scope.ServiceProvider.GetRequiredService<IEnqueueContextAccessor>();
 
-        await Execution.QueueAsync(typeof(IObservingTrain).FullName!, "{}");
+        await Execution.QueueAsync(typeof(IObservingTrain).FullName.NotNull(), "{}");
 
         ObservingProbe
             .DuringHook.Should()
@@ -186,7 +204,7 @@ public class QueueHookTransactionTests : TestSetup
             .Current.Should()
             .BeNull("the context is handed back when the enqueue returns, not left on the caller");
 
-        await Execution.RunAsync(typeof(IObservingTrain).FullName!, "{}");
+        await Execution.RunAsync(typeof(IObservingTrain).FullName.NotNull(), "{}");
 
         ObservingProbe
             .DuringRun.Should()
@@ -227,9 +245,9 @@ public class QueueHookTransactionTests : TestSetup
     /// <summary>Whether <see cref="IEnqueueContextAccessor.Current"/> held a context at each point.</summary>
     public static class ObservingProbe
     {
-        public static List<bool> DuringHook { get; } = [];
-        public static List<bool> DuringKey { get; } = [];
-        public static List<bool> DuringRun { get; } = [];
+        public static IList<bool> DuringHook { get; } = [];
+        public static IList<bool> DuringKey { get; } = [];
+        public static IList<bool> DuringRun { get; } = [];
 
         public static void Reset()
         {
@@ -272,7 +290,8 @@ public class QueueHookTransactionTests : TestSetup
                 Input = "{}",
                 InputTypeName = typeof(AmbientInput).FullName,
                 Priority = 0,
-            }
+            },
+            TimeProvider.System
         );
 
     public interface IAmbientWritingTrain : IServiceTrain<AmbientInput, Unit>;
@@ -283,8 +302,8 @@ public class QueueHookTransactionTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            var context = accessor.Current!;
-            await context.Track(Marker("ambient"));
+            var context = accessor.Current.NotNull();
+            await context.Track(Marker("ambient")).ConfigureAwait(false);
         }
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
@@ -299,7 +318,7 @@ public class QueueHookTransactionTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            await accessor.Current!.Track(Marker("ambient-throw"));
+            await accessor.Current.NotNull().Track(Marker("ambient-throw")).ConfigureAwait(false);
             throw new InvalidOperationException("hook rejected the mutation after writing");
         }
 
@@ -315,9 +334,10 @@ public class QueueHookTransactionTests : TestSetup
     {
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            using var own = await factory.CreateDbContextAsync(ct);
-            await own.Track(Marker("own-context"));
-            await own.SaveChanges(ct);
+            var own = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var ownDisposal = own.ConfigureAwait(false);
+            await own.Track(Marker("own-context")).ConfigureAwait(false);
+            await own.SaveChanges(ct).ConfigureAwait(false);
             throw new InvalidOperationException("hook rejected the mutation after writing");
         }
 
@@ -335,8 +355,8 @@ public class QueueHookTransactionTests : TestSetup
         // context flushes the row and its own write before the enqueue commits.
         protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
         {
-            await accessor.Current!.Track(Marker("ambient-flush"));
-            await accessor.Current!.SaveChanges(ct);
+            await accessor.Current.NotNull().Track(Marker("ambient-flush")).ConfigureAwait(false);
+            await accessor.Current.NotNull().SaveChanges(ct).ConfigureAwait(false);
             throw new InvalidOperationException("hook rejected the mutation after flushing");
         }
 

@@ -129,6 +129,8 @@ internal static partial class TypeScript
     private static readonly JsonSerializerOptions Json = new()
     {
         Encoder = JavaScriptEncoder.Default,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     /// <summary>
@@ -161,7 +163,7 @@ internal static partial class TypeScript
     /// Whether <paramref name="name"/> is ASCII letters, digits, <c>_</c> and <c>$</c>, not starting with a digit, and
     /// nothing after it: a trailing newline is not part of an identifier.
     /// </summary>
-    public static bool IsIdentifier(string name) => IdentifierPattern().IsMatch(name);
+    public static bool IsIdentifier(string name) => IdentifierPattern.IsMatch(name);
 
     /// <summary>
     /// Whether <paramref name="name"/> is a member of <c>Object.prototype</c>. A state or trigger named so is found on
@@ -198,9 +200,9 @@ internal static partial class TypeScript
     {
         if (string.IsNullOrWhiteSpace(text))
             return "";
-        var lines = Unprintable()
-            .Replace(LineTerminators().Replace(text, "\n"), " ")
-            .Replace("*/", "*\\/")
+        var lines = Unprintable
+            .Replace(LineTerminators.Replace(text, "\n"), " ")
+            .Replace("*/", "*\\/", StringComparison.Ordinal)
             .Trim()
             .Split('\n');
         if (lines.All(string.IsNullOrWhiteSpace))
@@ -218,7 +220,7 @@ internal static partial class TypeScript
     /// or format characters and line or paragraph separators is one space.
     /// </summary>
     public static string CommentText(string text) =>
-        SingleLineBreaks().Replace(text, " ").Replace("*/", "*\\/");
+        SingleLineBreaks.Replace(text, " ").Replace("*/", "*\\/", StringComparison.Ordinal);
 
     /// <summary>A kebab-case machine id in PascalCase: <c>topic-map</c> is <c>TopicMap</c>.</summary>
     public static string Pascal(string kebab) =>
@@ -239,15 +241,27 @@ internal static partial class TypeScript
     public static string Upper(string name) =>
         name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
 
-    [GeneratedRegex(@"^[A-Za-z_$][A-Za-z0-9_$]*\z")]
-    private static partial Regex IdentifierPattern();
+    [GeneratedRegex(
+        @"^[A-Za-z_$][A-Za-z0-9_$]*\z",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex IdentifierPattern { get; }
 
-    [GeneratedRegex(@"\r\n|[\r\u0085\u2028\u2029]")]
-    private static partial Regex LineTerminators();
+    [GeneratedRegex(
+        @"\r\n|[\r\u0085\u2028\u2029]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LineTerminators { get; }
 
-    [GeneratedRegex(@"[\p{Cc}\p{Cf}-[\n]]")]
-    private static partial Regex Unprintable();
+    [GeneratedRegex(@"[\p{Cc}\p{Cf}-[\n]]", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Unprintable { get; }
 
-    [GeneratedRegex(@"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+")]
-    private static partial Regex SingleLineBreaks();
+    [GeneratedRegex(
+        @"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SingleLineBreaks { get; }
 }

@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Trax.Core.Extensions;
 
 namespace Trax.Effect.Utils;
 
@@ -24,7 +26,7 @@ namespace Trax.Effect.Utils;
 /// The converter is registered in the TraxJsonSerializationOptions.Default
 /// options, making it available throughout the system.
 /// </remarks>
-internal class ValueTupleConverter : JsonConverterFactory
+internal sealed class ValueTupleConverter : JsonConverterFactory
 {
     /// <summary>
     /// Determines whether the converter can convert the specified type.
@@ -44,7 +46,9 @@ internal class ValueTupleConverter : JsonConverterFactory
     /// </remarks>
     public override bool CanConvert(Type typeToConvert) =>
         typeToConvert is { IsValueType: true, IsGenericType: true }
-        && typeToConvert.FullName!.StartsWith("System.ValueTuple");
+        && typeToConvert
+            .FullName.NotNull()
+            .StartsWith("System.ValueTuple", StringComparison.Ordinal);
 
     /// <summary>
     /// Creates a converter for the specified type.
@@ -79,7 +83,7 @@ internal class ValueTupleConverter : JsonConverterFactory
     /// The converter serializes ValueTuples as JSON arrays and deserializes JSON arrays
     /// back into ValueTuples, deserializing each element as its field's type.
     /// </remarks>
-    private class ValueTupleConverterInner<T> : JsonConverter<T>
+    private sealed class ValueTupleConverterInner<T> : JsonConverter<T>
         where T : struct
     {
         /// <summary>
@@ -128,13 +132,18 @@ internal class ValueTupleConverter : JsonConverterFactory
 
             var length = array.GetArrayLength();
             if (length != Fields.Length)
-                throw new JsonException($"Expected {Fields.Length} values, but got {length}");
+                throw new JsonException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Expected {Fields.Length} values, but got {length}"
+                    )
+                );
 
             var args = array
                 .EnumerateArray()
                 .Zip(Fields, (element, field) => element.Deserialize(field.FieldType, options))
                 .ToArray();
-            return (T)Activator.CreateInstance(typeof(T), args)!;
+            return (T)Activator.CreateInstance(typeof(T), args).NotNull();
         }
 
         /// <summary>

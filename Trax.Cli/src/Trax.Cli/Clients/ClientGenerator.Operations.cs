@@ -5,17 +5,6 @@ using GraphQLParser.AST;
 
 namespace Trax.Cli.Clients;
 
-/// <summary>
-/// What <c>trax client --operations</c> generates from: the operations schema's SDL and the documents the console
-/// sends.
-/// </summary>
-/// <param name="Schema">The operations schema, as SDL (Trax.Api.Dashboard's <c>operations.graphql</c>).</param>
-/// <param name="Documents">The <c>.graphql</c> files the console wrote.</param>
-internal sealed record OperationsGenerateOptions(
-    string Schema,
-    IReadOnlyList<ClientDocumentFile> Documents
-);
-
 internal sealed partial class ClientGenerator
 {
     /// <summary>The file Trax.Api.Dashboard embeds and a host registers the console's documents from.</summary>
@@ -58,18 +47,7 @@ internal sealed partial class ClientGenerator
     /// </summary>
     public static IReadOnlyList<ClientFile> Render(OperationsGenerateOptions options)
     {
-        GraphQLDocument sdl;
-        try
-        {
-            sdl = Parser.Parse(options.Schema);
-        }
-        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
-        {
-            throw new InvalidOperationException(
-                $"The operations schema is not GraphQL SDL ({ex.Message.Trim()}).",
-                ex
-            );
-        }
+        var sdl = ParseOperationsSchema(options.Schema);
         var types = new SdlTypes(sdl);
         var roots = OperationsRoots.Of(sdl);
         var documents = ClientDocumentSet.ReadOperations(options.Documents, types, roots);
@@ -96,6 +74,39 @@ internal sealed partial class ClientGenerator
         );
         index.Append("export type * from \"./types.g\";\n");
 
+        AppendOperationModules(files, index, names, paths, documents, types, roots);
+
+        files.Add(new("index.g.ts", index.ToString()));
+        files.Add(new(ConsoleDocumentsFileName, ConsoleDocumentsJson(documents)));
+        return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
+    }
+
+    private static GraphQLDocument ParseOperationsSchema(string schema)
+    {
+        try
+        {
+            return Parser.Parse(schema);
+        }
+        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
+        {
+            throw new InvalidOperationException(
+                $"The operations schema is not GraphQL SDL ({ex.Message.Trim()}).",
+                ex
+            );
+        }
+    }
+
+    // A module per document, each exported from the index.
+    private static void AppendOperationModules(
+        List<ClientFile> files,
+        StringBuilder index,
+        Names names,
+        Names paths,
+        ClientDocumentSet documents,
+        SdlTypes types,
+        OperationsRoots roots
+    )
+    {
         foreach (var operation in documents.Operations)
         {
             var owner = $"the console document {operation.Name} ({operation.Source})";
@@ -127,23 +138,19 @@ internal sealed partial class ClientGenerator
                 $"export {{ {function}, {document}, type {variables}, type {result} }} from \"./documents/{function}.g\";\n"
             );
         }
-
-        files.Add(new("index.g.ts", index.ToString()));
-        files.Add(new(ConsoleDocumentsFileName, ConsoleDocumentsJson(documents)));
-        return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Writes the operations client under <paramref name="outDir"/>, as <see cref="Write(ClientGenerateOptions, string)"/> does.</summary>
-    public static IReadOnlyList<ClientFile> Write(
+    /// <summary>Writes the operations client under <paramref name="outDir"/>, as <see cref="WriteAsync(ClientGenerateOptions, string)"/> does.</summary>
+    public static Task<IReadOnlyList<ClientFile>> WriteAsync(
         OperationsGenerateOptions options,
         string outDir
-    ) => Write(Render(options), outDir, Writer.OperationsTypeScript);
+    ) => WriteAsync(Render(options), outDir, Writer.OperationsTypeScript);
 
     /// <summary>What differs between the operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
-    public static IReadOnlyList<ClientDrift> Check(
+    public static Task<IReadOnlyList<ClientDrift>> CheckAsync(
         OperationsGenerateOptions options,
         string outDir
-    ) => Check(Render(options), outDir, Writer.OperationsTypeScript);
+    ) => CheckAsync(Render(options), outDir, Writer.OperationsTypeScript);
 
     // A console document's module: its descriptor, the types of its variables and of what it selects, and the function
     // that sends it (or, for a subscription, follows it).
@@ -159,6 +166,65 @@ internal sealed partial class ClientGenerator
     )
     {
         var owner = $"The console document {operation.Name} ({operation.Source})";
+        var kind = operation.Operation.Operation switch
+        {
+            OperationType.Mutation => "mutation",
+            OperationType.Subscription => "subscription",
+            _ => "query",
+        };
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        var answer = OperationAnswer(operation, kind, owner, types, roots, documents, used);
+
+        var variables = operation.Operation.Variables?.Items ?? [];
+        var variableLines = VariableLines(variables, types);
+        var imports = types
+            .NamesIn(variables.Select(v => v.Type))
+            .Concat(used)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var required = variables.Exists(v =>
+            v.Type is GraphQLNonNullType && v.DefaultValue is null
+        );
+
+        var sb = new StringBuilder(OperationsHeader);
+        AppendOperationDeclarations(
+            sb,
+            operation,
+            kind,
+            document,
+            variablesType,
+            resultType,
+            variables,
+            variableLines,
+            imports,
+            answer
+        );
+        AppendOperationFunction(
+            sb,
+            kind,
+            function,
+            document,
+            variablesType,
+            resultType,
+            variables,
+            required
+        );
+        sb.Append("}\n");
+        return sb.ToString();
+    }
+
+    // The type of what the operation selects from its root, adding each type it names to `used`.
+    private static string OperationAnswer(
+        ClientOperation operation,
+        string kind,
+        string owner,
+        SdlTypes types,
+        OperationsRoots roots,
+        ClientDocumentSet documents,
+        HashSet<string> used
+    )
+    {
         var selections = new SelectionTypes(
             types,
             documents.Fragments.ToDictionary(
@@ -167,27 +233,26 @@ internal sealed partial class ClientGenerator
                 StringComparer.Ordinal
             )
         );
-        var kind = operation.Operation.Operation switch
-        {
-            OperationType.Mutation => "mutation",
-            OperationType.Subscription => "subscription",
-            _ => "query",
-        };
         var root = kind switch
         {
             "mutation" => roots.Mutation,
             "subscription" => roots.Subscription,
             _ => roots.Query,
         };
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        var answer = selections.Of(
+        return selections.Of(
             new GraphQLNonNullType(new GraphQLNamedType(new GraphQLName(root))),
             operation.Operation.SelectionSet,
             owner,
             used
         );
+    }
 
-        var variables = operation.Operation.Variables?.Items ?? [];
+    // The `?:` line of each variable in the variables type.
+    private static StringBuilder VariableLines(
+        List<GraphQLVariableDefinition> variables,
+        SdlTypes types
+    )
+    {
         var variableLines = new StringBuilder();
         foreach (var variable in variables)
         {
@@ -198,17 +263,25 @@ internal sealed partial class ClientGenerator
                 $"  {SdlTypes.Property(name)}{(optional ? "?" : "")}: {types.InputType(variable.Type)};\n"
             );
         }
-        var imports = types
-            .NamesIn(variables.Select(v => v.Type))
-            .Concat(used)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToList();
-        var required = variables.Any(v => v.Type is GraphQLNonNullType && v.DefaultValue is null);
+        return variableLines;
+    }
 
-        var sb = new StringBuilder(OperationsHeader);
+    // The module's imports, its variables and result types, and its document descriptor.
+    private static void AppendOperationDeclarations(
+        StringBuilder sb,
+        ClientOperation operation,
+        string kind,
+        string document,
+        string variablesType,
+        string resultType,
+        List<GraphQLVariableDefinition> variables,
+        StringBuilder variableLines,
+        List<string> imports,
+        string answer
+    )
+    {
         sb.Append(
-            kind == "subscription"
+            string.Equals(kind, "subscription", StringComparison.Ordinal)
                 ? "import { subscribe, type TraxDocument, type TraxSink } from \"../client.g\";\n"
                 : "import { send, type TraxDocument } from \"../client.g\";\n"
         );
@@ -231,19 +304,33 @@ internal sealed partial class ClientGenerator
                 : $"/** The {kind} '{EscapeDocText(operation.Name)}' ({EscapeDocText(operation.Source)}), and the id a host that serves the console registers it under. */\n"
         );
         sb.Append(
-            $"export const {document}: TraxDocument<{variablesType}, {resultType}> = {{\n"
-                + $"  name: {TypeScript.Literal(operation.Name)},\n"
-                + $"  kind: {TypeScript.Literal(kind)},\n"
-                + $"  id: {(operation.Id.Length == 0 ? "null" : TypeScript.Literal(operation.Id))},\n"
-                + $"  text: {TypeScript.Literal(operation.Text)},\n"
-                + "};\n\n"
-        );
+                $"export const {document}: TraxDocument<{variablesType}, {resultType}> = {{\n"
+                    + $"  name: {TypeScript.Literal(operation.Name)},\n"
+                    + $"  kind: {TypeScript.Literal(kind)},\n"
+                    + $"  id: {(operation.Id.Length == 0 ? "null" : TypeScript.Literal(operation.Id))},\n"
+                    + $"  text: {TypeScript.Literal(operation.Text)},\n"
+            )
+            .Append("};\n\n");
+    }
+
+    // The function that sends the document or, for a subscription, follows it.
+    private static void AppendOperationFunction(
+        StringBuilder sb,
+        string kind,
+        string function,
+        string document,
+        string variablesType,
+        string resultType,
+        List<GraphQLVariableDefinition> variables,
+        bool required
+    )
+    {
         var parameter =
             variables.Count == 0 ? ""
             : required ? $"variables: {variablesType}"
             : $"variables: {variablesType} = {{}}";
         var value = variables.Count == 0 ? "{}" : "variables";
-        if (kind == "subscription")
+        if (string.Equals(kind, "subscription", StringComparison.Ordinal))
         {
             sb.Append(
                 "/** Follows the stream until the function it returns is called. Each frame goes to `sink.next`. */\n"
@@ -261,8 +348,6 @@ internal sealed partial class ClientGenerator
             sb.Append($"export function {function}({parameter}): Promise<{resultType}> {{\n");
             sb.Append($"  return send({document}, {value});\n");
         }
-        sb.Append("}\n");
-        return sb.ToString();
     }
 
     // The documents a host that serves the console registers: each one with an id, by name, as Trax.Api.Dashboard
@@ -281,9 +366,11 @@ internal sealed partial class ClientGenerator
                 {
                     WriteIndented = true,
                     Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
                 }
             )
-            .Replace("\r\n", "\n") + "\n";
+            .Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
 
     private const string OperationsClient =
         OperationsHeader

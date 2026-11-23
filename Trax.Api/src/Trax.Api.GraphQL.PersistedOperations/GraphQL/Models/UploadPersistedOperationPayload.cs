@@ -19,9 +19,9 @@ public sealed record UploadPersistedOperationPayload(
         new(op, Array.Empty<PersistedOperationError>());
 
     internal static UploadPersistedOperationPayload Fail(params PersistedOperationError[] errors) =>
-        new(null, errors);
+        new(Operation: null, errors);
 
     internal static UploadPersistedOperationPayload Fail(
         IEnumerable<PersistedOperationError> errors
-    ) => new(null, errors.ToArray());
+    ) => new(Operation: null, errors.ToArray());
 }

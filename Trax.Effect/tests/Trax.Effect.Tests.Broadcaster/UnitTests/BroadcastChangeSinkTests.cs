@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -8,28 +9,32 @@ namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 [TestFixture]
 public class BroadcastChangeSinkTests
 {
-    private ITrainEventBroadcaster _broadcaster = null!;
-    private BroadcastChangeSink _sink = null!;
+    private ITrainEventBroadcaster? _broadcaster;
+    private BroadcastChangeSink? _sink;
 
     [SetUp]
     public void SetUp()
     {
         _broadcaster = Substitute.For<ITrainEventBroadcaster>();
         _broadcaster
+            .NotNull()
             .PublishAsync(Arg.Any<TrainLifecycleEventMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        _sink = new BroadcastChangeSink(_broadcaster, TimeProvider.System);
+        _sink = new BroadcastChangeSink(_broadcaster.NotNull(), TimeProvider.System);
     }
 
     [Test]
     public async Task FlushAsync_PublishesOneDataChangedMessagePerDomain()
     {
-        await _sink.FlushAsync(
-            new[] { ChangeDomain.WorkQueue, ChangeDomain.DeadLetter },
-            CancellationToken.None
-        );
+        await _sink
+            .NotNull()
+            .FlushAsync(
+                new[] { ChangeDomain.WorkQueue, ChangeDomain.DeadLetter },
+                CancellationToken.None
+            );
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m =>
@@ -39,6 +44,7 @@ public class BroadcastChangeSinkTests
                 Arg.Any<CancellationToken>()
             );
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m =>
@@ -55,11 +61,12 @@ public class BroadcastChangeSinkTests
         // The receiver drops events whose Executor matches the local process. The sink must stamp
         // the message with this process's executor so the originating process ignores its own
         // broadcast (it already delivered the signal to local subscribers).
-        await _sink.FlushAsync(new[] { ChangeDomain.Manifest }, CancellationToken.None);
+        await _sink.NotNull().FlushAsync(new[] { ChangeDomain.Manifest }, CancellationToken.None);
 
         var localExecutor = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m => m.Executor == localExecutor),
@@ -70,9 +77,10 @@ public class BroadcastChangeSinkTests
     [Test]
     public async Task FlushAsync_CarriesTheExecutionDomainByName()
     {
-        await _sink.FlushAsync(new[] { ChangeDomain.Execution }, CancellationToken.None);
+        await _sink.NotNull().FlushAsync(new[] { ChangeDomain.Execution }, CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .Received(1)
             .PublishAsync(
                 Arg.Is<TrainLifecycleEventMessage>(m => m.ChangeDomain == "Execution"),
@@ -90,10 +98,10 @@ public class BroadcastChangeSinkTests
     public void ChangeDomain_MembersAreAppendOnly()
     {
         Enum.GetValues<ChangeDomain>()
-            .ToDictionary(d => d.ToString(), d => (int)d)
+            .ToDictionary(d => d.ToString(), d => (int)d, StringComparer.Ordinal)
             .Should()
             .Equal(
-                new Dictionary<string, int>
+                new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["WorkQueue"] = 0,
                     ["DeadLetter"] = 1,
@@ -108,9 +116,10 @@ public class BroadcastChangeSinkTests
     [Test]
     public async Task FlushAsync_EmptyDomains_PublishesNothing()
     {
-        await _sink.FlushAsync(Array.Empty<ChangeDomain>(), CancellationToken.None);
+        await _sink.NotNull().FlushAsync(Array.Empty<ChangeDomain>(), CancellationToken.None);
 
         await _broadcaster
+            .NotNull()
             .DidNotReceive()
             .PublishAsync(Arg.Any<TrainLifecycleEventMessage>(), Arg.Any<CancellationToken>());
     }

@@ -30,6 +30,10 @@ public static class RemoteRunJson
     /// <summary>What a worker writes: web defaults, enums as integers.</summary>
     public static readonly JsonSerializerOptions Write = ReadOnly(
         new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        }
     );
 
     /// <summary>
@@ -44,6 +48,8 @@ public static class RemoteRunJson
     public static readonly JsonSerializerOptions Read = ReadOnly(
         new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             Converters = { new TolerantFailureClassConverter(), new JsonStringEnumConverter() },
         }
     );

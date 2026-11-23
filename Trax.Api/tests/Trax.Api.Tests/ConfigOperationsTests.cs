@@ -7,6 +7,7 @@ using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.Operations;
 
@@ -57,7 +58,7 @@ public class ConfigOperationsTests
                 Arg.Any<UpdateSchedulerConfigInput>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new OperationResult(true, Id: 1, Count: 3, Message: "ok"));
+            .Returns(new OperationResult(Success: true, Id: 1, Count: 3, Message: "ok"));
         var mutations = new ConfigMutations();
         var input = new UpdateSchedulerConfigInput(MaxActiveJobs: 50);
 
@@ -95,7 +96,7 @@ public class ConfigOperationsTests
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
-                new Dictionary<string, string?>
+                new Dictionary<string, string?>(StringComparer.Ordinal)
                 {
                     ["Logging:LogLevel:Microsoft.AspNetCore"] = "Warning",
                     ["Logging:LogLevel:Default"] = "Information",
@@ -132,15 +133,23 @@ public class ConfigOperationsTests
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
-                new Dictionary<string, string?> { ["Logging:LogLevel:Default"] = "Information" }
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["Logging:LogLevel:Default"] = "Information",
+                }
             )
             .Build();
         var service = Substitute.For<ILogLevelService>();
         service
             .GetLogLevels()
             .Returns([
-                new CategoryLogLevel("Default", LogLevel.Information, "Information", false),
-                new CategoryLogLevel("Trax", LogLevel.Trace, "Debug", true),
+                new CategoryLogLevel(
+                    "Default",
+                    LogLevel.Information,
+                    "Information",
+                    Overridden: false
+                ),
+                new CategoryLogLevel("Trax", LogLevel.Trace, "Debug", Overridden: true),
             ]);
 
         var levels = new ConfigQueries().GetLogLevels(configuration, service);
@@ -163,7 +172,7 @@ public class ConfigOperationsTests
         var service = Substitute.For<ILogLevelService>();
         service
             .SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>())
-            .Returns(new LogLevelUpdateResult(true, 1, ["Trax"], "1 log level set."));
+            .Returns(new LogLevelUpdateResult(Success: true, 1, ["Trax"], "1 log level set."));
 
         var response = new ConfigMutations().SetLogLevels(
             [new LogLevelSettingInput("Trax", LogLevel.Debug)],
@@ -221,7 +230,7 @@ public class ConfigOperationsTests
         version
             .Should()
             .Be(
-                typeof(ConfigQueries).Assembly.GetName().Version!.ToString(3),
+                typeof(ConfigQueries).Assembly.GetName().Version.NotNull().ToString(3),
                 "it is the Trax.Api.GraphQL package version"
             );
     }

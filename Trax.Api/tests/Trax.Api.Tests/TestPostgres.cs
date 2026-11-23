@@ -7,7 +7,11 @@ namespace Trax.Api.Tests;
 internal static class TestPostgres
 {
     public static int Port { get; } =
-        int.TryParse(Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"), out var port)
+        int.TryParse(
+            Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"),
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var port
+        )
             ? port
             : 5432;
 }

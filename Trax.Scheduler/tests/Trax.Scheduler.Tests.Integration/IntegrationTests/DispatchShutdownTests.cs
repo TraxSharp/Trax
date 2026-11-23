@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
@@ -35,9 +36,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class DispatchShutdownTests
 {
-    private ServiceProvider _serviceProvider = null!;
-    private IServiceScope _scope = null!;
-    private IDataContext _dataContext = null!;
+    private ServiceProvider? _serviceProvider;
+    private AsyncServiceScope _scope;
+    private IDataContext? _dataContext;
 
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
@@ -65,22 +66,26 @@ public class DispatchShutdownTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _serviceProvider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        _scope = _serviceProvider.CreateScope();
+        _scope = _serviceProvider.NotNull().CreateAsyncScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
-        await TestSetup.CleanupDatabase(_dataContext);
+        await TestSetup.CleanupDatabase(_dataContext.NotNull());
     }
 
     [TearDown]
-    public void TestTearDown()
+    public async Task TestTearDown()
     {
         if (_dataContext is IDisposable disposable)
             disposable.Dispose();
-        _scope.Dispose();
+        await _scope.DisposeAsync().ConfigureAwait(false);
     }
 
     [Test]
@@ -91,7 +96,7 @@ public class DispatchShutdownTests
         using var stopping = new CancellationTokenSource();
         ShutdownDuringSubmit.Stopping = stopping;
 
-        using (var cycleScope = _serviceProvider.CreateScope())
+        await using (var cycleScope = _serviceProvider.NotNull().CreateAsyncScope())
         {
             var train = cycleScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
             try
@@ -106,25 +111,29 @@ public class DispatchShutdownTests
 
         stopping.IsCancellationRequested.Should().BeTrue("the submitter stopped the host");
 
-        _dataContext.Reset();
+        _dataContext.NotNull().Reset();
         var queued = await _dataContext
+            .NotNull()
             .WorkQueues.AsNoTracking()
-            .SingleAsync(q => q.Id == entry.Id);
+            .SingleAsync(q => q.Id == entry.Id, cancellationToken: CancellationToken.None);
         queued.Status.Should().Be(WorkQueueStatus.Queued, "the job was never delivered");
         queued.MetadataId.Should().BeNull();
 
         var run = await _dataContext
+            .NotNull()
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.ManifestId == entry.ManifestId);
+            .SingleAsync(
+                m => m.ManifestId == entry.ManifestId,
+                cancellationToken: CancellationToken.None
+            );
         run.TrainState.Should().Be(TrainState.Failed, "the attempt is recorded, not left Pending");
     }
 
     private async Task<WorkQueue> Queue()
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            _dataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(_dataContext.NotNull(), name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -136,21 +145,22 @@ public class DispatchShutdownTests
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await _dataContext.Track(manifest);
-        await _dataContext.SaveChanges(CancellationToken.None);
+        await _dataContext.NotNull().Track(manifest).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).FullName,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
-        await _dataContext.Track(entry);
-        await _dataContext.SaveChanges(CancellationToken.None);
-        _dataContext.Reset();
+        await _dataContext.NotNull().Track(entry).ConfigureAwait(false);
+        await _dataContext.NotNull().SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        _dataContext.NotNull().Reset();
         return entry;
     }
 
@@ -165,9 +175,9 @@ public class DispatchShutdownTests
         public Task<string> EnqueueAsync(long metadataId, object input) =>
             EnqueueAsync(metadataId, CancellationToken.None);
 
-        public Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
+        public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
         {
-            Stopping.Cancel();
+            await Stopping.CancelAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("The dispatcher did not pass its token.");
         }

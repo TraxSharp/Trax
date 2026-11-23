@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -31,7 +32,7 @@ public class JunctionEventRoutingTests
             ExternalId: "run-7",
             TrainName: "Routing.ITrain",
             TrainState: "InProgress",
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TestTime.UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
@@ -73,8 +74,11 @@ public class JunctionEventRoutingTests
             .Returns(Task.CompletedTask);
 
         var service = new TrainEventReceiverService(receiver, services);
-        await service.StartAsync(CancellationToken.None);
-        return (await started.Task.WaitAsync(Timeout), service);
+        await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        return (
+            await started.Task.WaitAsync(Timeout, TimeProvider.System).ConfigureAwait(false),
+            service
+        );
     }
 
     [Test]
@@ -82,11 +86,12 @@ public class JunctionEventRoutingTests
     {
         var trainHandler = Substitute.For<ITrainEventHandler>();
         var junctionHandler = Substitute.For<IJunctionEventHandler>();
-        await using var services = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddSingleton(trainHandler)
             .AddSingleton(junctionHandler)
             .AddSingleton<BroadcastInstance>()
             .BuildServiceProvider();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var (deliver, service) = await Start(services);
 
         await deliver(Message("JunctionFailed", Step), CancellationToken.None);
@@ -121,11 +126,12 @@ public class JunctionEventRoutingTests
     {
         var trainHandler = Substitute.For<ITrainEventHandler>();
         var junctionHandler = Substitute.For<IJunctionEventHandler>();
-        await using var services = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddSingleton(trainHandler)
             .AddSingleton(junctionHandler)
             .AddSingleton<BroadcastInstance>()
             .BuildServiceProvider();
+        await using var servicesDisposal = services.ConfigureAwait(false);
         var (deliver, service) = await Start(services);
 
         await deliver(Message("Decided"), CancellationToken.None);
@@ -167,7 +173,7 @@ public class JunctionEventRoutingTests
         json.Should().Contain("\"state\":\"Failed\"");
         json.Should().Contain("\"failureClass\":\"Transient\"");
 
-        var back = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!;
+        var back = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json).NotNull();
         back.Junction.Should().BeEquivalentTo(Step);
     }
 
@@ -180,6 +186,10 @@ public class JunctionEventRoutingTests
              "eventType":"Completed","executor":"W","output":null}
             """;
 
-        JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!.Junction.Should().BeNull();
+        JsonSerializer
+            .Deserialize<TrainLifecycleEventMessage>(json)
+            .NotNull()
+            .Junction.Should()
+            .BeNull();
     }
 }

@@ -54,8 +54,8 @@ public class JwtDispatcherBuilderTests
     public void MapIssuer_NullArguments_Throw()
     {
         var builder = new JwtDispatcherBuilder();
-        Action a = () => builder.MapIssuer(null!, "alpha");
-        Action b = () => builder.MapIssuer("https://idp", null!);
+        Action a = () => builder.MapIssuer(Null.Of<string>(), "alpha");
+        Action b = () => builder.MapIssuer("https://idp", Null.Of<string>());
 
         a.Should().Throw<ArgumentException>();
         b.Should().Throw<ArgumentException>();

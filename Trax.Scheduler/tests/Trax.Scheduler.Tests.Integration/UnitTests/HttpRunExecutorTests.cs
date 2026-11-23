@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Http;
 using Trax.Scheduler.Services.RunExecutor;
@@ -33,8 +34,13 @@ public class HttpRunExecutorTests
             Timeout = TimeSpan.FromSeconds(5),
             Retry = new HttpRetryOptions { MaxRetries = 0 },
         };
-        var client = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl) };
-        return new HttpRunExecutor(client, opts, NullLogger<HttpRunExecutor>.Instance);
+        var client = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl.NotNull()) };
+        return new HttpRunExecutor(
+            client,
+            opts,
+            NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
+        );
     }
 
     [Test]
@@ -71,7 +77,7 @@ public class HttpRunExecutorTests
             );
         result.ExternalId.Should().Be("ext-42");
         result.Output.Should().BeOfType<SimpleOutput>();
-        ((SimpleOutput)result.Output!).Value.Should().Be("ok");
+        ((SimpleOutput)result.Output.NotNull()).Value.Should().Be("ok");
     }
 
     [Test]
@@ -223,17 +229,17 @@ public class HttpRunExecutorTests
     private static HttpResponseMessage JsonResponse<T>(HttpStatusCode code, T payload) =>
         new(code) { Content = JsonContent.Create(payload) };
 
-    private record SimpleInput
+    private sealed record SimpleInput
     {
         public string Value { get; init; } = "";
     }
 
-    private record SimpleOutput
+    private sealed record SimpleOutput
     {
         public string Value { get; init; } = "";
     }
 
-    private class StubHandler : HttpMessageHandler
+    private sealed class StubHandler : HttpMessageHandler
     {
         private readonly Func<
             HttpRequestMessage,

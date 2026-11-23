@@ -14,7 +14,7 @@ public class ReadBatteryStateJunction(ILogger<ReadBatteryStateJunction> logger)
             input.TargetChargePercent
         );
 
-        await Task.Delay(200);
+        await Task.Delay(200, CancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "[{BatteryBankId}] Battery state: 67% charge, 45.2°C temperature, healthy",

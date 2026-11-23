@@ -10,8 +10,10 @@ grand_parent: SDK Reference
 nav_order: 14
 source:
   - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineViewTypeModule.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/FromIr/MachineViews.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/FromIr/MachineViewCatalog.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/FromIr/MachineViewReader.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/ViewDocuments.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/ViewDocument.cs
 ---
 
 # Views root

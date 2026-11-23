@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.StateMachine.Tests.Meta.Infrastructure;
 
 /// <summary>
@@ -14,15 +16,14 @@ internal sealed class SyntheticRepo : IDisposable
 
     public SyntheticRepo() => Directory.CreateDirectory(Root);
 
-    public SyntheticRepo Write(string relativePath, string content)
+    public async Task Write(string relativePath, string content)
     {
         var full = System.IO.Path.Combine(
             Root,
             relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar)
         );
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, content);
-        return this;
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full).NotNull());
+        await File.WriteAllTextAsync(full, content).ConfigureAwait(false);
     }
 
     public void Dispose()

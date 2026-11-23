@@ -1,0 +1,164 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using CodeFixTest = Trax.Analyzers.Tests.Harness.CSharpCodeFixTest<
+    Trax.Analyzers.Rules.UseInlineArrayInsteadOfFixedBufferAnalyzer,
+    Trax.Analyzers.Rules.UseInlineArrayInsteadOfFixedBufferFixer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class UseInlineArrayInsteadOfFixedBufferAnalyzerTests
+{
+    private static CodeFixTest CreateTest() => new();
+
+    [Fact]
+    public Task FixedByteBuffer_InlineArray16Exists_UseCodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte {|TRX0189:IpAddress|}[16];
+            }
+            """;
+        test.FixedCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public System.Runtime.CompilerServices.InlineArray16<byte> IpAddress;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FixedByteBuffer_InlineArray2Exists_UseCodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte {|TRX0189:IpAddress|}[2];
+            }
+            """;
+        test.FixedCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public System.Runtime.CompilerServices.InlineArray2<byte> IpAddress;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FixedByteBuffer_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte {|TRX0189:IpAddress|}[16];
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FixedIntBuffer_ReportsDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            unsafe struct Buffer
+            {
+                private fixed int {|TRX0189:Values|}[8];
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task FixedByteBuffer_Size17_NoCodeFix()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte {|TRX0189:IpAddress|}[17];
+            }
+            """;
+        test.FixedCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte {|TRX0189:IpAddress|}[17];
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task NonFixedField_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            struct Buffer
+            {
+                private int Values;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CSharp10_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.LanguageVersion = LanguageVersion.CSharp10;
+        test.TestCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte IpAddress[16];
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Net7WithoutInlineArrayAttribute_NoDiagnostic()
+    {
+        var test = CreateTest();
+        test.ReferenceAssemblies = ReferenceAssemblies.Net.Net70;
+        test.TestCode = """
+            unsafe struct IpAddressBuffer
+            {
+                public fixed byte IpAddress[16];
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    [Trait("Issue", "https://github.com/meziantou/Meziantou.Analyzer/issues/1674")]
+    public Task InvalidCode_FixedBufferWithoutNameAndType_NoCodeFix()
+    {
+        const string Source = """
+            unsafe struct Buffer
+            {
+                fixed {|TRX0189:|}2
+            }
+            """;
+        var test = CreateTest();
+        // The code does not compile, so the compiler diagnostics cannot be verified
+        test.CompilerDiagnostics = CompilerDiagnostics.None;
+        test.TestCode = Source;
+        test.FixedCode = Source;
+
+        return test.RunAsync();
+    }
+}

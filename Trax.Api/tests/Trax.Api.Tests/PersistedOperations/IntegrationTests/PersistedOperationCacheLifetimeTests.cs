@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -29,10 +30,10 @@ public class PersistedOperationCacheLifetimeTests
 
     private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(2);
 
-    private ServiceProvider _sp = null!;
-    private IPersistedOperationStore _store = null!;
-    private ManualClock _clock = null!;
-    private CountingDataContextFactory _reads = null!;
+    private ServiceProvider? _sp;
+    private IPersistedOperationStore? _store;
+    private ManualClock? _clock;
+    private CountingDataContextFactory? _reads;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -45,19 +46,20 @@ public class PersistedOperationCacheLifetimeTests
             po => po.SingleNode().WithCacheMaxAge(MaxAge),
             services =>
             {
-                services.AddSingleton<TimeProvider>(_clock);
+                services.AddSingleton<TimeProvider>(_clock.NotNull());
                 CountingDataContextFactory.Install(services);
             }
         );
-        _store = _sp.GetRequiredService<IPersistedOperationStore>();
-        _reads = _sp.GetRequiredService<CountingDataContextFactory>();
+        _store = _sp.NotNull().GetRequiredService<IPersistedOperationStore>();
+        _reads = _sp.NotNull().GetRequiredService<CountingDataContextFactory>();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         if (_sp is not null)
-            await _sp.DisposeAsync();
+            if (_sp is not null)
+                await _sp.DisposeAsync();
     }
 
     [SetUp]
@@ -67,17 +69,19 @@ public class PersistedOperationCacheLifetimeTests
     public async Task AChangeThatNeverReachedTheNode_IsInForceWithinTheMaximumAge()
     {
         var id = $"unbroadcast_{Guid.NewGuid():N}";
-        await _store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await _store
+            .NotNull()
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"");
 
         // Deactivated behind this node's back: no invalidation, no broadcast.
         await DeactivateDirectlyAsync(id);
-        _clock.Advance(MaxAge - TimeSpan.FromSeconds(1));
+        _clock.NotNull().Advance(MaxAge - TimeSpan.FromSeconds(1));
         (await ExecuteByIdAsync(id))
             .Should()
             .Contain("\"hello\"", "within the maximum age the node may still serve what it cached");
 
-        _clock.Advance(TimeSpan.FromSeconds(2));
+        _clock.NotNull().Advance(TimeSpan.FromSeconds(2));
 
         (await ExecuteByIdAsync(id)).Should().Contain("HC0020", AdrHint);
     }
@@ -85,12 +89,12 @@ public class PersistedOperationCacheLifetimeTests
     [Test]
     public async Task AnInlineRequestUnderRequirePersisted_IsRefusedWithoutReadingTheStore()
     {
-        var before = _reads.Count;
+        var before = _reads.NotNull().Count;
 
         var json = await ExecuteInlineAsync("query Probe { hello }");
 
         json.Should().Contain("PERSISTED_OPERATION_REQUIRED");
-        (_reads.Count - before)
+        (_reads.NotNull().Count - before)
             .Should()
             .Be(
                 0,
@@ -102,12 +106,14 @@ public class PersistedOperationCacheLifetimeTests
     public async Task AnUnknownIdAskedForTwice_ReadsTheStoreOnce()
     {
         var id = $"unknown_{Guid.NewGuid():N}";
-        var before = _reads.Count;
+        var before = _reads.NotNull().Count;
 
         (await ExecuteByIdAsync(id)).Should().Contain("HC0020");
         (await ExecuteByIdAsync(id)).Should().Contain("HC0020");
 
-        (_reads.Count - before).Should().Be(1, "an id the store does not hold is remembered");
+        (_reads.NotNull().Count - before)
+            .Should()
+            .Be(1, "an id the store does not hold is remembered");
     }
 
     [Test]
@@ -116,7 +122,9 @@ public class PersistedOperationCacheLifetimeTests
         var id = $"late_{Guid.NewGuid():N}";
         (await ExecuteByIdAsync(id)).Should().Contain("HC0020");
 
-        await _store.UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
+        await _store
+            .NotNull()
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
 
         (await ExecuteByIdAsync(id)).Should().Contain("\"hello\"", AdrHint);
     }
@@ -126,45 +134,55 @@ public class PersistedOperationCacheLifetimeTests
     {
         var id = $"unknown_aged_{Guid.NewGuid():N}";
         (await ExecuteByIdAsync(id)).Should().Contain("HC0020");
-        var before = _reads.Count;
+        var before = _reads.NotNull().Count;
 
-        _clock.Advance(MaxAge);
+        _clock.NotNull().Advance(MaxAge);
         await ExecuteByIdAsync(id);
 
-        (_reads.Count - before).Should().Be(1, AdrHint);
+        (_reads.NotNull().Count - before).Should().Be(1, AdrHint);
     }
 
     private async Task<string> ExecuteByIdAsync(string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
-        );
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull()).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 
     private async Task<string> ExecuteInlineAsync(string document)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(_sp);
+        var executor = await GraphQLFixture.GetExecutorAsync(_sp.NotNull()).ConfigureAwait(false);
         // As the HTTP transports send it: the document, and its hash computed from the bytes.
         var hash = new MD5DocumentHashProvider(HashFormat.Hex).ComputeHash(
             System.Text.Encoding.UTF8.GetBytes(document)
         );
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocument(document).SetDocumentHash(hash).Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocument(document).SetDocumentHash(hash).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 
     private static async Task DeactivateDirectlyAsync(string id)
     {
-        await using var conn = new NpgsqlConnection(PostgresFixture.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "update trax.persisted_operation set is_active = false where id = @id",
-            conn
-        );
-        cmd.Parameters.AddWithValue("id", id);
-        await cmd.ExecuteNonQueryAsync();
+        var conn = new NpgsqlConnection(PostgresFixture.ConnectionString);
+        await using (conn.ConfigureAwait(false))
+        {
+            await conn.OpenAsync().ConfigureAwait(false);
+            var cmd = new NpgsqlCommand(
+                "update trax.persisted_operation set is_active = false where id = @id",
+                conn
+            );
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.Parameters.AddWithValue("id", id);
+                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

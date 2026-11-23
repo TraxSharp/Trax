@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -35,7 +36,8 @@ internal static class ExecutionCancellation
         var manifestIds = await context
             .Manifests.Where(x => groupIds.Contains(x.ManifestGroupId))
             .Select(x => x.Id)
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         return context.Metadatas.Where(m =>
             m.ManifestId != null && manifestIds.Contains(m.ManifestId.Value)
@@ -81,19 +83,24 @@ internal static class ExecutionCancellation
                     .Where(m => registered.Contains(m.Id))
                     .Select(m => m.Id)
                     .ToListAsync(ct)
+                    .ConfigureAwait(false)
                 : [],
-            _ => await cancellable.Select(m => m.Id).ToListAsync(ct),
+            _ => await cancellable.Select(m => m.Id).ToListAsync(ct).ConfigureAwait(false),
         };
 
         var flagged = context.SupportsSetUpdates()
-            ? await cancellable.ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.CancellationRequested, true),
-                ct
-            )
-            : await context.UpdateEachAsync(cancellable, m => m.CancellationRequested = true, ct);
+            ? await cancellable
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.CancellationRequested, valueExpression: true),
+                    ct
+                )
+                .ConfigureAwait(false)
+            : await context
+                .UpdateEachAsync(cancellable, m => m.CancellationRequested = true, ct)
+                .ConfigureAwait(false);
 
         foreach (var id in onThisHost)
-            registry!.TryCancel(id);
+            registry.NotNull().TryCancel(id);
 
         if (flagged > 0)
             changeSignal?.Notify(ChangeDomain.Execution);

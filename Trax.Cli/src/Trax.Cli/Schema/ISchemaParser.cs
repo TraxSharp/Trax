@@ -4,5 +4,5 @@ namespace Trax.Cli.Schema;
 
 public interface ISchemaParser
 {
-    ApiSchema Parse(string filePath);
+    Task<ApiSchema> ParseAsync(string filePath);
 }

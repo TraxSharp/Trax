@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -53,7 +54,7 @@ public class InvokedRunLimitTests
             .OverLimit(
                 context,
                 new DraftOwner(SnapshotOwnerKind.User, userKey),
-                null,
+                leavingToken: null,
                 int.MaxValue,
                 CancellationToken.None
             );
@@ -61,29 +62,31 @@ public class InvokedRunLimitTests
         refused
             .Should()
             .NotBeNull("a user owner whose key names nobody cannot be counted, so it is refused");
-        refused!.Code.Should().Be(InvokeOutbox.Forbidden);
+        refused.NotNull().Code.Should().Be(InvokeOutbox.Forbidden);
     }
 
     private static async Task<string> Explain<T>(DbContext context, IQueryable<T> query)
     {
-        await using var command = (NpgsqlCommand)query.CreateDbCommand();
-        await context.Database.OpenConnectionAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        var command = (NpgsqlCommand)query.CreateDbCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
+        await context.Database.OpenConnectionAsync().ConfigureAwait(false);
+        var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
+        await using var transactionDisposal = transaction.ConfigureAwait(false);
         command.Transaction = (NpgsqlTransaction)transaction.GetDbTransaction();
 
-        await using (
-            var off = new NpgsqlCommand(
-                "SET LOCAL enable_seqscan = off",
-                command.Connection,
-                command.Transaction
-            )
-        )
-            await off.ExecuteNonQueryAsync();
+        var off = new NpgsqlCommand(
+            "SET LOCAL enable_seqscan = off",
+            command.Connection,
+            command.Transaction
+        );
+        await using (off.ConfigureAwait(false))
+            await off.ExecuteNonQueryAsync().ConfigureAwait(false);
 
         command.CommandText = "EXPLAIN " + command.CommandText;
         var lines = new List<string>();
-        await using (var reader = await command.ExecuteReaderAsync())
-            while (await reader.ReadAsync())
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using (reader.ConfigureAwait(false))
+            while (await reader.ReadAsync().ConfigureAwait(false))
                 lines.Add(reader.GetString(0));
 
         return string.Join('\n', lines);

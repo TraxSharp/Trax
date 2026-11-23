@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Microsoft.Playwright;
 using Trax.Samples.Recovery.Browser.Fixtures;
@@ -13,7 +14,7 @@ namespace Trax.Samples.Recovery.Browser.Tests;
 /// </summary>
 [TestFixture]
 [Property("adr", Adr)]
-public class UserPageBrowserTests
+public partial class UserPageBrowserTests
 {
     private const string Adr =
         "Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md";
@@ -35,10 +36,7 @@ public class UserPageBrowserTests
         await Expect(statuses.Nth(0))
             .ToHaveTextAsync("Crashed", new() { Timeout = BrowserTimeouts.Server.Ms() });
         await Expect(statuses.Nth(1))
-            .ToHaveTextAsync(
-                new System.Text.RegularExpressions.Regex("^(Recovered|Completed)$"),
-                new() { Timeout = BrowserTimeouts.Server.Ms() }
-            );
+            .ToHaveTextAsync(RecoveredOrCompleted, new() { Timeout = BrowserTimeouts.Server.Ms() });
 
         page.RequestsNaming("operations")
             .Should()
@@ -76,4 +74,9 @@ public class UserPageBrowserTests
                 "the page reads the run the order queued from the order's answer (invokedRun)"
             );
     }
+
+    // Playwright takes only the pattern and its case, line and single-line flags, so the group
+    // is non-capturing rather than ExplicitCapture.
+    [GeneratedRegex("^(?:Recovered|Completed)$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex RecoveredOrCompleted { get; }
 }

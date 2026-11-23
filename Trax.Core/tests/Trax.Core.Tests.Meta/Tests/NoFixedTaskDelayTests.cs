@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
@@ -7,21 +9,17 @@ namespace Trax.Core.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md")]
 [TestFixture]
-public class NoFixedTaskDelayTests
+public partial class NoFixedTaskDelayTests
 {
-    // Matches Task.Delay(...) and Thread.Sleep(...).
-    private static readonly Regex DelayCall = new(
-        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
-        RegexOptions.Compiled
-    );
-
     // A justification comment must appear on the same line or within the preceding 3 lines.
     // We look for any of these tokens (case-insensitive):
     //   determinism:, allowed-delay:, measuring-interval:, negative-wait:
-    private static readonly Regex Justification = new(
+    [GeneratedRegex(
         @"(?i)(determinism:|allowed-delay:|measuring-interval:|negative-wait:)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex Justification { get; }
 
     [Test]
     public void TestSources_DoNotUse_FixedDelays_WithoutJustification()
@@ -34,9 +32,11 @@ public class NoFixedTaskDelayTests
                 continue;
 
             var raw = File.ReadAllText(file);
-            var lines = raw.Replace("\r\n", "\n").Split('\n');
+            var lines = raw.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
             var stripped = SourceText.StripCommentsAndStrings(raw);
-            var strippedLines = stripped.Replace("\r\n", "\n").Split('\n');
+            var strippedLines = stripped
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n');
 
             for (var i = 0; i < strippedLines.Length; i++)
             {
@@ -46,7 +46,12 @@ public class NoFixedTaskDelayTests
                 if (HasJustification(lines, i))
                     continue;
 
-                offenders.Add($"{RepoRoot.Relative(file)}:{i + 1}  -> {lines[i].Trim()}");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{RepoRoot.Relative(file)}:{i + 1}  -> {lines[i].Trim()}"
+                    )
+                );
             }
         }
 
@@ -74,4 +79,11 @@ public class NoFixedTaskDelayTests
         }
         return false;
     }
+
+    [GeneratedRegex(
+        @"\b(Task\.Delay|Thread\.Sleep)\s*\(",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 5_000
+    )]
+    private static partial Regex DelayCall { get; }
 }

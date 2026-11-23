@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Exceptions;
 
@@ -25,7 +26,7 @@ public class TrainExceptionDataTests : TestSetup
 
         // Assert
         deserialized.Should().NotBeNull();
-        deserialized!.TrainName.Should().Be("MyTrain");
+        deserialized.NotNull().TrainName.Should().Be("MyTrain");
         deserialized.TrainExternalId.Should().Be("ext-123");
         deserialized.Type.Should().Be("InvalidOperationException");
         deserialized.Junction.Should().Be("ValidateInput");
@@ -77,7 +78,7 @@ public class TrainExceptionDataTests : TestSetup
         var deserialized = JsonSerializer.Deserialize<TrainExceptionData>(json);
 
         // Assert — round-trip preserves special characters
-        deserialized!.Message.Should().Be("Line1\nLine2\tTabbed \"quoted\" <html>");
+        deserialized.NotNull().Message.Should().Be("Line1\nLine2\tTabbed \"quoted\" <html>");
     }
 
     [Theory]
@@ -92,7 +93,7 @@ public class TrainExceptionDataTests : TestSetup
 
         // Assert
         data.Should().NotBeNull();
-        data!.TrainName.Should().Be("HelloTrain");
+        data.NotNull().TrainName.Should().Be("HelloTrain");
         data.TrainExternalId.Should().Be("abc-456");
         data.Type.Should().Be("ArgumentException");
         data.Junction.Should().Be("ParseJunction");
@@ -121,7 +122,7 @@ public class TrainExceptionDataTests : TestSetup
 
         // Assert
         deserialized.Should().NotBeNull();
-        deserialized!.StackTrace.Should().Be(data.StackTrace);
+        deserialized.NotNull().StackTrace.Should().Be(data.StackTrace);
     }
 
     [Theory]
@@ -144,7 +145,7 @@ public class TrainExceptionDataTests : TestSetup
 
         // Assert
         deserialized.Should().NotBeNull();
-        deserialized!.StackTrace.Should().BeNull();
+        deserialized.NotNull().StackTrace.Should().BeNull();
     }
 
     [Theory]
@@ -159,7 +160,7 @@ public class TrainExceptionDataTests : TestSetup
 
         // Assert — should deserialize successfully with null StackTrace
         data.Should().NotBeNull();
-        data!.StackTrace.Should().BeNull();
+        data.NotNull().StackTrace.Should().BeNull();
         data.Message.Should().Be("msg");
     }
 
@@ -183,7 +184,7 @@ public class TrainExceptionDataTests : TestSetup
         var deserialized = JsonSerializer.Deserialize<TrainExceptionData>(json);
 
         // Assert
-        deserialized!.StackTrace.Should().Be(data.StackTrace);
+        deserialized.NotNull().StackTrace.Should().Be(data.StackTrace);
     }
 
     #endregion

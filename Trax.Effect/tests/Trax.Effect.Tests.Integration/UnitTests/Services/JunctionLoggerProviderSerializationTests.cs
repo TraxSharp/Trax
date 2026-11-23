@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Utils;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
@@ -7,7 +8,7 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 [TestFixture]
 public class JunctionLoggerProviderSerializationTests
 {
-    private JsonSerializerOptions _options = null!;
+    private JsonSerializerOptions? _options;
 
     // What the junction logger writes with: the real options, wrapped for logging as the logger wraps them.
     [SetUp]
@@ -26,7 +27,7 @@ public class JunctionLoggerProviderSerializationTests
             Active = true,
         };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"name\":\"test\"");
         json.Should().Contain("\"count\":42");
@@ -44,7 +45,7 @@ public class JunctionLoggerProviderSerializationTests
         var child = new CircularChild { Name = "child", Parent = parent };
         parent.Child = child;
 
-        var act = () => JsonSerializer.Serialize<object>(parent, _options);
+        var act = () => JsonSerializer.Serialize<object>(parent, _options.NotNull());
 
         act.Should().NotThrow();
     }
@@ -56,7 +57,7 @@ public class JunctionLoggerProviderSerializationTests
         var child = new CircularChild { Name = "child", Parent = parent };
         parent.Child = child;
 
-        var json = JsonSerializer.Serialize<object>(parent, _options);
+        var json = JsonSerializer.Serialize<object>(parent, _options.NotNull());
 
         json.Should().Contain("\"name\":\"parent\"");
         json.Should().Contain("\"name\":\"child\"");
@@ -74,10 +75,10 @@ public class JunctionLoggerProviderSerializationTests
         var self = new SelfReferencing { Name = "loop" };
         self.Self = self;
 
-        var act = () => JsonSerializer.Serialize<object>(self, _options);
+        var act = () => JsonSerializer.Serialize<object>(self, _options.NotNull());
 
         act.Should().NotThrow();
-        var json = JsonSerializer.Serialize<object>(self, _options);
+        var json = JsonSerializer.Serialize<object>(self, _options.NotNull());
         var doc = JsonDocument.Parse(json);
         // IgnoreCycles writes null, WhenWritingNull omits it entirely
         doc.RootElement.TryGetProperty("self", out _).Should().BeFalse();
@@ -92,10 +93,14 @@ public class JunctionLoggerProviderSerializationTests
     {
         var obj = new ObjectWithDictionary
         {
-            Totals = new Dictionary<string, int> { ["Ada"] = 1, ["bo"] = 2 },
+            Totals = new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["Ada"] = 1,
+                ["bo"] = 2,
+            },
         };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Be("{\"totals\":{\"Ada\":1,\"bo\":2}}");
     }
@@ -110,7 +115,7 @@ public class JunctionLoggerProviderSerializationTests
         using var stream = new MemoryStream();
         var obj = new ObjectWithDisposable { Name = "test", Resource = stream };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"name\":\"test\"");
         json.Should().Contain("\"resource\":\"[ IDisposable ]\"");
@@ -125,7 +130,7 @@ public class JunctionLoggerProviderSerializationTests
     {
         var obj = new ObjectWithEnum { Status = TestStatus.Active };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"status\":\"Active\"");
         json.Should().NotContain("1");
@@ -144,7 +149,7 @@ public class JunctionLoggerProviderSerializationTests
             Inner = new InnerObject { Value = 99 },
         };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("id").GetString().Should().Be("outer");
@@ -160,7 +165,7 @@ public class JunctionLoggerProviderSerializationTests
     {
         var obj = new SimplePoco { Name = "test", NullableField = null };
 
-        var json = JsonSerializer.Serialize<object>(obj, _options);
+        var json = JsonSerializer.Serialize<object>(obj, _options.NotNull());
 
         json.Should().Contain("\"name\":\"test\"");
         json.Should().NotContain("nullableField");
@@ -169,7 +174,7 @@ public class JunctionLoggerProviderSerializationTests
     [Test]
     public void Serialize_NullObject_ReturnsNullLiteral()
     {
-        var json = JsonSerializer.Serialize<object?>(null, _options);
+        var json = JsonSerializer.Serialize<object?>(value: null, _options.NotNull());
 
         json.Should().Be("null");
     }
@@ -178,7 +183,7 @@ public class JunctionLoggerProviderSerializationTests
 
     #region TestModels
 
-    private class SimplePoco
+    private sealed class SimplePoco
     {
         public string Name { get; init; } = "";
         public int Count { get; init; }
@@ -186,25 +191,25 @@ public class JunctionLoggerProviderSerializationTests
         public string? NullableField { get; init; }
     }
 
-    private class CircularParent
+    private sealed class CircularParent
     {
         public string Name { get; init; } = "";
         public CircularChild? Child { get; set; }
     }
 
-    private class CircularChild
+    private sealed class CircularChild
     {
         public string Name { get; init; } = "";
         public CircularParent? Parent { get; set; }
     }
 
-    private class SelfReferencing
+    private sealed class SelfReferencing
     {
         public string Name { get; init; } = "";
         public SelfReferencing? Self { get; set; }
     }
 
-    private class ObjectWithDisposable
+    private sealed class ObjectWithDisposable
     {
         public string Name { get; init; } = "";
         public MemoryStream? Resource { get; init; }
@@ -216,23 +221,23 @@ public class JunctionLoggerProviderSerializationTests
         Active,
     }
 
-    private class ObjectWithDictionary
+    private sealed class ObjectWithDictionary
     {
-        public Dictionary<string, int> Totals { get; set; } = new();
+        public Dictionary<string, int> Totals { get; set; } = new(StringComparer.Ordinal);
     }
 
-    private class ObjectWithEnum
+    private sealed class ObjectWithEnum
     {
         public TestStatus Status { get; init; }
     }
 
-    private class OuterObject
+    private sealed class OuterObject
     {
         public string Id { get; init; } = "";
         public InnerObject? Inner { get; init; }
     }
 
-    private class InnerObject
+    private sealed class InnerObject
     {
         public int Value { get; init; }
     }

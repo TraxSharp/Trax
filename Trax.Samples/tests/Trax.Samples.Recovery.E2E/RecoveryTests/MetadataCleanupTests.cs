@@ -20,15 +20,17 @@ public class MetadataCleanupTests : RecoveryTestFixture
         // The factory keeps them three seconds and sweeps every second, so soon every run left
         // started after this test: the ones from before were swept. Without the sweep, the
         // oldest run stays older than the test forever.
-        var testStarted = DateTime.UtcNow;
+        var testStarted = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var swept = await Polling.WaitUntilAsync(
             async () =>
             {
-                var response = await GraphQL.SendAsync(
-                    $$"""{ operations { executions(trainName: "{{ManifestManager}}", order: OLDEST, take: 1) { items { startTime } } } }""",
-                    OperatorKey
-                );
+                var response = await GraphQL
+                    .SendAsync(
+                        $$"""{ operations { executions(trainName: "{{ManifestManager}}", order: OLDEST, take: 1) { items { startTime } } } }""",
+                        OperatorKey
+                    )
+                    .ConfigureAwait(false);
                 if (response.HasErrors)
                     return false;
                 var items = response.GetData("operations", "executions", "items");

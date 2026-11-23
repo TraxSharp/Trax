@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Npgsql;
 using NUnit.Framework.Interfaces;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 
 [assembly: Trax.Scheduler.Tests.Integration.Fixtures.CheckTraxInvariants]
@@ -33,7 +34,9 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 
     public ActionTargets Targets => ActionTargets.Test;
 
-    public void BeforeTest(ITest test) => _before = Find();
+    // ITestAction is synchronous, and the check runs between tests, never inside one, so it
+    // waits here. Every await below is ConfigureAwait(false).
+    public void BeforeTest(ITest test) => _before = FindAsync().GetAwaiter().GetResult();
 
     public void AfterTest(ITest test)
     {
@@ -43,32 +46,35 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         )
             return;
 
-        var added = Find().Except(_before).ToList();
+        var added = FindAsync().GetAwaiter().GetResult().Except(_before).ToList();
         if (added.Count > 0)
             Assert.Fail(TraxInvariants.Describe(added));
     }
 
-    // ITestAction is synchronous, and the check runs between tests, never inside one.
-    private static IReadOnlyList<TraxInvariantViolation> Find() =>
-        Find(TestPostgres.ConnectionString, [])
-            .Concat(
-                InvokeCluster.OpenClusters.SelectMany(c =>
-                    c.Store == ClusterStore.Postgres
-                        ? Find(c.ConnectionString, c.InvokingStates)
-                        : FindOnSqlite(c.ConnectionString, c.InvokingStates)
-                )
-            )
-            .ToList();
+    private static async Task<IReadOnlyList<TraxInvariantViolation>> FindAsync()
+    {
+        var found = new List<TraxInvariantViolation>();
+        found.AddRange(await FindAsync(TestPostgres.ConnectionString, []).ConfigureAwait(false));
+        foreach (var cluster in InvokeCluster.OpenClusters)
+            found.AddRange(
+                cluster.Store == ClusterStore.Postgres
+                    ? await FindAsync(cluster.ConnectionString, cluster.InvokingStates)
+                        .ConfigureAwait(false)
+                    : await FindOnSqliteAsync(cluster.ConnectionString, cluster.InvokingStates)
+                        .ConfigureAwait(false)
+            );
+        return found;
+    }
 
     // A SQLite cluster's file. Read on an unpooled connection that may not create the file, so the
     // check neither holds the file open nor makes one before the cluster's first host has.
-    private static IEnumerable<TraxInvariantViolation> FindOnSqlite(
+    private static async Task<IReadOnlyList<TraxInvariantViolation>> FindOnSqliteAsync(
         string connectionString,
         IReadOnlyList<InvokingState> invokingStates
     )
     {
         var file = new SqliteConnectionStringBuilder(connectionString).DataSource;
-        using var connection = new SqliteConnection(
+        var connection = new SqliteConnection(
             new SqliteConnectionStringBuilder
             {
                 DataSource = file,
@@ -76,27 +82,30 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
                 Pooling = false,
             }.ConnectionString
         );
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         try
         {
-            connection.Open();
+            await connection.OpenAsync().ConfigureAwait(false);
         }
         catch (SqliteException)
         {
             return [];
         }
 
-        using (var migrated = connection.CreateCommand())
+        var migrated = connection.CreateCommand();
+        await using (migrated.ConfigureAwait(false))
         {
             migrated.CommandText =
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('work_queue', 'effect_claim')";
-            if ((long)migrated.ExecuteScalar()! < 2)
+            if ((long)(await migrated.ExecuteScalarAsync().ConfigureAwait(false)).NotNull() < 2)
                 return [];
         }
 
-        return TraxInvariants
-            .FindViolationsAsync(connection, invokingStates)
-            .GetAwaiter()
-            .GetResult()
+        return (
+            await TraxInvariants
+                .FindViolationsAsync(connection, invokingStates)
+                .ConfigureAwait(false)
+        )
             .Select(v => v with { Detail = $"{v.Detail} (in {Path.GetFileName(file)})" })
             .ToList();
     }
@@ -105,7 +114,7 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
     // check reads on unpooled connections, so it leaves no idle session in the pool the tests share:
     // DispatcherWakeTests counts sessions in pg_stat_activity on a pooled connection, and missed
     // the listener's session when it was handed one the check had left idle.
-    private static IEnumerable<TraxInvariantViolation> Find(
+    private static async Task<IReadOnlyList<TraxInvariantViolation>> FindAsync(
         string pooled,
         IReadOnlyList<InvokingState> invokingStates
     )
@@ -114,39 +123,39 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
         {
             Pooling = false,
         }.ConnectionString;
-        return IsMigrated(connectionString)
-            ? TraxInvariants
+        if (!await IsMigratedAsync(connectionString).ConfigureAwait(false))
+            return [];
+
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database;
+        return (
+            await TraxInvariants
                 .FindViolationsAsync(connectionString, invokingStates)
-                .GetAwaiter()
-                .GetResult()
-                .Select(v =>
-                    v with
-                    {
-                        Detail =
-                            $"{v.Detail} (in {new NpgsqlConnectionStringBuilder(connectionString).Database})",
-                    }
-                )
-            : [];
+                .ConfigureAwait(false)
+        )
+            .Select(v => v with { Detail = $"{v.Detail} (in {database})" })
+            .ToList();
     }
 
     // The first host to start migrates a database, so before it nothing can be stuck. With no
     // server there is nothing to check: the tests that need one fail on their own, and the rest
     // still run (see ExclusiveTestDatabase).
-    private static bool IsMigrated(string connectionString)
+    private static async Task<bool> IsMigratedAsync(string connectionString)
     {
-        using var connection = new NpgsqlConnection(connectionString);
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
         try
         {
-            connection.Open();
+            await connection.OpenAsync().ConfigureAwait(false);
         }
         catch (NpgsqlException)
         {
             return false;
         }
 
-        using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText =
             "SELECT to_regclass('trax.work_queue') IS NOT NULL AND to_regclass('trax.effect_claim') IS NOT NULL";
-        return (bool)command.ExecuteScalar()!;
+        return (bool)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull();
     }
 }

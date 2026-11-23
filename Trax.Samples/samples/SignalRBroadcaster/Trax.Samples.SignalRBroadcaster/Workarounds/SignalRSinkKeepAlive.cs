@@ -34,7 +34,11 @@ internal static class SignalRSinkKeepAlive
             services[i] = ServiceDescriptor.Singleton<ITrainLifecycleHookFactory>(sp =>
             {
                 var factory = (ITrainLifecycleHookFactory)create(sp);
-                return factory.GetType().Name == SinkFactoryName
+                return string.Equals(
+                    factory.GetType().Name,
+                    SinkFactoryName,
+                    StringComparison.Ordinal
+                )
                     ? new NonDisposingFactory(factory.Create())
                     : factory;
             });

@@ -10,16 +10,18 @@ public class AdvancePartition(IMachineInstances instances)
     : EffectJunction<PartitionActionInput, PartitionActionOutput>
 {
     public override async Task<PartitionActionOutput> Run(PartitionActionInput input) =>
-        await instances.Advance<SourcePartitionMachine>(
-            SourcePartitionMachine.KeyFor(input.Source, input.Month),
-            input.Action switch
-            {
-                PartitionAction.Retry => nameof(PartitionTrigger.Retry),
-                PartitionAction.Approve => nameof(PartitionTrigger.Approve),
-                _ => throw new ArgumentOutOfRangeException(nameof(input)),
-            },
-            cancellationToken: CancellationToken
-        ) switch
+        await instances
+            .Advance<SourcePartitionMachine>(
+                SourcePartitionMachine.KeyFor(input.Source, input.Month),
+                input.Action switch
+                {
+                    PartitionAction.Retry => nameof(PartitionTrigger.Retry),
+                    PartitionAction.Approve => nameof(PartitionTrigger.Approve),
+                    _ => throw new ArgumentOutOfRangeException(nameof(input)),
+                },
+                cancellationToken: CancellationToken
+            )
+            .ConfigureAwait(false) switch
         {
             AdvanceOutcome.Advanced advanced => new() { State = advanced.Snapshot.State },
             AdvanceOutcome.Rejected rejected => new() { Problem = rejected.Reason.ToWire() },

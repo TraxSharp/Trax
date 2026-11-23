@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -45,9 +46,9 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [NonParallelizable]
 public class OutOfTrainLifecycleEventTests
 {
-    private static readonly string TrainName = typeof(ISchedulerTestTrain).FullName!;
+    private static readonly string TrainName = typeof(ISchedulerTestTrain).FullName.NotNull();
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
     private readonly LifecycleRecorder _lifecycle = new();
 
     [OneTimeSetUp]
@@ -76,18 +77,23 @@ public class OutOfTrainLifecycleEventTests
             )
             .BuildServiceProvider();
 
-        var config = _provider.GetRequiredService<SchedulerConfiguration>();
+        var config = _provider.NotNull().GetRequiredService<SchedulerConfiguration>();
         config.StalePendingTimeout = TimeSpan.FromMinutes(1);
         config.StaleInProgressTimeout = TimeSpan.FromMinutes(1);
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _provider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
         _lifecycle.Clear();
     }
@@ -95,19 +101,22 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_reaped_InProgress_run_and_a_reaped_Pending_run_each_publish_Failed_once()
     {
-        var stalePending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow.AddHours(-1));
+        var stalePending = await SeedRunAsync(
+            TrainState.Pending,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+        );
         var staleInProgress = await SeedRunAsync(
             TrainState.InProgress,
-            DateTime.UtcNow.AddHours(-1)
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
         );
 
         // The real leader path: the reapers write inside the leader transaction, and their events
         // go out once it commits.
         var polling = new ManifestManagerPollingService(
-            _provider,
-            _provider.GetRequiredService<SchedulerConfiguration>(),
+            _provider.NotNull(),
+            _provider.NotNull().GetRequiredService<SchedulerConfiguration>(),
             NullLogger<ManifestManagerPollingService>.Instance,
-            _provider.GetRequiredService<ISqlDialect>()
+            _provider.NotNull().GetRequiredService<ISqlDialect>()
         );
 
         await polling.RunManifestManager(CancellationToken.None);
@@ -139,16 +148,21 @@ public class OutOfTrainLifecycleEventTests
     {
         var stale = new List<long>();
         for (var i = 0; i < 4; i++)
-            stale.Add(await SeedRunAsync(TrainState.InProgress, DateTime.UtcNow.AddHours(-1)));
+            stale.Add(
+                await SeedRunAsync(
+                    TrainState.InProgress,
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1)
+                )
+            );
 
         // Each OnFailed waits for a second one to be in flight with it, or gives up after a while.
         _lifecycle.MeetOnFailed(TimeSpan.FromSeconds(5));
 
         var polling = new ManifestManagerPollingService(
-            _provider,
-            _provider.GetRequiredService<SchedulerConfiguration>(),
+            _provider.NotNull(),
+            _provider.NotNull().GetRequiredService<SchedulerConfiguration>(),
             NullLogger<ManifestManagerPollingService>.Instance,
-            _provider.GetRequiredService<ISqlDialect>()
+            _provider.NotNull().GetRequiredService<ISqlDialect>()
         );
         await polling.RunManifestManager(CancellationToken.None);
 
@@ -159,7 +173,7 @@ public class OutOfTrainLifecycleEventTests
                 "a reaper's runs are published several at a time, so one slow hook does not hold up the rest"
             );
         _lifecycle
-            .Events.Where(e => e.Event == "Failed")
+            .Events.Where(e => string.Equals(e.Event, "Failed", StringComparison.Ordinal))
             .Select(e => e.Id)
             .Should()
             .BeEquivalentTo(stale, "the one statement that failed them all published each once");
@@ -168,9 +182,13 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task An_operator_cancel_of_a_pending_run_publishes_Cancelled_once()
     {
-        var pending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow);
+        var pending = await SeedRunAsync(
+            TrainState.Pending,
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
 
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var result = await scope
                 .ServiceProvider.GetRequiredService<IOperationsService>()
@@ -186,8 +204,9 @@ public class OutOfTrainLifecycleEventTests
         // delivery of the same job finds it Cancelled already.
         for (var delivery = 0; delivery < 2; delivery++)
         {
-            using var scope = _provider.CreateScope();
-            await scope
+            var deliveryScope = _provider.NotNull().CreateAsyncScope();
+            await using var scopeDisposal = deliveryScope.ConfigureAwait(false);
+            await deliveryScope
                 .ServiceProvider.GetRequiredService<IJobRunnerTrain>()
                 .Run(new RunJobRequest(pending, new SchedulerTestInput { Value = "x" }));
         }
@@ -203,7 +222,10 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_run_failed_by_startup_recovery_publishes_Failed_once()
     {
-        var stuck = await SeedRunAsync(TrainState.InProgress, DateTime.UtcNow.AddMinutes(-5));
+        var stuck = await SeedRunAsync(
+            TrainState.InProgress,
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-5)
+        );
 
         var configuration = new SchedulerConfiguration
         {
@@ -214,7 +236,8 @@ public class OutOfTrainLifecycleEventTests
 
         for (var start = 0; start < 2; start++)
         {
-            using var scope = _provider.CreateScope();
+            var scope = _provider.NotNull().CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
             await new SchedulerStartupService(
                 scope.ServiceProvider,
                 configuration,
@@ -234,7 +257,8 @@ public class OutOfTrainLifecycleEventTests
     [Test]
     public async Task A_run_whose_submit_fails_publishes_Failed_once_without_the_submitters_detail()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var run = () =>
@@ -263,7 +287,8 @@ public class OutOfTrainLifecycleEventTests
 
     private async Task<long> SeedRunAsync(TrainState state, DateTime startTime)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var metadata = Metadata.Create(
@@ -272,28 +297,32 @@ public class OutOfTrainLifecycleEventTests
                 Name = TrainName,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         await context
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(m => m.TrainState, state).SetProperty(m => m.StartTime, startTime)
-            );
+            )
+            .ConfigureAwait(false);
 
         return metadata.Id;
     }
 
     private async Task<List<Metadata>> StoredRunsAsync()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .Metadatas.AsNoTracking()
             .Where(m => m.Name == TrainName)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -336,7 +365,7 @@ public class OutOfTrainLifecycleEventTests
 
         public void Add(string name, Metadata metadata)
         {
-            if (metadata.Name != TrainName)
+            if (!string.Equals(metadata.Name, TrainName, StringComparison.Ordinal))
                 return;
             lock (_events)
                 _events.Add((name, metadata.Id, metadata.TrainState));
@@ -344,7 +373,7 @@ public class OutOfTrainLifecycleEventTests
 
         public void AddFailure(Metadata metadata, Exception exception)
         {
-            if (metadata.Name != TrainName)
+            if (!string.Equals(metadata.Name, TrainName, StringComparison.Ordinal))
                 return;
             var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
             lock (_failures)
@@ -370,7 +399,7 @@ public class OutOfTrainLifecycleEventTests
                 _met.TrySetResult();
             try
             {
-                await _met.Task.WaitAsync(within);
+                await _met.Task.WaitAsync(within, TimeProvider.System).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -401,10 +430,10 @@ public class OutOfTrainLifecycleEventTests
 
         public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
         {
-            if (metadata.Name == TrainName)
-                await recorder.MeetAsync();
+            if (string.Equals(metadata.Name, TrainName, StringComparison.Ordinal))
+                await recorder.MeetAsync().ConfigureAwait(false);
             recorder.AddFailure(metadata, exception);
-            await Record("Failed", metadata);
+            await Record("Failed", metadata).ConfigureAwait(false);
         }
 
         public Task OnCancelled(Metadata metadata, CancellationToken ct) =>

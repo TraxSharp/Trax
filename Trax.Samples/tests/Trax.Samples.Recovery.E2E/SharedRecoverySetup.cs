@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.E2E.Factories;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
@@ -12,7 +13,11 @@ namespace Trax.Samples.Recovery.E2E;
 [SetUpFixture]
 public class SharedRecoverySetup
 {
-    public static RecoveryApiFactory Factory { get; private set; } = null!;
+    public static RecoveryApiFactory Factory
+    {
+        get => field.NotNull(nameof(Factory));
+        private set;
+    }
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()

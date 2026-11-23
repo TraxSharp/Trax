@@ -2,6 +2,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -105,7 +106,12 @@ public class JwtBuilderTests
     {
         var builder = new JwtBuilder();
 
-        var act = () => builder.UseSigningKey("iss", "aud", null!);
+        var act = () =>
+            builder.UseSigningKey(
+                "iss",
+                "aud",
+                Null.Of<Microsoft.IdentityModel.Tokens.SecurityKey>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -115,7 +121,10 @@ public class JwtBuilderTests
     {
         var builder = new JwtBuilder();
 
-        var act = () => builder.CustomizeTokenValidation(null!);
+        var act = () =>
+            builder.CustomizeTokenValidation(
+                Null.Of<Action<Microsoft.IdentityModel.Tokens.TokenValidationParameters>>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -131,7 +140,7 @@ public class JwtBuilderTests
         builder.CustomizeTokenValidation(_ => sequence.Add(3));
 
         var tvp = new Microsoft.IdentityModel.Tokens.TokenValidationParameters();
-        builder.TokenValidationCustomizer!(tvp);
+        builder.TokenValidationCustomizer.NotNull()(tvp);
 
         sequence.Should().Equal(1, 2, 3);
     }
@@ -141,7 +150,10 @@ public class JwtBuilderTests
     {
         var builder = new JwtBuilder();
 
-        var act = () => builder.CustomizeBearerOptions(null!);
+        var act = () =>
+            builder.CustomizeBearerOptions(
+                Null.Of<Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>>()
+            );
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -156,7 +168,7 @@ public class JwtBuilderTests
         builder.CustomizeBearerOptions(_ => sequence.Add(2));
 
         var options = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions();
-        builder.BearerOptionsCustomizer!(options);
+        builder.BearerOptionsCustomizer.NotNull()(options);
 
         sequence.Should().Equal(1, 2);
     }

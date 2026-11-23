@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Validation;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -47,7 +48,6 @@ public partial class TrainTypeModule(
             ReferenceEqualityComparer.Instance
         );
         var queryFields = new List<(TrainRegistration Registration, string TrainName)>();
-        var needsExecutionModeEnum = false;
 
         // Pre-compute the set of GraphQL names that will be claimed by output ObjectType<T>
         // registrations. Used below to avoid a name collision when the synthesized mutation
@@ -57,22 +57,52 @@ public partial class TrainTypeModule(
         // "{trainName}MutationResponse" instead.
         var outputTypeGraphQLNames = OutputTypeGraphQLNames(registrations);
 
+        var needsExecutionModeEnum = CollectTrainTypes(
+            registrations,
+            trainNames,
+            outputTypeGraphQLNames,
+            types,
+            usedInputTypes,
+            usedOutputTypes,
+            queryFields,
+            mutationFields,
+            responseTypeNames
+        );
+
+        // Register ExecutionMode enum if any train supports both modes
+        if (needsExecutionModeEnum)
+            types.Add(BuildExecutionModeEnumType());
+
+        AddDispatchNamespace(types, mutationFields, responseTypeNames);
+        AddDiscoverNamespace(types, queryFields);
+
+        return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
+    }
+
+    /// <summary>
+    /// Registers each exposed train's input and output types and its mutation response type, and
+    /// sorts the trains into query and mutation fields. True when a mutation offers both run and queue.
+    /// </summary>
+    private static bool CollectTrainTypes(
+        IReadOnlyList<TrainRegistration> registrations,
+        Dictionary<TrainRegistration, string> trainNames,
+        HashSet<string> outputTypeGraphQLNames,
+        List<ITypeSystemMember> types,
+        HashSet<Type> usedInputTypes,
+        HashSet<Type> usedOutputTypes,
+        List<(TrainRegistration Registration, string TrainName)> queryFields,
+        List<(TrainRegistration Registration, string TrainName)> mutationFields,
+        Dictionary<TrainRegistration, string> responseTypeNames
+    )
+    {
+        var needsExecutionModeEnum = false;
+
         foreach (var reg in registrations)
         {
             if (!reg.IsQuery && !reg.IsMutation)
                 continue;
 
-            // Unit input is not allowed on GraphQL-exposed trains — each train must have
-            // a dedicated input record for mediator routing and schema generation.
-            if (reg.InputType == typeof(Trax.Core.Functional.Unit))
-            {
-                var attrType = reg.IsQuery ? "[TraxQuery]" : "[TraxMutation]";
-                throw new InvalidOperationException(
-                    $"Train '{reg.ServiceType.FullName}' has Unit input but is annotated with {attrType}. "
-                        + "GraphQL-exposed trains must have a dedicated input record. "
-                        + $"Create a type like: public record {DeriveTrainName(reg.ServiceTypeName)}Input;"
-                );
-            }
+            RefuseUnitInput(reg);
 
             var trainName = trainNames[reg];
 
@@ -81,16 +111,18 @@ public partial class TrainTypeModule(
             if (HasTypedInput(reg) && usedInputTypes.Add(reg.InputType))
             {
                 var inputObjectType = (ITypeSystemMember)
-                    Activator.CreateInstance(
-                        typeof(InputObjectType<>).MakeGenericType(reg.InputType)
-                    )!;
+                    Activator
+                        .CreateInstance(typeof(InputObjectType<>).MakeGenericType(reg.InputType))
+                        .NotNull();
                 types.Add(inputObjectType);
             }
 
             if (HasTypedOutput(reg) && usedOutputTypes.Add(reg.OutputType))
             {
                 var outputObjectType = (ITypeSystemMember)
-                    Activator.CreateInstance(typeof(ObjectType<>).MakeGenericType(reg.OutputType))!;
+                    Activator
+                        .CreateInstance(typeof(ObjectType<>).MakeGenericType(reg.OutputType))
+                        .NotNull();
                 types.Add(outputObjectType);
             }
 
@@ -117,12 +149,32 @@ public partial class TrainTypeModule(
             }
         }
 
-        // Register ExecutionMode enum if any train supports both modes
-        if (needsExecutionModeEnum)
-            types.Add(BuildExecutionModeEnumType());
+        return needsExecutionModeEnum;
+    }
 
-        // Register DispatchMutations type + extend RootMutation with a "dispatch" field,
-        // but only when there are mutation trains — avoids empty object types in the schema.
+    // Unit input is not allowed on GraphQL-exposed trains — each train must have
+    // a dedicated input record for mediator routing and schema generation.
+    private static void RefuseUnitInput(TrainRegistration reg)
+    {
+        if (reg.InputType == typeof(Trax.Core.Functional.Unit))
+        {
+            var attrType = reg.IsQuery ? "[TraxQuery]" : "[TraxMutation]";
+            throw new InvalidOperationException(
+                $"Train '{reg.ServiceType.FullName}' has Unit input but is annotated with {attrType}. "
+                    + "GraphQL-exposed trains must have a dedicated input record. "
+                    + $"Create a type like: public record {DeriveTrainName(reg.ServiceTypeName)}Input;"
+            );
+        }
+    }
+
+    // Register DispatchMutations type + extend RootMutation with a "dispatch" field,
+    // but only when there are mutation trains — avoids empty object types in the schema.
+    private void AddDispatchNamespace(
+        List<ITypeSystemMember> types,
+        List<(TrainRegistration Registration, string TrainName)> mutationFields,
+        Dictionary<TrainRegistration, string> responseTypeNames
+    )
+    {
         if (mutationFields.Count > 0)
         {
             types.Add(new ObjectType<DispatchMutations>());
@@ -144,7 +196,13 @@ public partial class TrainTypeModule(
                 (d, reg, name) => AddMutationField(d, reg, name, responseTypeNames[reg])
             );
         }
+    }
 
+    private void AddDiscoverNamespace(
+        List<ITypeSystemMember> types,
+        List<(TrainRegistration Registration, string TrainName)> queryFields
+    )
+    {
         // Register DiscoverQueries type + extend RootQuery with a "discover" field.
         // When query model registrations exist, the base type and discover field are
         // already registered in GraphQLServiceExtensions — only add the field extension.
@@ -169,8 +227,6 @@ public partial class TrainTypeModule(
 
             AddGroupedFields(types, queryFields, "DiscoverQueries", AddQueryField);
         }
-
-        return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
     }
 
     /// <summary>
@@ -286,8 +342,9 @@ public partial class TrainTypeModule(
         Action<IObjectTypeDescriptor, TrainRegistration, string> addField
     )
     {
-        var byNamespace = fields.GroupBy(f =>
-            f.Registration.GraphQLNamespace is { } ns ? CamelCase(ns) : null
+        var byNamespace = fields.GroupBy(
+            f => f.Registration.GraphQLNamespace is { } ns ? CamelCase(ns) : null,
+            StringComparer.Ordinal
         );
 
         foreach (var group in byNamespace)
@@ -331,7 +388,7 @@ public partial class TrainTypeModule(
     }
 
     private bool NamespaceOwnedByQueryModels(string parentTypeName, string namespaceField) =>
-        parentTypeName == "DiscoverQueries"
+        string.Equals(parentTypeName, "DiscoverQueries", StringComparison.Ordinal)
         && graphQLConfiguration is not null
         && graphQLConfiguration.ModelRegistrations.Any(m =>
             m.Attribute.Namespace is { } ns

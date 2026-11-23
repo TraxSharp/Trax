@@ -5,7 +5,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction> logger)
+internal sealed class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction> logger)
     : EffectJunction<PlaceOrderInput, PricedCart>
 {
     public override async Task<PricedCart> Run(PlaceOrderInput input)
@@ -13,10 +13,9 @@ internal class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction>
         if (input.Lines.Count == 0)
             throw new TrainException("The cart is empty.");
 
-        var prices = await catalogue.PricesOf(
-            [.. input.Lines.Select(l => l.Sku)],
-            CancellationToken
-        );
+        var prices = await catalogue
+            .PricesOf([.. input.Lines.Select(l => l.Sku)], CancellationToken)
+            .ConfigureAwait(false);
 
         var lines = input
             .Lines.Select(line =>

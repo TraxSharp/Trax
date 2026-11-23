@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Trax.Api.GraphQL.Client;
 
 /// <summary>
@@ -26,7 +28,7 @@ internal sealed class RetryingAsyncLazy<T>
 
     private readonly Func<Task<T>> _factory;
     private readonly TimeProvider _time;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Task<T>? _load;
     private int _failures;
     private DateTimeOffset _retryAt;
@@ -64,7 +66,10 @@ internal sealed class RetryingAsyncLazy<T>
             MaxBackoff.TotalMilliseconds,
             BaseBackoff.TotalMilliseconds * Math.Pow(2, exponent)
         );
-        return TimeSpan.FromMilliseconds(ceiling / 2 + Random.Shared.NextDouble() * ceiling / 2);
+        return TimeSpan.FromMilliseconds(
+            ceiling / 2
+                + RandomNumberGenerator.GetInt32(int.MaxValue) / (double)int.MaxValue * ceiling / 2
+        );
     }
 
     private bool Retryable() => _time.GetUtcNow() >= _retryAt;

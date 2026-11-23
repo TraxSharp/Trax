@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -32,8 +33,8 @@ public class MachineRulesE2ETests
     /// <summary>The generic opt-in's policy here: any signed-in caller, so only the event rules decide.</summary>
     private const string ToolingPolicy = "StateMachineTooling";
 
-    private IHost _host = null!;
-    private CountingCharge _charge = null!;
+    private IHost? _host;
+    private CountingCharge? _charge;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -42,7 +43,7 @@ public class MachineRulesE2ETests
         _charge = new CountingCharge();
         _host = await E2EHost.StartAsync(
             Database,
-            _charge,
+            _charge.NotNull(),
             new E2EHostOptions
             {
                 Served = [typeof(WizardMachine)],
@@ -58,7 +59,7 @@ public class MachineRulesE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -66,13 +67,15 @@ public class MachineRulesE2ETests
     public async Task Discard_of_an_instance_the_server_moved_is_discard_not_allowed_and_keeps_it()
     {
         // Pay runs the effect, so Approving is a state only the server puts the instance in.
-        var approving = await _host.WizardInApprovingAsync(E2EHost.CarolKey);
+        var approving = await _host.NotNull().WizardInApprovingAsync(E2EHost.CarolKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id);
 
-        using var doc = await _host.PostAsync(
-            WizardOps.Discard(approving.Id, WizardOps.NewRequestId()),
-            apiKey: E2EHost.CarolKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                WizardOps.Discard(approving.Id, WizardOps.NewRequestId()),
+                apiKey: E2EHost.CarolKey
+            );
         var refused = WizardOps.Result(doc, "discard");
 
         refused
@@ -91,7 +94,7 @@ public class MachineRulesE2ETests
     {
         // Pay (Payer) runs the effect into Approving; its timer moves the instance on to Expired, carrying the record
         // that the server put it there. The owner's Edit then moves it to Naming, which is the owner's own doing.
-        var approving = await _host.WizardInApprovingAsync(E2EHost.CarolKey);
+        var approving = await _host.NotNull().WizardInApprovingAsync(E2EHost.CarolKey);
         await E2ESql.ExecuteAsync(
             Database,
             "UPDATE trax.snapshot_draft SET due_at = now() - interval '1 minute' WHERE machine = @machine AND id = @id",
@@ -99,17 +102,21 @@ public class MachineRulesE2ETests
             ("id", approving.Id)
         );
         await _host
+            .NotNull()
             .Services.GetRequiredService<InvokeOutcomeReconciler>()
             .FireDueTimersOnce(CancellationToken.None);
-        (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))!
+        (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))
+            .NotNull()
             .State.Should()
             .Be(nameof(WizardState.Expired));
 
         using (
-            var doc = await _host.PostAsync(
-                WizardOps.Discard(approving.Id, WizardOps.NewRequestId()),
-                apiKey: E2EHost.CarolKey
-            )
+            var doc = await _host
+                .NotNull()
+                .PostAsync(
+                    WizardOps.Discard(approving.Id, WizardOps.NewRequestId()),
+                    apiKey: E2EHost.CarolKey
+                )
         )
             WizardOps
                 .Result(doc, "discard")
@@ -119,14 +126,16 @@ public class MachineRulesE2ETests
                     "a timer moved on what the server decided, which stays its record, per " + Adr
                 );
 
-        (await _host.AdvanceWizardAsync(E2EHost.CarolKey, "edit", approving.Id))
+        (await _host.NotNull().AdvanceWizardAsync(E2EHost.CarolKey, "edit", approving.Id))
             .ProblemCode.Should()
             .BeNull();
         using (
-            var doc = await _host.PostAsync(
-                WizardOps.Discard(approving.Id, WizardOps.NewRequestId()),
-                apiKey: E2EHost.CarolKey
-            )
+            var doc = await _host
+                .NotNull()
+                .PostAsync(
+                    WizardOps.Discard(approving.Id, WizardOps.NewRequestId()),
+                    apiKey: E2EHost.CarolKey
+                )
         )
             WizardOps
                 .Result(doc, "discard")
@@ -144,10 +153,12 @@ public class MachineRulesE2ETests
     public async Task A_caller_without_the_events_role_is_forbidden_and_nothing_is_written()
     {
         // Carol may pay but not approve.
-        var approving = await _host.WizardInApprovingAsync(E2EHost.CarolKey);
+        var approving = await _host.NotNull().WizardInApprovingAsync(E2EHost.CarolKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id);
 
-        var refused = await _host.SendWizardEventAsync(E2EHost.CarolKey, "approve", approving.Id);
+        var refused = await _host
+            .NotNull()
+            .SendWizardEventAsync(E2EHost.CarolKey, "approve", approving.Id);
 
         refused
             .ProblemCode.Should()
@@ -167,16 +178,17 @@ public class MachineRulesE2ETests
     public async Task The_effect_bound_event_checks_its_rule_before_claiming_the_effect()
     {
         // Bob holds no role: he may describe his wizard but not pay for it.
-        var paying = await _host.WizardInPayingAsync(E2EHost.BobKey);
-        var callsBefore = _charge.Calls;
+        var paying = await _host.NotNull().WizardInPayingAsync(E2EHost.BobKey);
+        var callsBefore = _charge.NotNull().Calls;
         var claimsBefore = await E2ESql.CountEffectClaimsAsync(Database, "wizard:pay");
 
-        var refused = await _host.SendWizardEventAsync(E2EHost.BobKey, "pay", paying.Id);
+        var refused = await _host.NotNull().SendWizardEventAsync(E2EHost.BobKey, "pay", paying.Id);
 
         refused
             .ProblemCode.Should()
             .Be(RefusalCode.Forbidden.ToWire(), "pay requires the Payer role, per " + Adr);
         _charge
+            .NotNull()
             .Calls.Should()
             .Be(callsBefore, "the rule is checked before the effect is claimed, so it never runs");
         (await E2ESql.CountEffectClaimsAsync(Database, "wizard:pay"))
@@ -187,28 +199,30 @@ public class MachineRulesE2ETests
     [Test]
     public async Task The_generic_opt_in_advance_checks_the_same_event_rule()
     {
-        var approving = await _host.WizardInApprovingAsync(E2EHost.CarolKey);
+        var approving = await _host.NotNull().WizardInApprovingAsync(E2EHost.CarolKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id);
 
-        using var doc = await _host.PostAsync(
-            """
-            mutation Advance($input: AdvanceSnapshotInput!) {
-              dispatch { stateMachine { advanceSnapshot(input: $input) {
-                output { snapshot problem { code message } }
-              } } }
-            }
-            """,
-            new
-            {
-                input = new
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                """
+                mutation Advance($input: AdvanceSnapshotInput!) {
+                  dispatch { stateMachine { advanceSnapshot(input: $input) {
+                    output { snapshot problem { code message } }
+                  } } }
+                }
+                """,
+                new
                 {
-                    machine = WizardMachine.MachineId,
-                    id = approving.Id.ToString(),
-                    trigger = "Approve",
+                    input = new
+                    {
+                        machine = WizardMachine.MachineId,
+                        id = approving.Id.ToString(),
+                        trigger = "Approve",
+                    },
                 },
-            },
-            E2EHost.CarolKey
-        );
+                E2EHost.CarolKey
+            );
 
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -234,8 +248,8 @@ public class MachineRulesE2ETests
     [Test]
     public async Task Get_of_another_users_id_is_answered_like_an_unknown_id()
     {
-        var alices = await _host.StartWizardAsync(E2EHost.AliceKey);
-        var own = await _host.GetWizardAsync(E2EHost.AliceKey, alices.Id);
+        var alices = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
+        var own = await _host.NotNull().GetWizardAsync(E2EHost.AliceKey, alices.Id);
         own.ValueKind.Should().Be(JsonValueKind.Object, "the owner reads her own instance");
 
         var others = await ReadAs(E2EHost.BobKey, alices.Id);
@@ -259,7 +273,7 @@ public class MachineRulesE2ETests
     [Test]
     public async Task An_operators_role_does_not_unlock_another_users_draft_through_machines()
     {
-        var alices = await _host.WizardInPayingAsync(E2EHost.AliceKey);
+        var alices = await _host.NotNull().WizardInPayingAsync(E2EHost.AliceKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, alices.Id);
 
         var unknown = await ReadAs(E2EHost.OperatorKey, Guid.NewGuid());
@@ -271,10 +285,12 @@ public class MachineRulesE2ETests
                 "Operator and Admin reach the operations surface, never a user's draft, per " + Adr
             );
 
-        using var sent = await _host.PostAsync(
-            WizardOps.Event("back", alices.Id, WizardOps.NewRequestId()),
-            apiKey: E2EHost.OperatorKey
-        );
+        using var sent = await _host
+            .NotNull()
+            .PostAsync(
+                WizardOps.Event("back", alices.Id, WizardOps.NewRequestId()),
+                apiKey: E2EHost.OperatorKey
+            );
         WizardOps
             .Result(sent, "back")
             .Raw.GetProperty("problem")
@@ -296,7 +312,10 @@ public class MachineRulesE2ETests
     // The whole response, with the id asked for replaced, so two answers compare by shape and content alone.
     private async Task<string> ReadAs(string apiKey, Guid id)
     {
-        using var doc = await _host.PostAsync(WizardOps.Get(id), apiKey: apiKey);
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(WizardOps.Get(id), apiKey: apiKey)
+            .ConfigureAwait(false);
         return doc
             .RootElement.GetRawText()
             .Replace(id.ToString(), "<id>", StringComparison.Ordinal);

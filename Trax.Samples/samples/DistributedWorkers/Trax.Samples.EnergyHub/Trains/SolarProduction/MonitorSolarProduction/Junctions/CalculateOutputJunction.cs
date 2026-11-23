@@ -13,7 +13,7 @@ public class CalculateOutputJunction(ILogger<CalculateOutputJunction> logger)
             input.ArrayId
         );
 
-        await Task.Delay(150);
+        await Task.Delay(150, CancellationToken).ConfigureAwait(false);
 
         var totalKwh = 142.7;
         var efficiency = 0.89;

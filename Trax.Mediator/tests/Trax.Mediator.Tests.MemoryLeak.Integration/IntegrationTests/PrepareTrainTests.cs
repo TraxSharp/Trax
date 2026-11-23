@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -25,7 +26,7 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class PrepareTrainTests
 {
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -46,7 +47,7 @@ public class PrepareTrainTests
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
@@ -56,10 +57,11 @@ public class PrepareTrainTests
     [Test]
     public async Task It_returns_the_registration_and_the_input_read_as_a_queue_reads_it()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         var prepared = await Execution(scope)
-            .PrepareAsync(typeof(IPrepareTrain).FullName!, """{"Label":"x","Count":3}""");
+            .PrepareAsync(typeof(IPrepareTrain).FullName.NotNull(), """{"Label":"x","Count":3}""");
 
         prepared.Registration.ServiceType.Should().Be(typeof(IPrepareTrain));
         prepared
@@ -72,9 +74,11 @@ public class PrepareTrainTests
     [TestCase("  ")]
     public async Task A_blank_input_is_read_as_an_empty_object(string? json)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
-        var prepared = await Execution(scope).PrepareAsync(typeof(IPrepareTrain).FullName!, json);
+        var prepared = await Execution(scope)
+            .PrepareAsync(typeof(IPrepareTrain).FullName.NotNull(), json);
 
         prepared.Input.Should().Be(new PrepareInput());
     }
@@ -82,9 +86,10 @@ public class PrepareTrainTests
     [Test]
     public async Task A_json_null_a_duplicate_and_an_oversized_input_are_refused()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = Execution(scope);
-        var name = typeof(IPrepareTrain).FullName!;
+        var name = typeof(IPrepareTrain).FullName.NotNull();
 
         await ((Func<Task>)(() => execution.PrepareAsync(name, "null")))
             .Should()
@@ -106,7 +111,8 @@ public class PrepareTrainTests
     [Test]
     public async Task An_unknown_train_is_refused_as_QueueAsync_refuses_it()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         await ((Func<Task>)(() => Execution(scope).PrepareAsync("No.Such.Train", "{}")))
             .Should()
@@ -116,14 +122,16 @@ public class PrepareTrainTests
     [Test]
     public async Task Authorization_runs_before_the_input_is_read()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
 
         // Invalid JSON for a gated train on a host with no enforcer: the refusal is the
         // authorization one, so a caller who may not use the train learns nothing about its input.
         await (
             (Func<Task>)(
                 () =>
-                    Execution(scope).PrepareAsync(typeof(IGatedPrepareTrain).FullName!, "{not json")
+                    Execution(scope)
+                        .PrepareAsync(typeof(IGatedPrepareTrain).FullName.NotNull(), "{not json")
             )
         )
             .Should()
@@ -134,13 +142,14 @@ public class PrepareTrainTests
     [Test]
     public async Task A_trusted_scope_passes_authorization_as_it_does_for_a_queue()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var trusted = scope.ServiceProvider.GetRequiredService<ITrustedExecutionScope>();
 
         using (trusted.BeginTrusted("test.prepare"))
         {
             var prepared = await Execution(scope)
-                .PrepareAsync(typeof(IGatedPrepareTrain).FullName!, """{"label":"ok"}""");
+                .PrepareAsync(typeof(IGatedPrepareTrain).FullName.NotNull(), """{"label":"ok"}""");
 
             prepared.Input.Should().Be(new GatedPrepareInput { Label = "ok" });
         }

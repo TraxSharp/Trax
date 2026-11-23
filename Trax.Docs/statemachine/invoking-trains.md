@@ -5,8 +5,18 @@ type: how-to
 area: machines
 nav_order: 3
 source:
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedTrainLauncher.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/IInvokeBuilder.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcomeKind.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeEdge.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SpawnDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/InvokeDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/OutcomeTriggers.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IInvokedTrainLauncher.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedTrainDeclaration.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/EnteringEvent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedTrainLaunch.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeRefusals.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokesStartupValidator.cs
 ---
 

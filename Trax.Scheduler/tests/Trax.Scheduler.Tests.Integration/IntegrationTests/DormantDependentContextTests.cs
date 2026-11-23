@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Testing;
@@ -25,12 +26,12 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class DormantDependentContextTests : TestSetup
 {
-    private DormantDependentContext _context = null!;
-    private SchedulerConfiguration _schedulerConfig = null!;
+    private DormantDependentContext? _context;
+    private SchedulerConfiguration? _schedulerConfig;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _context = Scope.ServiceProvider.GetRequiredService<DormantDependentContext>();
         _schedulerConfig = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
     }
@@ -42,15 +43,17 @@ public class DormantDependentContextTests : TestSetup
     {
         // Arrange
         var (parent, dormant) = await CreateParentAndDormantDependent();
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         var runtimeInput = new SchedulerTestInput { Value = "RuntimeValue" };
 
         // Act
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            dormant.ExternalId,
-            runtimeInput
-        );
+        await _context
+            .NotNull()
+            .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                dormant.ExternalId,
+                runtimeInput
+            );
 
         // Assert
         DataContext.Reset();
@@ -72,15 +75,17 @@ public class DormantDependentContextTests : TestSetup
         // Arrange
         var groupPriority = 5;
         var (parent, dormant) = await CreateParentAndDormantDependent(groupPriority: groupPriority);
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
-        var expectedPriority = groupPriority + _schedulerConfig.DependentPriorityBoost;
+        var expectedPriority = groupPriority + _schedulerConfig.NotNull().DependentPriorityBoost;
 
         // Act
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            dormant.ExternalId,
-            new SchedulerTestInput { Value = "PriorityTest" }
-        );
+        await _context
+            .NotNull()
+            .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                dormant.ExternalId,
+                new SchedulerTestInput { Value = "PriorityTest" }
+            );
 
         // Assert
         DataContext.Reset();
@@ -101,7 +106,7 @@ public class DormantDependentContextTests : TestSetup
         var dormant1 = await CreateAndSaveDormantDependent(group, parent, "dormant-1");
         var dormant2 = await CreateAndSaveDormantDependent(group, parent, "dormant-2");
         var dormant3 = await CreateAndSaveDormantDependent(group, parent, "dormant-3");
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         var activations = new[]
         {
@@ -111,9 +116,9 @@ public class DormantDependentContextTests : TestSetup
         };
 
         // Act
-        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            activations
-        );
+        await _context
+            .NotNull()
+            .ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(activations);
 
         // Assert
         DataContext.Reset();
@@ -126,9 +131,9 @@ public class DormantDependentContextTests : TestSetup
             .ToListAsync();
 
         entries.Should().HaveCount(3);
-        entries.Select(e => e.Input).Should().Contain(i => i!.Contains("Input1"));
-        entries.Select(e => e.Input).Should().Contain(i => i!.Contains("Input2"));
-        entries.Select(e => e.Input).Should().Contain(i => i!.Contains("Input3"));
+        entries.Select(e => e.Input).Should().Contain(i => i.NotNull().Contains("Input1"));
+        entries.Select(e => e.Input).Should().Contain(i => i.NotNull().Contains("Input2"));
+        entries.Select(e => e.Input).Should().Contain(i => i.NotNull().Contains("Input3"));
     }
 
     [Test]
@@ -136,14 +141,14 @@ public class DormantDependentContextTests : TestSetup
     {
         // Arrange
         var (parent, _) = await CreateParentAndDormantDependent();
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         var activations = Enumerable.Empty<(string ExternalId, SchedulerTestInput Input)>();
 
         // Act
-        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            activations
-        );
+        await _context
+            .NotNull()
+            .ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(activations);
 
         // Assert
         DataContext.Reset();
@@ -159,10 +164,12 @@ public class DormantDependentContextTests : TestSetup
     public async Task ActivateAsync_WhenNotInitialized_SkipsWithoutError()
     {
         // Act — context not initialized, should no-op (not throw)
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            "any-id",
-            new SchedulerTestInput { Value = "test" }
-        );
+        await _context
+            .NotNull()
+            .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                "any-id",
+                new SchedulerTestInput { Value = "test" }
+            );
 
         // Assert — no work queue entries created
         DataContext.Reset();
@@ -181,9 +188,9 @@ public class DormantDependentContextTests : TestSetup
         };
 
         // Act — context not initialized, should no-op (not throw)
-        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            activations
-        );
+        await _context
+            .NotNull()
+            .ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(activations);
 
         // Assert — no work queue entries created
         DataContext.Reset();
@@ -196,14 +203,16 @@ public class DormantDependentContextTests : TestSetup
     {
         // Arrange
         var (parent, _) = await CreateParentAndDormantDependent();
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-                "nonexistent-id",
-                new SchedulerTestInput { Value = "test" }
-            );
+            _context
+                .NotNull()
+                .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                    "nonexistent-id",
+                    new SchedulerTestInput { Value = "test" }
+                );
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -236,14 +245,16 @@ public class DormantDependentContextTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-                dependent.ExternalId,
-                new SchedulerTestInput { Value = "test" }
-            );
+            _context
+                .NotNull()
+                .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                    dependent.ExternalId,
+                    new SchedulerTestInput { Value = "test" }
+                );
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -270,14 +281,16 @@ public class DormantDependentContextTests : TestSetup
         );
         var dormant = await CreateAndSaveDormantDependent(group, parentA, "wrong-parent-test");
 
-        _context.Initialize(parentB.Id); // Wrong parent!
+        _context.NotNull().Initialize(parentB.Id); // Wrong parent!
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-                dormant.ExternalId,
-                new SchedulerTestInput { Value = "test" }
-            );
+            _context
+                .NotNull()
+                .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                    dormant.ExternalId,
+                    new SchedulerTestInput { Value = "test" }
+                );
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -293,7 +306,7 @@ public class DormantDependentContextTests : TestSetup
     {
         // Arrange
         var (parent, dormant) = await CreateParentAndDormantDependent();
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         // Create an existing queued entry
         var existingEntry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
@@ -303,17 +316,20 @@ public class DormantDependentContextTests : TestSetup
                 Input = dormant.Properties,
                 InputTypeName = dormant.PropertyTypeName,
                 ManifestId = dormant.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(existingEntry);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
         // Act — should not throw, just skip
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            dormant.ExternalId,
-            new SchedulerTestInput { Value = "ShouldBeSkipped" }
-        );
+        await _context
+            .NotNull()
+            .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                dormant.ExternalId,
+                new SchedulerTestInput { Value = "ShouldBeSkipped" }
+            );
 
         // Assert — still only the original entry, no new one
         DataContext.Reset();
@@ -333,7 +349,7 @@ public class DormantDependentContextTests : TestSetup
     {
         // Arrange
         var (parent, dormant) = await CreateParentAndDormantDependent();
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         // Create an in-progress metadata record
         var metadata = Metadata.Create(
@@ -343,7 +359,8 @@ public class DormantDependentContextTests : TestSetup
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = dormant.Id,
-            }
+            },
+            TimeProvider.System
         );
         metadata.TrainState = TrainState.InProgress;
         await DataContext.Track(metadata);
@@ -351,10 +368,12 @@ public class DormantDependentContextTests : TestSetup
         DataContext.Reset();
 
         // Act — should not throw, just skip
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            dormant.ExternalId,
-            new SchedulerTestInput { Value = "ShouldBeSkipped" }
-        );
+        await _context
+            .NotNull()
+            .ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                dormant.ExternalId,
+                new SchedulerTestInput { Value = "ShouldBeSkipped" }
+            );
 
         // Assert — no work queue entry created
         DataContext.Reset();
@@ -385,15 +404,15 @@ public class DormantDependentContextTests : TestSetup
         var (parent, dormant) = await CreateParentAndDormantDependent();
 
         // Initialize in the PARENT scope (like RunScheduledTrainJunction does)
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         // Act — resolve from a CHILD scope (like TrainBus.RunAsync does)
-        using var childScope = Scope.ServiceProvider.CreateScope();
+        await using var childScope = Scope.ServiceProvider.CreateAsyncScope();
         var childContext =
             childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
 
         // The child instance should NOT be the same object as the parent instance
-        childContext.Should().NotBeSameAs(_context);
+        childContext.Should().NotBeSameAs(_context.NotNull());
 
         await childContext.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             dormant.ExternalId,
@@ -425,10 +444,10 @@ public class DormantDependentContextTests : TestSetup
         var dormant2 = await CreateAndSaveDormantDependent(group, parent, "cross-scope-2");
 
         // Initialize in parent scope
-        _context.Initialize(parent.Id);
+        _context.NotNull().Initialize(parent.Id);
 
         // Act — activate from child scope
-        using var childScope = Scope.ServiceProvider.CreateScope();
+        await using var childScope = Scope.ServiceProvider.CreateAsyncScope();
         var childContext =
             childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
 
@@ -458,11 +477,11 @@ public class DormantDependentContextTests : TestSetup
 
         // Arrange
         var (parent, dormant) = await CreateParentAndDormantDependent();
-        _context.Initialize(parent.Id);
-        _context.Reset();
+        _context.NotNull().Initialize(parent.Id);
+        _context.NotNull().Reset();
 
         // Act — after Reset, activation should be a no-op (not initialized)
-        using var childScope = Scope.ServiceProvider.CreateScope();
+        await using var childScope = Scope.ServiceProvider.CreateAsyncScope();
         var childContext =
             childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
 
@@ -509,7 +528,7 @@ public class DormantDependentContextTests : TestSetup
             "wrong-parent-dormant"
         );
 
-        _context.Initialize(parentA.Id);
+        _context.NotNull().Initialize(parentA.Id);
 
         var activations = new[]
         {
@@ -519,7 +538,9 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert — the second activation should fail validation
         var act = () =>
-            _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(activations);
+            _context
+                .NotNull()
+                .ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(activations);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 
@@ -538,16 +559,19 @@ public class DormantDependentContextTests : TestSetup
     )
     {
         var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}",
-            priority: groupPriority
-        );
-        var parent = await CreateAndSaveManifest(group, ScheduleType.Interval, intervalSeconds: 60);
+                DataContext,
+                name: $"group-{Guid.NewGuid():N}",
+                priority: groupPriority
+            )
+            .ConfigureAwait(false);
+        var parent = await CreateAndSaveManifest(group, ScheduleType.Interval, intervalSeconds: 60)
+            .ConfigureAwait(false);
         var dormant = await CreateAndSaveDormantDependent(
-            group,
-            parent,
-            $"dormant-{Guid.NewGuid():N}"
-        );
+                group,
+                parent,
+                $"dormant-{Guid.NewGuid():N}"
+            )
+            .ConfigureAwait(false);
         return (parent, dormant);
     }
 
@@ -571,8 +595,8 @@ public class DormantDependentContextTests : TestSetup
 
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -599,8 +623,8 @@ public class DormantDependentContextTests : TestSetup
         manifest.ManifestGroupId = group.Id;
         manifest.ExternalId = externalId;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;

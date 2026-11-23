@@ -26,7 +26,11 @@ internal sealed class SkewedDatabaseClock : DbCommandInterceptor
         var configure = typeof(EntityFrameworkServiceCollectionExtensions)
             .GetMethods()
             .Single(m =>
-                m.Name == nameof(EntityFrameworkServiceCollectionExtensions.ConfigureDbContext)
+                string.Equals(
+                    m.Name,
+                    nameof(EntityFrameworkServiceCollectionExtensions.ConfigureDbContext),
+                    StringComparison.Ordinal
+                )
                 && m.GetParameters() is [_, { ParameterType: var action }, _]
                 && action == typeof(Action<IServiceProvider, DbContextOptionsBuilder>)
             )
@@ -45,9 +49,13 @@ internal sealed class SkewedDatabaseClock : DbCommandInterceptor
 
     private static void Skew(DbCommand command) =>
         command.CommandText = command
-            .CommandText.Replace("clock_timestamp()", "(clock_timestamp() + interval '1 hour')")
-            .Replace("now()", "(now() + interval '1 hour')")
-            .Replace("'now')", "'now', '+1 hours')");
+            .CommandText.Replace(
+                "clock_timestamp()",
+                "(clock_timestamp() + interval '1 hour')",
+                StringComparison.Ordinal
+            )
+            .Replace("now()", "(now() + interval '1 hour')", StringComparison.Ordinal)
+            .Replace("'now')", "'now', '+1 hours')", StringComparison.Ordinal);
 
     public override InterceptionResult<DbDataReader> ReaderExecuting(
         DbCommand command,

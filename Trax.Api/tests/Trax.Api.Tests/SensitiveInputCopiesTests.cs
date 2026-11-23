@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
@@ -35,14 +36,14 @@ public class SensitiveInputCopiesTests
 {
     private const string Marker = """{"_redacted":true}""";
 
-    private IDataContextProviderFactory _factory = null!;
-    private ITrainDiscoveryService _discovery = null!;
+    private IDataContextProviderFactory? _factory;
+    private ITrainDiscoveryService? _discovery;
 
     // The detail resolver reads through the operations service, as a host registers it.
     private IOperationsService Operations =>
         new OperationsService(
-            _discovery,
-            _factory,
+            _discovery.NotNull(),
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             Substitute.For<ITrainExecutionService>()
         );
@@ -53,6 +54,7 @@ public class SensitiveInputCopiesTests
         _factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
         _discovery = Substitute.For<ITrainDiscoveryService>();
         _discovery
+            .NotNull()
             .DiscoverTrains()
             .Returns([
                 Registration(typeof(PaymentInput)),
@@ -83,11 +85,12 @@ public class SensitiveInputCopiesTests
             GraphQLOperations = GraphQLOperation.Run,
         };
 
-    private static JsonElement Parse(string? json) => JsonDocument.Parse(json!).RootElement;
+    private static JsonElement Parse(string? json) =>
+        JsonDocument.Parse(json.NotNull()).RootElement;
 
     private static bool IsMarker(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
-        && element.EnumerateObject().Count() == 1
+        && element.EnumerateObject().Take(2).Count() == 1
         && element.TryGetProperty("_redacted", out var flag)
         && flag.ValueKind == JsonValueKind.True;
 
@@ -95,15 +98,16 @@ public class SensitiveInputCopiesTests
     public async Task Requeueing_a_run_whose_recorded_input_was_masked_is_refused()
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var meta = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(IPaymentTrain).FullName!,
+                    Name = typeof(IPaymentTrain).FullName.NotNull(),
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
             meta.Input = $$"""{"accountId":"acct-1","cardNumber":{{Marker}}}""";
             await db.Track(meta);
@@ -112,8 +116,8 @@ public class SensitiveInputCopiesTests
         }
         var execution = Substitute.For<ITrainExecutionService>();
         var operations = new OperationsService(
-            _discovery,
-            _factory,
+            _discovery.NotNull(),
+            _factory.NotNull(),
             new SchedulerConfiguration(),
             execution
         );
@@ -129,15 +133,16 @@ public class SensitiveInputCopiesTests
     public async Task A_work_queue_entrys_input_reads_with_its_sensitive_member_masked()
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    TrainName = typeof(IPaymentTrain).FullName!,
+                    TrainName = typeof(IPaymentTrain).FullName.NotNull(),
                     Input = """{"accountId":"acct-1","cardNumber":"4111111111111111"}""",
                     InputTypeName = typeof(PaymentInput).FullName,
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(entry);
             await db.SaveChanges(default);
@@ -146,7 +151,7 @@ public class SensitiveInputCopiesTests
 
         var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
 
-        var input = Parse(detail!.Input);
+        var input = Parse(detail.NotNull().Input);
         input.GetProperty("accountId").GetString().Should().Be("acct-1");
         IsMarker(input.GetProperty("cardNumber")).Should().BeTrue(detail.Input);
         detail.Input.Should().NotContain("4111");
@@ -156,13 +161,13 @@ public class SensitiveInputCopiesTests
     public async Task A_manifests_properties_read_with_their_sensitive_member_masked()
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var group = new ManifestGroup
             {
                 Name = "payments",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             };
             await db.Track(group);
             await db.SaveChanges(default);
@@ -177,12 +182,12 @@ public class SensitiveInputCopiesTests
 
         var detail = await new OperationsQueries().GetManifestDetail(
             id,
-            _factory,
-            _discovery,
+            _factory.NotNull(),
+            _discovery.NotNull(),
             default
         );
 
-        var properties = Parse(detail!.Properties);
+        var properties = Parse(detail.NotNull().Properties);
         properties.GetProperty("accountId").GetString().Should().Be("acct-2");
         IsMarker(properties.GetProperty("cardNumber")).Should().BeTrue(detail.Properties);
         detail.Properties.Should().NotContain("5500");
@@ -192,7 +197,7 @@ public class SensitiveInputCopiesTests
     public async Task An_input_this_host_cannot_read_as_its_type_is_masked_whole()
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
@@ -200,7 +205,8 @@ public class SensitiveInputCopiesTests
                     TrainName = "Other.App.IUnregisteredTrain",
                     Input = """{"secret":"s3cr3t"}""",
                     InputTypeName = "Other.App.UnregisteredInput",
-                }
+                },
+                TimeProvider.System
             );
             await db.Track(entry);
             await db.SaveChanges(default);
@@ -210,7 +216,7 @@ public class SensitiveInputCopiesTests
         var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
 
         // Nothing shows the copy holds no sensitive member, so none of it is shown.
-        IsMarker(Parse(detail!.Input)).Should().BeTrue(detail.Input);
+        IsMarker(Parse(detail.NotNull().Input)).Should().BeTrue(detail.Input);
         detail.Input.Should().NotContain("s3cr3t");
     }
 
@@ -221,49 +227,60 @@ public class SensitiveInputCopiesTests
     )
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    TrainName = typeof(IPaymentTrain).FullName!,
+                    TrainName = typeof(IPaymentTrain).FullName.NotNull(),
                     Input = json,
                     InputTypeName = typeName ?? inputType.FullName,
-                }
+                },
+                TimeProvider.System
             );
-            await db.Track(entry);
-            await db.SaveChanges(default);
+            await db.Track(entry).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             id = entry.Id;
         }
 
-        return (await new WorkQueueQueries().GetDetail(id, Operations, default))!.Input;
+        return (
+            await new WorkQueueQueries().GetDetail(id, Operations, default).ConfigureAwait(false)
+        )
+            .NotNull()
+            .Input;
     }
 
     private async Task<string?> ReadManifestProperties(string json, Type inputType)
     {
         long id;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
                 Name = "payments-" + Guid.NewGuid().ToString("N"),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             };
-            await db.Track(group);
-            await db.SaveChanges(default);
+            await db.Track(group).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             var manifest = Manifest.Create(new CreateManifest { Name = typeof(PaymentTrain) });
             manifest.ManifestGroupId = group.Id;
             manifest.PropertyTypeName = inputType.FullName;
             manifest.Properties = json;
-            await db.Track(manifest);
-            await db.SaveChanges(default);
+            await db.Track(manifest).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             id = manifest.Id;
         }
 
         return (
-            await new OperationsQueries().GetManifestDetail(id, _factory, _discovery, default)
-        )!.Properties;
+            await new OperationsQueries()
+                .GetManifestDetail(id, _factory.NotNull(), _discovery.NotNull(), default)
+                .ConfigureAwait(false)
+        )
+            .NotNull()
+            .Properties;
     }
 
     /// <summary>

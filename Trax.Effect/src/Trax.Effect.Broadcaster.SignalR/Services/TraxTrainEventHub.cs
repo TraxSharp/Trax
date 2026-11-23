@@ -8,4 +8,4 @@ namespace Trax.Effect.Broadcaster.SignalR.Services;
 /// requires the host to choose who may connect.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-trax-train-event-client">SDK reference</seealso>
-public sealed class TraxTrainEventHub : Hub<ITraxTrainEventClient> { }
+public sealed class TraxTrainEventHub : Hub<ITraxTrainEventClient>;

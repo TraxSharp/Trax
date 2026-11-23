@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -53,35 +55,44 @@ public class ReadFieldStressTests : StressTestSetup
 
     internal static async Task EnsureSubjectRowsAsync(IServiceProvider sp, CancellationToken ct)
     {
-        await SeedLock.WaitAsync(ct);
+        await SeedLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            using var db = await Factory(sp).CreateDbContextAsync(ct);
+            var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var dbDisposal = db.ConfigureAwait(false);
             var ctx = (DbContext)db;
-            var existing = await db.WorkQueues.CountAsync(q => q.SubjectKey != null, ct);
+            var existing = await db
+                .WorkQueues.CountAsync(q => q.SubjectKey != null, ct)
+                .ConfigureAwait(false);
             var target = Math.Max(10_000, Profile.WorkQueue / 10);
             if (existing < target)
             {
                 ctx.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
                 var missing = target - existing;
                 var metadataRows = Profile.Metadata;
-                await ctx.Database.ExecuteSqlAsync(
-                    $"""
-                    INSERT INTO trax.work_queue (external_id, train_name, status, created_at,
-                        priority, dispatch_attempts, subject_key, confirmed_at, metadata_id)
-                    SELECT 'wqs-' || g, 'Trax.Stress.Trains.IStressTrain1',
-                           CASE WHEN g % 10 = 0 THEN 'dispatched'::trax.work_queue_status
-                                ELSE 'queued'::trax.work_queue_status END,
-                           now() - ((g % 20160) * interval '1 minute'),
-                           (g % 32), 0, 'subject-' || (g % {Subjects}), now(),
-                           CASE WHEN g % 10 = 0 THEN 1 + (g % {metadataRows}) ELSE NULL END
-                    FROM generate_series(1, {missing}) g
-                    """,
-                    ct
-                );
-                await ctx.Database.ExecuteSqlRawAsync("ANALYZE trax.work_queue", ct);
+                await ctx
+                    .Database.ExecuteSqlAsync(
+                        $"""
+                        INSERT INTO trax.work_queue (external_id, train_name, status, created_at,
+                            priority, dispatch_attempts, subject_key, confirmed_at, metadata_id)
+                        SELECT 'wqs-' || g, 'Trax.Stress.Trains.IStressTrain1',
+                               CASE WHEN g % 10 = 0 THEN 'dispatched'::trax.work_queue_status
+                                    ELSE 'queued'::trax.work_queue_status END,
+                               now() - ((g % 20160) * interval '1 minute'),
+                               (g % 32), 0, 'subject-' || (g % {Subjects}), now(),
+                               CASE WHEN g % 10 = 0 THEN 1 + (g % {metadataRows}) ELSE NULL END
+                        FROM generate_series(1, {missing}) g
+                        """,
+                        ct
+                    )
+                    .ConfigureAwait(false);
+                await ctx
+                    .Database.ExecuteSqlRawAsync("ANALYZE trax.work_queue", ct)
+                    .ConfigureAwait(false);
             }
-            _subjectRows = await db.WorkQueues.CountAsync(q => q.SubjectKey != null, ct);
+            _subjectRows = await db
+                .WorkQueues.CountAsync(q => q.SubjectKey != null, ct)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -95,13 +106,15 @@ public class ReadFieldStressTests : StressTestSetup
         CancellationToken ct
     )
     {
-        await EnsureSubjectRowsAsync(sp, ct);
-        using var db = await Factory(sp).CreateDbContextAsync(ct);
+        await EnsureSubjectRowsAsync(sp, ct).ConfigureAwait(false);
+        var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return await db
             .WorkQueues.Where(q => q.SubjectKey == subject && q.Status == WorkQueueStatus.Queued)
             .OrderByDescending(q => q.Id)
             .Select(q => q.Id)
-            .FirstAsync(ct);
+            .FirstAsync(ct)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -112,12 +125,9 @@ public class ReadFieldStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new OperationsQueries().GetManifests(
-                    Factory(sp),
-                    ct,
-                    take: 25,
-                    sqlDialect: Dialect(sp)
-                );
+                var page = await new OperationsQueries()
+                    .GetManifests(Factory(sp), ct, take: 25, sqlDialect: Dialect(sp))
+                    .ConfigureAwait(false);
                 page.Items.Should().HaveCount(25);
                 page.Items.Should().OnlyContain(m => m.ManifestGroupName != null);
             }
@@ -132,13 +142,9 @@ public class ReadFieldStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new OperationsQueries().GetManifests(
-                    Factory(sp),
-                    ct,
-                    take: 25,
-                    afterId: 30,
-                    sqlDialect: Dialect(sp)
-                );
+                var page = await new OperationsQueries()
+                    .GetManifests(Factory(sp), ct, take: 25, afterId: 30, sqlDialect: Dialect(sp))
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(m => m.ManifestGroupName != null);
             }
@@ -161,7 +167,8 @@ public class ReadFieldStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var upcoming = await Operations(sp)
-                    .GetUpcomingRunsAsync(ids, OperationsService.MaxUpcomingRuns, ct);
+                    .GetUpcomingRunsAsync(ids, OperationsService.MaxUpcomingRuns, ct)
+                    .ConfigureAwait(false);
                 upcoming.Should().HaveCount(ids.Count);
                 upcoming.Should().OnlyContain(u => u.ScheduleText.Length > 0);
             }
@@ -178,14 +185,11 @@ public class ReadFieldStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var detail = await new OperationsQueries().GetManifestDetail(
-                    Profile.Manifests / 2,
-                    Factory(sp),
-                    Discovery(sp),
-                    ct
-                );
+                var detail = await new OperationsQueries()
+                    .GetManifestDetail(Profile.Manifests / 2, Factory(sp), Discovery(sp), ct)
+                    .ConfigureAwait(false);
                 detail.Should().NotBeNull();
-                detail!.ManifestGroupName.Should().StartWith("stress-group-");
+                detail.NotNull().ManifestGroupName.Should().StartWith("stress-group-");
             }
         );
     }
@@ -200,13 +204,22 @@ public class ReadFieldStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 if (id == 0)
-                    id = await QueuedEntryFor(sp, "subject-7", ct);
-                var detail = await new WorkQueueQueries().GetDetail(id, Operations(sp), ct);
+                    id = await QueuedEntryFor(sp, "subject-7", ct).ConfigureAwait(false);
+                var detail = await new WorkQueueQueries()
+                    .GetDetail(id, Operations(sp), ct)
+                    .ConfigureAwait(false);
                 detail.Should().NotBeNull();
-                detail!.SubjectKey.Should().Be("subject-7");
+                detail.NotNull().SubjectKey.Should().Be("subject-7");
             }
         );
-        TestContext.Out.WriteLine($"subject-keyed work_queue rows: {_subjectRows:N0}");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"subject-keyed work_queue rows: {_subjectRows:N0}"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -224,22 +237,26 @@ public class ReadFieldStressTests : StressTestSetup
             {
                 if (id == 0)
                 {
-                    await EnsureSubjectRowsAsync(sp, ct);
-                    using var db = await Factory(sp).CreateDbContextAsync(ct);
+                    await EnsureSubjectRowsAsync(sp, ct).ConfigureAwait(false);
+                    var db = await Factory(sp).CreateDbContextAsync(ct).ConfigureAwait(false);
+                    await using var dbDisposal = db.ConfigureAwait(false);
                     var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
                         new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
                         {
                             TrainName = "Trax.Stress.Trains.IStressTrain1",
                             SubjectKey = "subject-alone-" + Guid.NewGuid().ToString("N"),
                             Priority = 0,
-                        }
+                        },
+                        TimeProvider.System
                     );
-                    await db.Track(entry);
-                    await db.SaveChanges(ct);
+                    await db.Track(entry).ConfigureAwait(false);
+                    await db.SaveChanges(ct).ConfigureAwait(false);
                     id = entry.Id;
                 }
-                var detail = await new WorkQueueQueries().GetDetail(id, Operations(sp), ct);
-                detail!.SubjectQueuedBehind.Should().BeNull();
+                var detail = await new WorkQueueQueries()
+                    .GetDetail(id, Operations(sp), ct)
+                    .ConfigureAwait(false);
+                detail.NotNull().SubjectQueuedBehind.Should().BeNull();
                 detail.SubjectHeldBy.Should().BeNull();
             }
         );
@@ -253,11 +270,9 @@ public class ReadFieldStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var detail = await new WorkQueueQueries().GetDetail(
-                    Profile.WorkQueue / 2,
-                    Operations(sp),
-                    ct
-                );
+                var detail = await new WorkQueueQueries()
+                    .GetDetail(Profile.WorkQueue / 2, Operations(sp), ct)
+                    .ConfigureAwait(false);
                 detail.Should().NotBeNull();
             }
         );
@@ -285,7 +300,10 @@ public class ReadFieldStressTests : StressTestSetup
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
-                new Dictionary<string, string?> { ["Logging:LogLevel:Default"] = "Information" }
+                new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["Logging:LogLevel:Default"] = "Information",
+                }
             )
             .Build();
         var environment = new StressEnvironment();

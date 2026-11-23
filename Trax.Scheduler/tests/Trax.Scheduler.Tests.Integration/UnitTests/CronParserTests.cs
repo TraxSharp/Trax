@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Cronos;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.Scheduling;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
@@ -101,7 +102,7 @@ public class CronParserTests
         var next = CronParser.GetNextOccurrence("0 3 * * *", after);
 
         next.Should().NotBeNull();
-        next!.Value.Should().Be(new DateTime(2026, 3, 2, 3, 0, 0, DateTimeKind.Utc));
+        next.NotNull().Value.Should().Be(new DateTime(2026, 3, 2, 3, 0, 0, DateTimeKind.Utc));
     }
 
     [Test]
@@ -112,7 +113,7 @@ public class CronParserTests
         var next = CronParser.GetNextOccurrence("30 * * * * *", after);
 
         next.Should().NotBeNull();
-        next!.Value.Should().Be(new DateTime(2026, 3, 2, 12, 0, 30, DateTimeKind.Utc));
+        next.NotNull().Value.Should().Be(new DateTime(2026, 3, 2, 12, 0, 30, DateTimeKind.Utc));
     }
 
     [Test]
@@ -123,13 +124,16 @@ public class CronParserTests
         var next = CronParser.GetNextOccurrence("*/15 * * * * *", after);
 
         next.Should().NotBeNull();
-        next!.Value.Should().Be(new DateTime(2026, 3, 2, 12, 0, 15, DateTimeKind.Utc));
+        next.NotNull().Value.Should().Be(new DateTime(2026, 3, 2, 12, 0, 15, DateTimeKind.Utc));
     }
 
     [Test]
     public void GetNextOccurrence_InvalidExpression_ReturnsNull()
     {
-        var next = CronParser.GetNextOccurrence("invalid", DateTime.UtcNow);
+        var next = CronParser.GetNextOccurrence(
+            "invalid",
+            TimeProvider.System.GetUtcNow().UtcDateTime
+        );
         next.Should().BeNull();
     }
 

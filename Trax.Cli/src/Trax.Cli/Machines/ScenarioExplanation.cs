@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Xml;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Machines;
 
@@ -22,12 +24,12 @@ internal static class ScenarioExplanation
     /// <param name="files">The files a derivation gave, by name: <c>host.json</c> and each <c>&lt;machine&gt;.ir.json</c>.</param>
     internal static IReadOnlyList<Scenario> Explain(IReadOnlyDictionary<string, string> files)
     {
-        var host = JsonNode.Parse(files[FeatureDirectory.HostFileName])!.AsObject();
+        var host = JsonNode.Parse(files[FeatureDirectory.HostFileName]).NotNull().AsObject();
         var irs = files
             .Where(f => f.Key.EndsWith(FeatureDirectory.IrSuffix, StringComparison.Ordinal))
             .ToDictionary(
                 f => f.Key[..^FeatureDirectory.IrSuffix.Length],
-                f => JsonNode.Parse(f.Value)!.AsObject(),
+                f => JsonNode.Parse(f.Value).NotNull().AsObject(),
                 StringComparer.Ordinal
             );
         var policies = host["policies"] as JsonArray ?? [];
@@ -36,7 +38,7 @@ internal static class ScenarioExplanation
         var scenarios =
             new SortedDictionary<(string File, int Line), (string Name, List<string> Facts)>();
         foreach (var (machine, facts) in host["provenance"] as JsonObject ?? [])
-        foreach (var (key, sources) in facts!.AsObject())
+        foreach (var (key, sources) in facts.NotNull().AsObject())
         {
             var said = Say(
                 machine,
@@ -45,11 +47,17 @@ internal static class ScenarioExplanation
                 irs.GetValueOrDefault(machine),
                 policies
             );
-            foreach (var source in sources!.AsArray())
+            foreach (var source in sources.NotNull().AsArray())
             {
-                var at = (source!["file"]!.GetValue<string>(), source["line"]!.GetValue<int>());
+                var at = (
+                    source.NotNull()["file"].NotNull().GetValue<string>(),
+                    source["line"].NotNull().GetValue<int>()
+                );
                 if (!scenarios.TryGetValue(at, out var scenario))
-                    scenarios[at] = scenario = (source["scenario"]!.GetValue<string>(), []);
+                    scenarios[at] = scenario = (
+                        source["scenario"].NotNull().GetValue<string>(),
+                        []
+                    );
                 if (!scenario.Facts.Contains(said))
                     scenario.Facts.Add(said);
             }
@@ -81,7 +89,7 @@ internal static class ScenarioExplanation
             case ["command", var trigger]:
                 return $"grant: {machine} {trigger} is served to {Rule(hosted?["triggers"]?[trigger])}";
             case ["edge", var from, var trigger, var to]:
-                return from == to
+                return string.Equals(from, to, StringComparison.Ordinal)
                     ? $"edge: {machine} {from} --{trigger}--> {to} (a self-transition: it changes nothing and sets no policy off)"
                     : $"edge: {machine} {from} --{trigger}--> {to}";
             case ["guard", var from, var trigger]:
@@ -109,7 +117,10 @@ internal static class ScenarioExplanation
             JsonObject o when o["roles"] is JsonArray sets => string.Join(
                 " and ",
                 sets.Select(set =>
-                    string.Join(" or ", set!.AsArray().Select(r => r!.GetValue<string>()))
+                    string.Join(
+                        " or ",
+                        set.NotNull().AsArray().Select(r => r.NotNull().GetValue<string>())
+                    )
                 )
             ),
             _ => rule.ToJsonString(),
@@ -120,7 +131,7 @@ internal static class ScenarioExplanation
         var targets = (ir?["outcomes"]?[$"{state}.{kind}"]?["edges"] as JsonArray ?? [])
             .Select(e => e?["to"]?.GetValue<string>())
             .OfType<string>()
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
         return targets.Count == 0 ? "" : $", to {string.Join(" or ", targets)}";
     }
@@ -128,7 +139,7 @@ internal static class ScenarioExplanation
     private static string Timer(string machine, string state, JsonObject? ir)
     {
         var timer = (ir?["timers"] as JsonArray ?? []).FirstOrDefault(t =>
-            t?["state"]?.GetValue<string>() == state
+            string.Equals(t?["state"]?.GetValue<string>(), state, StringComparison.Ordinal)
         );
         if (timer is null)
             return $"timer: {machine} {state} has a timer";
@@ -141,10 +152,13 @@ internal static class ScenarioExplanation
         try
         {
             var span = XmlConvert.ToTimeSpan(iso);
-            return span.TotalDays >= 1 && span.TotalDays % 1 == 0 ? $"{span.TotalDays} d"
-                : span.TotalHours >= 1 && span.TotalHours % 1 == 0 ? $"{span.TotalHours} h"
-                : span.TotalMinutes >= 1 && span.TotalMinutes % 1 == 0 ? $"{span.TotalMinutes} min"
-                : $"{span.TotalSeconds} s";
+            return span.TotalDays >= 1 && span.TotalDays % 1 == 0
+                    ? string.Create(CultureInfo.InvariantCulture, $"{span.TotalDays} d")
+                : span.TotalHours >= 1 && span.TotalHours % 1 == 0
+                    ? string.Create(CultureInfo.InvariantCulture, $"{span.TotalHours} h")
+                : span.TotalMinutes >= 1 && span.TotalMinutes % 1 == 0
+                    ? string.Create(CultureInfo.InvariantCulture, $"{span.TotalMinutes} min")
+                : string.Create(CultureInfo.InvariantCulture, $"{span.TotalSeconds} s");
         }
         catch (FormatException)
         {
@@ -157,9 +171,22 @@ internal static class ScenarioExplanation
     {
         var matches = policies
             .Where(p =>
-                p?["when"]?["machine"]?.GetValue<string>() == source
-                && p["when"]?["enters"]?.GetValue<string>() == entered
-                && p["then"]?["machine"]?.GetValue<string>() == target
+                p is not null
+                && string.Equals(
+                    p["when"]?["machine"]?.GetValue<string>(),
+                    source,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    p["when"]?["enters"]?.GetValue<string>(),
+                    entered,
+                    StringComparison.Ordinal
+                )
+                && string.Equals(
+                    p["then"]?["machine"]?.GetValue<string>(),
+                    target,
+                    StringComparison.Ordinal
+                )
             )
             .ToList();
         if (matches.Count == 0)
@@ -168,7 +195,7 @@ internal static class ScenarioExplanation
             "; ",
             matches.Select(p =>
             {
-                var then = p!["then"]!;
+                var then = p.NotNull()["then"].NotNull();
                 var trigger = then["trigger"]?.GetValue<string>();
                 var which = p["shape"]?.GetValue<string>() switch
                 {

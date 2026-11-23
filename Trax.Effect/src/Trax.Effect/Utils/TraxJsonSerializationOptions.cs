@@ -57,6 +57,8 @@ public static class TraxJsonSerializationOptions
         Frozen(
             new()
             {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
                 WriteIndented = true,
                 IncludeFields = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -80,6 +82,8 @@ public static class TraxJsonSerializationOptions
         Frozen(
             new()
             {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
                 WriteIndented = true,
                 IncludeFields = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -119,6 +123,8 @@ public static class TraxJsonSerializationOptions
     public static JsonSerializerOptions JunctionLogging { get; internal set; } =
         new()
         {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
             WriteIndented = false,
             IncludeFields = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence.Mutations;
 
@@ -28,7 +30,7 @@ public class MachineEventsE2ETests
 
     private const string Database = "trax_sm_machine_events";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task Up()
@@ -50,36 +52,38 @@ public class MachineEventsE2ETests
     [OneTimeTearDown]
     public async Task Down()
     {
-        _host.Dispose();
+        _host?.Dispose();
         await E2EHost.DropDatabaseAsync(Database);
     }
 
     [Test]
     public async Task Each_event_runs_through_the_advance_train_and_returns_the_servers_snapshot_with_revision()
     {
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey, title: "Atlas");
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey, title: "Atlas");
         var advancesBefore = await RunsOf<IAdvanceSnapshot>();
         var sendsBefore = await RunsOf<ISendSnapshot>();
 
-        var described = await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            started.Id,
-            WizardOps.DetailsInput(title: "Atlas", pages: 4)
-        );
-        var paid = await _host.AdvanceWizardAsync(E2EHost.AliceKey, "pay", started.Id);
+        var described = await _host
+            .NotNull()
+            .AdvanceWizardAsync(
+                E2EHost.AliceKey,
+                "describe",
+                started.Id,
+                WizardOps.DetailsInput(title: "Atlas", pages: 4)
+            );
+        var paid = await _host.NotNull().AdvanceWizardAsync(E2EHost.AliceKey, "pay", started.Id);
 
         described.StateIs(WizardState.Paying).Should().BeTrue(described.Raw.GetRawText());
         described.Context.GetProperty("pages").GetInt32().Should().Be(4);
         described
             .Revision.Should()
             .BeGreaterThan(
-                started.Revision!.Value,
+                started.Revision.NotNull().Value,
                 "every answer carries the revision the server recorded, per " + Adr
             );
         paid.StateIs(WizardState.Approving).Should().BeTrue(paid.Raw.GetRawText());
         paid.Context.GetProperty("receipt").GetString().Should().StartWith("receipt-");
-        paid.Revision.Should().BeGreaterThan(described.Revision!.Value);
+        paid.Revision.Should().BeGreaterThan(described.Revision.NotNull().Value);
 
         (await RunsOf<IAdvanceSnapshot>())
             .Should()
@@ -95,7 +99,7 @@ public class MachineEventsE2ETests
     [Test]
     public async Task Internal_machine_trains_are_not_broadcast_on_the_lifecycle_feed()
     {
-        await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
+        await using var ws = await GraphQLWs.ConnectAsync(_host.NotNull(), E2EHost.OperatorKey);
         await ws.SubscribeAsync("feed", "subscription { onTrainCompleted { trainName output } }");
 
         // graphql-transport-ws sends no ack for subscribe, so the subscription is live only once a warm-up run
@@ -112,13 +116,10 @@ public class MachineEventsE2ETests
             CompletedPing(warm.Value).Should().BeTrue(warm.Value.GetRawText());
         }
 
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
-        await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            started.Id,
-            WizardOps.DetailsInput()
-        );
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
+        await _host
+            .NotNull()
+            .AdvanceWizardAsync(E2EHost.AliceKey, "describe", started.Id, WizardOps.DetailsInput());
         var sentinel = "sentinel-" + Guid.NewGuid().ToString("N");
         await RunSentinelAsync(sentinel);
 
@@ -126,7 +127,12 @@ public class MachineEventsE2ETests
         while (true)
         {
             var completed = (await ws.NextDataAsync("feed")).GetProperty("onTrainCompleted");
-            if (completed.GetProperty("output").GetRawText().Contains(sentinel))
+            if (
+                completed
+                    .GetProperty("output")
+                    .GetRawText()
+                    .Contains(sentinel, StringComparison.Ordinal)
+            )
                 break;
             CompletedPing(completed, "warm-up")
                 .Should()
@@ -146,8 +152,17 @@ public class MachineEventsE2ETests
         var completed = message.TryGetProperty("payload", out var payload)
             ? payload.GetProperty("data").GetProperty("onTrainCompleted")
             : message;
-        return completed.GetProperty("trainName").GetString()?.Contains(nameof(IPing)) == true
-            && (value is null || completed.GetProperty("output").GetRawText().Contains(value));
+        return completed
+                .GetProperty("trainName")
+                .GetString()
+                ?.Contains(nameof(IPing), StringComparison.Ordinal) == true
+            && (
+                value is null
+                || completed
+                    .GetProperty("output")
+                    .GetRawText()
+                    .Contains(value, StringComparison.Ordinal)
+            );
     }
 
     private static IEnumerable<TestCaseData> InvalidInputs()
@@ -170,14 +185,16 @@ public class MachineEventsE2ETests
     [TestCaseSource(nameof(InvalidInputs))]
     public async Task Invalid_input_is_refused_as_invalid_input_and_nothing_is_written(string input)
     {
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
         var before = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, started.Id);
         var runsBefore = await E2ESql.CountMachineRunsAsync(Database);
 
-        using var doc = await _host.PostAsync(
-            WizardOps.Event("describe", started.Id, WizardOps.NewRequestId(), input),
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                WizardOps.Event("describe", started.Id, WizardOps.NewRequestId(), input),
+                apiKey: E2EHost.AliceKey
+            );
 
         var refusedByValidation = WizardOps.ErrorCodes(doc).Count > 0;
         if (!refusedByValidation)
@@ -200,12 +217,14 @@ public class MachineEventsE2ETests
     [Test]
     public async Task A_refused_guard_is_data_not_an_error()
     {
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
 
-        using var doc = await _host.PostAsync(
-            WizardOps.Describe(started.Id, WizardOps.NewRequestId(), pages: 0),
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                WizardOps.Describe(started.Id, WizardOps.NewRequestId(), pages: 0),
+                apiKey: E2EHost.AliceKey
+            );
 
         var refused = WizardOps.Result(doc, "describe");
         refused.ProblemCode.Should().Be(RefusalCode.GuardFailed.ToWire());
@@ -222,15 +241,17 @@ public class MachineEventsE2ETests
     public async Task An_events_sensitive_input_field_is_masked_in_the_runs_recorded_input()
     {
         var secret = $"secret-{Guid.NewGuid():N}";
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
         var runsBefore = await E2ESql.CountMachineRunsAsync(Database);
 
-        await _host.AdvanceWizardAsync(
-            E2EHost.AliceKey,
-            "describe",
-            started.Id,
-            WizardOps.DetailsInput(secret: secret)
-        );
+        await _host
+            .NotNull()
+            .AdvanceWizardAsync(
+                E2EHost.AliceKey,
+                "describe",
+                started.Id,
+                WizardOps.DetailsInput(secret: secret)
+            );
 
         var inputs = await E2ESql.MachineRunInputsAsync(Database);
         inputs.Count.Should().BeGreaterThan((int)runsBefore, "the advance run is recorded");
@@ -253,7 +274,7 @@ public class MachineEventsE2ETests
     [TestCaseSource(nameof(TwoEventOperations))]
     public async Task An_operation_with_two_machine_event_fields_is_refused(bool sameInstance)
     {
-        var wizard = await _host.StartWizardAsync(E2EHost.AliceKey);
+        var wizard = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
         var memo = await StartMemoAsync();
         var wizardBefore = await E2ESql.DraftAsync(Database, WizardMachine.MachineId, wizard.Id);
         var memoBefore = await E2ESql.DraftAsync(Database, MemoMachine.MachineId, memo);
@@ -269,7 +290,7 @@ public class MachineEventsE2ETests
             ? $"mutation {{ machines {{ wizard {{ {describe} {WizardOps.EventField("describe", wizard.Id, WizardOps.NewRequestId(), WizardOps.DetailsInput(title: "Other"), alias: "b")} }} }} }}"
             : $"mutation {{ machines {{ wizard {{ {describe} }} memo {{ file(id: {WizardOps.Literal(memo.ToString())}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}";
 
-        using var doc = await _host.PostAsync(document, apiKey: E2EHost.AliceKey);
+        using var doc = await _host.NotNull().PostAsync(document, apiKey: E2EHost.AliceKey);
 
         WizardOps
             .ErrorCodes(doc)
@@ -287,20 +308,23 @@ public class MachineEventsE2ETests
     [Test]
     public async Task Two_aliased_gets_in_one_request_share_the_scoped_DbContext_safely()
     {
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
+        var started = await _host.NotNull().StartWizardAsync(E2EHost.AliceKey);
         var id = WizardOps.Literal(started.Id.ToString());
         var document =
             $"{{ machines {{ wizard {{ a: get(id: {id}) {{ {WizardOps.ReadFields} }} b: get(id: {id}) {{ {WizardOps.ReadFields} }} }} }} }}";
 
         for (var i = 0; i < 50; i++)
         {
-            using var doc = await _host.PostAsync(document, apiKey: E2EHost.AliceKey);
+            using var doc = await _host.NotNull().PostAsync(document, apiKey: E2EHost.AliceKey);
 
             WizardOps
                 .ErrorCodes(doc)
                 .Should()
                 .BeEmpty(
-                    $"two gets in one request must not use the scoped data context at once (run {i}), per "
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"two gets in one request must not use the scoped data context at once (run {i}), per "
+                    )
                         + Adr
                         + ": "
                         + doc.RootElement.GetRawText()
@@ -315,27 +339,35 @@ public class MachineEventsE2ETests
     }
 
     private async Task<long> RunsOf<TTrain>() =>
-        await E2ESql.ScalarAsync<long>(
-            Database,
-            "SELECT count(*) FROM trax.metadata WHERE name = @name",
-            ("name", typeof(TTrain).FullName!)
-        );
+        await E2ESql
+            .ScalarAsync<long>(
+                Database,
+                "SELECT count(*) FROM trax.metadata WHERE name = @name",
+                ("name", typeof(TTrain).FullName.NotNull())
+            )
+            .ConfigureAwait(false);
 
     private async Task RunSentinelAsync(string value)
     {
-        using var doc = await _host.PostAsync(
-            $"{{ discover {{ ping(input: {{ value: {WizardOps.Literal(value)} }}) {{ value }} }} }}",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                $"{{ discover {{ ping(input: {{ value: {WizardOps.Literal(value)} }}) {{ value }} }} }}",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         WizardOps.ErrorCodes(doc).Should().BeEmpty(doc.RootElement.GetRawText());
     }
 
     private async Task<Guid> StartMemoAsync()
     {
-        using var doc = await _host.PostAsync(
-            $"mutation {{ machines {{ memo {{ start(input: {{ text: \"note\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}",
-            apiKey: E2EHost.AliceKey
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostAsync(
+                $"mutation {{ machines {{ memo {{ start(input: {{ text: \"note\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ id problem {{ code }} }} }} }} }}",
+                apiKey: E2EHost.AliceKey
+            )
+            .ConfigureAwait(false);
         WizardOps.FailOnErrors(doc, "memo.start");
         return Guid.Parse(
             doc.RootElement.GetProperty("data")
@@ -343,7 +375,8 @@ public class MachineEventsE2ETests
                 .GetProperty("memo")
                 .GetProperty("start")
                 .GetProperty("id")
-                .GetString()!
+                .GetString()
+                .NotNull()
         );
     }
 }

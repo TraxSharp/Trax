@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
 using Trax.StateMachine.Persistence;
@@ -30,13 +31,13 @@ public class SnapshotChangeOutcomeNotifyTests
     // Every wait in this class: long past any step here, short enough that a hang fails the test.
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
-    private InvokeHost _host = null!;
+    private InvokeHost? _host;
 
     [SetUp]
     public void SetUp() => _host = InvokeHost.Create(StoreProvider.Postgres);
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     [Test]
     public async Task Advance_into_invoke_notifies_once()
@@ -44,24 +45,24 @@ public class SnapshotChangeOutcomeNotifyTests
         const string user = "notify-user";
         var id = Guid.NewGuid();
         TestPrincipal.Become(user);
-        await _host.SeedIdle(user, id, GoodMachine.MachineId);
+        await _host.NotNull().SeedIdle(user, id, GoodMachine.MachineId);
 
         await using var listener = await Listener.Open();
         // A fresh LISTEN can be handed notices committed just before it; only what the act sends counts.
         _ = await listener.Drain();
 
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, GoodMachine.MachineId).Advance(user, id, "Go"))
+        using (var scope = _host.NotNull().Scope())
+            (await _host.NotNull().Service(scope, GoodMachine.MachineId).Advance(user, id, "Go"))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();
-        (await _host.Runs(id)).Should().ContainSingle("the advance queued its run");
+        (await _host.NotNull().Runs(id)).Should().ContainSingle("the advance queued its run");
 
-        var rowId = (await _host.Row(id, GoodMachine.MachineId))!.RowId;
+        var rowId = (await _host.NotNull().Row(id, GoodMachine.MachineId)).NotNull().RowId;
         var notices = await listener.Drain();
         notices
             .Should()
             .ContainSingle(
-                p => p == rowId.ToString(),
+                p => p == rowId.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 $"the advance into the invoking state is one committed write, and it sends one notice. See {Adr}"
             );
     }
@@ -80,7 +81,7 @@ public class SnapshotChangeOutcomeNotifyTests
             _connection = connection;
             _connection.Notification += (_, e) =>
             {
-                if (e.Channel == Channel)
+                if (string.Equals(e.Channel, Channel, StringComparison.Ordinal))
                     _payloads.Enqueue(e.Payload);
             };
         }
@@ -88,11 +89,14 @@ public class SnapshotChangeOutcomeNotifyTests
         public static async Task<Listener> Open()
         {
             var connection = new NpgsqlConnection(PostgresSetup.ConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync().ConfigureAwait(false);
             var listener = new Listener(connection);
-            await using var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
-            await listen.ExecuteNonQueryAsync();
-            return listener;
+            var listen = new NpgsqlCommand($"LISTEN {Channel}", connection);
+            await using (listen.ConfigureAwait(false))
+            {
+                await listen.ExecuteNonQueryAsync().ConfigureAwait(false);
+                return listener;
+            }
         }
 
         /// <summary>
@@ -101,12 +105,15 @@ public class SnapshotChangeOutcomeNotifyTests
         public async Task<IReadOnlyList<string>> Drain()
         {
             using var bound = new CancellationTokenSource(Bound);
-            await using var roundTrip = new NpgsqlCommand("SELECT 1", _connection);
-            await roundTrip.ExecuteScalarAsync(bound.Token);
-            var drained = new List<string>();
-            while (_payloads.TryDequeue(out var payload))
-                drained.Add(payload);
-            return drained;
+            var roundTrip = new NpgsqlCommand("SELECT 1", _connection);
+            await using (roundTrip.ConfigureAwait(false))
+            {
+                await roundTrip.ExecuteScalarAsync(bound.Token).ConfigureAwait(false);
+                var drained = new List<string>();
+                while (_payloads.TryDequeue(out var payload))
+                    drained.Add(payload);
+                return drained;
+            }
         }
 
         public ValueTask DisposeAsync() => _connection.DisposeAsync();

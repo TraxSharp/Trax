@@ -27,7 +27,7 @@ public class ExtractTupleTests : TestSetup
         result.Should().NotBeNull();
         result.Item1.Should().Be(1);
         result.Item2.Should().Be("hello");
-        result.Item3.Should().Be(false);
+        result.Item3.Should().Be(expected: false);
         result.Item4.Should().Be('c');
         result.Item5.Should().Be(inputObject);
     }
@@ -47,7 +47,7 @@ public class ExtractTupleTests : TestSetup
         Assert.Throws<TrainException>(() => monad.ExtractTuple(inputTuple));
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() => Resolve();
     }

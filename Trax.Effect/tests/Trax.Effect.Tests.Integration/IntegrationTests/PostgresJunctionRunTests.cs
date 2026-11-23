@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
@@ -40,7 +41,7 @@ public class PostgresJunctionRunTests
 {
     private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
 
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -50,7 +51,7 @@ public class PostgresJunctionRunTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
         var connectionString = TestPostgres.WithPort(
-            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"].NotNull()
         );
 
         var services = new ServiceCollection();
@@ -65,7 +66,11 @@ public class PostgresJunctionRunTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task A_runs_steps_are_rows_read_back_in_order()
@@ -104,15 +109,16 @@ public class PostgresJunctionRunTests
     [Test]
     public async Task A_manifests_run_stores_its_attempt()
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
         long manifestId;
-        using (var context = await factory.CreateDbContextAsync(CancellationToken.None))
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using (context.ConfigureAwait(false))
         {
             var group = new ManifestGroup
             {
                 Name = $"junction-runs-{Guid.NewGuid():N}",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+                CreatedAt = TestTime.UtcDateTime,
+                UpdatedAt = TestTime.UtcDateTime,
             };
             await context.Track(group);
             await context.SaveChanges(CancellationToken.None);
@@ -143,9 +149,9 @@ public class PostgresJunctionRunTests
     public async Task A_burst_of_steps_is_written_in_batches_and_every_end_lands()
     {
         var metadataId = await Run();
-        var writer = _provider.GetRequiredService<JunctionRunWriter>();
+        var writer = _provider.NotNull().GetRequiredService<JunctionRunWriter>();
         var dropped = writer.DroppedSteps;
-        var start = DateTime.UtcNow;
+        var start = TestTime.UtcDateTime;
         const int Junctions = 1500;
 
         // Several batches' worth of starts, then their ends, which update rows written by an
@@ -177,7 +183,9 @@ public class PostgresJunctionRunTests
         await writer.FlushAsync();
 
         writer.DroppedSteps.Should().Be(dropped);
-        var burst = (await Rows(metadataId)).Where(r => r.Name == "Burst").ToList();
+        var burst = (await Rows(metadataId))
+            .Where(r => string.Equals(r.Name, "Burst", StringComparison.Ordinal))
+            .ToList();
         burst
             .Should()
             .HaveCount(Junctions)
@@ -193,7 +201,8 @@ public class PostgresJunctionRunTests
     public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
     {
         ChainGraph graph;
-        using (var scope = _provider.CreateScope())
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var fresh = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
             graph = ChainGraph.From(
@@ -215,7 +224,9 @@ public class PostgresJunctionRunTests
                 graph.Nodes.Single(n => n.Kind == ChainStepKind.Switch).Id,
                 graph
                     .Nodes.Single(n => n.Kind == ChainStepKind.Switch)
-                    .Tracks.Single(t => t.Name == nameof(PgBin.Small))
+                    .Tracks.Single(t =>
+                        string.Equals(t.Name, nameof(PgBin.Small), StringComparison.Ordinal)
+                    )
                     .Nodes[0]
                     .Id
             );
@@ -226,76 +237,56 @@ public class PostgresJunctionRunTests
 
     private async Task<long> Run(long? manifestId = null)
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
         var input = new PgItem(3);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(IPgStepsTrain).FullName!,
+                Name = typeof(IPgStepsTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = manifestId,
-            }
+            },
+            TestTime.Clock
         );
-        var run = async () => await train.Run(input, metadata);
-        await run.Should().ThrowAsync<InvalidOperationException>();
+        var run = async () =>
+            await train.Run(input, metadata, CancellationToken.None).ConfigureAwait(false);
+        await run.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        await _provider.GetRequiredService<JunctionRunWriter>().FlushAsync();
-        return train.Metadata!.Id;
+        await _provider
+            .NotNull()
+            .GetRequiredService<JunctionRunWriter>()
+            .FlushAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        return train.Metadata.NotNull().Id;
     }
 
     private async Task<List<JunctionRun>> Rows(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        return await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .JunctionRuns.AsNoTracking()
+            .ForRun(metadataId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     private async Task Delete(long metadataId)
     {
-        var factory = _provider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
-        await context.Metadatas.Where(m => m.Id == metadataId).ExecuteDeleteAsync();
+        var factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        await context
+            .Metadatas.Where(m => m.Id == metadataId)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
     }
-}
-
-public sealed record PgItem(int Size);
-
-[Asks("Which bin does this item go in?")]
-public enum PgBin
-{
-    Small,
-    Large,
-}
-
-public class PgMeasure : EffectJunction<PgItem, PgItem>
-{
-    public override Task<PgItem> Run(PgItem input) => Task.FromResult(input);
-}
-
-public class PgBreak : EffectJunction<PgItem, string>
-{
-    public override Task<string> Run(PgItem input) =>
-        throw new InvalidOperationException("the bin is jammed");
-}
-
-public sealed class PgStepClassifier : IFailureClassifier
-{
-    public FailureClass? Classify(Exception exception) =>
-        exception is InvalidOperationException ? FailureClass.Conflict : null;
-}
-
-public interface IPgStepsTrain : IServiceTrain<PgItem, string>;
-
-public class PgStepsTrain : ServiceTrain<PgItem, string>, IPgStepsTrain
-{
-    protected override Task<Either<Exception, string>> Junctions() =>
-        Chain<PgMeasure>()
-            .Switch<PgItem, PgBin>(tracks =>
-                tracks
-                    .When(PgBin.Small, t => t.Chain<PgBreak>())
-                    .When(PgBin.Large, t => t.Chain<PgBreak>())
-            )
-            .Resolve();
 }

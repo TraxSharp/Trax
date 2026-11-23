@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainExecution;
@@ -87,29 +88,60 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
         RefuseSharedClassServiceTypes(classes);
 
-        // A subsystem that registers a train's route without exposing it adds an exposure only when the host opts
-        // in; it is read here as the class's own attribute would be.
-        var exposures = _serviceCollection
+        var exposures = MutationExposures();
+
+        var registrations = new List<(int Index, TrainRegistration Registration)>();
+        var pairedInterfaces = new HashSet<Type>();
+
+        AddClassRegistrations(classes, interfaces, exposures, registrations, pairedInterfaces);
+        AddUnpairedInterfaceRegistrations(
+            classes,
+            interfaces,
+            exposures,
+            registrations,
+            pairedInterfaces
+        );
+
+        _cachedRegistrations = registrations
+            .OrderBy(r => r.Index)
+            .Select(r => r.Registration)
+            .ToList()
+            .AsReadOnly();
+
+        return _cachedRegistrations;
+    }
+
+    // A subsystem that registers a train's route without exposing it adds an exposure only when the host opts
+    // in; it is read here as the class's own attribute would be.
+    private Dictionary<Type, TrainMutationExposure> MutationExposures() =>
+        _serviceCollection
             .Where(d => d.ServiceType == typeof(TrainMutationExposure))
             .Select(d => d.ImplementationInstance)
             .OfType<TrainMutationExposure>()
             .GroupBy(e => e.Implementation)
             .ToDictionary(g => g.Key, g => g.Last());
-        TrainRegistration Build(
-            Type serviceType,
-            Type implementationType,
-            ServiceLifetime lifetime
-        ) =>
-            TrainDiscoveryService.Build(
-                serviceType,
-                implementationType,
-                lifetime,
-                exposures.GetValueOrDefault(implementationType)
-            );
 
-        var registrations = new List<(int Index, TrainRegistration Registration)>();
-        var pairedInterfaces = new HashSet<Type>();
+    private static TrainRegistration BuildExposed(
+        Type serviceType,
+        Type implementationType,
+        ServiceLifetime lifetime,
+        Dictionary<Type, TrainMutationExposure> exposures
+    ) =>
+        Build(
+            serviceType,
+            implementationType,
+            lifetime,
+            exposures.GetValueOrDefault(implementationType)
+        );
 
+    private static void AddClassRegistrations(
+        List<RegisteredClass> classes,
+        Dictionary<Type, (int Index, ServiceDescriptor Descriptor)> interfaces,
+        Dictionary<Type, TrainMutationExposure> exposures,
+        List<(int Index, TrainRegistration Registration)> registrations,
+        HashSet<Type> pairedInterfaces
+    )
+    {
         foreach (var registered in classes)
         {
             var own =
@@ -127,7 +159,12 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 registrations.Add(
                     (
                         registered.Index,
-                        Build(own, registered.Implementation, entry.Descriptor.Lifetime)
+                        BuildExposed(
+                            own,
+                            registered.Implementation,
+                            entry.Descriptor.Lifetime,
+                            exposures
+                        )
                     )
                 );
                 continue;
@@ -136,11 +173,25 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             registrations.Add(
                 (
                     registered.Index,
-                    Build(registered.ServiceType, registered.Implementation, registered.Lifetime)
+                    BuildExposed(
+                        registered.ServiceType,
+                        registered.Implementation,
+                        registered.Lifetime,
+                        exposures
+                    )
                 )
             );
         }
+    }
 
+    private static void AddUnpairedInterfaceRegistrations(
+        List<RegisteredClass> classes,
+        Dictionary<Type, (int Index, ServiceDescriptor Descriptor)> interfaces,
+        Dictionary<Type, TrainMutationExposure> exposures,
+        List<(int Index, TrainRegistration Registration)> registrations,
+        HashSet<Type> pairedInterfaces
+    )
+    {
         foreach (var (serviceType, (index, descriptor)) in interfaces)
         {
             if (pairedInterfaces.Contains(serviceType))
@@ -153,22 +204,16 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 // A factory whose class cannot be read. When a registered class implements the
                 // interface, that class is listed under its own entry already, and listing this
                 // interface could name a different train from the one whose attributes were read.
-                if (classes.Any(c => serviceType.IsAssignableFrom(c.Implementation)))
+                if (classes.Exists(c => serviceType.IsAssignableFrom(c.Implementation)))
                     continue;
 
                 implementation = serviceType;
             }
 
-            registrations.Add((index, Build(serviceType, implementation, descriptor.Lifetime)));
+            registrations.Add(
+                (index, BuildExposed(serviceType, implementation, descriptor.Lifetime, exposures))
+            );
         }
-
-        _cachedRegistrations = registrations
-            .OrderBy(r => r.Index)
-            .Select(r => r.Registration)
-            .ToList()
-            .AsReadOnly();
-
-        return _cachedRegistrations;
     }
 
     /// <summary>
@@ -181,7 +226,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     {
         var shared = classes
             .GroupBy(c => c.ServiceType)
-            .Where(g => g.Select(c => c.Implementation).Distinct().Count() > 1)
+            .Where(g => g.Select(c => c.Implementation).Distinct().Skip(1).Any())
             .ToList();
 
         if (shared.Count == 0)
@@ -189,7 +234,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
         throw new TrainException(
             string.Join(
-                " ",
+                ' ',
                 shared.Select(g =>
                     $"{g.Count()} trains are registered under {g.Key.FullName}: "
                     + string.Join(", ", g.Select(c => c.Implementation.FullName))
@@ -263,7 +308,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     )
     {
         var genericArgs = TrainServiceType
-            .FindClosedServiceTrain(serviceType)!
+            .FindClosedServiceTrain(serviceType)
+            .NotNull()
             .GetGenericArguments();
         var inputType = genericArgs[0];
         var outputType = genericArgs[1];
@@ -277,7 +323,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         if (exposure?.Policy is { } exposurePolicy && !string.IsNullOrWhiteSpace(exposurePolicy))
         {
             hasAuthorize = true;
-            if (!policies.Contains(exposurePolicy))
+            if (!policies.Contains(exposurePolicy, StringComparer.Ordinal))
                 policies = policies.Append(exposurePolicy).ToList().AsReadOnly();
         }
 
@@ -300,8 +346,10 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             IsQuery = graphql.IsQuery,
             IsMutation = graphql.IsMutation,
             IsBroadcastEnabled = HasBroadcastAttribute(implementationType),
-            IsRunProgressEnabled =
-                implementationType.GetCustomAttribute<TraxRunProgressAttribute>() is not null,
+            IsRunProgressEnabled = Attribute.IsDefined(
+                implementationType,
+                typeof(TraxRunProgressAttribute)
+            ),
             RunProgressAnswers =
                 implementationType.GetCustomAttribute<TraxRunProgressAttribute>()?.Answers == true,
             IsRemote = HasRemoteAttribute(implementationType),
@@ -354,11 +402,20 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         var policies = new List<string>();
         foreach (var attr in attributes.Where(a => !string.IsNullOrWhiteSpace(a.Policy)))
         {
-            var policy = attr.Policy!;
+            var policy = attr.Policy.NotNull();
             if (!policies.Contains(policy))
                 policies.Add(policy);
         }
 
+        var (roles, roleSets) = ReadRoles(attributes);
+
+        return (true, policies.AsReadOnly(), roles.AsReadOnly(), roleSets.AsReadOnly());
+    }
+
+    private static (List<string> Roles, List<IReadOnlyList<string>> RoleSets) ReadRoles(
+        List<TraxAuthorizeAttribute> attributes
+    )
+    {
         var roles = new List<string>();
         var roleSets = new List<IReadOnlyList<string>>();
         foreach (var attr in attributes.Where(a => a.Roles is not null))
@@ -367,7 +424,9 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             // ordinally, the way @authorize matches them, so "Admin" and "admin" are different
             // roles. Folding case here once let a claim satisfy a role it only resembled: the
             // invariant culture upper-cases the long s to S.
-            var parsed = attr.Roles!.Split(',', StringSplitOptions.TrimEntries)
+            var parsed = attr
+                .Roles.NotNull()
+                .Split(',', StringSplitOptions.TrimEntries)
                 .Where(r => r.Length > 0)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
@@ -382,7 +441,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             // attribute already declared adds nothing to the requirement.
             if (
                 parsed.Count > 0
-                && !roleSets.Any(set =>
+                && !roleSets.Exists(set =>
                     set.Count == parsed.Count
                     && set.All(r => parsed.Contains(r, StringComparer.Ordinal))
                 )
@@ -390,7 +449,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 roleSets.Add(parsed.AsReadOnly());
         }
 
-        return (true, policies.AsReadOnly(), roles.AsReadOnly(), roleSets.AsReadOnly());
+        return (roles, roleSets);
     }
 
     private static (
@@ -441,21 +500,24 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         // attribute does not flow to the implementing type via inherit: true, so check
         // the implementation (plus its base chain) and every interface it implements.
         if (
-            implementationType.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true)
-            is not null
+            Attribute.IsDefined(
+                implementationType,
+                typeof(TraxAllowAnonymousAttribute),
+                inherit: true
+            )
         )
             return true;
 
         return implementationType
             .GetInterfaces()
-            .Any(i => i.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null);
+            .Any(i => Attribute.IsDefined(i, typeof(TraxAllowAnonymousAttribute), inherit: true));
     }
 
     private static bool HasBroadcastAttribute(Type implementationType) =>
-        implementationType.GetCustomAttribute<TraxBroadcastAttribute>() is not null;
+        Attribute.IsDefined(implementationType, typeof(TraxBroadcastAttribute));
 
     private static bool HasRemoteAttribute(Type implementationType) =>
-        implementationType.GetCustomAttribute<TraxRemoteAttribute>() is not null;
+        Attribute.IsDefined(implementationType, typeof(TraxRemoteAttribute));
 
     private static int? GetConcurrencyLimit(Type implementationType) =>
         implementationType.GetCustomAttribute<TraxConcurrencyLimitAttribute>()?.MaxConcurrent;
@@ -465,7 +527,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         if (!type.IsGenericType)
             return type.Name;
 
-        var name = type.Name[..type.Name.IndexOf('`')];
+        var name = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
         var args = string.Join(", ", type.GetGenericArguments().Select(GetFriendlyTypeName));
         return $"{name}<{args}>";
     }

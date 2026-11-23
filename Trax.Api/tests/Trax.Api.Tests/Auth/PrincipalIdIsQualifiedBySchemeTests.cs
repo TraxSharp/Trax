@@ -10,6 +10,7 @@ using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;
@@ -59,25 +60,27 @@ public class PrincipalIdIsQualifiedBySchemeTests
         string value
     )
     {
-        await using var scope = services.CreateAsyncScope();
-        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        context.Request.Headers[header] = value;
-        var result = await scope
-            .ServiceProvider.GetRequiredService<IAuthenticationService>()
-            .AuthenticateAsync(context, scheme);
-        result.Succeeded.Should().BeTrue(result.Failure?.Message);
-        return result.Principal!.TryGetPrincipalId(out var id) ? id : null;
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+            context.Request.Headers[header] = value;
+            var result = await scope
+                .ServiceProvider.GetRequiredService<IAuthenticationService>()
+                .AuthenticateAsync(context, scheme)
+                .ConfigureAwait(false);
+            result.Succeeded.Should().BeTrue(result.Failure?.Message);
+            return result.Principal.NotNull().TryGetPrincipalId(out var id) ? id : null;
+        }
     }
 
     private static async Task<string?> SocketPrincipalId(IServiceProvider services, object payload)
     {
         var interceptor = new TraxCompositeSocketInterceptor(new TraxApplicationServices(services));
         var (session, http) = NewSession();
-        var status = await interceptor.OnConnectAsync(
-            session,
-            Payload(payload),
-            CancellationToken.None
-        );
+        var status = await interceptor
+            .OnConnectAsync(session, Payload(payload), CancellationToken.None)
+            .ConfigureAwait(false);
         status.Accepted.Should().BeTrue(status.Message);
         return http.User.TryGetPrincipalId(out var id) ? id : null;
     }
@@ -148,7 +151,10 @@ public class PrincipalIdIsQualifiedBySchemeTests
         var claims = new TraxPrincipal("abc", "Abc", []).ToClaimsPrincipal("Customer");
 
         claims.TryGetTraxPrincipal(out var principal).Should().BeTrue();
-        principal!.Id.Should().Be("Customer:abc", "the claim carries the qualified id, per " + Adr);
+        principal
+            .NotNull()
+            .Id.Should()
+            .Be("Customer:abc", "the claim carries the qualified id, per " + Adr);
         TraxPrincipalId.Qualify("Customer", "abc").Should().Be("Customer:abc");
     }
 

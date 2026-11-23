@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Cli.Machines;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Tests.Fakes;
 
@@ -25,9 +26,9 @@ internal sealed class FakeNodeRunner : INodeRunner
     public bool WritesOutputs { get; set; } = true;
     public List<(string Script, IReadOnlyList<string> Args)> Calls { get; } = [];
 
-    public bool IsAvailable() => Available;
+    public Task<bool> IsAvailableAsync() => Task.FromResult(Available);
 
-    public NodeResult Run(string scriptPath, IReadOnlyList<string> args)
+    public async Task<NodeResult> RunAsync(string scriptPath, IReadOnlyList<string> args)
     {
         Calls.Add((scriptPath, args));
         if (ExitCode != 0)
@@ -41,28 +42,41 @@ internal sealed class FakeNodeRunner : INodeRunner
         if (script.Contains("twin", StringComparison.Ordinal))
         {
             var outDir = flags["--out-dir"];
-            var id = ReadIrId(flags["--ir"]);
-            if (flags.GetValueOrDefault("--lang") == "csharp")
+            var id = await ReadIrIdAsync(flags["--ir"]).ConfigureAwait(false);
+            if (
+                string.Equals(flags.GetValueOrDefault("--lang"), "csharp", StringComparison.Ordinal)
+            )
             {
-                File.WriteAllText(
-                    Path.Combine(outDir, $"{MachineScaffolder.Pascal(id)}.g.cs"),
-                    ViewContent
-                );
+                await File.WriteAllTextAsync(
+                        Path.Combine(outDir, $"{MachineScaffolder.Pascal(id)}.g.cs"),
+                        ViewContent
+                    )
+                    .ConfigureAwait(false);
                 return new NodeResult(0, "", "");
             }
-            File.WriteAllText(Path.Combine(outDir, $"{id}.contexts.g.ts"), ContextsContent);
-            File.WriteAllText(Path.Combine(outDir, $"{id}.machine.g.ts"), MachineContent);
+            await File.WriteAllTextAsync(
+                    Path.Combine(outDir, $"{id}.contexts.g.ts"),
+                    ContextsContent
+                )
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(outDir, $"{id}.machine.g.ts"), MachineContent)
+                .ConfigureAwait(false);
         }
         else if (script.Contains("corpus", StringComparison.Ordinal))
         {
-            File.WriteAllText(flags["--out"], CorpusContent);
+            await File.WriteAllTextAsync(flags["--out"], CorpusContent).ConfigureAwait(false);
         }
 
         return new NodeResult(0, "", "");
     }
 
-    private static string ReadIrId(string irPath) =>
-        ((JsonObject)JsonNode.Parse(File.ReadAllText(irPath))!)["id"]!.GetValue<string>();
+    private static async Task<string> ReadIrIdAsync(string irPath) =>
+        (
+            (JsonObject)
+                JsonNode.Parse(await File.ReadAllTextAsync(irPath).ConfigureAwait(false)).NotNull()
+        )["id"]
+            .NotNull()
+            .GetValue<string>();
 
     private static Dictionary<string, string> ParseFlags(IReadOnlyList<string> args)
     {

@@ -1,0 +1,94 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class SimplifyCallerArgumentExpressionAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.SimplifyCallerArgumentExpression,
+        title: "Remove redundant argument value",
+        messageFormat: "Remove redundant argument value",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.SimplifyCallerArgumentExpression));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+        context.RegisterCompilationStartAction(context =>
+        {
+            var analyzerContext = new AnalyzerContext(context.Compilation);
+            if (!analyzerContext.IsValid)
+                return;
+
+            context.RegisterOperationAction(analyzerContext.AnalyzeInvocation, OperationKind.Invocation);
+        });
+    }
+
+    private sealed class AnalyzerContext(Compilation compilation)
+    {
+        private readonly ITypeSymbol _callerArgumentExpressionAttribute = compilation.GetBestTypeByMetadataName("System.Runtime.CompilerServices.CallerArgumentExpressionAttribute")!;
+
+        public bool IsValid => _callerArgumentExpressionAttribute is not null;
+
+        public void AnalyzeInvocation(OperationAnalysisContext context)
+        {
+            var operation = (IInvocationOperation)context.Operation;
+            if (!operation.GetCSharpLanguageVersion().IsCSharp10OrGreater())
+                return;
+
+            foreach (var argument in operation.Arguments)
+            {
+                AnalyzeArgument(context, operation, argument);
+            }
+        }
+
+        private void AnalyzeArgument(OperationAnalysisContext context, IInvocationOperation invocation, IArgumentOperation argument)
+        {
+            if (!argument.Value.ConstantValue.HasValue)
+                return;
+
+            if (argument.ArgumentKind is not ArgumentKind.Explicit)
+                return;
+
+            if (argument.Parameter is null)
+                return;
+
+            if (!argument.Parameter.Type.IsString())
+                return;
+
+            if (!argument.Parameter.HasExplicitDefaultValue)
+                return;
+
+            if (argument.Parameter.ExplicitDefaultValue is not null)
+                return;
+
+            foreach (var attribute in argument.Parameter.GetAttributes())
+            {
+                if (attribute.ConstructorArguments.Length == 0)
+                    continue;
+
+                if (!attribute.AttributeClass.IsEqualTo(_callerArgumentExpressionAttribute))
+                    continue;
+
+                var parameterName = attribute.ConstructorArguments[0].Value as string;
+                if (string.IsNullOrEmpty(parameterName))
+                    continue;
+
+                var targetArgument = invocation.Arguments.FirstOrDefault(arg => arg.Parameter?.Name == parameterName);
+                if (targetArgument is null)
+                    continue;
+
+                var defaultValue = targetArgument.Value.Syntax.ToString();
+                if (defaultValue == (string?)argument.Value.ConstantValue.Value)
+                {
+                    context.ReportDiagnostic(Rule, argument);
+                }
+            }
+        }
+    }
+}

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Dashboard.Serving;
 
@@ -21,7 +22,7 @@ namespace Trax.Api.Dashboard.Serving;
 /// <c>Trax.Samples.Orders.IShipOrderTrain</c> or a manifest named <c>nightly.log</c>), answered
 /// with the entry page.</item>
 /// <item>The entry page is revalidated on every load (<c>no-cache</c>, with an ETag), so a new
-/// build is picked up at once, and is never stored by a shared cache (<c>private</c>), because it
+/// build is picked up at once, and is never stored by a shared cache (<see langword="private"/>), because it
 /// is the gated shell a shared cache must not hand to someone the posture would refuse. Files under <c>assets/</c> are named by their content
 /// and cached for good, by the browser alone unless the shell is anonymous
 /// (<see cref="AssetCacheControl"/>).</item>
@@ -47,7 +48,11 @@ internal sealed partial class DashboardEndpoint(
     private const string Revalidate = "no-cache";
     private const string PrivateRevalidate = "private, no-cache";
 
-    private static readonly JsonSerializerOptions ConfigJson = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions ConfigJson = new(JsonSerializerDefaults.Web)
+    {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     public async Task HandleAsync(HttpContext context)
     {
@@ -81,23 +86,38 @@ internal sealed partial class DashboardEndpoint(
         }
         var basePath = request.PathBase.Add(new PathString(path[..^relative.Length].TrimEnd('/')));
 
-        if (relative.Length == 0 || relative == DashboardAssets.IndexPath)
+        if (
+            relative.Length == 0
+            || string.Equals(relative, DashboardAssets.IndexPath, StringComparison.Ordinal)
+        )
         {
-            await WriteIndexAsync(context, basePath);
+            await WriteIndexAsync(context, basePath).ConfigureAwait(false);
             return;
         }
 
+        await ServeAssetOrIndexAsync(context, relative, basePath).ConfigureAwait(false);
+    }
+
+    // A file of the app when it has one by that path, a 404 for any other file, and the index for a route.
+    private async Task ServeAssetOrIndexAsync(
+        HttpContext context,
+        string relative,
+        PathString basePath
+    )
+    {
+        var response = context.Response;
         if (assets.TryGet(relative, out var asset))
         {
             await WriteAsync(
-                context,
-                asset.Content,
-                asset.ContentType,
-                asset.ETag,
-                DashboardAssets.IsContentHashed(asset.Path)
-                    ? AssetCacheControl(context, anonymousShell)
-                    : PrivateRevalidate
-            );
+                    context,
+                    asset.Content,
+                    asset.ContentType,
+                    asset.ETag,
+                    DashboardAssets.IsContentHashed(asset.Path)
+                        ? AssetCacheControl(context, anonymousShell)
+                        : PrivateRevalidate
+                )
+                .ConfigureAwait(false);
             return;
         }
 
@@ -108,7 +128,7 @@ internal sealed partial class DashboardEndpoint(
             return;
         }
 
-        await WriteIndexAsync(context, basePath);
+        await WriteIndexAsync(context, basePath).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -150,7 +170,7 @@ internal sealed partial class DashboardEndpoint(
     )
     {
         var baseHref = basePath.Add(new PathString("/")).ToUriComponent();
-        var fields = new Dictionary<string, object>
+        var fields = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["basePath"] = baseHref,
             ["graphqlPath"] = graphQLPath,
@@ -165,7 +185,7 @@ internal sealed partial class DashboardEndpoint(
             $"<base href=\"{HtmlEncoder.Default.Encode(baseHref)}\" />"
             + $"<meta name=\"trax-dashboard-config\" content=\"{HtmlEncoder.Default.Encode(config)}\" />";
 
-        var at = HeadTag().Match(template);
+        var at = HeadTag.Match(template);
         if (!at.Success)
             throw new InvalidOperationException(
                 "The Trax API dashboard's index.html has no <head>, so its runtime config cannot be written into it."
@@ -177,15 +197,22 @@ internal sealed partial class DashboardEndpoint(
     {
         var graphQL = context.Request.PathBase.Add(new PathString(graphQLPath())).ToUriComponent();
         var html = Encoding.UTF8.GetBytes(
-            RenderIndex(assets.IndexTemplate!, basePath, graphQL, documentIds(), hostAuthenticates)
+            RenderIndex(
+                assets.IndexTemplate.NotNull(),
+                basePath,
+                graphQL,
+                documentIds(),
+                hostAuthenticates
+            )
         );
         await WriteAsync(
-            context,
-            html,
-            "text/html; charset=utf-8",
-            DashboardAssets.ETagOf(html),
-            PrivateRevalidate
-        );
+                context,
+                html,
+                "text/html; charset=utf-8",
+                DashboardAssets.ETagOf(html),
+                PrivateRevalidate
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task WriteAsync(
@@ -202,7 +229,7 @@ internal sealed partial class DashboardEndpoint(
 
         if (
             context.Request.Headers.IfNoneMatch.ToString() is { Length: > 0 } match
-            && match.Split(',').Any(m => m.Trim() == etag)
+            && match.Split(',').Any(m => string.Equals(m.Trim(), etag, StringComparison.Ordinal))
         )
         {
             response.StatusCode = StatusCodes.Status304NotModified;
@@ -213,7 +240,7 @@ internal sealed partial class DashboardEndpoint(
         response.ContentType = contentType;
         response.ContentLength = content.Length;
         if (!HttpMethods.IsHead(context.Request.Method))
-            await response.Body.WriteAsync(content, context.RequestAborted);
+            await response.Body.WriteAsync(content, context.RequestAborted).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -238,7 +265,7 @@ internal sealed partial class DashboardEndpoint(
         // so nothing a client sends can widen the policy.
         var socket = "";
         var host = request.Host.Value;
-        if (host is not null && PlainHost().IsMatch(host))
+        if (host is not null && PlainHost.IsMatch(host))
             socket = request.IsHttps ? $" wss://{host}" : $" ws://{host} wss://{host}";
 
         return "default-src 'none'; "
@@ -253,9 +280,13 @@ internal sealed partial class DashboardEndpoint(
             + "object-src 'none'";
     }
 
-    [GeneratedRegex("<head(?:\\s[^>]*)?>", RegexOptions.IgnoreCase)]
-    private static partial Regex HeadTag();
+    [GeneratedRegex("<head(?:\\s[^>]*)?>", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex HeadTag { get; }
 
-    [GeneratedRegex("^[A-Za-z0-9.\\-]+(?::[0-9]{1,5})?$|^\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?$")]
-    private static partial Regex PlainHost();
+    [GeneratedRegex(
+        "^[A-Za-z0-9.\\-]+(?::[0-9]{1,5})?$|^\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PlainHost { get; }
 }

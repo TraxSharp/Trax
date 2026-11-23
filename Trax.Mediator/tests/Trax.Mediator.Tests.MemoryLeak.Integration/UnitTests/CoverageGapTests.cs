@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -106,7 +107,8 @@ public class CoverageGapTests
     [Test]
     public async Task QueueAsync_HappyPath_PersistsWorkQueueEntry()
     {
-        using var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
             new GapInput { Value = "queued" },
@@ -122,10 +124,12 @@ public class CoverageGapTests
     [Test]
     public async Task QueueAsync_UnknownTrain_ThrowsInvalidOperation()
     {
-        using var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
-        var act = async () => await execution.QueueAsync("Does.Not.Exist", "{}");
+        var act = async () =>
+            await execution.QueueAsync("Does.Not.Exist", "{}").ConfigureAwait(false);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -143,7 +147,8 @@ public class CoverageGapTests
                         .WithMaxInputJsonBytes(64)
                 )
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
         var oversized = new GapInput { Value = new string('x', 1024) };
@@ -152,7 +157,8 @@ public class CoverageGapTests
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
-        var act = async () => await execution.QueueAsync(nameof(IGapTrain), inputJson);
+        var act = async () =>
+            await execution.QueueAsync(nameof(IGapTrain), inputJson).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Mediator.Exceptions.TrainInputValidationException>();
     }
@@ -160,12 +166,14 @@ public class CoverageGapTests
     [Test]
     public async Task RunAsync_DeserializeReturnsNull_ThrowsJsonException()
     {
-        using var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
         // The literal "null" deserializes to null for reference types — covers the
         // null-check after JsonSerializer.Deserialize in DeserializeInput.
-        var act = async () => await execution.RunAsync(nameof(IGapTrain), "null");
+        var act = async () =>
+            await execution.RunAsync(nameof(IGapTrain), "null").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<System.Text.Json.JsonException>(
@@ -177,12 +185,14 @@ public class CoverageGapTests
     [Test]
     public async Task QueueAsync_DeserializeReturnsNull_ThrowsJsonException()
     {
-        using var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        var provider = (ServiceProvider)BuildProviderWithGapTrains();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
         // Only a null or blank string is read as {}; the JSON literal null is not blank, so it
         // reaches the deserializer and is refused there, the same as on RunAsync.
-        var act = async () => await execution.QueueAsync(nameof(IGapTrain), "null");
+        var act = async () =>
+            await execution.QueueAsync(nameof(IGapTrain), "null").ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<System.Text.Json.JsonException>(
@@ -200,7 +210,8 @@ public class CoverageGapTests
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(mediator => mediator.ScanAssemblies(typeof(CoverageGapTests).Assembly))
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
         var trusted =
             provider.GetRequiredService<Trax.Mediator.Services.TrustedExecution.ITrustedExecutionScope>();
@@ -209,7 +220,7 @@ public class CoverageGapTests
             new AuthGapInput { Value = "x" },
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
-        var trainName = typeof(IAuthorizedGapTrain).FullName!;
+        var trainName = typeof(IAuthorizedGapTrain).FullName.NotNull();
 
         using (trusted.BeginTrusted("test.admin-surface"))
         {
@@ -220,7 +231,8 @@ public class CoverageGapTests
                 .Be("x");
         }
 
-        var outside = async () => await execution.RunAsync(trainName, inputJson);
+        var outside = async () =>
+            await execution.RunAsync(trainName, inputJson).ConfigureAwait(false);
         await outside
             .Should()
             .ThrowAsync<InvalidOperationException>("outside the scope the check still fails closed")
@@ -238,7 +250,8 @@ public class CoverageGapTests
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(mediator => mediator.ScanAssemblies(typeof(CoverageGapTests).Assembly))
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
         var trusted =
             provider.GetRequiredService<Trax.Mediator.Services.TrustedExecution.ITrustedExecutionScope>();
@@ -251,14 +264,16 @@ public class CoverageGapTests
         using (trusted.BeginTrusted("test.admin-surface"))
         {
             var queued = await execution.QueueAsync(
-                typeof(IAuthorizedGapTrain).FullName!,
+                typeof(IAuthorizedGapTrain).FullName.NotNull(),
                 inputJson
             );
             queued.WorkQueueId.Should().BeGreaterThan(0);
         }
 
         var outside = async () =>
-            await execution.QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson);
+            await execution
+                .QueueAsync(typeof(IAuthorizedGapTrain).FullName.NotNull(), inputJson)
+                .ConfigureAwait(false);
         await outside
             .Should()
             .ThrowAsync<InvalidOperationException>("outside the scope the check still fails closed")
@@ -277,7 +292,8 @@ public class CoverageGapTests
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(mediator => mediator.ScanAssemblies(typeof(CoverageGapTests).Assembly))
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
         var inputJson = JsonSerializer.Serialize(
@@ -285,8 +301,8 @@ public class CoverageGapTests
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
-        var trainName = typeof(IAuthorizedGapTrain).FullName!;
-        var act = async () => await execution.RunAsync(trainName, inputJson);
+        var trainName = typeof(IAuthorizedGapTrain).FullName.NotNull();
+        var act = async () => await execution.RunAsync(trainName, inputJson).ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -305,7 +321,8 @@ public class CoverageGapTests
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(mediator => mediator.ScanAssemblies(typeof(CoverageGapTests).Assembly))
         );
-        using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         var execution = provider.GetRequiredService<ITrainExecutionService>();
 
         var inputJson = JsonSerializer.Serialize(
@@ -314,7 +331,9 @@ public class CoverageGapTests
         );
 
         var act = async () =>
-            await execution.QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson);
+            await execution
+                .QueueAsync(typeof(IAuthorizedGapTrain).FullName.NotNull(), inputJson)
+                .ConfigureAwait(false);
 
         var thrown = await act.Should()
             .ThrowExactlyAsync<Trax.Mediator.Exceptions.TrainAuthorizationNotConfiguredException>();

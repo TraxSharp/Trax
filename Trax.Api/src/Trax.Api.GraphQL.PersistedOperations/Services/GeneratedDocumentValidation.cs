@@ -32,12 +32,12 @@ internal static class GeneratedDocumentValidation
             if (errors.Count > 0)
                 refusals.Add(
                     $"The document of the {document.Owner} is refused by this host's own validation, so "
-                        + $"every call to it would be: {string.Join(" ", errors)}"
+                        + $"every call to it would be: {string.Join(' ', errors)}"
                 );
         }
         if (refusals.Count > 0)
             throw new InvalidOperationException(
-                string.Join("\n", refusals)
+                string.Join('\n', refusals)
                     + "\nRaise the limit (MaxExecutionDepth, MaxOperationsPerRequest), or give the answer a shallower "
                     + "shape."
             );

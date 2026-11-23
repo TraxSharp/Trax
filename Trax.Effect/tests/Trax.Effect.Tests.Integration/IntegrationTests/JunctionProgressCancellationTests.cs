@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -22,7 +23,7 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [Property("adr", "docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md")]
 public class JunctionProgressCancellationTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void BuildProvider()
@@ -37,19 +38,28 @@ public class JunctionProgressCancellationTests
     }
 
     [OneTimeTearDown]
-    public async Task DisposeProvider() => await _provider.DisposeAsync();
+    public async Task DisposeProvider()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [Test]
     public async Task Work_that_finished_after_the_caller_cancelled_is_recorded_completed_with_junction_progress()
     {
-        using var scope = _provider.CreateScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (FinishesAnywayTrain)
             scope.ServiceProvider.GetRequiredService<IFinishesAnywayTrain>();
         using var cts = new CancellationTokenSource();
         Downstream.Reset();
 
         var run = train.Run(Unit.Default, cts.Token);
-        await Downstream.Started.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await Downstream.Started.Task.WaitAsync(
+            TimeSpan.FromSeconds(15),
+            TimeProvider.System,
+            CancellationToken.None
+        );
         await cts.CancelAsync();
         Downstream.Answer.SetResult();
 
@@ -62,10 +72,14 @@ public class JunctionProgressCancellationTests
         Downstream.WorkDone.Should().BeTrue("the junction's downstream call completed");
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var row = await context
             .Metadatas.AsNoTracking()
-            .SingleAsync(m => m.Id == train.Metadata!.Id);
+            .SingleAsync(
+                m => m.Id == train.Metadata.NotNull().Id,
+                cancellationToken: CancellationToken.None
+            );
 
         row.TrainState.Should()
             .Be(
@@ -92,22 +106,22 @@ public class JunctionProgressCancellationTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private class UninterruptibleJunction : EffectJunction<Unit, Unit>
+    private sealed class UninterruptibleJunction : EffectJunction<Unit, Unit>
     {
         public override async Task<Unit> Run(Unit input)
         {
             Downstream.Started.TrySetResult();
-            await Downstream.Answer.Task;
+            await Downstream.Answer.Task.ConfigureAwait(false);
             Downstream.WorkDone = true;
             return Unit.Default;
         }
     }
 
-    private class FinishesAnywayTrain : ServiceTrain<Unit, Unit>, IFinishesAnywayTrain
+    private sealed class FinishesAnywayTrain : ServiceTrain<Unit, Unit>, IFinishesAnywayTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<UninterruptibleJunction>().Resolve();
     }
 
-    public interface IFinishesAnywayTrain : IServiceTrain<Unit, Unit> { }
+    public interface IFinishesAnywayTrain : IServiceTrain<Unit, Unit>;
 }

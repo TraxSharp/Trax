@@ -48,4 +48,4 @@ namespace Trax.Effect.Attributes;
     AllowMultiple = false,
     Inherited = true
 )]
-public sealed class TraxAllowAnonymousAttribute : Attribute { }
+public sealed class TraxAllowAnonymousAttribute : Attribute;

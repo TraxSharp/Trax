@@ -45,9 +45,11 @@ internal sealed class SelectionTypes(
             var field =
                 selection
                     ?.Selections.OfType<GraphQLField>()
-                    .FirstOrDefault(f => f.Name.StringValue == name)
+                    .FirstOrDefault(f =>
+                        string.Equals(f.Name.StringValue, name, StringComparison.Ordinal)
+                    )
                 ?? throw new InvalidOperationException(
-                    $"The document of {owner} does not select '{string.Join(".", path)}'. Export the manifest again "
+                    $"The document of {owner} does not select '{string.Join('.', path)}'. Export the manifest again "
                         + "from the host."
                 );
             selection = field.SelectionSet;
@@ -120,7 +122,7 @@ internal sealed class SelectionTypes(
         foreach (var (key, field, below) in fields)
         {
             var name = field.Name.StringValue;
-            if (name == "__typename")
+            if (string.Equals(name, "__typename", StringComparison.Ordinal))
             {
                 sb.Append(pad)
                     .Append(SdlTypes.Property(key))
@@ -130,7 +132,9 @@ internal sealed class SelectionTypes(
                 continue;
             }
             var definition =
-                objectType.Fields?.Items.FirstOrDefault(f => f.Name.StringValue == name)
+                objectType.Fields?.Items.FirstOrDefault(f =>
+                    string.Equals(f.Name.StringValue, name, StringComparison.Ordinal)
+                )
                 ?? throw new InvalidOperationException(
                     $"The document of {owner} selects {typeName}.{name}, which the manifest's types do not hold. "
                         + "Export the manifest again from the host."
@@ -170,7 +174,9 @@ internal sealed class SelectionTypes(
             {
                 case GraphQLField field:
                     var key = field.Alias?.Name.StringValue ?? field.Name.StringValue;
-                    var at = fields.FindIndex(f => f.Key == key);
+                    var at = fields.FindIndex(f =>
+                        string.Equals(f.Key, key, StringComparison.Ordinal)
+                    );
                     if (at < 0)
                     {
                         fields.Add((key, field, []));

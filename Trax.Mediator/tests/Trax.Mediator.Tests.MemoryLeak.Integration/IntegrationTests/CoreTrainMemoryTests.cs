@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
@@ -31,9 +32,14 @@ public class CoreTrainMemoryTests
                     var train = trainFactory();
 
                     trainReferences.Add(new WeakReference(train));
-                    var largeInput = new LargeDataModel($"test_{i}", new byte[100_000]); // 100KB each
+                    var largeInput = new LargeDataModel(
+                        string.Create(CultureInfo.InvariantCulture, $"test_{i}"),
+                        new byte[100_000]
+                    ); // 100KB each
 
-                    var output = await train.Run(largeInput);
+                    var output = await train
+                        .Run(largeInput, CancellationToken.None)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
 
                     // Train goes out of scope here, but Memory dictionary might retain objects
@@ -42,13 +48,15 @@ public class CoreTrainMemoryTests
             "CoreTrain_MemoryDictionary_Retention"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Whether the Memory dictionary let go is a question about reachability, so it is asked of
         // the trains. Bounding MemoryRetained against MemoryAllocated cannot answer it: both sides
         // are the same process-wide measurement and the ratio tightens whenever a collection lands
         // inside the window.
-        var aliveTrains = await MemoryProfiler.CountAliveAsync(trainReferences);
+        var aliveTrains = await MemoryProfiler
+            .CountAliveAsync(trainReferences)
+            .ConfigureAwait(false);
 
         aliveTrains
             .Should()
@@ -92,8 +100,22 @@ public class CoreTrainMemoryTests
             iterations
         );
 
-        Console.WriteLine($"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs");
-        Console.WriteLine($"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs"
+                )
+            )
+            .ConfigureAwait(false);
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs"
+                )
+            )
+            .ConfigureAwait(false);
 
         largeAllocated
             .Should()
@@ -110,7 +132,7 @@ public class CoreTrainMemoryTests
     {
         var start = GC.GetTotalAllocatedBytes(precise: true);
         for (var i = 0; i < iterations; i++)
-            await body();
+            await body().ConfigureAwait(false);
         return GC.GetTotalAllocatedBytes(precise: true) - start;
     }
 
@@ -124,15 +146,19 @@ public class CoreTrainMemoryTests
                 for (int i = 0; i < 20; i++)
                 {
                     var train = new TupleTrain();
-                    var input = new SimpleInput($"tuple_test_{i}");
-                    var output = await train.Run(input);
+                    var input = new SimpleInput(
+                        string.Create(CultureInfo.InvariantCulture, $"tuple_test_{i}")
+                    );
+                    var output = await train
+                        .Run(input, CancellationToken.None)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
             "TupleTrain_MemoryUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Tuple handling should not cause excessive memory retention
         result
@@ -157,25 +183,37 @@ public class CoreTrainMemoryTests
                     var train = new VeryLargeDataTrain();
                     largeObjectTrains.Add(new WeakReference(train));
 
-                    var largeInput = new VeryLargeDataModel($"large_{i}", new byte[1_000_000]); // 1MB each
-                    var output = await train.Run(largeInput);
+                    var largeInput = new VeryLargeDataModel(
+                        string.Create(CultureInfo.InvariantCulture, $"large_{i}"),
+                        new byte[1_000_000]
+                    ); // 1MB each
+                    var output = await train
+                        .Run(largeInput, CancellationToken.None)
+                        .ConfigureAwait(false);
                     output.Should().NotBeNull();
                 }
             },
             "VeryLargeDataTrain_MemoryUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Force GC and check if trains can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        await Task.Delay(100); // Give GC time to work
+        await Task.Delay(100).ConfigureAwait(false); // Give GC time to work
 
         var aliveTrains = largeObjectTrains.Count(wr => wr.IsAlive);
-        Console.WriteLine($"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}"
+                )
+            )
+            .ConfigureAwait(false);
 
         aliveTrains
             .Should()
@@ -206,20 +244,25 @@ public class CoreTrainMemoryTests
                         {
                             var train = new LargeDataTrain();
                             var input = new LargeDataModel(
-                                $"concurrent_{trainId}_{i}",
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"concurrent_{trainId}_{i}"
+                                ),
                                 new byte[50_000]
                             ); // 50KB each
-                            var output = await train.Run(input);
+                            var output = await train
+                                .Run(input, CancellationToken.None)
+                                .ConfigureAwait(false);
                             output.Should().NotBeNull();
                         }
                     });
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
             },
             "ConcurrentTrains_MemoryUsage"
         );
 
-        Console.WriteLine(result.GetSummary());
+        await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
         // Concurrent execution should not cause excessive memory retention
         result
@@ -238,7 +281,7 @@ public class CoreTrainMemoryTests
         var input = new SimpleInput("clear_test");
 
         // Run train to populate Memory
-        var result = train.Run(input).Result;
+        var result = train.Run(input, CancellationToken.None).Result;
         result.Should().NotBeNull();
 
         // Memory dictionary should contain objects
@@ -270,16 +313,21 @@ public class CoreTrainMemoryTests
                     for (int i = 0; i < 15; i++)
                     {
                         var train = new LargeDataTrain();
-                        var input = new LargeDataModel($"batch_{batch}_item_{i}", new byte[75_000]); // 75KB each
-                        var output = await train.Run(input);
+                        var input = new LargeDataModel(
+                            string.Create(CultureInfo.InvariantCulture, $"batch_{batch}_item_{i}"),
+                            new byte[75_000]
+                        ); // 75KB each
+                        var output = await train
+                            .Run(input, CancellationToken.None)
+                            .ConfigureAwait(false);
                         output.Should().NotBeNull();
                     }
                 },
-                $"RepeatedExecution_Batch_{batch}"
+                string.Create(CultureInfo.InvariantCulture, $"RepeatedExecution_Batch_{batch}")
             );
 
             batchResults.Add(result);
-            Console.WriteLine(result.GetSummary());
+            await TestContext.Out.WriteLineAsync(result.GetSummary()).ConfigureAwait(false);
 
             // Force cleanup between batches
             GC.Collect();
@@ -299,155 +347,4 @@ public class CoreTrainMemoryTests
                 "Memory retention should be consistent across batches (difference < 8MB)"
             );
     }
-}
-
-// Test train classes
-public class SimpleInput(string name)
-{
-    public string Name { get; } = name;
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
-}
-
-public class SimpleOutput(string result)
-{
-    public string Result { get; } = result;
-    public DateTime ProcessedAt { get; } = DateTime.UtcNow;
-}
-
-public class LargeDataModel(string name, byte[] data)
-{
-    public string Name { get; } = name;
-    public byte[] Data { get; } = data;
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
-}
-
-public class VeryLargeDataModel(string name, byte[] data)
-{
-    public string Name { get; } = name;
-    public byte[] Data { get; } = data;
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
-    public string Description { get; } = new string('X', 10000); // Additional 10KB string
-}
-
-// Simple junction that processes input
-public class ProcessJunction : Junction<SimpleInput, SimpleOutput>
-{
-    public override Task<SimpleOutput> Run(SimpleInput input)
-    {
-        return Task.FromResult(new SimpleOutput($"Processed: {input.Name}"));
-    }
-}
-
-// Junction that processes SimpleOutput to SimpleOutput (for chaining)
-public class ProcessOutputJunction : Junction<SimpleOutput, SimpleOutput>
-{
-    public override Task<SimpleOutput> Run(SimpleOutput input)
-    {
-        return Task.FromResult(new SimpleOutput($"Reprocessed: {input.Result}"));
-    }
-}
-
-// Junction that handles large data
-public class LargeDataJunction : Junction<LargeDataModel, SimpleOutput>
-{
-    public override Task<SimpleOutput> Run(LargeDataModel input)
-    {
-        // Simulate some processing
-        var processedSize = input.Data.Length;
-        return Task.FromResult(new SimpleOutput($"Processed {processedSize} bytes"));
-    }
-}
-
-// Junction that returns a tuple
-public class TupleJunction : Junction<SimpleInput, (string Result, int Count, DateTime Timestamp)>
-{
-    public override Task<(string Result, int Count, DateTime Timestamp)> Run(SimpleInput input)
-    {
-        return Task.FromResult(
-            (
-                Result: $"Tuple result for {input.Name}",
-                Count: input.Name.Length,
-                Timestamp: DateTime.UtcNow
-            )
-        );
-    }
-}
-
-// Test trains
-public class SmallChainTrain : Train<SimpleInput, SimpleOutput>
-{
-    protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
-        await Chain<ProcessJunction>().Resolve();
-}
-
-public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
-{
-    protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
-        await Chain<ProcessJunction>()
-            .Chain<ProcessOutputJunction>()
-            .Chain<ProcessOutputJunction>()
-            .Chain<ProcessOutputJunction>()
-            .Chain<ProcessOutputJunction>()
-            .Resolve();
-}
-
-public class LargeDataTrain : Train<LargeDataModel, SimpleOutput>
-{
-    protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
-        await Chain<LargeDataJunction>().Resolve();
-}
-
-public class VeryLargeDataTrain : Train<VeryLargeDataModel, SimpleOutput>
-{
-    protected override Task<Either<Exception, SimpleOutput>> Junctions() =>
-        Chain<BuildLargeDataModel>().Chain<LargeDataJunction>().Resolve();
-}
-
-public class TupleTrain : Train<SimpleInput, (string Result, int Count, DateTime Timestamp)>
-{
-    protected override Task<
-        Either<Exception, (string Result, int Count, DateTime Timestamp)>
-    > Junctions() => Chain<TupleJunction>().Resolve();
-}
-
-/// <summary>
-/// Reaches the monad a run left behind, so the Memory tests can assert on what a chain
-/// accumulated and on clearing it.
-/// </summary>
-/// <remarks>
-/// The monad is framework state rather than anything a train declares, so it is read by
-/// reflection off the base class rather than by having the train hand it out. That keeps this
-/// train an ordinary chain declaration: the subject here is Monad.Memory, not the train.
-/// </remarks>
-public class TestableTrain : Train<SimpleInput, SimpleOutput>
-{
-    protected override Task<Either<Exception, SimpleOutput>> Junctions() =>
-        Chain<ProcessJunction>().Resolve();
-
-    public int GetMemoryCount() => Memory()?.Count ?? 0;
-
-    public void ClearMemory() => Memory()?.Clear();
-
-    private Dictionary<Type, object>? Memory()
-    {
-        const System.Reflection.BindingFlags flags =
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-
-        var monad = typeof(Train<SimpleInput, SimpleOutput>)
-            .GetField("_monad", flags)
-            ?.GetValue(this);
-
-        return monad?.GetType().GetProperty("Memory", flags)?.GetValue(monad)
-            as Dictionary<Type, object>;
-    }
-}
-
-/// <summary>
-/// Builds the large payload the memory tests measure. It is a junction because a train declares
-/// which junctions run; building the model is work, and work belongs in a junction.
-/// </summary>
-public class BuildLargeDataModel : Junction<VeryLargeDataModel, LargeDataModel>
-{
-    public override Task<LargeDataModel> Run(VeryLargeDataModel input) =>
-        Task.FromResult(new LargeDataModel(input.Name, input.Data));
 }

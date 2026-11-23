@@ -1,6 +1,8 @@
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -12,9 +14,9 @@ namespace Trax.Cli.Tests.UnitTests;
 /// service that serves HTTP and runs the api or scheduler role, so runs as one). It refuses what compose cannot give
 /// the hosts, and never overwrites a compose file it did not write.
 /// </summary>
-public class DeployComposeTests
+public partial class DeployComposeTests
 {
-    private string _dir = null!;
+    private string _dir = "";
 
     [SetUp]
     public void SetUp()
@@ -25,7 +27,7 @@ public class DeployComposeTests
             var project in new[] { "Orders/Orders.csproj", "Orders.Worker/Orders.Worker.csproj" }
         )
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_dir, project))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_dir, project)).NotNull());
             File.WriteAllText(Path.Combine(_dir, project), "<Project />");
         }
     }
@@ -72,7 +74,105 @@ public class DeployComposeTests
         };
 
     private static Dictionary<string, DeployManifest> Exports() =>
-        new() { ["hub"] = Hub(), ["worker"] = Worker() };
+        new(StringComparer.Ordinal) { ["hub"] = Hub(), ["worker"] = Worker() };
+
+    private const string HubAndTwoWorkersCompose = """
+        # Written by `trax deploy --target compose` from trax.deploy.json. Running it again overwrites this file.
+        # Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy
+        # .env.example to .env and fill it in. Never commit the .env.
+
+        # What every Trax service is given.
+        x-trax: &trax
+          ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;GSS Encryption Mode=Disable
+          PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+          RabbitMq__Host: rabbitmq
+          RabbitMq__UserName: orders
+          RabbitMq__Password: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+          Auth__Authority: ${Auth__Authority:?set Auth__Authority}
+          Stripe__ApiKey: ${Stripe__ApiKey:?set Stripe__ApiKey}
+
+        services:
+          database:
+            image: postgres:17
+            environment:
+              POSTGRES_DB: orders
+              POSTGRES_USER: orders
+              POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+            volumes:
+              - database:/var/lib/postgresql/data
+            healthcheck:
+              test: ["CMD", "pg_isready", "-U", "orders"]
+              interval: 5s
+            security_opt:
+              - no-new-privileges:true
+            restart: unless-stopped
+
+          rabbitmq:
+            image: rabbitmq:4
+            environment:
+              RABBITMQ_DEFAULT_USER: orders
+              RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+            healthcheck:
+              test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+              interval: 5s
+            security_opt:
+              - no-new-privileges:true
+            restart: unless-stopped
+
+          # The new version migrates the database once, before any service of it starts.
+          migrate:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            command: ["--trax-migrate"]
+            environment: *trax
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            depends_on:
+              database:
+                condition: service_healthy
+            restart: "no"
+
+          hub:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+            ports:
+              - "127.0.0.1:8080:8080"
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            depends_on:
+              migrate:
+                condition: service_completed_successfully
+              rabbitmq:
+                condition: service_healthy
+            restart: unless-stopped
+
+          worker:
+            image: orders-worker:${TRAX_IMAGE_TAG:-latest}
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            deploy:
+              replicas: 2
+            depends_on:
+              migrate:
+                condition: service_completed_successfully
+              rabbitmq:
+                condition: service_healthy
+            restart: unless-stopped
+
+        volumes:
+          database:
+
+        """;
 
     [Test]
     public void A_hub_and_two_workers_become_this_stack()
@@ -80,108 +180,7 @@ public class DeployComposeTests
         var files = ComposeTarget.Render(File_(), Exports());
 
         files.Select(f => f.Path).Should().Equal("compose.yaml", ".env.example");
-        files[0]
-            .Content.ReplaceLineEndings("\n")
-            .Should()
-            .Be(
-                """
-                # Written by `trax deploy --target compose` from trax.deploy.json. Running it again overwrites this file.
-                # Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy
-                # .env.example to .env and fill it in. Never commit the .env.
-
-                # What every Trax service is given.
-                x-trax: &trax
-                  ConnectionStrings__Trax: Host=database;Database=orders;Username=orders;GSS Encryption Mode=Disable
-                  PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-                  RabbitMq__Host: rabbitmq
-                  RabbitMq__UserName: orders
-                  RabbitMq__Password: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
-                  Auth__Authority: ${Auth__Authority:?set Auth__Authority}
-                  Stripe__ApiKey: ${Stripe__ApiKey:?set Stripe__ApiKey}
-
-                services:
-                  database:
-                    image: postgres:17
-                    environment:
-                      POSTGRES_DB: orders
-                      POSTGRES_USER: orders
-                      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-                    volumes:
-                      - database:/var/lib/postgresql/data
-                    healthcheck:
-                      test: ["CMD", "pg_isready", "-U", "orders"]
-                      interval: 5s
-                    security_opt:
-                      - no-new-privileges:true
-                    restart: unless-stopped
-
-                  rabbitmq:
-                    image: rabbitmq:4
-                    environment:
-                      RABBITMQ_DEFAULT_USER: orders
-                      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
-                    healthcheck:
-                      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-                      interval: 5s
-                    security_opt:
-                      - no-new-privileges:true
-                    restart: unless-stopped
-
-                  # The new version migrates the database once, before any service of it starts.
-                  migrate:
-                    image: orders-hub:${TRAX_IMAGE_TAG:-latest}
-                    command: ["--trax-migrate"]
-                    environment: *trax
-                    cap_drop:
-                      - ALL
-                    security_opt:
-                      - no-new-privileges:true
-                    depends_on:
-                      database:
-                        condition: service_healthy
-                    restart: "no"
-
-                  hub:
-                    image: orders-hub:${TRAX_IMAGE_TAG:-latest}
-                    environment:
-                      <<: *trax
-                      TRAX_MIGRATIONS: skip
-                    ports:
-                      - "127.0.0.1:8080:8080"
-                    cap_drop:
-                      - ALL
-                    security_opt:
-                      - no-new-privileges:true
-                    depends_on:
-                      migrate:
-                        condition: service_completed_successfully
-                      rabbitmq:
-                        condition: service_healthy
-                    restart: unless-stopped
-
-                  worker:
-                    image: orders-worker:${TRAX_IMAGE_TAG:-latest}
-                    environment:
-                      <<: *trax
-                      TRAX_MIGRATIONS: skip
-                    cap_drop:
-                      - ALL
-                    security_opt:
-                      - no-new-privileges:true
-                    deploy:
-                      replicas: 2
-                    depends_on:
-                      migrate:
-                        condition: service_completed_successfully
-                      rabbitmq:
-                        condition: service_healthy
-                    restart: unless-stopped
-
-                volumes:
-                  database:
-
-                """
-            );
+        files[0].Content.ReplaceLineEndings("\n").Should().Be(HubAndTwoWorkersCompose);
         files[1]
             .Content.ReplaceLineEndings("\n")
             .Should()
@@ -208,7 +207,7 @@ public class DeployComposeTests
         // What compose hands every Trax service once it has read the .env.
         var env = Interpolated(
             compose,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["POSTGRES_PASSWORD"] = password,
                 ["RABBITMQ_PASSWORD"] = password,
@@ -227,7 +226,7 @@ public class DeployComposeTests
         env["RabbitMq__Host"].Should().Be("rabbitmq");
         env["RabbitMq__UserName"].Should().Be("orders");
         env["RabbitMq__Password"].Should().Be(password);
-        env.Where(e => e.Value.Contains(password))
+        env.Where(e => e.Value.Contains(password, StringComparison.Ordinal))
             .Select(e => e.Key)
             .Should()
             .BeEquivalentTo(
@@ -249,14 +248,17 @@ public class DeployComposeTests
             .Select(l => l.Trim().Split(": ", 2))
             .ToDictionary(
                 p => p[0],
-                p =>
-                    System.Text.RegularExpressions.Regex.Replace(
-                        p[1],
-                        @"\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}",
-                        m => values[m.Groups[1].Value]
-                    )
+                p => Required.Replace(p[1], m => values[m.Groups["name"].Value]),
+                StringComparer.Ordinal
             );
     }
+
+    [GeneratedRegex(
+        @"\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Required { get; }
 
     [Test]
     public void A_stack_with_no_rabbitmq_host_runs_no_broker()
@@ -269,7 +271,11 @@ public class DeployComposeTests
         var compose = ComposeTarget
             .Render(
                 File_(),
-                new Dictionary<string, DeployManifest> { ["hub"] = hub, ["worker"] = worker }
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
+                {
+                    ["hub"] = hub,
+                    ["worker"] = worker,
+                }
             )[0]
             .Content;
 
@@ -283,7 +289,7 @@ public class DeployComposeTests
         var act = () =>
             ComposeTarget.Render(
                 File_(),
-                new Dictionary<string, DeployManifest>
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
                 {
                     ["hub"] = Hub(provider),
                     ["worker"] = Worker(),
@@ -317,7 +323,11 @@ public class DeployComposeTests
         var compose = ComposeTarget
             .Render(
                 File_(),
-                new Dictionary<string, DeployManifest> { ["hub"] = Hub(), ["worker"] = worker }
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
+                {
+                    ["hub"] = Hub(),
+                    ["worker"] = worker,
+                }
             )[0]
             .Content;
 
@@ -336,7 +346,7 @@ public class DeployComposeTests
         var compose = ComposeTarget
             .Render(
                 file,
-                new Dictionary<string, DeployManifest>
+                new Dictionary<string, DeployManifest>(StringComparer.Ordinal)
                 {
                     ["hub"] = Hub(),
                     ["worker"] = Worker(),
@@ -363,61 +373,86 @@ public class DeployComposeTests
     [TestCase(typeof(UnauthorizedAccessException))]
     [TestCase(typeof(System.Text.Json.JsonException))]
     [TestCase(typeof(System.ComponentModel.Win32Exception))]
-    public void Deploy_reports_a_failure_in_a_line(Type failure) =>
-        DeployCommand
-            .Run(
+    public async Task Deploy_reports_a_failure_in_a_line(Type failure)
+    {
+        var exit = await DeployCommand
+            .RunAsync(
                 "compose",
-                Write(File_()),
-                null,
+                await WriteAsync(File_()).ConfigureAwait(false),
+                outDir: null,
                 build: false,
                 new AwsDeployerTests.ThrowingExporter(
-                    (Exception)Activator.CreateInstance(failure)!
+                    (Exception)Activator.CreateInstance(failure).NotNull()
                 ),
-                (_, _) => { }
+                (_, _) => Task.CompletedTask,
+                TextWriter.Null,
+                TextWriter.Null
             )
-            .Should()
-            .Be(1);
+            .ConfigureAwait(false);
+
+        exit.Should().Be(1);
+    }
 
     [Test]
-    public void A_child_that_does_not_exit_in_time_is_stopped_and_its_output_kept()
+    public async Task A_child_that_does_not_exit_in_time_is_stopped_and_its_output_kept()
     {
         if (OperatingSystem.IsWindows())
             Assert.Ignore("Uses sh; the timeout's code path is the same on every OS.");
-        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh") { UseShellExecute = false };
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("echo serving; sleep 20");
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
 
-        var act = () => ChildProcess.Run(psi, TimeSpan.FromSeconds(1), CancellationToken.None);
+        var act = async () =>
+            await ChildProcess
+                .RunAsync(psi, TimeSpan.FromSeconds(1), CancellationToken.None)
+                .ConfigureAwait(false);
 
-        act.Should().Throw<TimeoutException>().WithMessage("*serving*");
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(15));
+        await act.Should()
+            .ThrowAsync<TimeoutException>()
+            .WithMessage("*serving*")
+            .ConfigureAwait(false);
+        TimeProvider.System.GetElapsedTime(clock).Should().BeLessThan(TimeSpan.FromSeconds(15));
     }
 
     [Test]
-    public void A_child_is_stopped_when_the_command_is_cancelled()
+    public async Task A_child_is_stopped_when_the_command_is_cancelled()
     {
         if (OperatingSystem.IsWindows())
             Assert.Ignore("Uses sh; the cancellation's code path is the same on every OS.");
-        var psi = new System.Diagnostics.ProcessStartInfo("sh");
+        var psi = new System.Diagnostics.ProcessStartInfo("sh") { UseShellExecute = false };
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("sleep 20");
         using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var clock = TimeProvider.System.GetTimestamp();
 
-        var act = () => ChildProcess.Run(psi, TimeSpan.FromMinutes(5), cancel.Token);
+        var act = async () =>
+            await ChildProcess
+                .RunAsync(psi, TimeSpan.FromMinutes(5), cancel.Token)
+                .ConfigureAwait(false);
 
-        act.Should().Throw<OperationCanceledException>();
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(15));
+        await act.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        TimeProvider.System.GetElapsedTime(clock).Should().BeLessThan(TimeSpan.FromSeconds(15));
     }
 
     [Test]
-    public void Deploy_writes_the_stack_beside_the_file_from_what_the_hosts_report()
+    public async Task Deploy_writes_the_stack_beside_the_file_from_what_the_hosts_report()
     {
-        var path = Write(File_());
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
         var exporter = new FakeExporter(Exports(), _dir);
 
-        var exit = DeployCommand.Run("compose", path, null, build: false, exporter, (_, _) => { });
+        var exit = await DeployCommand
+            .RunAsync(
+                "compose",
+                path,
+                outDir: null,
+                build: false,
+                exporter,
+                (_, _) => Task.CompletedTask,
+                TextWriter.Null,
+                TextWriter.Null
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(0);
         File.Exists(Path.Combine(_dir, "compose.yaml")).Should().BeTrue();
@@ -428,71 +463,90 @@ public class DeployComposeTests
                 Path.Combine(_dir, "Orders", "Orders.csproj"),
                 Path.Combine(_dir, "Orders.Worker", "Orders.Worker.csproj")
             );
-        exporter.Environment!["ConnectionStrings__Trax"].Should().Contain(".invalid");
+        exporter.Environment.NotNull()["ConnectionStrings__Trax"].Should().Contain(".invalid");
         exporter.Environment["Auth__Authority"].Should().StartWith("https://");
         exporter.Environment.Should().ContainKey("Stripe__ApiKey");
     }
 
     [Test]
-    public void Deploy_does_not_overwrite_a_compose_file_it_did_not_write()
+    public async Task Deploy_does_not_overwrite_a_compose_file_it_did_not_write()
     {
-        var path = Write(File_());
-        File.WriteAllText(Path.Combine(_dir, "compose.yaml"), "services: {}\n");
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(_dir, "compose.yaml"), "services: {}\n")
+            .ConfigureAwait(false);
 
-        var exit = DeployCommand.Run(
-            "compose",
-            path,
-            null,
-            build: false,
-            new FakeExporter(Exports(), _dir),
-            (_, _) => { }
-        );
+        var exit = await DeployCommand
+            .RunAsync(
+                "compose",
+                path,
+                outDir: null,
+                build: false,
+                new FakeExporter(Exports(), _dir),
+                (_, _) => Task.CompletedTask,
+                TextWriter.Null,
+                TextWriter.Null
+            )
+            .ConfigureAwait(false);
 
         exit.Should().Be(1);
-        File.ReadAllText(Path.Combine(_dir, "compose.yaml")).Should().Be("services: {}\n");
+        (await File.ReadAllTextAsync(Path.Combine(_dir, "compose.yaml")).ConfigureAwait(false))
+            .Should()
+            .Be("services: {}\n");
     }
 
     [Test]
-    public void Deploy_builds_each_image_under_its_service_name_when_asked()
+    public async Task Deploy_builds_each_image_under_its_service_name_when_asked()
     {
-        var path = Write(File_());
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
         var built = new List<(string Project, string Image)>();
 
-        DeployCommand
-            .Run(
-                "compose",
-                path,
-                null,
-                build: true,
-                new FakeExporter(Exports(), _dir),
-                (p, i) => built.Add((p, i))
-            )
-            .Should()
-            .Be(0);
+        (
+            await DeployCommand
+                .RunAsync(
+                    "compose",
+                    path,
+                    outDir: null,
+                    build: true,
+                    new FakeExporter(Exports(), _dir),
+                    (p, i) =>
+                    {
+                        built.Add((p, i));
+                        return Task.CompletedTask;
+                    },
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        ).Should().Be(0);
 
         built.Select(b => b.Image).Should().Equal("orders-hub", "orders-worker");
     }
 
     [Test]
-    public void A_target_trax_does_not_deploy_to_is_refused() =>
-        DeployCommand
-            .Run(
-                "gcp",
-                Write(File_()),
-                null,
-                false,
-                new FakeExporter(Exports(), _dir),
-                (_, _) => { }
-            )
+    public async Task A_target_trax_does_not_deploy_to_is_refused() =>
+        (
+            await DeployCommand
+                .RunAsync(
+                    "gcp",
+                    await WriteAsync(File_()).ConfigureAwait(false),
+                    outDir: null,
+                    build: false,
+                    new FakeExporter(Exports(), _dir),
+                    (_, _) => Task.CompletedTask,
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .Be(1);
 
     [Test]
-    public void The_file_reads_back_what_it_wrote()
+    public async Task The_file_reads_back_what_it_wrote()
     {
-        var path = Write(File_());
+        var path = await WriteAsync(File_()).ConfigureAwait(false);
 
-        var read = DeployFile.Read(path);
+        var read = await DeployFile.ReadAsync(path).ConfigureAwait(false);
 
         read.Should().BeEquivalentTo(File_());
     }
@@ -519,32 +573,51 @@ public class DeployComposeTests
         "*'worker'*port 8080*'hub'*"
     )]
     [TestCase("""{ "version": 2, "app": "orders", "services": {} }""", "*version 2*")]
-    public void A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
+    public async Task A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
         string json,
         string message
     )
     {
         var path = Path.Combine(_dir, DeployFile.FileName);
-        File.WriteAllText(path, json);
+        await File.WriteAllTextAsync(path, json);
 
-        var act = () => DeployFile.Read(path);
+        var act = async () => await DeployFile.ReadAsync(path).ConfigureAwait(false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
     }
 
     [Test]
-    public void Init_names_each_Trax_host_under_the_directory_and_skips_tests()
+    public async Task Init_names_each_Trax_host_under_the_directory_and_skips_tests()
     {
-        WriteProject("Orders/Orders.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
-        WriteProject(
-            "Orders.Worker/Orders.Worker.csproj",
-            "Microsoft.NET.Sdk.Worker",
-            "Trax.Scheduler",
-            exe: true
-        );
-        WriteProject("Orders.Trains/Orders.Trains.csproj", "Microsoft.NET.Sdk", "Trax.Effect");
-        WriteProject("tests/Orders.Tests/Orders.Tests.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
-        WriteProject("Unrelated/Unrelated.csproj", "Microsoft.NET.Sdk.Web", "Newtonsoft.Json");
+        await WriteProjectAsync("Orders/Orders.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+            .ConfigureAwait(false);
+        await WriteProjectAsync(
+                "Orders.Worker/Orders.Worker.csproj",
+                "Microsoft.NET.Sdk.Worker",
+                "Trax.Scheduler",
+                exe: true
+            )
+            .ConfigureAwait(false);
+        await WriteProjectAsync(
+                "Orders.Trains/Orders.Trains.csproj",
+                "Microsoft.NET.Sdk",
+                "Trax.Effect"
+            )
+            .ConfigureAwait(false);
+        await WriteProjectAsync(
+                "tests/Orders.Tests/Orders.Tests.csproj",
+                "Microsoft.NET.Sdk.Web",
+                "Trax.Api"
+            )
+            .ConfigureAwait(false);
+        await WriteProjectAsync(
+                "Unrelated/Unrelated.csproj",
+                "Microsoft.NET.Sdk.Web",
+                "Newtonsoft.Json"
+            )
+            .ConfigureAwait(false);
 
         var file = DeployInit.Create(_dir, "orders");
 
@@ -554,22 +627,57 @@ public class DeployComposeTests
     }
 
     [Test]
-    public void Init_calls_a_lone_host_the_hub()
+    public async Task Init_calls_a_lone_host_the_hub()
     {
-        WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
+        await WriteProjectAsync("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+            .ConfigureAwait(false);
 
         DeployInit.Create(_dir, "orders").Services.Keys.Should().Equal("hub");
     }
 
     [Test]
-    public void Init_does_not_replace_an_existing_file_without_force()
+    public async Task Init_does_not_replace_an_existing_file_without_force()
     {
-        WriteProject("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api");
-        File.WriteAllText(Path.Combine(_dir, DeployFile.FileName), "{}");
+        await WriteProjectAsync("App/App.csproj", "Microsoft.NET.Sdk.Web", "Trax.Api")
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(_dir, DeployFile.FileName), "{}")
+            .ConfigureAwait(false);
 
-        DeployCommand.Init(_dir, "orders", force: false).Should().Be(1);
-        File.ReadAllText(Path.Combine(_dir, DeployFile.FileName)).Should().Be("{}");
-        DeployCommand.Init(_dir, "orders", force: true).Should().Be(0);
+        (
+            await DeployCommand
+                .InitAsync(
+                    _dir,
+                    "orders",
+                    force: false,
+                    "compose",
+                    region: null,
+                    domain: null,
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(1);
+        (await File.ReadAllTextAsync(Path.Combine(_dir, DeployFile.FileName)).ConfigureAwait(false))
+            .Should()
+            .Be("{}");
+        (
+            await DeployCommand
+                .InitAsync(
+                    _dir,
+                    "orders",
+                    force: true,
+                    "compose",
+                    region: null,
+                    domain: null,
+                    TextWriter.Null,
+                    TextWriter.Null
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .Be(0);
     }
 
     [Test]
@@ -578,7 +686,7 @@ public class DeployComposeTests
         var psi = DotnetHostExporter.StartInfo(
             "/src/Orders/Orders.csproj",
             "/tmp/m.json",
-            new Dictionary<string, string> { ["X"] = "y" }
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["X"] = "y" }
         );
 
         psi.ArgumentList.Should()
@@ -597,26 +705,32 @@ public class DeployComposeTests
         psi.Environment["X"].Should().Be("y");
     }
 
-    private string Write(DeployFile file)
+    private async Task<string> WriteAsync(DeployFile file)
     {
         var path = Path.Combine(_dir, DeployFile.FileName);
-        File.WriteAllText(path, file.Write());
+        await File.WriteAllTextAsync(path, file.Write()).ConfigureAwait(false);
         return path;
     }
 
-    private void WriteProject(string relative, string sdk, string reference, bool exe = false)
+    private async Task WriteProjectAsync(
+        string relative,
+        string sdk,
+        string reference,
+        bool exe = false
+    )
     {
         var path = Path.Combine(_dir, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(
-            path,
-            $"""
-            <Project Sdk="{sdk}">
-              <PropertyGroup>{(exe ? "<OutputType>Exe</OutputType>" : "")}</PropertyGroup>
-              <ItemGroup><PackageReference Include="{reference}" /></ItemGroup>
-            </Project>
-            """
-        );
+        Directory.CreateDirectory(Path.GetDirectoryName(path).NotNull());
+        await File.WriteAllTextAsync(
+                path,
+                $"""
+                <Project Sdk="{sdk}">
+                  <PropertyGroup>{(exe ? "<OutputType>Exe</OutputType>" : "")}</PropertyGroup>
+                  <ItemGroup><PackageReference Include="{reference}" /></ItemGroup>
+                </Project>
+                """
+            )
+            .ConfigureAwait(false);
     }
 
     private sealed class FakeExporter(
@@ -628,17 +742,19 @@ public class DeployComposeTests
 
         public IReadOnlyDictionary<string, string>? Environment { get; private set; }
 
-        public DeployManifest Export(
+        public Task<DeployManifest> ExportAsync(
             string projectPath,
             IReadOnlyDictionary<string, string> environment
         )
         {
             Asked.Add(projectPath);
             Environment = environment;
-            return Path.GetRelativePath(dir, projectPath)
-                .StartsWith("Orders.Worker", StringComparison.Ordinal)
-                ? byService["worker"]
-                : byService["hub"];
+            return Task.FromResult(
+                Path.GetRelativePath(dir, projectPath)
+                    .StartsWith("Orders.Worker", StringComparison.Ordinal)
+                    ? byService["worker"]
+                    : byService["hub"]
+            );
         }
     }
 }

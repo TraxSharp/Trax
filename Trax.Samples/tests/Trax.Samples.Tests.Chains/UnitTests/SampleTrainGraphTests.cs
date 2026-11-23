@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
@@ -27,14 +28,9 @@ namespace Trax.Samples.Tests.Chains.UnitTests;
 /// left out: they are scaffolded into a consumer's repository, not run here.</para>
 /// </summary>
 [TestFixture]
-public class SampleTrainGraphTests
+public partial class SampleTrainGraphTests
 {
     private const string Solution = "Trax.Samples.slnx";
-
-    private static readonly Regex DefinesATrain = new(
-        @":\s*(ServiceTrain|Train)<",
-        RegexOptions.Compiled
-    );
 
     private static readonly Lazy<string> SamplesRoot = new(FindSamplesRoot);
 
@@ -59,7 +55,10 @@ public class SampleTrainGraphTests
         var golden = Path.Combine(GoldensDirectory, $"{train.Name}.chain.json");
         var received = golden + ".received";
 
-        if (File.Exists(golden) && File.ReadAllText(golden) == expected)
+        if (
+            File.Exists(golden)
+            && string.Equals(File.ReadAllText(golden), expected, StringComparison.Ordinal)
+        )
         {
             File.Delete(received);
             return;
@@ -82,8 +81,8 @@ public class SampleTrainGraphTests
     public void TrainNames_AreUnique_SoEachHasOneGolden()
     {
         Trains
-            .Value.GroupBy(t => t.Name)
-            .Where(g => g.Count() > 1)
+            .Value.GroupBy(t => t.Name, StringComparer.Ordinal)
+            .Where(g => g.Skip(1).Any())
             .Select(g => string.Join(", ", g.Select(t => t.FullName)))
             .Should()
             .BeEmpty("a golden is named after its train, so two trains of one name would share it");
@@ -92,25 +91,43 @@ public class SampleTrainGraphTests
     [Test]
     public void EveryGolden_NamesATrainThatStillExists()
     {
-        var names = Trains.Value.Select(t => $"{t.Name}.chain.json").ToHashSet();
+        var names = Trains
+            .Value.Select(t => $"{t.Name}.chain.json")
+            .ToHashSet(StringComparer.Ordinal);
 
         Directory
             .EnumerateFiles(GoldensDirectory, "*.chain.json")
             .Select(Path.GetFileName)
-            .Where(file => !names.Contains(file!))
+            .Where(file => !names.Contains(file.NotNull()))
             .Should()
             .BeEmpty("a golden whose train was renamed or removed checks nothing; delete it");
     }
 
     [Test]
-    public void EverySampleProjectWithATrain_IsReadHere()
+    public async Task EverySampleProjectWithATrain_IsReadHere()
     {
-        var loaded = SampleAssemblies().Select(a => a.GetName().Name).ToHashSet();
+        var loaded = SampleAssemblies()
+            .Select(a => a.GetName().Name)
+            .ToHashSet(StringComparer.Ordinal);
         var samples = Path.Combine(SamplesRoot.Value, "samples");
 
-        Directory
-            .EnumerateFiles(samples, "*.csproj", SearchOption.AllDirectories)
-            .Where(project => DeclaresATrain(Path.GetDirectoryName(project)!))
+        var withTrains = new List<string>();
+        foreach (
+            var project in Directory.EnumerateFiles(
+                samples,
+                "*.csproj",
+                SearchOption.AllDirectories
+            )
+        )
+        {
+            if (
+                await DeclaresATrainAsync(Path.GetDirectoryName(project).NotNull())
+                    .ConfigureAwait(false)
+            )
+                withTrains.Add(project);
+        }
+
+        withTrains
             .Select(Path.GetFileNameWithoutExtension)
             .Where(name => !loaded.Contains(name))
             .Should()
@@ -123,7 +140,9 @@ public class SampleTrainGraphTests
     [Test]
     public void ApproveRefundTrain_DrawsItsSwitchAndGateTracks_ThenItsCheckpoint()
     {
-        var refund = Trains.Value.Single(t => t.Name == "ApproveRefundTrain");
+        var refund = Trains.Value.Single(t =>
+            string.Equals(t.Name, "ApproveRefundTrain", StringComparison.Ordinal)
+        );
         var graph = GraphOf(refund);
 
         var routing = graph.Nodes.Where(n => n.Tracks.Count > 0).ToList();
@@ -149,35 +168,31 @@ public class SampleTrainGraphTests
     private static string Render(ChainGraph graph)
     {
         using var canonical = JsonDocument.Parse(graph.ToJson());
-        using var buffer = new MemoryStream();
-
-        using (
-            var json = new Utf8JsonWriter(
-                buffer,
-                new JsonWriterOptions
-                {
-                    Indented = true,
-                    NewLine = "\n",
-                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                }
-            )
-        )
-            canonical.WriteTo(json);
-
-        return Encoding.UTF8.GetString(buffer.ToArray()) + "\n";
+        return JsonSerializer.Serialize(canonical.RootElement, RenderOptions) + "\n";
     }
+
+    private static readonly JsonSerializerOptions RenderOptions = new()
+    {
+        WriteIndented = true,
+        NewLine = "\n",
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
+    };
 
     private static ChainGraph GraphOf(Type train)
     {
-        var declared = TrainBase(train)!;
+        var declared = TrainBase(train).NotNull();
         var arguments = declared.GetGenericArguments();
         var instance =
             Activator.CreateInstance(train)
             ?? throw new InvalidOperationException($"{train.FullName} could not be built.");
         var chain = (ChainRecorder)
             train
-                .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)!
-                .Invoke(instance, null)!;
+                .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)
+                .NotNull()
+                .Invoke(instance, parameters: null)
+                .NotNull();
 
         return ChainGraph.From(chain, train, arguments[0], arguments[1]);
     }
@@ -194,8 +209,10 @@ public class SampleTrainGraphTests
     private static IReadOnlyList<Type> FindTrains() =>
         SampleAssemblies()
             .SelectMany(a => a.GetTypes())
-            .Where(t => t is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false })
-            .Where(t => TrainBase(t) is not null)
+            .Where(t =>
+                t is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false }
+                && TrainBase(t) is not null
+            )
             .OrderBy(t => t.FullName, StringComparer.Ordinal)
             .ToList();
 
@@ -210,19 +227,33 @@ public class SampleTrainGraphTests
         return Directory
             .EnumerateFiles(AppContext.BaseDirectory, "Trax.Samples.*.dll")
             .Select(Path.GetFileNameWithoutExtension)
-            .Where(name => name != self)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .Select(name => Assembly.Load(new AssemblyName(name!)));
+            .Where(name => !string.Equals(name, self, StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .Select(name => Assembly.Load(new AssemblyName(name.NotNull())));
     }
 
-    private static bool DeclaresATrain(string projectDirectory) =>
-        Directory
-            .EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
-            .Where(file =>
-                !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                && !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-            )
-            .Any(file => DefinesATrain.IsMatch(File.ReadAllText(file)));
+    private static async Task<bool> DeclaresATrainAsync(string projectDirectory)
+    {
+        foreach (
+            var file in Directory
+                .EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
+                .Where(file =>
+                    !file.Contains(
+                        $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                        StringComparison.Ordinal
+                    )
+                    && !file.Contains(
+                        $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                        StringComparison.Ordinal
+                    )
+                )
+        )
+        {
+            if (DefinesATrain.IsMatch(await File.ReadAllTextAsync(file).ConfigureAwait(false)))
+                return true;
+        }
+        return false;
+    }
 
     private static string FindSamplesRoot()
     {
@@ -238,4 +269,11 @@ public class SampleTrainGraphTests
             $"No {Solution} found walking up from '{AppContext.BaseDirectory}'."
         );
     }
+
+    [GeneratedRegex(
+        @":\s*(ServiceTrain|Train)<",
+        RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DefinesATrain { get; }
 }

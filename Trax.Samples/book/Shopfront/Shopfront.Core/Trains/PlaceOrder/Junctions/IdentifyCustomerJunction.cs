@@ -5,7 +5,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.PlaceOrder.Junctions;
 
-internal class IdentifyCustomerJunction(IShopfrontCaller caller)
+internal sealed class IdentifyCustomerJunction(IShopfrontCaller caller)
     : EffectJunction<PlaceOrderInput, Customer>
 {
     public override Task<Customer> Run(PlaceOrderInput input) =>

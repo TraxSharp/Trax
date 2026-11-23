@@ -66,7 +66,9 @@ public class SendReceipt(IOutbox outbox) : Junction<Payment, Receipt>
 {
     public override Task<Receipt> Run(Payment payment)
     {
-        outbox.Sent.Add($"receipt for {payment.Amount}");
+        outbox.Sent.Add(
+            string.Create(CultureInfo.InvariantCulture, $"receipt for {payment.Amount}")
+        );
         return Task.FromResult(new Receipt(payment.Amount));
     }
 }

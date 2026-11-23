@@ -11,6 +11,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using NUnit.Framework;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Oidc;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Auth.Oidc;
 
@@ -46,7 +47,8 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnRedirectToLogin_SetsStatus401()
     {
-        using var sp = (ServiceProvider)BuildProvider();
+        var sp = (ServiceProvider)BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetCookieOptions(sp);
         var http = new DefaultHttpContext { RequestServices = sp };
 
@@ -54,7 +56,7 @@ public class OidcEventCallbackTests
             http,
             new AuthenticationScheme(
                 OidcDefaults.CookieSchemeName,
-                null,
+                displayName: null,
                 typeof(CookieAuthenticationHandler)
             ),
             opts,
@@ -70,7 +72,8 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnRedirectToAccessDenied_SetsStatus403()
     {
-        using var sp = (ServiceProvider)BuildProvider();
+        var sp = (ServiceProvider)BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetCookieOptions(sp);
         var http = new DefaultHttpContext { RequestServices = sp };
 
@@ -78,7 +81,7 @@ public class OidcEventCallbackTests
             http,
             new AuthenticationScheme(
                 OidcDefaults.CookieSchemeName,
-                null,
+                displayName: null,
                 typeof(CookieAuthenticationHandler)
             ),
             opts,
@@ -94,21 +97,23 @@ public class OidcEventCallbackTests
     [Test]
     public async Task OnTokenValidated_NullPrincipal_FailsContext()
     {
-        using var sp = (ServiceProvider)BuildProvider();
+        var sp = (ServiceProvider)BuildProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var ctx = NewTokenValidatedContext(sp, opts, principal: null);
 
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure.Should().NotBeNull();
-        ctx.Result.Failure!.Message.Should().Contain("without a principal");
+        ctx.Result.NotNull().Failure.Should().NotBeNull();
+        ctx.Result.Failure.NotNull().Message.Should().Contain("without a principal");
     }
 
     [Test]
     public async Task OnTokenValidated_ResolverReturnsNull_FailsContext()
     {
-        using var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(returns: null));
+        var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(returns: null));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim("sub", "user-1")], "test")
@@ -118,14 +123,15 @@ public class OidcEventCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure!.Message.Should().Contain("known Trax principal");
+        ctx.Result.NotNull().Failure.NotNull().Message.Should().Contain("known Trax principal");
     }
 
     [Test]
     public async Task OnTokenValidated_ResolverThrows_FailsContextWithException()
     {
         var boom = new InvalidOperationException("resolver explosion");
-        using var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(throws: boom));
+        var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(throws: boom));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim("sub", "user-1")], "test")
@@ -135,7 +141,7 @@ public class OidcEventCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure.Should().BeSameAs(boom);
+        ctx.Result.NotNull().Failure.Should().BeSameAs(boom);
     }
 
     [Test]
@@ -148,9 +154,8 @@ public class OidcEventCallbackTests
             Claims: null,
             PrincipalType: OidcDefaults.PrincipalType
         );
-        using var sp = (ServiceProvider)BuildResolverProvider(
-            new StubResolver(returns: traxPrincipal)
-        );
+        var sp = (ServiceProvider)BuildResolverProvider(new StubResolver(returns: traxPrincipal));
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var inputPrincipal = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim("sub", "u-1")], "test")
@@ -161,7 +166,10 @@ public class OidcEventCallbackTests
 
         ctx.Result.Should().BeNull();
         ctx.Principal.Should().NotBeSameAs(inputPrincipal);
-        ctx.Principal!.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("TraxOidc:u-1");
+        ctx.Principal.NotNull()
+            .FindFirst(TraxAuthClaimTypes.PrincipalId)
+            ?.Value.Should()
+            .Be("TraxOidc:u-1");
     }
 
     [Test]
@@ -180,7 +188,8 @@ public class OidcEventCallbackTests
         );
         services.Remove(resolverDescriptor);
 
-        using var sp = services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewTokenValidatedContext(sp, opts, principal);
@@ -188,7 +197,10 @@ public class OidcEventCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Failure!.Message.Should().Contain("ITraxPrincipalResolver<OidcTokenInput>");
+        ctx.Result.NotNull()
+            .Failure.NotNull()
+            .Message.Should()
+            .Contain("ITraxPrincipalResolver<OidcTokenInput>");
     }
 
     [Test]
@@ -196,7 +208,7 @@ public class OidcEventCallbackTests
     {
         // Wire a customizer that installs an OnTokenValidated which sets
         // Result. Trax's wrapper must defer to it and stop.
-        using var sp = (ServiceProvider)BuildResolverProvider(
+        var sp = (ServiceProvider)BuildResolverProvider(
             new StubResolver(throws: new Exception("should not be called")),
             customize: o =>
             {
@@ -207,6 +219,7 @@ public class OidcEventCallbackTests
                 };
             }
         );
+        await using var spDisposal = sp.ConfigureAwait(false);
         var opts = GetOidcOptions(sp);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u")], "test"));
         var ctx = NewTokenValidatedContext(sp, opts, principal);
@@ -214,7 +227,7 @@ public class OidcEventCallbackTests
         await opts.Events.OnTokenValidated(ctx);
 
         ctx.Result.Should().NotBeNull();
-        ctx.Result!.Handled.Should().BeTrue();
+        ctx.Result.NotNull().Handled.Should().BeTrue();
     }
 
     private static IServiceProvider BuildResolverProvider(
@@ -251,7 +264,7 @@ public class OidcEventCallbackTests
         var http = new DefaultHttpContext { RequestServices = sp };
         var scheme = new AuthenticationScheme(
             OidcDefaults.SchemeName,
-            null,
+            displayName: null,
             typeof(OpenIdConnectHandler)
         );
         var ctx = new TokenValidatedContext(

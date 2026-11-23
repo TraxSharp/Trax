@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -32,7 +33,7 @@ public class QueueInputDepthTests
 
     private const int Nesting = 12;
 
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -60,12 +61,13 @@ public class QueueInputDepthTests
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private TrainRegistration RegistrationOf<TTrain>() =>
         _serviceProvider
+            .NotNull()
             .GetRequiredService<ITrainDiscoveryService>()
             .DiscoverTrains()
             .Single(r => r.ServiceType == typeof(TTrain));
@@ -81,18 +83,24 @@ public class QueueInputDepthTests
     }
 
     private DeepInput NestedInput() =>
-        JsonSerializer.Deserialize<DeepInput>(
-            NestedInputJson(),
-            new JsonSerializerOptions(TraxEffectConfiguration.StaticSystemJsonSerializerOptions)
-        )!;
+        JsonSerializer
+            .Deserialize<DeepInput>(
+                NestedInputJson(),
+                new JsonSerializerOptions(TraxEffectConfiguration.StaticSystemJsonSerializerOptions)
+            )
+            .NotNull();
 
     [Test]
     public async Task RunAsync_InputNestedDeeperThanTheStorageDepth_Succeeds()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var result = await execution.RunAsync(typeof(IDepthTrain).FullName!, NestedInputJson());
+        var result = await execution.RunAsync(
+            typeof(IDepthTrain).FullName.NotNull(),
+            NestedInputJson()
+        );
 
         result
             .Output.Should()
@@ -105,13 +113,18 @@ public class QueueInputDepthTests
     [Test]
     public async Task QueueAsync_InputNestedDeeperThanTheStorageDepth_IsQueuedAndReadsBackAsTheInput()
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var queued = await execution.QueueAsync(typeof(IDepthTrain).FullName!, NestedInputJson());
+        var queued = await execution.QueueAsync(
+            typeof(IDepthTrain).FullName.NotNull(),
+            NestedInputJson()
+        );
 
         var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
             .SingleAsync(w => w.Id == queued.WorkQueueId);
@@ -144,11 +157,14 @@ public class QueueInputDepthTests
                 )
                 .AddMediator(assemblies: [typeof(QueueInputDepthTests).Assembly])
         );
-        await using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var act = () => execution.QueueAsync(typeof(IDepthTrain).FullName!, NestedInputJson(70));
+        var act = () =>
+            execution.QueueAsync(typeof(IDepthTrain).FullName.NotNull(), NestedInputJson(70));
 
         (await act.Should().ThrowAsync<TrainInputValidationException>())
             .Which.InnerException.Should()

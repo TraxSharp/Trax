@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -56,7 +58,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <summary>
     /// Runs the junction effects (junction logger, junction progress) around each
     /// <see cref="EffectJunction.EffectJunction{TIn,TOut}"/> in this train. Filled by property injection when the
-    /// train is resolved; <see cref="Run(TIn, CancellationToken)"/> throws when it is <c>null</c>.
+    /// train is resolved; <see cref="Run(TIn, CancellationToken)"/> throws when it is <see langword="null"/>.
     /// </summary>
     [Inject]
     [JsonIgnore]
@@ -66,7 +68,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// Fires the registered lifecycle hooks (broadcaster, GraphQL subscriptions, your own
     /// <c>AddLifecycleHook</c> registrations) when the run starts, completes, fails or is cancelled. Filled by
     /// property injection from the run's scope; <see cref="Run(TIn, CancellationToken)"/> throws when it is
-    /// <c>null</c>.
+    /// <see langword="null"/>.
     /// </summary>
     [Inject]
     [JsonIgnore]
@@ -87,6 +89,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public IServiceProvider? ServiceProvider { get; set; }
 
     /// <summary>
+    /// The clock the run's times are read from: the container's <see cref="TimeProvider"/> when it
+    /// registers one (AddTrax registers the system's), and the system's when the train has no
+    /// container.
+    /// </summary>
+    internal TimeProvider Clock =>
+        ServiceProvider?.GetService(typeof(TimeProvider)) as TimeProvider ?? TimeProvider.System;
+
+    /// <summary>
     /// The canonical (interface) name for this train, set during DI registration.
     /// When null, falls back to the concrete type's FullName.
     /// </summary>
@@ -105,15 +115,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// Also returns the input inside <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>,
     /// which run on an instance that has not run, when the enqueue path hands it over through
     /// <see cref="EnterQueueHooks"/>. A Trax.Mediator that predates that method does not, and
-    /// <c>TrainInput</c> then returns <c>default</c> there; the hook's <c>metadata</c> argument
+    /// <c>TrainInput</c> then returns <see langword="default"/> there; the hook's <c>metadata</c> argument
     /// carries the input on every version. Anywhere else a train with no metadata carrying an
-    /// input returns <c>default</c>.
+    /// input returns <see langword="default"/>.
     /// </remarks>
+    [MaybeNull]
     protected TIn TrainInput =>
         IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainInput))
-        : Metadata is not null ? (Metadata.GetInputObject() is TIn typed ? typed : default!)
+        : Metadata is not null ? (Metadata.GetInputObject() is TIn typed ? typed : default)
         : QueueHookFrame.Find(_queueHookFrame.Value, this) is { } frame ? frame.Input
-        : default!;
+        : default;
 
     // Static so that it costs nothing on a train that is never enqueued, and an AsyncLocal because
     // one scoped instance can run the hooks of two concurrent enqueues on a shared scope. Each
@@ -186,20 +197,21 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     /// <summary>
     /// Gets the typed output produced by this train. Set after a successful run, so it is
-    /// only meaningful in <see cref="OnCompleted"/>. Returns <c>default</c> in
+    /// only meaningful in <see cref="OnCompleted"/>. Returns <see langword="default"/> in
     /// <see cref="OnStarted"/>, <see cref="OnFailed"/>, and <see cref="OnCancelled"/>
     /// because the train either hasn't run yet, failed before producing output, or was cancelled.
     /// </summary>
     /// <remarks>
     /// Throws <see cref="ChainDeclarationException"/> while the chain is being read, because
     /// <c>Junctions()</c> is then run to record its declaration and no output exists. Returns
-    /// <c>default</c> in <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which are
+    /// <see langword="default"/> in <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which are
     /// called on an instance that has not run and has no metadata.
     /// </remarks>
+    [MaybeNull]
     protected TOut TrainOutput =>
         IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainOutput))
         : Metadata is not null && Metadata.GetOutputObject() is TOut typed ? typed
-        : default!;
+        : default;
 
     /// <summary>
     /// Gets the canonical train name. Prefers the interface name set at registration time
@@ -336,6 +348,71 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     {
         CancellationToken = cancellationToken;
 
+        await BeginRunRecord().ConfigureAwait(false);
+
+        Metadata.AssertLoaded();
+
+        // Set in this frame so the rest of this run, and only this run, sees it: a log line written
+        // through ILogger is stored against the run that wrote it, once the row has its id. A run
+        // started inside another one replaces the outer run here rather than inheriting it.
+        CurrentRun.Metadata = Metadata;
+
+        await RecordStart(input).ConfigureAwait(false);
+
+        // Everything up to the result is captured rather than allowed to propagate, so a failure
+        // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
+        // from inside a try whose catch also finishes the train ran both of them twice.
+        Either<Exception, TOut> result;
+        CheckpointRun? checkpoints = null;
+
+        try
+        {
+            await RunStartedHooks().ConfigureAwait(false);
+
+            // Set in this frame, not in a helper, so the run's own async flow carries it and no
+            // other run's does. A run that names one to replay and cannot replay it fails here,
+            // before it asks anything.
+            DecisionRun.Current = await BeginDecisions().ConfigureAwait(false);
+
+            // A run that resumes an earlier one skips to its checkpoint; one that cannot runs from
+            // the top. Its checkpoints are stored against this run. See Trax.Docs/adr/0047.
+            checkpoints =
+                Metadata.Id > 0 ? new CheckpointRun(Metadata.Id, () => Declared()?.Hash) : null;
+            CheckpointRun.Current = checkpoints;
+            Resume = await BeginResume(input).ConfigureAwait(false);
+
+            // The same for the run's junction events, when the host publishes them
+            // (AddJunctionEvents): its junctions and decisions report against this run only.
+            JunctionEventRun.Current = await BeginJunctionEvents().ConfigureAwait(false);
+
+            Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
+            result = await RunEither(input).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            result = e;
+        }
+        finally
+        {
+            ClearRunState();
+        }
+
+        if (result.IsLeft)
+        {
+            var exception = result.Swap().ValueUnsafe();
+            await RecordAndReportFailure(result, exception).ConfigureAwait(false);
+            ExceptionDispatchInfo.Capture(exception).Throw();
+        }
+
+        return await CompleteRun(result, checkpoints).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Checks the train's services and gives this run its own metadata row, unless the caller
+    /// passed one in for it.
+    /// </summary>
+    private async Task BeginRunRecord()
+    {
         EffectRunner.AssertLoaded();
         JunctionEffectRunner.AssertLoaded();
         LifecycleHookRunner.AssertLoaded();
@@ -351,15 +428,73 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             if (Metadata is not null)
                 ForgetPreviousRun();
 
-            await this.InitializeServiceTrain();
+            await this.InitializeServiceTrain().ConfigureAwait(false);
         }
+    }
 
+    /// <summary>
+    /// Clears the run's decision, junction-event and checkpoint state once its junctions are done.
+    /// Synchronous, so the values it clears are cleared in the calling run's own flow.
+    /// </summary>
+    private void ClearRunState()
+    {
+        // The run decides nothing after its junctions, so its decision state goes now, on
+        // every path, rather than with whatever terminal write or hook comes next.
+        DecisionRun.Current = null;
+        JunctionEventRun.Current = null;
+        CheckpointRun.Current = null;
+        Resume = null;
+    }
+
+    /// <summary>
+    /// Records a completed run and reports it to the hooks; returns its output.
+    /// </summary>
+    private async Task<TOut> CompleteRun(Either<Exception, TOut> result, CheckpointRun? checkpoints)
+    {
         Metadata.AssertLoaded();
 
-        // Set in this frame so the rest of this run, and only this run, sees it: a log line written
-        // through ILogger is stored against the run that wrote it, once the row has its id. A run
-        // started inside another one replaces the outer run here rather than inheriting it.
-        CurrentRun.Metadata = Metadata;
+        var output = result.Unwrap();
+        var unrecordedOutcome = await RecordCompletion(result, output, checkpoints)
+            .ConfigureAwait(false);
+
+        // The hooks report what happened, not what the store could hold: the output the store
+        // refused is what they publish, in place of the placeholder that was stored.
+        unrecordedOutcome?.Restore(Metadata);
+
+        // Hooks read the output as serialized JSON. When the parameter effect wrote the stored
+        // copy they get that; otherwise one is built here, AFTER the outcome is saved so it is not
+        // persisted, through the same decision and ceiling as the stored copy: an output the host
+        // excluded is not serialized for the hooks either, and any copy is bounded, because the
+        // broadcaster, GraphQL and SignalR hooks publish it to other processes and subscribers.
+        // A train that withholds its output gives the hooks none, serialized or as the object: no
+        // copy is built (the parameter effect stored none either), and a copy any other effect wrote
+        // is set aside while they run and put back after, so the tracked row is unchanged.
+        var withheld = OutputWithheldFromHooks ? Metadata.Output : null;
+        if (OutputWithheldFromHooks)
+        {
+            Metadata.Output = null;
+            Metadata.SetOutputObject(value: null);
+        }
+        else if (Metadata.Output is null)
+            SerializeOutputForHooks();
+
+        await ReportCompletion(output, withheld).ConfigureAwait(false);
+
+        // Back to what was stored, so a later save of this tracked row does not send the refused
+        // content again.
+        unrecordedOutcome?.Drop(Metadata);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Puts the run's input and its first flags on the row and writes it, before the junctions run.
+    /// </summary>
+    private async Task RecordStart(TIn input)
+    {
+        Metadata.AssertLoaded();
+        EffectRunner.AssertLoaded();
+        ServiceProvider.AssertLoaded();
 
         // The input goes on the row before its first write, so the InProgress row already carries
         // it. A process that dies mid-run (a Lambda timeout, an OOM kill, a deploy) writes nothing
@@ -392,7 +527,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // check does), so a run graph drawn later on a changed chain can say so. Never read here:
         // a train that declares no checkpoint never has its chain read by a run.
         Metadata.ChainHash ??= DeclaredChains.Known(GetType())?.Hash;
-        await EffectRunner.Update(Metadata);
+        await EffectRunner.Update(Metadata).ConfigureAwait(false);
 
         // Not the caller's token, for the same reason SaveOutcome does not take it. An
         // already-cancelled caller, which is what a host shutting down or a timed-out request
@@ -401,157 +536,173 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // manifest counts toward retries and dead letters. Persisting it regardless costs one
         // write and lets the cancellation surface inside the try, where it is recorded as what it
         // is.
-        await SaveStart();
+        await SaveStart().ConfigureAwait(false);
+    }
 
-        // Everything up to the result is captured rather than allowed to propagate, so a failure
-        // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
-        // from inside a try whose catch also finishes the train ran both of them twice.
-        Either<Exception, TOut> result;
-        CheckpointRun? checkpoints = null;
+    /// <summary>
+    /// Runs the registered OnStarted hooks, then the train's own override, whose failure is logged.
+    /// </summary>
+    private async Task RunStartedHooks()
+    {
+        Metadata.AssertLoaded();
+        LifecycleHookRunner.AssertLoaded();
+
+        await LifecycleHookRunner.OnStarted(Metadata, CancellationToken).ConfigureAwait(false);
 
         try
         {
-            await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
-
-            try
-            {
-                await OnStarted(Metadata, CancellationToken);
-            }
-            catch (Exception hookEx)
-            {
-                Logger?.LogError(
-                    hookEx,
-                    "Train-level OnStarted hook threw for train ({TrainName}).",
-                    TrainName
-                );
-            }
-
-            // Set in this frame, not in a helper, so the run's own async flow carries it and no
-            // other run's does. A run that names one to replay and cannot replay it fails here,
-            // before it asks anything.
-            DecisionRun.Current = await BeginDecisions();
-
-            // A run that resumes an earlier one skips to its checkpoint; one that cannot runs from
-            // the top. Its checkpoints are stored against this run. See Trax.Docs/adr/0047.
-            checkpoints =
-                Metadata.Id > 0 ? new CheckpointRun(Metadata.Id, () => Declared()?.Hash) : null;
-            CheckpointRun.Current = checkpoints;
-            Resume = await BeginResume(input);
-
-            // The same for the run's junction events, when the host publishes them
-            // (AddJunctionEvents): its junctions and decisions report against this run only.
-            JunctionEventRun.Current = ServiceProvider.GetService(typeof(JunctionEventPublisher))
-                is JunctionEventPublisher junctionEvents
-                ? await junctionEvents.BeginAsync(
-                    Metadata,
-                    GetType(),
-                    ServiceProvider,
-                    CancellationToken,
-                    this
-                )
-                : null;
-
-            Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
-            result = await RunEither(input);
+            await OnStarted(Metadata, CancellationToken).ConfigureAwait(false);
         }
-        catch (Exception e)
+        catch (Exception hookEx)
         {
-            result = e;
-        }
-        finally
-        {
-            // The run decides nothing after its junctions, so its decision state goes now, on
-            // every path, rather than with whatever terminal write or hook comes next.
-            DecisionRun.Current = null;
-            JunctionEventRun.Current = null;
-            CheckpointRun.Current = null;
-            Resume = null;
-        }
-
-        if (result.IsLeft)
-        {
-            var exception = result.Swap().ValueUnsafe();
             Logger?.LogError(
-                "Caught Exception ({Type}) with Message ({Message}).",
-                exception.GetType(),
-                exception.Message
+                hookEx,
+                "Train-level OnStarted hook threw for train ({TrainName}).",
+                TrainName
             );
+        }
+    }
 
-            // The train's own failure is what the caller needs. If recording it fails too, that
-            // is logged and the failure still propagates, with its hooks; the stale-run reaper
-            // fails a row left in progress.
-            UnrecordedContent? unrecorded = null;
-            try
-            {
-                await this.FinishServiceTrain(result);
-                unrecorded = await SaveOutcome();
-            }
-            catch (Exception recordEx)
-            {
-                Logger?.LogError(
-                    recordEx,
-                    "Could not record the failure of train ({TrainName}); the original failure still propagates.",
-                    TrainName
-                );
-            }
+    /// <summary>
+    /// The run's junction-event state, when the host publishes junction events; null otherwise.
+    /// </summary>
+    private async Task<JunctionEventRun?> BeginJunctionEvents()
+    {
+        Metadata.AssertLoaded();
+        ServiceProvider.AssertLoaded();
 
-            // The hooks report what happened, not what the store could hold.
-            unrecorded?.Restore(Metadata);
+        return
+            ServiceProvider.GetService(typeof(JunctionEventPublisher))
+                is JunctionEventPublisher junctionEvents
+            ? await junctionEvents
+                .BeginAsync(Metadata, GetType(), ServiceProvider, CancellationToken, this)
+                .ConfigureAwait(false)
+            : null;
+    }
 
-            // The same test FinishServiceTrain used to choose Cancelled over Failed, so the hooks
-            // that fire always match the state that was recorded.
-            if (this.IsRequestedCancellation(exception))
-            {
-                // Registered lifecycle hooks do not take the caller's token, for the reason
-                // SaveOutcome does not: reporting the outcome is not part of the work the caller
-                // cancelled. Handed that token, a hook that passes it to a publish (the broadcaster
-                // passes it to BasicPublishAsync, the GraphQL hook to SendAsync) is cancelled by the
-                // very cancellation it is reporting, and LifecycleHookRunner swallows hook failures
-                // by design, so the event is dropped with nothing to show for it. A run that
-                // completes despite cancellation loses its Completed event the same way.
-                await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken.None);
+    /// <summary>
+    /// Logs and records a failed or cancelled run, then runs the hooks that match the recorded
+    /// state. The caller rethrows the failure.
+    /// </summary>
+    private async Task RecordAndReportFailure(Either<Exception, TOut> result, Exception exception)
+    {
+        Metadata.AssertLoaded();
 
-                try
-                {
-                    // The train's own override keeps the caller's token: it is consumer code that
-                    // may legitimately want to honour the cancellation, and
-                    // TrainLifecycleOverrideTests pins the passthrough deliberately.
-                    await OnCancelled(Metadata, CancellationToken);
-                }
-                catch (Exception hookEx)
-                {
-                    Logger?.LogError(
-                        hookEx,
-                        "Train-level OnCancelled hook threw for train ({TrainName}).",
-                        TrainName
-                    );
-                }
-            }
-            else
-            {
-                // Not the caller's token; see the OnCancelled branch above.
-                await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken.None);
+        Logger?.LogError(
+            "Caught Exception ({Type}) with Message ({Message}).",
+            exception.GetType(),
+            exception.Message
+        );
 
-                try
-                {
-                    // The train's own override keeps the caller's token; see OnCancelled above.
-                    await OnFailed(Metadata, exception, CancellationToken);
-                }
-                catch (Exception hookEx)
-                {
-                    Logger?.LogError(
-                        hookEx,
-                        "Train-level OnFailed hook threw for train ({TrainName}).",
-                        TrainName
-                    );
-                }
-            }
-
-            unrecorded?.Drop(Metadata);
-            ExceptionDispatchInfo.Capture(exception).Throw();
+        // The train's own failure is what the caller needs. If recording it fails too, that
+        // is logged and the failure still propagates, with its hooks; the stale-run reaper
+        // fails a row left in progress.
+        UnrecordedContent? unrecorded = null;
+        try
+        {
+            await this.FinishServiceTrain(result).ConfigureAwait(false);
+            unrecorded = await SaveOutcome().ConfigureAwait(false);
+        }
+        catch (Exception recordEx)
+        {
+            Logger?.LogError(
+                recordEx,
+                "Could not record the failure of train ({TrainName}); the original failure still propagates.",
+                TrainName
+            );
         }
 
-        var output = result.Unwrap();
+        // The hooks report what happened, not what the store could hold.
+        unrecorded?.Restore(Metadata);
+
+        // The same test FinishServiceTrain used to choose Cancelled over Failed, so the hooks
+        // that fire always match the state that was recorded.
+        if (this.IsRequestedCancellation(exception))
+            await ReportCancelled().ConfigureAwait(false);
+        else
+            await ReportFailed(exception).ConfigureAwait(false);
+
+        unrecorded?.Drop(Metadata);
+    }
+
+    /// <summary>
+    /// Runs the registered OnCancelled hooks, then the train's own override, whose failure is
+    /// logged.
+    /// </summary>
+    private async Task ReportCancelled()
+    {
+        Metadata.AssertLoaded();
+        LifecycleHookRunner.AssertLoaded();
+
+        // Registered lifecycle hooks do not take the caller's token, for the reason
+        // SaveOutcome does not: reporting the outcome is not part of the work the caller
+        // cancelled. Handed that token, a hook that passes it to a publish (the broadcaster
+        // passes it to BasicPublishAsync, the GraphQL hook to SendAsync) is cancelled by the
+        // very cancellation it is reporting, and LifecycleHookRunner swallows hook failures
+        // by design, so the event is dropped with nothing to show for it. A run that
+        // completes despite cancellation loses its Completed event the same way.
+        await LifecycleHookRunner
+            .OnCancelled(Metadata, CancellationToken.None)
+            .ConfigureAwait(false);
+
+        try
+        {
+            // The train's own override keeps the caller's token: it is consumer code that
+            // may legitimately want to honour the cancellation, and
+            // TrainLifecycleOverrideTests pins the passthrough deliberately.
+            await OnCancelled(Metadata, CancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception hookEx)
+        {
+            Logger?.LogError(
+                hookEx,
+                "Train-level OnCancelled hook threw for train ({TrainName}).",
+                TrainName
+            );
+        }
+    }
+
+    /// <summary>
+    /// Runs the registered OnFailed hooks, then the train's own override, whose failure is logged.
+    /// </summary>
+    private async Task ReportFailed(Exception exception)
+    {
+        Metadata.AssertLoaded();
+        LifecycleHookRunner.AssertLoaded();
+
+        // Not the caller's token; see the OnCancelled branch above.
+        await LifecycleHookRunner
+            .OnFailed(Metadata, exception, CancellationToken.None)
+            .ConfigureAwait(false);
+
+        try
+        {
+            // The train's own override keeps the caller's token; see OnCancelled above.
+            await OnFailed(Metadata, exception, CancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception hookEx)
+        {
+            Logger?.LogError(
+                hookEx,
+                "Train-level OnFailed hook threw for train ({TrainName}).",
+                TrainName
+            );
+        }
+    }
+
+    /// <summary>
+    /// Records a completed run's output and outcome, and forgets its checkpoints. Returns the
+    /// content the store refused, if any.
+    /// </summary>
+    private async Task<UnrecordedContent?> RecordCompletion(
+        Either<Exception, TOut> result,
+        TOut output,
+        CheckpointRun? checkpoints
+    )
+    {
+        Metadata.AssertLoaded();
+        EffectRunner.AssertLoaded();
+
         Logger?.LogTrace("({TrainName}) completed successfully.", TrainName);
         Metadata.SetOutputObject(output);
 
@@ -569,77 +720,80 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         // A failure to record a completed run propagates as it is. It is not turned into a
         // Failed outcome: the work happened, and recording that it failed would be false.
-        await EffectRunner.Update(Metadata);
-        await this.FinishServiceTrain(result);
-        var unrecordedOutcome = await SaveOutcome();
+        await EffectRunner.Update(Metadata).ConfigureAwait(false);
+        await this.FinishServiceTrain(result).ConfigureAwait(false);
+        var unrecordedOutcome = await SaveOutcome().ConfigureAwait(false);
 
         if (checkpoints is { Wrote: true })
-            await ForgetCheckpoints();
+            await ForgetCheckpoints().ConfigureAwait(false);
 
-        // The hooks report what happened, not what the store could hold: the output the store
-        // refused is what they publish, in place of the placeholder that was stored.
-        unrecordedOutcome?.Restore(Metadata);
+        return unrecordedOutcome;
+    }
 
-        // Hooks read the output as serialized JSON. When the parameter effect wrote the stored
-        // copy they get that; otherwise one is built here, AFTER the outcome is saved so it is not
-        // persisted, through the same decision and ceiling as the stored copy: an output the host
-        // excluded is not serialized for the hooks either, and any copy is bounded, because the
-        // broadcaster, GraphQL and SignalR hooks publish it to other processes and subscribers.
-        // A train that withholds its output gives the hooks none, serialized or as the object: no
-        // copy is built (the parameter effect stored none either), and a copy any other effect wrote
-        // is set aside while they run and put back after, so the tracked row is unchanged.
-        var withheld = OutputWithheldFromHooks ? Metadata.Output : null;
-        if (OutputWithheldFromHooks)
+    /// <summary>
+    /// Builds the hooks' serialized copy of the output, masked and bounded as the stored one is,
+    /// when the host's policy allows one.
+    /// </summary>
+    private void SerializeOutputForHooks()
+    {
+        Metadata.AssertLoaded();
+        ServiceProvider.AssertLoaded();
+
+        var outputObject = Metadata.GetOutputObject();
+        var ceiling = (
+            ServiceProvider.GetService(typeof(ILifecycleHookOutputPolicy))
+                as ILifecycleHookOutputPolicy
+            ?? new DefaultLifecycleHookOutputPolicy()
+        ).MaxCopyBytes(TrainName);
+
+        if (outputObject is not null && ceiling is not null)
         {
-            Metadata.Output = null;
-            Metadata.SetOutputObject(null);
-        }
-        else if (Metadata.Output is null)
-        {
-            var outputObject = Metadata.GetOutputObject();
-            var ceiling = (
-                ServiceProvider.GetService(typeof(ILifecycleHookOutputPolicy))
-                    as ILifecycleHookOutputPolicy
-                ?? new DefaultLifecycleHookOutputPolicy()
-            ).MaxCopyBytes(TrainName);
-
-            if (outputObject is not null && ceiling is not null)
+            try
             {
-                try
-                {
-                    // Masked as the stored output is.
-                    Metadata.Output = Utils.TraxBoundedJson.Serialize(
-                        outputObject,
-                        Utils.TraxRedaction.WithRedaction(
-                            Configuration
-                                .TraxEffectConfiguration
-                                .TraxEffectConfiguration
-                                .StaticSystemJsonSerializerOptions
-                        ),
-                        ceiling
-                    );
-                }
-                catch (Exception ex)
-                {
-                    Logger?.LogDebug(
-                        ex,
-                        "Failed to serialize output for lifecycle hooks in train ({TrainName}).",
-                        TrainName
-                    );
-                }
+                // Masked as the stored output is.
+                Metadata.Output = Utils.TraxBoundedJson.Serialize(
+                    outputObject,
+                    Utils.TraxRedaction.WithRedaction(
+                        Configuration
+                            .TraxEffectConfiguration
+                            .TraxEffectConfiguration
+                            .StaticSystemJsonSerializerOptions
+                    ),
+                    ceiling
+                );
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogDebug(
+                    ex,
+                    "Failed to serialize output for lifecycle hooks in train ({TrainName}).",
+                    TrainName
+                );
             }
         }
+    }
+
+    /// <summary>
+    /// Runs the registered OnCompleted hooks, then the train's own override, and puts back a
+    /// withheld output afterwards.
+    /// </summary>
+    private async Task ReportCompletion(TOut output, string? withheld)
+    {
+        Metadata.AssertLoaded();
+        LifecycleHookRunner.AssertLoaded();
 
         try
         {
             // Not the caller's token. A caller that cancelled while the work finished anyway still
             // gets Completed recorded (effect/0005), so the matching event has to survive too.
-            await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken.None);
+            await LifecycleHookRunner
+                .OnCompleted(Metadata, CancellationToken.None)
+                .ConfigureAwait(false);
 
             try
             {
                 // The train's own override keeps the caller's token; see the OnCancelled branch.
-                await OnCompleted(Metadata, CancellationToken);
+                await OnCompleted(Metadata, CancellationToken).ConfigureAwait(false);
             }
             catch (Exception hookEx)
             {
@@ -658,12 +812,6 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 Metadata.SetOutputObject(output);
             }
         }
-
-        // Back to what was stored, so a later save of this tracked row does not send the refused
-        // content again.
-        unrecordedOutcome?.Drop(Metadata);
-
-        return output;
     }
 
     // Whether this train's class withholds its output from the lifecycle hooks.
@@ -743,38 +891,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         var operatorAsked = Metadata.ManifestId is null;
 
-        ResumePlan? Refuse(string code, string reason)
-        {
-            if (operatorAsked)
-            {
-                var refusal = new ResumeRefusedException(
-                    code,
-                    $"Run {ExternalId} of train '{TrainName}' was queued to resume run {from}, but "
-                        + $"it cannot: {reason} It is failed rather than run from the top, because a "
-                        + "resume was asked for, not a fresh run."
-                );
-                refusal.Data["TrainExceptionData"] = new TrainExceptionData
-                {
-                    TrainName = Metadata.Name,
-                    TrainExternalId = ExternalId,
-                    Type = nameof(ResumeRefusedException),
-                    Junction = "Resume",
-                    Message = refusal.Message,
-                    FailureClass = FailureClass.Permanent,
-                };
-                throw refusal;
-            }
-
-            Logger?.LogWarning(
-                "Run ({ExternalId}) of ({TrainName}) cannot resume run ({From}) and runs from the "
-                    + "top: {Reason}",
-                ExternalId,
-                TrainName,
-                from,
-                reason
-            );
-            return null;
-        }
+        ResumePlan? Refuse(string code, string reason) =>
+            RefuseResume(operatorAsked, from, code, reason);
 
         if (
             ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
@@ -788,7 +906,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         if (
             ResumeSources.Refusal(
                 from,
-                await rows.Source(from, CancellationToken),
+                await rows.Source(from, CancellationToken).ConfigureAwait(false),
                 Metadata.Name,
                 Metadata.Input,
                 input,
@@ -798,22 +916,66 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         )
             return Refuse(refused.Code, refused.Reason);
 
-        var lineage = await rows.Lineage(from, CancellationToken);
-        var (verdict, plan) = await ResumePlanner.Plan(
-            declared.Chain,
-            declared.Hash,
-            typeof(TIn),
-            typeof(TOut),
-            ServiceProvider.GetService(
-                typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
-            ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
-            lineage,
-            Metadata.ResumeAt,
-            rows.States,
-            CancellationToken
-        );
+        var lineage = await rows.Lineage(from, CancellationToken).ConfigureAwait(false);
+        var (verdict, plan) = await ResumePlanner
+            .Plan(
+                declared.Chain,
+                declared.Hash,
+                typeof(TIn),
+                typeof(TOut),
+                ServiceProvider.GetService(
+                    typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
+                ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
+                lineage,
+                Metadata.ResumeAt,
+                rows.States,
+                CancellationToken
+            )
+            .ConfigureAwait(false);
 
-        return plan ?? Refuse(verdict.Code!, verdict.Reason!);
+        return plan ?? Refuse(verdict.Code.NotNull(), verdict.Reason.NotNull());
+    }
+
+    /// <summary>
+    /// Refuses a resume: fails an operator's resume with a <see cref="ResumeRefusedException"/>,
+    /// and logs any other one, which then runs from the top.
+    /// </summary>
+    private ResumePlan? RefuseResume(bool operatorAsked, long from, string code, string reason)
+    {
+        Metadata.AssertLoaded();
+
+        if (operatorAsked)
+        {
+            var refusal = new ResumeRefusedException(
+                code,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Run {ExternalId} of train '{TrainName}' was queued to resume run {from}, but "
+                )
+                    + $"it cannot: {reason} It is failed rather than run from the top, because a "
+                    + "resume was asked for, not a fresh run."
+            );
+            refusal.Data["TrainExceptionData"] = new TrainExceptionData
+            {
+                TrainName = Metadata.Name,
+                TrainExternalId = ExternalId,
+                Type = nameof(ResumeRefusedException),
+                Junction = "Resume",
+                Message = refusal.Message,
+                FailureClass = FailureClass.Permanent,
+            };
+            throw refusal;
+        }
+
+        Logger?.LogWarning(
+            "Run ({ExternalId}) of ({TrainName}) cannot resume run ({From}) and runs from the "
+                + "top: {Reason}",
+            ExternalId,
+            TrainName,
+            from,
+            reason
+        );
+        return null;
     }
 
     /// <summary>
@@ -833,7 +995,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await rows.DeleteFor(Metadata.Id, CancellationToken.None);
+            await rows.DeleteFor(Metadata.Id, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -872,7 +1034,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         {
             try
             {
-                check.ThrowIfReplaced();
+                await check.ThrowIfReplacedAsync().ConfigureAwait(false);
             }
             catch (InvalidOperationException e)
             {
@@ -889,7 +1051,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             ServiceProvider?.GetService(typeof(IDecisionRunRecorder))
             is IDecisionRunRecorder recorder
         )
-            return await recorder.Begin(Metadata, GetType(), CancellationToken);
+            return await recorder
+                .Begin(Metadata, GetType(), CancellationToken)
+                .ConfigureAwait(false);
 
         if (Metadata.ReplayDecisionsOf is not null)
         {
@@ -930,7 +1094,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await EffectRunner.SaveChanges(CancellationToken.None);
+            await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception contentEx) when (IsStoreContentRefusal(contentEx))
         {
@@ -944,7 +1108,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
             try
             {
-                await EffectRunner.SaveChanges(CancellationToken.None);
+                await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception stateEx)
             {
@@ -963,7 +1127,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     /// <returns>
     /// The content that was replaced by placeholders when the store refused it, so the hooks can
-    /// be shown what happened; <c>null</c> when the row was written in full.
+    /// be shown what happened; <see langword="null"/> when the row was written in full.
     /// </returns>
     /// <remarks>
     /// Deliberately not given the caller's token. That token is cancelled in exactly the case
@@ -989,7 +1153,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            await EffectRunner.SaveChanges(CancellationToken.None);
+            await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             return null;
         }
         catch (Exception contentEx) when (IsStoreContentRefusal(contentEx))
@@ -1005,12 +1169,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // Without the object, the parameter effect cannot serialize the output again over
             // the placeholder. It is put back for the hooks and TrainOutput.
             var outputObject = Metadata.GetOutputObject();
-            Metadata.SetOutputObject(null);
+            Metadata.SetOutputObject(value: null);
             unrecorded.Drop(Metadata);
 
             try
             {
-                await EffectRunner.SaveChanges(CancellationToken.None);
+                await EffectRunner.SaveChanges(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception stateEx)
             {
@@ -1069,7 +1233,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     private void ForgetPreviousRun()
     {
-        if (ExternalId == Metadata!.ExternalId)
+        if (string.Equals(ExternalId, Metadata.NotNull().ExternalId, StringComparison.Ordinal))
             ExternalId = Guid.NewGuid().ToString("N");
 
         Metadata = null;
@@ -1092,9 +1256,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <exception cref="TrainException"><paramref name="metadata"/> is not <c>Pending</c>.</exception>
     public async Task<TOut> Run(TIn input, Metadata metadata)
     {
-        await this.InitializeServiceTrain(metadata);
+        await this.InitializeServiceTrain(metadata).ConfigureAwait(false);
         _metadataSuppliedForRun = true;
-        return await Run(input, CancellationToken);
+        return await Run(input, CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1103,9 +1267,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public async Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken)
     {
         CancellationToken = cancellationToken;
-        await this.InitializeServiceTrain(metadata);
+        await this.InitializeServiceTrain(metadata).ConfigureAwait(false);
         _metadataSuppliedForRun = true;
-        return await Run(input, CancellationToken);
+        return await Run(input, CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1114,7 +1278,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <c>Run</c>: the monad is what the chain runs on, so a service train does not replace it.
     /// </summary>
     protected sealed override Monad<TIn, TOut> NewMonad() =>
-        new(this, ServiceProvider!, CancellationToken);
+        // A train run without a container (reading its declared chain, say) gets the monad a
+        // plain train gets.
+        ServiceProvider is { } services
+            ? new(this, services, CancellationToken)
+            : new(this, CancellationToken);
 
     /// <summary>
     /// Releases the run: clears the in-memory input and output objects, disposes the effect, junction effect and
@@ -1125,8 +1293,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     {
         if (Metadata != null)
         {
-            Metadata.SetInputObject(null);
-            Metadata.SetOutputObject(null);
+            Metadata.SetInputObject(value: null);
+            Metadata.SetOutputObject(value: null);
         }
 
         EffectRunner?.Dispose();

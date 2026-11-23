@@ -12,7 +12,7 @@ namespace Trax.Cli.Tests.UnitTests;
 [TestFixture]
 public class CodeRendererFixTests
 {
-    private CodeRenderer _renderer = null!;
+    private CodeRenderer _renderer = new();
 
     [SetUp]
     public void SetUp()
@@ -79,7 +79,7 @@ public class CodeRendererFixTests
     #region RenderJunction_EmptyInput
 
     [Test]
-    public void RenderJunction_EmptyInput_NoFunctionalUsing()
+    public async Task RenderJunction_EmptyInput_NoFunctionalUsing()
     {
         var op = MakeOperation(
             "ListAll",
@@ -89,25 +89,25 @@ public class CodeRendererFixTests
             httpPath: "/items"
         );
 
-        var result = _renderer.RenderJunction(op, "MyApi");
+        var result = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         // Empty input records don't need the Unit namespace: they use the record name directly
         result.Should().NotContain("using Trax.Core.Functional;");
     }
 
     [Test]
-    public void RenderJunction_EmptyInput_UsesInputTypeName()
+    public async Task RenderJunction_EmptyInput_UsesInputTypeName()
     {
         var op = MakeOperation("ListAll", OperationKind.Query, input: UnitType);
 
-        var result = _renderer.RenderJunction(op, "MyApi");
+        var result = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("Junction<Unit,");
         result.Should().Contain("Run(Unit input)");
     }
 
     [Test]
-    public void RenderJunction_UnitOutput_QualifiesTraxUnit()
+    public async Task RenderJunction_UnitOutput_QualifiesTraxUnit()
     {
         var op = MakeOperation(
             "DeletePlayer",
@@ -117,13 +117,13 @@ public class CodeRendererFixTests
             httpPath: "/players/{id}"
         );
 
-        var result = _renderer.RenderJunction(op, "MyApi");
+        var result = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("global::Trax.Core.Functional.Unit");
     }
 
     [Test]
-    public void RenderJunction_EmptyInputAndUnitOutput_QualifiesTraxUnit()
+    public async Task RenderJunction_EmptyInputAndUnitOutput_QualifiesTraxUnit()
     {
         var op = MakeOperation(
             "Ping",
@@ -134,18 +134,18 @@ public class CodeRendererFixTests
             httpPath: "/ping"
         );
 
-        var result = _renderer.RenderJunction(op, "MyApi");
+        var result = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         // The input is the operation's own empty record; the output is Trax's Unit
         result.Should().Contain("Junction<Unit, global::Trax.Core.Functional.Unit>");
     }
 
     [Test]
-    public void RenderJunction_NeitherInputNorOutputUnit_NoFunctionalUsing()
+    public async Task RenderJunction_NeitherInputNorOutputUnit_NoFunctionalUsing()
     {
         var op = MakeOperation("GetPlayer", OperationKind.Query);
 
-        var result = _renderer.RenderJunction(op, "MyApi");
+        var result = await _renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().NotContain("using Trax.Core.Functional;");
     }
@@ -155,32 +155,32 @@ public class CodeRendererFixTests
     #region RenderTrainInterface_EmptyInput
 
     [Test]
-    public void RenderTrainInterface_EmptyInput_NoFunctionalUsing()
+    public async Task RenderTrainInterface_EmptyInput_NoFunctionalUsing()
     {
         var op = MakeOperation("ListAll", OperationKind.Query, input: UnitType);
 
-        var result = _renderer.RenderTrainInterface(op, "MyApi");
+        var result = await _renderer.RenderTrainInterfaceAsync(op, "MyApi").ConfigureAwait(false);
 
         // Empty input records don't need the Unit namespace
         result.Should().NotContain("using Trax.Core.Functional;");
     }
 
     [Test]
-    public void RenderTrainInterface_UnitOutput_QualifiesTraxUnit()
+    public async Task RenderTrainInterface_UnitOutput_QualifiesTraxUnit()
     {
         var op = MakeOperation("DeletePlayer", OperationKind.Mutation, output: UnitType);
 
-        var result = _renderer.RenderTrainInterface(op, "MyApi");
+        var result = await _renderer.RenderTrainInterfaceAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("global::Trax.Core.Functional.Unit");
     }
 
     [Test]
-    public void RenderTrainInterface_NeitherUnit_NoFunctionalUsing()
+    public async Task RenderTrainInterface_NeitherUnit_NoFunctionalUsing()
     {
         var op = MakeOperation("GetPlayer", OperationKind.Query);
 
-        var result = _renderer.RenderTrainInterface(op, "MyApi");
+        var result = await _renderer.RenderTrainInterfaceAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().NotContain("using Trax.Core.Functional;");
     }
@@ -190,7 +190,7 @@ public class CodeRendererFixTests
     #region RenderInput_ModelsNamespace
 
     [Test]
-    public void RenderInput_WithModelsNamespace_QualifiesModelTypes()
+    public async Task RenderInput_WithModelsNamespace_QualifiesModelTypes()
     {
         _renderer.SetModelsNamespace("MyApi.Trains.Models");
         _renderer.SetModelNames(["Status"]);
@@ -210,14 +210,14 @@ public class CodeRendererFixTests
         };
         var op = MakeOperation("ListItems", OperationKind.Query, input: input);
 
-        var result = _renderer.RenderInput(op, "MyApi");
+        var result = await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().Contain("global::MyApi.Trains.Models.Status? Status");
         result.Should().NotContain("using MyApi.Trains.Models;");
     }
 
     [Test]
-    public void RenderInput_WithoutModelsNamespace_NoModelsUsing()
+    public async Task RenderInput_WithoutModelsNamespace_NoModelsUsing()
     {
         // Do NOT call SetModelsNamespace
         var input = new ApiType
@@ -236,7 +236,7 @@ public class CodeRendererFixTests
         };
         var op = MakeOperation("ListItems", OperationKind.Query, input: input);
 
-        var result = _renderer.RenderInput(op, "MyApi");
+        var result = await _renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false);
 
         result.Should().NotContain("using MyApi.Trains.Models;");
     }

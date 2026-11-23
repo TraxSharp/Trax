@@ -8,7 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Pure HTTP GraphQL client; no Trax DI or DB dependencies. -->
+    <!-- Pure HTTP GraphQL client; no Trax DI or DB dependencies. It prints through a console
+         logger (DemoOutput), since the samples do not use System.Console. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
   </ItemGroup>
 
   <ItemGroup>

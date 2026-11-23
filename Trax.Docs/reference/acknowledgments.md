@@ -16,7 +16,8 @@ packages and the .NET shared framework: `Trax.Api`, `Trax.Api.Auth`, `Trax.Api.A
 `Trax.Api.GraphQL.Audit`, `Trax.Api.GraphQL.Client.Typed`, `Trax.Effect.Broadcaster.SignalR`,
 `Trax.Effect.Decisions.SystemOne`, `Trax.Effect.JunctionProvider.Logging`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Effect.Provider.Parameter`,
-`Trax.StateMachine`, `Trax.StateMachine.Testing` and `Trax.Samples.Templates`.
+`Trax.StateMachine`, `Trax.StateMachine.Testing`, `Trax.Analyzers.Annotations` and
+`Trax.Samples.Templates`.
 
 
 ## Trax.Core
@@ -26,11 +27,23 @@ packages and the .NET shared framework: `Trax.Api`, `Trax.Api.Auth`, `Trax.Api.A
 | [Microsoft.Extensions.DependencyInjection.Abstractions](https://github.com/dotnet/runtime) | MIT | DI abstractions for service registration |
 | [Microsoft.Extensions.Logging.Abstractions](https://github.com/dotnet/runtime) | MIT | Logging abstractions |
 
-## Trax.Core.Analyzers
+## Trax.Analyzers
+
+Most of the rules are a copy of Meziantou.Analyzer, which Trax maintains in its own namespace and
+rule ids (`MA0004` is `TRX0004`) rather than referencing. The copy carries the code of three
+projects by Gérald Barré, each under its own licence in `Trax.Analyzers/licenses/`:
+
+| Project | Licence | Used for |
+|---|---|---|
+| [Meziantou.Analyzer](https://github.com/meziantou/Meziantou.Analyzer) | MIT | The rules, code fixes and suppressors, their tests and their documentation pages |
+| [Meziantou.Framework.Roslyn](https://github.com/meziantou/Meziantou.Framework) | MIT | The Roslyn helpers the rules are written against |
+| [Meziantou.Polyfill](https://github.com/meziantou/Meziantou.Polyfill) | MIT | The polyfills that let the rules build for netstandard2.0 |
+
+The package references one third-party package, which a project that installs it gets too:
 
 | Package | Licence | Used for |
 |---|---|---|
-| [Microsoft.CodeAnalysis.Analyzers](https://github.com/dotnet/roslyn) | MIT | Rules for writing Roslyn analyzers |
+| [Microsoft.CodeAnalysis.BannedApiAnalyzers](https://github.com/dotnet/roslyn-analyzers) | MIT | RS0030, which reports the banned clock, chance, console and exit APIs |
 
 ## Trax.Core.Testing
 

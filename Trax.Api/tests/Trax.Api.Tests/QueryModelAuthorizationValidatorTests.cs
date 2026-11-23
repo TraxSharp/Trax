@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Startup;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -20,41 +21,42 @@ public class QueryModelAuthorizationValidatorTests
 {
     [TraxQueryModel]
     [TraxAuthorize(Policy = "RegisteredPolicy")]
-    private class GatedWithRegisteredPolicy
+    private sealed class GatedWithRegisteredPolicy
     {
         public int Id { get; set; }
     }
 
     [TraxQueryModel]
     [TraxAuthorize(Policy = "MissingPolicy")]
-    private class GatedWithMissingPolicy
+    private sealed class GatedWithMissingPolicy
     {
         public int Id { get; set; }
     }
 
     [TraxQueryModel]
     [TraxAuthorize(Roles = "Admin")]
-    private class GatedRolesOnly
+    private sealed class GatedRolesOnly
     {
         public int Id { get; set; }
     }
 
-    private class RegisteredPolicyDbContext(DbContextOptions<RegisteredPolicyDbContext> options)
-        : DbContext(options)
+    private sealed class RegisteredPolicyDbContext(
+        DbContextOptions<RegisteredPolicyDbContext> options
+    ) : DbContext(options)
     {
-        public DbSet<GatedWithRegisteredPolicy> Rows { get; set; } = null!;
+        public DbSet<GatedWithRegisteredPolicy> Rows => Set<GatedWithRegisteredPolicy>();
     }
 
-    private class MissingPolicyDbContext(DbContextOptions<MissingPolicyDbContext> options)
+    private sealed class MissingPolicyDbContext(DbContextOptions<MissingPolicyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<GatedWithMissingPolicy> Rows { get; set; } = null!;
+        public DbSet<GatedWithMissingPolicy> Rows => Set<GatedWithMissingPolicy>();
     }
 
-    private class RolesOnlyDbContext(DbContextOptions<RolesOnlyDbContext> options)
+    private sealed class RolesOnlyDbContext(DbContextOptions<RolesOnlyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<GatedRolesOnly> Rows { get; set; } = null!;
+        public DbSet<GatedRolesOnly> Rows => Set<GatedRolesOnly>();
     }
 
     [Test]
@@ -95,14 +97,15 @@ public class QueryModelAuthorizationValidatorTests
 
         var validator = new QueryModelAuthorizationValidator(config, policyProvider);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         var assertion = await act.Should().ThrowAsync<InvalidOperationException>();
         assertion
             .Which.Message.Should()
             .Contain("MissingPolicy", "the error must name the policy the consumer typo'd")
             .And.Contain(
-                typeof(GatedWithMissingPolicy).FullName!,
+                typeof(GatedWithMissingPolicy).FullName.NotNull(),
                 "the error must name the entity that declared the policy"
             )
             .And.Contain("AddAuthorization", "the error must point the consumer at the fix");
@@ -190,23 +193,24 @@ public class QueryModelAuthorizationValidatorTests
 
     [TraxQueryModel]
     [TraxAuthorize(Policy = "SharedPolicy")]
-    private class FirstGatedBySharedPolicy
+    private sealed class FirstGatedBySharedPolicy
     {
         public int Id { get; set; }
     }
 
     [TraxQueryModel]
     [TraxAuthorize(Policy = "SharedPolicy")]
-    private class SecondGatedBySharedPolicy
+    private sealed class SecondGatedBySharedPolicy
     {
         public int Id { get; set; }
     }
 
-    private class DuplicatePolicyDbContext(DbContextOptions<DuplicatePolicyDbContext> options)
-        : DbContext(options)
+    private sealed class DuplicatePolicyDbContext(
+        DbContextOptions<DuplicatePolicyDbContext> options
+    ) : DbContext(options)
     {
-        public DbSet<FirstGatedBySharedPolicy> First { get; set; } = null!;
-        public DbSet<SecondGatedBySharedPolicy> Second { get; set; } = null!;
+        public DbSet<FirstGatedBySharedPolicy> First => Set<FirstGatedBySharedPolicy>();
+        public DbSet<SecondGatedBySharedPolicy> Second => Set<SecondGatedBySharedPolicy>();
     }
 
     /// <summary>

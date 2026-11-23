@@ -33,8 +33,8 @@ public class PostgresChangeFeedTests
     private static async Task<(Guid Id, long RowId)> Saved(InstanceHost host)
     {
         var id = Guid.NewGuid();
-        await host.SeedDraft(User, id, TestTurnstile.InitialJson);
-        return (id, await host.RowId(id));
+        await host.SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (id, await host.RowId(id).ConfigureAwait(false));
     }
 
     private static async Task Coin(InstanceHost host, Guid id)
@@ -43,6 +43,7 @@ public class PostgresChangeFeedTests
         (
             await host.Service(scope, "turnstile")
                 .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -51,19 +52,19 @@ public class PostgresChangeFeedTests
     private static async Task<SnapshotRowChange> Next(SnapshotWatch watch)
     {
         using var timeout = new CancellationTokenSource(Within);
-        return await watch.Changes.ReadAsync(timeout.Token);
+        return await watch.Changes.ReadAsync(timeout.Token).ConfigureAwait(false);
     }
 
     // Whether a poll reads the row within the wait.
     private static async Task<bool> Polled(SnapshotChangeListener listener, long rowId)
     {
-        var until = DateTime.UtcNow + Within;
-        while (DateTime.UtcNow < until)
+        var until = TimeProvider.System.GetUtcNow().UtcDateTime + Within;
+        while (TimeProvider.System.GetUtcNow().UtcDateTime < until)
         {
             if (listener.LastPolled.Contains(rowId))
                 return true;
             // allowed-delay: waits for the listener's next poll, which runs every 50 ms here.
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         }
         return false;
     }
@@ -85,7 +86,8 @@ public class PostgresChangeFeedTests
             postgresConnectionString: NoticesOff
         );
         using var on = InstanceHost.Create(StoreProvider.Postgres);
-        await using var notices = await SnapshotNotices.Listen();
+        var notices = await SnapshotNotices.Listen();
+        await using var noticesDisposal = notices.ConfigureAwait(false);
 
         var (silentId, silent) = await Saved(off);
         await Coin(off, silentId);
@@ -169,7 +171,8 @@ public class PostgresChangeFeedTests
 
         try
         {
-            await using (var feed = hub.WatchAll("turnstile"))
+            var feed = hub.WatchAll("turnstile");
+            await using (feed.ConfigureAwait(false))
             {
                 (await Next(feed)).Kind.Should().Be(SnapshotRowChangeKind.Reload);
                 listener.LastPolled.Should().Contain(turnstile);
@@ -188,7 +191,8 @@ public class PostgresChangeFeedTests
             }
 
             // The listener's loop may outlive the first feed by a poll, so the wider read is waited for.
-            await using (var everything = hub.WatchAll(null))
+            var everything = hub.WatchAll(machine: null);
+            await using (everything.ConfigureAwait(false))
             {
                 (await Next(everything)).Kind.Should().Be(SnapshotRowChangeKind.Reload);
                 (await Polled(listener, reminder))
@@ -254,7 +258,8 @@ public class PostgresChangeFeedTests
             logger.Warnings.Should().BeEmpty();
 
             var (id, rowId) = await Saved(host);
-            await using var watch = hub.Watch(rowId);
+            var watch = hub.Watch(rowId);
+            await using var watchDisposal = watch.ConfigureAwait(false);
             (await Next(watch)).Revision.Should().Be(1);
             await Coin(host, id);
             (await Next(watch))

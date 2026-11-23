@@ -62,7 +62,7 @@ public class FakeCourier : ICourier
 
     public async Task<CourierRates> Rates(CancellationToken cancellationToken)
     {
-        await Task.Delay(QuoteTime, cancellationToken);
+        await Task.Delay(QuoteTime, cancellationToken).ConfigureAwait(false);
         return new CourierRates(Base: 4.00m, PerKilogram: 1.50m);
     }
 
@@ -116,7 +116,7 @@ public class FakeWarehouse : IWarehouse
 
     public async Task<Box> ChooseBox(int items, CancellationToken cancellationToken)
     {
-        await Task.Delay(ChoosingTime, cancellationToken);
+        await Task.Delay(ChoosingTime, cancellationToken).ConfigureAwait(false);
         return items <= 2 ? new Box("Small", 1m) : new Box("Large", 3m);
     }
 
@@ -222,13 +222,13 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.FulfilOrder.Junctions;
 
-internal class ChooseBoxJunction(IWarehouse warehouse, ILogger<ChooseBoxJunction> logger)
+internal sealed class ChooseBoxJunction(IWarehouse warehouse, ILogger<ChooseBoxJunction> logger)
     : EffectJunction<FulfilOrderInput, Box>
 {
     public override async Task<Box> Run(FulfilOrderInput input)
     {
         logger.LogInformation("Choosing a box for order {OrderId}", input.OrderId);
-        var box = await warehouse.ChooseBox(input.Items, CancellationToken);
+        var box = await warehouse.ChooseBox(input.Items, CancellationToken).ConfigureAwait(false);
         logger.LogInformation("Chose a {Size} box for order {OrderId}", box.Size, input.OrderId);
         return box;
     }
@@ -243,13 +243,15 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.FulfilOrder.Junctions;
 
-internal class GetCourierRatesJunction(ICourier courier, ILogger<GetCourierRatesJunction> logger)
-    : EffectJunction<FulfilOrderInput, CourierRates>
+internal sealed class GetCourierRatesJunction(
+    ICourier courier,
+    ILogger<GetCourierRatesJunction> logger
+) : EffectJunction<FulfilOrderInput, CourierRates>
 {
     public override async Task<CourierRates> Run(FulfilOrderInput input)
     {
         logger.LogInformation("Asking the courier's rates for order {OrderId}", input.OrderId);
-        var rates = await courier.Rates(CancellationToken);
+        var rates = await courier.Rates(CancellationToken).ConfigureAwait(false);
         logger.LogInformation(
             "The courier charges {Base} and {PerKilogram} a kilogram",
             rates.Base,
@@ -274,7 +276,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.FulfilOrder.Junctions;
 
-internal class BuyLabelJunction(ICourier courier, ILogger<BuyLabelJunction> logger)
+internal sealed class BuyLabelJunction(ICourier courier, ILogger<BuyLabelJunction> logger)
     : EffectJunction<(FulfilOrderInput Order, Box Box, CourierRates Rates), ShippingLabel>
 {
     public override async Task<ShippingLabel> Run(
@@ -282,7 +284,9 @@ internal class BuyLabelJunction(ICourier courier, ILogger<BuyLabelJunction> logg
     )
     {
         var price = input.Rates.Base + input.Rates.PerKilogram * input.Box.Kilograms;
-        var trackingNumber = await courier.BuyLabel(input.Order.OrderId, price, CancellationToken);
+        var trackingNumber = await courier
+            .BuyLabel(input.Order.OrderId, price, CancellationToken)
+            .ConfigureAwait(false);
         logger.LogInformation("Bought label {TrackingNumber} for {Price}", trackingNumber, price);
         return new ShippingLabel(trackingNumber, price);
     }
@@ -298,7 +302,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.FulfilOrder.Junctions;
 
-internal class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction> logger)
+internal sealed class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction> logger)
     : EffectJunction<(FulfilOrderInput Order, ShippingLabel Label), FulfilOrderOutput>
 {
     public override async Task<FulfilOrderOutput> Run(
@@ -306,12 +310,14 @@ internal class PackOrderJunction(IWarehouse warehouse, ILogger<PackOrderJunction
     )
     {
         logger.LogInformation("Packing order {OrderId}", input.Order.OrderId);
-        await warehouse.Pack(
-            input.Order.OrderId,
-            input.Order.Items,
-            input.Label.TrackingNumber,
-            CancellationToken
-        );
+        await warehouse
+            .Pack(
+                input.Order.OrderId,
+                input.Order.Items,
+                input.Label.TrackingNumber,
+                CancellationToken
+            )
+            .ConfigureAwait(false);
         logger.LogInformation(
             "Packed order {OrderId} as {TrackingNumber}",
             input.Order.OrderId,

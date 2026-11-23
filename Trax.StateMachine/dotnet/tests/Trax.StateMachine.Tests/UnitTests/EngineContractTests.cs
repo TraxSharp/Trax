@@ -115,7 +115,7 @@ public class EngineContractTests
             .Should()
             .BeEmpty(
                 $"an outcome case replays through the outcome entry point, not Advance ({Adr}): "
-                    + string.Join("\n", diffs)
+                    + string.Join('\n', diffs)
             );
     }
 
@@ -124,7 +124,7 @@ public class EngineContractTests
     {
         var output = new JsonObject { ["fingerprint"] = 5, ["unsure"] = "yes" };
 
-        AdvanceResult result = null!;
+        AdvanceResult? result = null;
         var apply = () =>
             result = IngestMachine.Machine.ApplyOutcome(Fetching(), new InvokeOutcome.Done(output));
 

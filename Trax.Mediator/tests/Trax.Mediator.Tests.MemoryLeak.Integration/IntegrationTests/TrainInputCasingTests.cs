@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -28,7 +29,7 @@ public class TrainInputCasingTests
     private const string Adr =
         "Trax.Docs/adr/0023-caller-supplied-train-input-is-read-case-insensitively.md";
 
-    private ServiceProvider _serviceProvider = null!;
+    private ServiceProvider? _serviceProvider;
 
     [SetUp]
     public void Setup()
@@ -47,29 +48,38 @@ public class TrainInputCasingTests
     [TearDown]
     public void TearDown()
     {
-        _serviceProvider.Dispose();
+        _serviceProvider?.Dispose();
         TrainBus.ClearMethodCache();
     }
 
     private async Task<PaymentInput> QueuedInputAsync(string json)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
-        var result = await execution.QueueAsync(typeof(IPaymentTrain).FullName!, json);
+        var result = await execution
+            .QueueAsync(typeof(IPaymentTrain).FullName.NotNull(), json)
+            .ConfigureAwait(false);
 
-        var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var factory = _serviceProvider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using var contextDisposal = context.ConfigureAwait(false);
         var stored = await context
             .WorkQueues.AsNoTracking()
-            .SingleAsync(w => w.Id == result.WorkQueueId);
+            .SingleAsync(w => w.Id == result.WorkQueueId)
+            .ConfigureAwait(false);
 
-        return JsonSerializer.Deserialize<PaymentInput>(
-            stored.Input!,
-            new JsonSerializerOptions(TraxEffectConfiguration.StaticSystemJsonSerializerOptions)
-            {
-                PropertyNameCaseInsensitive = true,
-            }
-        )!;
+        return JsonSerializer
+            .Deserialize<PaymentInput>(
+                stored.Input.NotNull(),
+                new JsonSerializerOptions(TraxEffectConfiguration.StaticSystemJsonSerializerOptions)
+                {
+                    PropertyNameCaseInsensitive = true,
+                }
+            )
+            .NotNull();
     }
 
     [TestCase("""{"amount":5,"reference":"r-1"}""")]
@@ -91,11 +101,18 @@ public class TrainInputCasingTests
     [TestCase("""{"amount":1,"amount":999}""")]
     public async Task A_property_given_twice_is_refused_at_enqueue(string json)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
-        var queue = async () => await execution.QueueAsync(typeof(IPaymentTrain).FullName!, json);
-        var run = async () => await execution.RunAsync(typeof(IPaymentTrain).FullName!, json);
+        var queue = async () =>
+            await execution
+                .QueueAsync(typeof(IPaymentTrain).FullName.NotNull(), json)
+                .ConfigureAwait(false);
+        var run = async () =>
+            await execution
+                .RunAsync(typeof(IPaymentTrain).FullName.NotNull(), json)
+                .ConfigureAwait(false);
 
         await queue
             .Should()
@@ -105,8 +122,9 @@ public class TrainInputCasingTests
             .WithMessage("*Duplicate property*");
         await run.Should().ThrowAsync<JsonException>("RunAsync reads input the same way");
 
-        var factory = _serviceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        var factory = _serviceProvider.NotNull().GetRequiredService<IDataContextProviderFactory>();
+        var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var contextDisposal = context.ConfigureAwait(false);
         (await context.WorkQueues.CountAsync()).Should().Be(0, "a refused input writes nothing");
     }
 

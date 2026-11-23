@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -173,11 +174,18 @@ public class DemoJwtKeyEnvironmentTests
         services.AddSingleton<IHostEnvironment>(new Environment(environment));
         services.AddLogging();
         for (var i = 0; i < schemes.Length; i++)
-            services.AddTraxJwtAuth(i == 0 ? JwtDefaults.SchemeName : $"scheme{i}", schemes[i]);
-        await using var provider = services.BuildServiceProvider();
-
-        foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(CancellationToken.None);
+            services.AddTraxJwtAuth(
+                i == 0
+                    ? JwtDefaults.SchemeName
+                    : string.Create(CultureInfo.InvariantCulture, $"scheme{i}"),
+                schemes[i]
+            );
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            foreach (var hosted in provider.GetServices<IHostedService>())
+                await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     private sealed class Environment(string name) : IHostEnvironment

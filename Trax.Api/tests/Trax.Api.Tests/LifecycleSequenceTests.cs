@@ -4,6 +4,7 @@ using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 
 namespace Trax.Api.Tests;
@@ -159,11 +160,9 @@ public class LifecycleSequenceTests
     {
         var delivered = new List<long>();
         await foreach (
-            var e in LifecycleSubscriptions.ReadLifecycle(
-                new ListStream(events),
-                visibility,
-                baseline
-            )
+            var e in LifecycleSubscriptions
+                .ReadLifecycle(new ListStream(events), visibility, baseline)
+                .ConfigureAwait(false)
         )
             delivered.Add(e.Sequence);
         return delivered;
@@ -182,7 +181,7 @@ public class LifecycleSequenceTests
             ExternalId: externalId,
             TrainName: trainName,
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null
@@ -205,7 +204,7 @@ public class LifecycleSequenceTests
 
         async IAsyncEnumerable<object?> ISourceStream.ReadEventsAsync()
         {
-            await foreach (var e in ReadEventsAsync())
+            await foreach (var e in ReadEventsAsync().ConfigureAwait(false))
                 yield return e;
         }
 
@@ -229,7 +228,7 @@ public class LifecycleSequenceTests
                 FailNext = false;
                 throw new InvalidOperationException("transport down");
             }
-            Sent.Add((topicName, (TrainLifecycleEvent)(object)message!));
+            Sent.Add((topicName, (TrainLifecycleEvent)(object)message.NotNull()));
             return ValueTask.CompletedTask;
         }
 

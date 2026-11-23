@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using HostHeartbeatRow = Trax.Effect.Models.HostHeartbeat.HostHeartbeat;
@@ -43,16 +44,62 @@ public partial class OperationsService
         var weekAgo = nowUtc.AddDays(-7);
         var overdueBefore = OverdueBefore();
 
-        async Task<T> Read<T>(Func<IDataContext, Task<T>> read)
-        {
-            using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-            return await read(db);
-        }
+        var deadLettersRead = ReadInOwnContextAsync(db => ReadDeadLetterGroupsAsync(db, ct), ct);
 
-        var deadLettersRead = Read(db =>
-            db.DeadLetters.AsNoTracking()
+        var finishedRead = ReadInOwnContextAsync(
+            db => ReadFinishedRunsAsync(db, weekAgo, hourAgo, ct),
+            ct
+        );
+
+        var stuckRead = ReadInOwnContextAsync(
+            db => ReadStuckGroupsAsync(db, overdueBefore, ct),
+            ct
+        );
+
+        var queueRead = ReadInOwnContextAsync(db => ReadDueQueueAsync(db, nowUtc, ct), ct);
+
+        var hostsRead = ReadInOwnContextAsync(db => ReadHostsAsync(db, ct), ct);
+
+        await Task.WhenAll(deadLettersRead, finishedRead, stuckRead, queueRead, hostsRead)
+            .ConfigureAwait(false);
+
+        var scheduler = new AttentionScheduler(
+            _schedulerConfiguration.ManifestManagerEnabled,
+            _schedulerConfiguration.JobDispatcherEnabled,
+            "/system/scheduler"
+        );
+
+        var deadLetters = DeadLetterGroups(await deadLettersRead.ConfigureAwait(false));
+
+        var failing = FailingTrains(await finishedRead.ConfigureAwait(false));
+
+        var stuck = StuckInstances(await stuckRead.ConfigureAwait(false));
+
+        var (queued, oldestQueued) = await queueRead.ConfigureAwait(false);
+        var queue = DueQueue(queued, oldestQueued, nowUtc);
+
+        var offline = OfflineHosts(await hostsRead.ConfigureAwait(false), now);
+
+        return new Attention(scheduler, deadLetters, failing, stuck, queue, offline, nowUtc);
+    }
+
+    private async Task<T> ReadInOwnContextAsync<T>(
+        Func<IDataContext, Task<T>> read,
+        CancellationToken ct
+    )
+    {
+        var db = await _dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
+        return await read(db).ConfigureAwait(false);
+    }
+
+    private static async Task<
+        List<(string? Name, string Reason, long Count, DateTime Oldest)>
+    > ReadDeadLetterGroupsAsync(IDataContext db, CancellationToken ct) => (
+            await db
+                .DeadLetters.AsNoTracking()
                 .Where(d => d.Status == DeadLetterStatus.AwaitingIntervention)
-                .GroupBy(d => new { d.Manifest!.Name, d.Reason })
+                .GroupBy(d => new { Name = d.Manifest != null ? d.Manifest.Name : null, d.Reason })
                 .Select(g => new
                 {
                     g.Key.Name,
@@ -65,10 +112,19 @@ public partial class OperationsService
                 .ThenBy(g => g.Reason)
                 .Take(AttentionListCap)
                 .ToListAsync(ct)
-        );
+                .ConfigureAwait(false)
+        ).Select(g => (g.Name, g.Reason, g.Count, g.Oldest)).ToList();
 
-        var finishedRead = Read(db =>
-            db.Metadatas.AsNoTracking()
+    private static async Task<
+        List<(string Name, TrainState State, bool LastHour, long Count)>
+    > ReadFinishedRunsAsync(
+        IDataContext db,
+        DateTime weekAgo,
+        DateTime hourAgo,
+        CancellationToken ct
+    ) => (
+            await db
+                .Metadatas.AsNoTracking()
                 .Where(m =>
                     (m.TrainState == TrainState.Completed || m.TrainState == TrainState.Failed)
                     && m.StartTime >= weekAgo
@@ -87,26 +143,35 @@ public partial class OperationsService
                     Count = g.LongCount(),
                 })
                 .ToListAsync(ct)
-        );
+                .ConfigureAwait(false)
+        ).Select(r => (r.Name, r.TrainState, r.LastHour, r.Count)).ToList();
 
-        var stuckRead = Read(db => ReadStuckGroupsAsync(db, overdueBefore, ct));
+    private static async Task<(long Count, DateTime? Oldest)> ReadDueQueueAsync(
+        IDataContext db,
+        DateTime nowUtc,
+        CancellationToken ct
+    )
+    {
+        var due = db
+            .WorkQueues.AsNoTracking()
+            .Where(w =>
+                w.Status == WorkQueueStatus.Queued
+                && w.ConfirmedAt != null
+                && (w.ScheduledAt == null || w.ScheduledAt <= nowUtc)
+            );
+        var count = await due.LongCountAsync(ct).ConfigureAwait(false);
+        var oldest =
+            count == 0
+                ? null
+                : await due.MinAsync(w => (DateTime?)w.CreatedAt, ct).ConfigureAwait(false);
+        return (count, oldest);
+    }
 
-        var queueRead = Read(async db =>
-        {
-            var due = db
-                .WorkQueues.AsNoTracking()
-                .Where(w =>
-                    w.Status == WorkQueueStatus.Queued
-                    && w.ConfirmedAt != null
-                    && (w.ScheduledAt == null || w.ScheduledAt <= nowUtc)
-                );
-            var count = await due.LongCountAsync(ct);
-            var oldest = count == 0 ? null : await due.MinAsync(w => (DateTime?)w.CreatedAt, ct);
-            return (count, oldest);
-        });
-
-        var hostsRead = Read(db =>
-            db.HostHeartbeats.AsNoTracking()
+    private static async Task<
+        List<(string InstanceId, string HostName, DateTime LastHeartbeatAt, bool RunsDispatcher)>
+    > ReadHostsAsync(IDataContext db, CancellationToken ct) => (
+            await db
+                .HostHeartbeats.AsNoTracking()
                 .Select(h => new
                 {
                     h.InstanceId,
@@ -115,37 +180,30 @@ public partial class OperationsService
                     h.RunsDispatcher,
                 })
                 .ToListAsync(ct)
-        );
+                .ConfigureAwait(false)
+        ).Select(h => (h.InstanceId, h.HostName, h.LastHeartbeatAt, h.RunsDispatcher)).ToList();
 
-        await Task.WhenAll(deadLettersRead, finishedRead, stuckRead, queueRead, hostsRead);
-
-        var scheduler = new AttentionScheduler(
-            _schedulerConfiguration.ManifestManagerEnabled,
-            _schedulerConfiguration.JobDispatcherEnabled,
-            "/system/scheduler"
-        );
-
-        var deadLetters = (await deadLettersRead)
-            .Select(g => new AttentionDeadLetterGroup(
-                g.Name,
+    private static List<AttentionDeadLetterGroup> DeadLetterGroups(
+        List<(string? Name, string Reason, long Count, DateTime Oldest)> rows
+    ) =>
+        rows.Select(g => new AttentionDeadLetterGroup(
+                g.Name.NotNull(),
                 g.Reason,
                 g.Count,
                 DateTime.SpecifyKind(g.Oldest, DateTimeKind.Utc),
                 ConsoleLink(
                     "/runs/dead-letters",
                     ("status", "AWAITING_INTERVENTION"),
-                    ("train", g.Name),
+                    ("train", g.Name.NotNull()),
                     ("reason", g.Reason)
                 )
             ))
             .ToList();
 
-        var failing = FailingTrains(
-            (await finishedRead).Select(r => (r.Name, r.TrainState, r.LastHour, r.Count))
-        );
-
-        var stuck = (await stuckRead)
-            .Select(g => new AttentionStuckInstances(
+    private static List<AttentionStuckInstances> StuckInstances(
+        List<(string Machine, string State, long Count)> rows
+    ) =>
+        rows.Select(g => new AttentionStuckInstances(
                 g.Machine,
                 g.State,
                 g.Count,
@@ -157,19 +215,29 @@ public partial class OperationsService
             ))
             .ToList();
 
-        var (queued, oldestQueued) = await queueRead;
+    private static AttentionQueue DueQueue(long queued, DateTime? oldestQueued, DateTime nowUtc)
+    {
         var oldestQueuedAt = oldestQueued is { } o
             ? DateTime.SpecifyKind(o, DateTimeKind.Utc)
             : (DateTime?)null;
-        var queue = new AttentionQueue(
+        return new AttentionQueue(
             queued,
             oldestQueuedAt,
             oldestQueuedAt is { } at ? Math.Max(0, (nowUtc - at).TotalSeconds) : null,
             ConsoleLink("/runs/queued", ("status", "QUEUED"))
         );
+    }
 
-        var offline = (await hostsRead)
-            .Where(h => !HostHeartbeatRow.IsOnline(h.LastHeartbeatAt, now))
+    private static List<AttentionHost> OfflineHosts(
+        List<(
+            string InstanceId,
+            string HostName,
+            DateTime LastHeartbeatAt,
+            bool RunsDispatcher
+        )> rows,
+        DateTimeOffset now
+    ) =>
+        rows.Where(h => !HostHeartbeatRow.IsOnline(h.LastHeartbeatAt, now))
             .OrderByDescending(h => h.LastHeartbeatAt)
             .ThenBy(h => h.InstanceId, StringComparer.Ordinal)
             .Take(AttentionListCap)
@@ -182,36 +250,33 @@ public partial class OperationsService
             ))
             .ToList();
 
-        return new Attention(scheduler, deadLetters, failing, stuck, queue, offline, nowUtc);
-
-        static List<AttentionFailingTrain> FailingTrains(
-            IEnumerable<(string Name, TrainState State, bool LastHour, long Count)> rows
-        ) =>
-            rows.GroupBy(r => r.Name, StringComparer.Ordinal)
-                .Select(g =>
-                {
-                    long Of(bool lastHour, TrainState state) =>
-                        g.Where(r => r.LastHour == lastHour && r.State == state).Sum(r => r.Count);
-                    var failedHour = Of(true, TrainState.Failed);
-                    var finishedHour = failedHour + Of(true, TrainState.Completed);
-                    var failedBefore = Of(false, TrainState.Failed);
-                    var finishedBefore = failedBefore + Of(false, TrainState.Completed);
-                    return new AttentionFailingTrain(
-                        g.Key,
-                        failedHour,
-                        finishedHour,
-                        finishedHour == 0 ? 0 : (double)failedHour / finishedHour,
-                        finishedBefore == 0 ? 0 : (double)failedBefore / finishedBefore,
-                        ConsoleLink("/runs", ("state", "FAILED"), ("train", g.Key))
-                    );
-                })
-                .Where(t => t.FailedLastHour > 0 && t.LastHourFailureRate > t.BaselineFailureRate)
-                .OrderByDescending(t => t.LastHourFailureRate)
-                .ThenByDescending(t => t.FailedLastHour)
-                .ThenBy(t => t.TrainName, StringComparer.Ordinal)
-                .Take(AttentionListCap)
-                .ToList();
-    }
+    private static List<AttentionFailingTrain> FailingTrains(
+        IEnumerable<(string Name, TrainState State, bool LastHour, long Count)> rows
+    ) =>
+        rows.GroupBy(r => r.Name, StringComparer.Ordinal)
+            .Select(g =>
+            {
+                long Of(bool lastHour, TrainState state) =>
+                    g.Where(r => r.LastHour == lastHour && r.State == state).Sum(r => r.Count);
+                var failedHour = Of(lastHour: true, TrainState.Failed);
+                var finishedHour = failedHour + Of(lastHour: true, TrainState.Completed);
+                var failedBefore = Of(lastHour: false, TrainState.Failed);
+                var finishedBefore = failedBefore + Of(lastHour: false, TrainState.Completed);
+                return new AttentionFailingTrain(
+                    g.Key,
+                    failedHour,
+                    finishedHour,
+                    finishedHour == 0 ? 0 : (double)failedHour / finishedHour,
+                    finishedBefore == 0 ? 0 : (double)failedBefore / finishedBefore,
+                    ConsoleLink("/runs", ("state", "FAILED"), ("train", g.Key))
+                );
+            })
+            .Where(t => t.FailedLastHour > 0 && t.LastHourFailureRate > t.BaselineFailureRate)
+            .OrderByDescending(t => t.LastHourFailureRate)
+            .ThenByDescending(t => t.FailedLastHour)
+            .ThenBy(t => t.TrainName, StringComparer.Ordinal)
+            .Take(AttentionListCap)
+            .ToList();
 
     // The stuck instances by machine and state, by StuckPredicate: the overdue timers through ix_snapshot_draft_due,
     // the rows that hold a token through ux_snapshot_draft_invoke_token, and each token's run and queue entry through
@@ -230,6 +295,7 @@ public partial class OperationsService
                     Count = g.LongCount(),
                 })
                 .ToListAsync(ct)
+                .ConfigureAwait(false)
         ).Select(g => (g.Machine, g.State, g.Count)).OrderByDescending(g => g.Count).ThenBy(g => g.Machine, StringComparer.Ordinal).ThenBy(g => g.State, StringComparer.Ordinal).Take(AttentionListCap).ToList();
 
     private static string ConsoleLink(string path, params (string Key, string Value)[] query) =>
@@ -238,7 +304,7 @@ public partial class OperationsService
             : path
                 + "?"
                 + string.Join(
-                    "&",
+                    '&',
                     query.Select(q =>
                         $"{Uri.EscapeDataString(q.Key)}={Uri.EscapeDataString(q.Value)}"
                     )

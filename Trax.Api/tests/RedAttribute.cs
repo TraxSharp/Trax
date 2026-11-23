@@ -21,6 +21,9 @@ namespace Trax.Testing.Red;
 /// </remarks>
 /// <param name="because">What the test is waiting for, shown in its result message.</param>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed class RedAttribute(string because) : Attribute, IWrapTestMethod, IApplyToTest
 {
     /// <summary>The category every red test carries.</summary>
@@ -61,7 +64,14 @@ internal sealed class RedAttribute(string because) : Attribute, IWrapTestMethod,
             var result = context.CurrentResult;
             var state = result.ResultState;
 
-            if (state.Status == TestStatus.Failed && state.Label != ResultState.Cancelled.Label)
+            if (
+                state.Status == TestStatus.Failed
+                && !string.Equals(
+                    state.Label,
+                    ResultState.Cancelled.Label,
+                    StringComparison.Ordinal
+                )
+            )
                 result.SetResult(
                     ResultState.Success,
                     $"Red as expected ({because}): {FirstLine(result.Message)}"

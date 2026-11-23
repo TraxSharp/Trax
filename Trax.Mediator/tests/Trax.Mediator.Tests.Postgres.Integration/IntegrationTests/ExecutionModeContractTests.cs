@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -24,7 +25,7 @@ public class ExecutionModeContractTests : TestSetup
 {
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         DownstreamProbe.Reset();
     }
 
@@ -34,7 +35,7 @@ public class ExecutionModeContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var runTask = execution.RunAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             CancellationToken.None
         );
@@ -57,7 +58,7 @@ public class ExecutionModeContractTests : TestSetup
             DownstreamProbe.CompletedAt.Should().BeNull();
 
             DownstreamProbe.Downstream.SetResult();
-            await runTask.WaitAsync(SignalTimeout);
+            await runTask.WaitAsync(SignalTimeout, TimeProvider.System);
 
             DownstreamProbe
                 .CompletedAt.Should()
@@ -76,7 +77,7 @@ public class ExecutionModeContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var runTask = execution.RunAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             CancellationToken.None
         );
@@ -89,7 +90,8 @@ public class ExecutionModeContractTests : TestSetup
             );
 
             var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-            using (var context = (IDataContext)factory.Create())
+            var context = (IDataContext)factory.Create();
+            await using (context.ConfigureAwait(false))
             {
                 var inFlight = await context
                     .Metadatas.AsNoTracking()
@@ -106,7 +108,7 @@ public class ExecutionModeContractTests : TestSetup
             }
 
             DownstreamProbe.Downstream.SetResult();
-            await runTask.WaitAsync(SignalTimeout);
+            await runTask.WaitAsync(SignalTimeout, TimeProvider.System);
         }
         finally
         {
@@ -122,13 +124,14 @@ public class ExecutionModeContractTests : TestSetup
         DownstreamProbe.Downstream.SetResult();
 
         var result = await execution.RunAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             CancellationToken.None
         );
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var metadata = await context
             .Metadatas.AsNoTracking()
@@ -150,7 +153,7 @@ public class ExecutionModeContractTests : TestSetup
         var execution = Scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
 
         var result = await execution.QueueAsync(
-            typeof(IGatedDownstreamTrain).FullName!,
+            typeof(IGatedDownstreamTrain).FullName.NotNull(),
             "{}",
             ct: CancellationToken.None
         );
@@ -163,7 +166,8 @@ public class ExecutionModeContractTests : TestSetup
         result.ExternalId.Should().NotBeNullOrEmpty();
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-        using var context = (IDataContext)factory.Create();
+        var context = (IDataContext)factory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
 
         var entry = await context
             .WorkQueues.AsNoTracking()
@@ -205,21 +209,24 @@ public class ExecutionModeContractTests : TestSetup
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    internal class GatedDownstreamTrain
+    [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+    )]
+    internal sealed class GatedDownstreamTrain
         : ServiceTrain<GatedDownstreamInput, Unit>,
             IGatedDownstreamTrain
     {
         protected override async Task<Either<Exception, Unit>> Junctions()
         {
             DownstreamProbe.ReachedDownstream.TrySetResult();
-            await DownstreamProbe.Downstream.Task;
-            DownstreamProbe.CompletedAt = DateTime.UtcNow;
+            await DownstreamProbe.Downstream.Task.ConfigureAwait(false);
+            DownstreamProbe.CompletedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
 
             return Resolve();
         }
     }
 
-    internal record GatedDownstreamInput;
+    internal sealed record GatedDownstreamInput;
 
-    internal interface IGatedDownstreamTrain : IServiceTrain<GatedDownstreamInput, Unit> { }
+    internal interface IGatedDownstreamTrain : IServiceTrain<GatedDownstreamInput, Unit>;
 }

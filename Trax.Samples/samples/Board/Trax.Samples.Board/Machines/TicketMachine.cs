@@ -6,131 +6,6 @@ using static Trax.StateMachine.Rules;
 
 namespace Trax.Samples.Board.Machines;
 
-/// <summary>Where a ticket is on the board. Each lane is one state; Done and Closed are the last column.</summary>
-public enum TicketState
-{
-    Triage,
-    Reproducing,
-    ReadyToFix,
-    InQA,
-    InReview,
-    Done,
-    Closed,
-}
-
-public enum TicketTrigger
-{
-    /// <summary>A worker holds the ticket in its lane.</summary>
-    Claim,
-
-    /// <summary>The claim ends without the ticket moving: its lease ran out.</summary>
-    Release,
-
-    Triaged,
-    NotReproduced,
-    Reproduced,
-    CannotReproduce,
-    FixRejected,
-    Fixed,
-    QaFailed,
-    QaPassed,
-    SentBack,
-    Approved,
-}
-
-/// <summary>A ticket, one shape in every state: the report it was filed from, its claim, and what each lane left on it.</summary>
-public sealed record TicketContext
-{
-    [MinLength(1)]
-    public string Id { get; init; } = "";
-
-    [MinLength(1)]
-    public string Report { get; init; } = "";
-
-    /// <summary>The worker holding the ticket in its lane, or null when it is free to claim.</summary>
-    public string? ClaimedBy { get; init; }
-
-    /// <summary>When the claim was taken (ISO 8601), for its lease.</summary>
-    public string? ClaimedAt { get; init; }
-
-    public string? Area { get; init; }
-
-    /// <summary>How many repro cases the server ran that did not show the bug.</summary>
-    public int? FailedCases { get; init; }
-
-    public decimal? ReproSubtotal { get; init; }
-
-    public decimal? ReproCharged { get; init; }
-
-    public decimal? FixFreeFrom { get; init; }
-
-    public bool? FixInclusive { get; init; }
-
-    /// <summary>The last thing a lane recorded, and who did it.</summary>
-    public string? Note { get; init; }
-
-    public string? By { get; init; }
-}
-
-public sealed record ClaimInput
-{
-    [MinLength(1)]
-    public string By { get; init; } = "";
-
-    [MinLength(1)]
-    public string At { get; init; } = "";
-}
-
-/// <summary>What a lane leaves on the ticket when it moves it: who, and a one-line note.</summary>
-public sealed record NoteInput
-{
-    [MinLength(1)]
-    public string By { get; init; } = "";
-
-    [MinLength(1)]
-    public string Note { get; init; } = "";
-}
-
-public sealed record TriagedInput
-{
-    [MinLength(1)]
-    public string By { get; init; } = "";
-
-    [MinLength(1)]
-    public string Note { get; init; } = "";
-
-    [MinLength(1)]
-    public string Area { get; init; } = "";
-}
-
-public sealed record CaseInput
-{
-    [MinLength(1)]
-    public string By { get; init; } = "";
-
-    [MinLength(1)]
-    public string Note { get; init; } = "";
-
-    public decimal Subtotal { get; init; }
-
-    public decimal Charged { get; init; }
-
-    public int FailedCases { get; init; }
-}
-
-public sealed record PatchInput
-{
-    [MinLength(1)]
-    public string By { get; init; } = "";
-
-    [MinLength(1)]
-    public string Note { get; init; } = "";
-
-    public decimal FreeFrom { get; init; }
-
-    public bool Inclusive { get; init; }
-}
-
 /// <summary>
 /// The board. One instance per ticket, owned by the system: no client reads or moves it. Host code does, and only
 /// two kinds: the claim train, and a check train once it has run an agent's evidence and accepted it. So the lanes a
@@ -150,7 +25,7 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
     public static readonly IReadOnlyDictionary<string, TicketState> Lanes = new Dictionary<
         string,
         TicketState
-    >
+    >(StringComparer.Ordinal)
     {
         ["triage"] = TicketState.Triage,
         ["reproduce"] = TicketState.Reproducing,
@@ -165,15 +40,15 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
     );
 
     private static readonly Reduction DropClaim = SetAll(
-        Set((TicketContext c) => c.ClaimedBy).ToValue(null),
-        Set((TicketContext c) => c.ClaimedAt).ToValue(null)
+        Set((TicketContext c) => c.ClaimedBy).ToValue(value: null),
+        Set((TicketContext c) => c.ClaimedAt).ToValue(value: null)
     );
 
     // Moving a ticket to another lane ends the claim on it and leaves a note.
     private static Reduction Moved(params Reduction[] more) =>
         SetAll([
-            Set((TicketContext c) => c.ClaimedBy).ToValue(null),
-            Set((TicketContext c) => c.ClaimedAt).ToValue(null),
+            Set((TicketContext c) => c.ClaimedBy).ToValue(value: null),
+            Set((TicketContext c) => c.ClaimedAt).ToValue(value: null),
             Set((TicketContext c) => c.Note).FromInput((NoteInput i) => i.Note),
             Set((TicketContext c) => c.By).FromInput((NoteInput i) => i.By),
             .. more,
@@ -193,6 +68,16 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
             .SystemOwned()
             .StartsAt(TicketState.Triage, () => ContextFor("unknown", "unknown"));
 
+        TriageAndReproduce(m);
+        FixAndReview(m);
+
+        m.In(TicketState.Done).Context<TicketContext>();
+        m.In(TicketState.Closed).Context<TicketContext>();
+    }
+
+    // Triage picks the area; reproducing tries cases until one shows the bug or two do not.
+    private static void TriageAndReproduce(IMachineBuilder<TicketState, TicketTrigger> m)
+    {
         Lane(m, TicketState.Triage)
             .On(TicketTrigger.Triaged)
             .WithInput<TriagedInput>()
@@ -228,7 +113,11 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
             .Because("A ticket is closed only after at least two cases did not reproduce it.")
             .Reduce(Moved())
             .To(TicketState.Closed);
+    }
 
+    // A fix is written, checked by QA, then reviewed; a failure at either sends it back.
+    private static void FixAndReview(IMachineBuilder<TicketState, TicketTrigger> m)
+    {
         Lane(m, TicketState.ReadyToFix)
             .On(TicketTrigger.FixRejected)
             .WithInput<NoteInput>()
@@ -269,9 +158,6 @@ public sealed class TicketMachine : Machine<TicketState, TicketTrigger>
             .WithInput<NoteInput>()
             .Reduce(Moved())
             .To(TicketState.ReadyToFix);
-
-        m.In(TicketState.Done).Context<TicketContext>();
-        m.In(TicketState.Closed).Context<TicketContext>();
     }
 
     // A lane: a worker claims the ticket once, and the claim is released when its lease runs out.

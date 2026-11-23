@@ -17,7 +17,7 @@ public abstract class WeighCoCitation(
 {
     public override async Task<CoCitationSignal> Run(CoCitationEvidence evidence)
     {
-        await Task.Delay(pace.StepDelay, CancellationToken);
+        await Task.Delay(pace.StepDelay, CancellationToken).ConfigureAwait(false);
 
         if (faults.TryFire(evidence.RunId, CrashPoint.CoCitation))
             throw new TimeoutException(
@@ -27,15 +27,3 @@ public abstract class WeighCoCitation(
         return new CoCitationSignal(track, weight, evidence.Pairs);
     }
 }
-
-/// <summary>The <c>Yes</c> track: shared references count in full.</summary>
-public class TrustCoCitation(FaultInjector faults, DemoPace pace)
-    : WeighCoCitation(faults, pace, "Trusted", 1.0);
-
-/// <summary>The <c>Unsure</c> track: shared references count for half.</summary>
-public class DampenCoCitation(FaultInjector faults, DemoPace pace)
-    : WeighCoCitation(faults, pace, "Dampened", 0.5);
-
-/// <summary>The <c>No</c> track: shared references do not count.</summary>
-public class IgnoreCoCitation(FaultInjector faults, DemoPace pace)
-    : WeighCoCitation(faults, pace, "Ignored", 0.0);

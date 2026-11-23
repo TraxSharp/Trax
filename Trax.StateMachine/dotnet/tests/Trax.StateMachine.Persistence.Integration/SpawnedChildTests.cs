@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
@@ -56,7 +57,10 @@ public class SpawnedChildTests(StoreProvider provider)
 
         var parent = await Parent(host, id);
         parent.State.Should().Be(nameof(ConsignmentState.Sent));
-        JsonNode.Parse(parent.Context)!["label"]!
+        JsonNode
+            .Parse(parent.Context)
+            .NotNull()["label"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("P-1", "OnDone reduces the child's context into the parent's");
@@ -102,7 +106,7 @@ public class SpawnedChildTests(StoreProvider provider)
             await host.Service(scope, ParcelMachine.Id).Advance(User, childId, "Inspect");
         var child = (await host.Rows(childId)).Single();
         var grandchildId = Guid.Parse(
-            JsonNode.Parse(child.Context)!["inspectionId"]!.GetValue<string>()
+            JsonNode.Parse(child.Context).NotNull()["inspectionId"].NotNull().GetValue<string>()
         );
         (await host.Rows(grandchildId)).Should().ContainSingle();
 
@@ -148,7 +152,13 @@ public class SpawnedChildTests(StoreProvider provider)
 
         var moved = (await host.Rows(started.Id)).Single();
         moved.State.Should().Be(nameof(ConsignmentState.Sent));
-        JsonNode.Parse(moved.Context)!["label"]!.GetValue<string>().Should().Be("S-1");
+        JsonNode
+            .Parse(moved.Context)
+            .NotNull()["label"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("S-1");
     }
 
     [Test]
@@ -170,7 +180,13 @@ public class SpawnedChildTests(StoreProvider provider)
 
         var parent = await Parent(host, id);
         parent.State.Should().Be(nameof(ConsignmentState.Sent));
-        JsonNode.Parse(parent.Context)!["label"]!.GetValue<string>().Should().Be("P-2");
+        JsonNode
+            .Parse(parent.Context)
+            .NotNull()["label"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("P-2");
     }
 
     [Test]
@@ -234,9 +250,12 @@ public class SpawnedChildTests(StoreProvider provider)
     private static async Task<Guid> Packing(InstanceHost host)
     {
         var id = Guid.NewGuid();
-        await host.Seed(User, id, ConsignmentMachine.At(ConsignmentState.Open));
+        await host.Seed(User, id, ConsignmentMachine.At(ConsignmentState.Open))
+            .ConfigureAwait(false);
         using var scope = host.Scope();
-        var packed = await host.Service(scope, ConsignmentMachine.Id).Advance(User, id, "Pack");
+        var packed = await host.Service(scope, ConsignmentMachine.Id)
+            .Advance(User, id, "Pack")
+            .ConfigureAwait(false);
         packed.Should().BeOfType<AdvanceOutcome.Advanced>(packed.ToString());
         return id;
     }
@@ -244,10 +263,15 @@ public class SpawnedChildTests(StoreProvider provider)
     private static async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Parent(
         InstanceHost host,
         Guid id
-    ) => (await host.Rows(id)).Single(r => r.Machine == ConsignmentMachine.Id);
+    ) =>
+        (await host.Rows(id).ConfigureAwait(false)).Single(r =>
+            string.Equals(r.Machine, ConsignmentMachine.Id, StringComparison.Ordinal)
+        );
 
     private static Guid ChildId(Trax.Effect.Models.SnapshotDraft.SnapshotDraft parent) =>
-        Guid.Parse(JsonNode.Parse(parent.Context)!["parcelId"]!.GetValue<string>());
+        Guid.Parse(
+            JsonNode.Parse(parent.Context).NotNull()["parcelId"].NotNull().GetValue<string>()
+        );
 
     // SQLite stores a Guid as its uppercase text.
     private static object Id(InstanceHost host, Guid id) =>

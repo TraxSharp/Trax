@@ -155,9 +155,11 @@ public static class TraxInvariants
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentNullException.ThrowIfNull(invokingStates);
 
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        return await FindViolationsAsync(connection, invokingStates, cancellationToken);
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await FindViolationsAsync(connection, invokingStates, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -192,17 +194,19 @@ public static class TraxInvariants
         ArgumentNullException.ThrowIfNull(invokingStates);
         ArgumentNullException.ThrowIfNull(timedStates);
 
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
+        var connection = new NpgsqlConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         return await FindViolationsAsync(
-            connection,
-            invokingStates,
-            timedStates,
-            maxDraftLifetime,
-            maxDraftsPerUser,
-            keptStates,
-            cancellationToken
-        );
+                connection,
+                invokingStates,
+                timedStates,
+                maxDraftLifetime,
+                maxDraftsPerUser,
+                keptStates,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -239,19 +243,22 @@ public static class TraxInvariants
         ArgumentNullException.ThrowIfNull(timedStates);
         var invoking = invokingStates.ToList();
         var violations = (
-            await FindViolationsAsync(connection, invoking, cancellationToken)
+            await FindViolationsAsync(connection, invoking, cancellationToken).ConfigureAwait(false)
         ).ToList();
         var dialect = Dialect.Of(connection);
         violations.AddRange(
             await FindTimerViolationsAsync(
-                connection,
-                dialect,
-                invoking,
-                timedStates.Distinct().ToList(),
-                maxDraftLifetime,
-                (keptStates ?? []).ToHashSet(),
-                cancellationToken
-            )
+                    connection,
+                    dialect,
+                    invoking,
+                    timedStates.Distinct().ToList(),
+                    maxDraftLifetime,
+                    (keptStates ?? []).ToHashSet(),
+                    // A static check with no container: the drafts are aged on the system clock.
+                    TimeProvider.System,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
         if (maxDraftsPerUser is not { } cap)
             return violations;
@@ -259,25 +266,29 @@ public static class TraxInvariants
         // Counted across machines, the way the cap counts them; a system row is nobody's draft.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
-                SELECT s.user_key, {dialect.Text("count(*)")}
-                FROM {dialect.Table("snapshot_draft")} s
-                WHERE s.owner_kind = {dialect.Owner(SnapshotOwnerKind.User)}
-                  AND s.user_key IS NOT NULL
-                GROUP BY s.user_key
-                HAVING count(*) > {cap.ToString(System.Globalization.CultureInfo.InvariantCulture)}
-                ORDER BY s.user_key
-                """,
-                (user, count) =>
-                    new TraxInvariantViolation(
-                        DraftsAboveCap,
-                        dialect.Table("snapshot_draft"),
-                        user,
-                        $"user {user} holds {count} drafts, more than the cap of {cap}"
-                    ),
-                cancellationToken
-            )
+                    connection,
+                    $"""
+                    SELECT s.user_key, {dialect.Text("count(*)")}
+                    FROM {dialect.Table("snapshot_draft")} s
+                    WHERE s.owner_kind = {dialect.Owner(SnapshotOwnerKind.User)}
+                      AND s.user_key IS NOT NULL
+                    GROUP BY s.user_key
+                    HAVING count(*) > {cap.ToString(CultureInfo.InvariantCulture)}
+                    ORDER BY s.user_key
+                    """,
+                    (user, count) =>
+                        new TraxInvariantViolation(
+                            DraftsAboveCap,
+                            dialect.Table("snapshot_draft"),
+                            user,
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"user {user} holds {count} drafts, more than the cap of {cap}"
+                            )
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
         return violations;
     }
@@ -310,26 +321,103 @@ public static class TraxInvariants
         var invoking = invokingStates.Distinct().ToList();
         var violations = new List<TraxInvariantViolation>();
 
+        await AddRunAndClaimViolationsAsync(connection, dialect, violations, cancellationToken)
+            .ConfigureAwait(false);
+
+        await AddDispatchAndCheckpointViolationsAsync(
+                connection,
+                dialect,
+                violations,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        await AddResumeViolationsAsync(connection, dialect, violations, cancellationToken)
+            .ConfigureAwait(false);
+
+        await AddInvokeTokenViolationsAsync(connection, dialect, violations, cancellationToken)
+            .ConfigureAwait(false);
+
+        await AddRevisionAndOwnerViolationsAsync(connection, dialect, violations, cancellationToken)
+            .ConfigureAwait(false);
+
+        await AddDuplicateRowIdViolationsAsync(connection, dialect, violations, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (invoking.Count > 0)
+            violations.AddRange(
+                await FindInvokingStateViolationsAsync(
+                        connection,
+                        dialect,
+                        invoking,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false)
+            );
+
+        return violations;
+    }
+
+    private static async Task AddDuplicateRowIdViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        List<TraxInvariantViolation> violations,
+        CancellationToken cancellationToken
+    )
+    {
+        // row_id is the table's key, so only a table whose key was dropped can hold two.
+        violations.AddRange(
+            await ReadAsync(
+                    connection,
+                    $"""
+                    SELECT {dialect.Text("s.row_id")}, {dialect.Text("count(*)")}
+                    FROM {dialect.Table("snapshot_draft")} s
+                    GROUP BY s.row_id
+                    HAVING count(*) > 1
+                    ORDER BY s.row_id
+                    """,
+                    (id, count) =>
+                        new TraxInvariantViolation(
+                            DuplicateRowId,
+                            dialect.Table("snapshot_draft"),
+                            id,
+                            $"{count} rows share row id {id}"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        );
+    }
+
+    // A run left in progress, and an effect claimed with no receipt.
+    private static async Task AddRunAndClaimViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        List<TraxInvariantViolation> violations,
+        CancellationToken cancellationToken
+    )
+    {
         // A run a host had started and never finished. After every host has stopped, nothing will
         // finish it: stuck-job recovery is the only thing that would move it, and only later.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
-                SELECT {dialect.Text("id")}, name
-                FROM {dialect.Table("metadata")}
-                WHERE train_state = {dialect.State(TrainState.InProgress)}
-                ORDER BY id
-                """,
-                (id, name) =>
-                    new TraxInvariantViolation(
-                        RunInProgress,
-                        dialect.Table("metadata"),
-                        id,
-                        $"run {id} of '{name}' is still in progress"
-                    ),
-                cancellationToken
-            )
+                    connection,
+                    $"""
+                    SELECT {dialect.Text("id")}, name
+                    FROM {dialect.Table("metadata")}
+                    WHERE train_state = {dialect.State(TrainState.InProgress)}
+                    ORDER BY id
+                    """,
+                    (id, name) =>
+                        new TraxInvariantViolation(
+                            RunInProgress,
+                            dialect.Table("metadata"),
+                            id,
+                            $"run {id} of '{name}' is still in progress"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
 
         // A claim names its effect's intent, not a run, so it cannot be joined to one. A receipt is
@@ -337,53 +425,64 @@ public static class TraxInvariants
         // claim with neither is an effect whose outcome nobody recorded.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
-                SELECT effect_key, {dialect.Text("owner_token")}
-                FROM {dialect.Table("effect_claim")}
-                WHERE receipt IS NULL
-                ORDER BY effect_key
-                """,
-                (key, owner) =>
-                    new TraxInvariantViolation(
-                        EffectClaimInFlight,
-                        dialect.Table("effect_claim"),
-                        key,
-                        $"effect '{key}' is claimed by {owner} with no receipt"
-                    ),
-                cancellationToken
-            )
+                    connection,
+                    $"""
+                    SELECT effect_key, {dialect.Text("owner_token")}
+                    FROM {dialect.Table("effect_claim")}
+                    WHERE receipt IS NULL
+                    ORDER BY effect_key
+                    """,
+                    (key, owner) =>
+                        new TraxInvariantViolation(
+                            EffectClaimInFlight,
+                            dialect.Table("effect_claim"),
+                            key,
+                            $"effect '{key}' is claimed by {owner} with no receipt"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
+    }
 
+    // A dispatched queue entry with no run, and a checkpoint kept for a completed run.
+    private static async Task AddDispatchAndCheckpointViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        List<TraxInvariantViolation> violations,
+        CancellationToken cancellationToken
+    )
+    {
         // The dispatcher creates the run and marks the entry dispatched in one transaction, so a
         // dispatched entry with no run means that write was split or its run deleted after it.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
-                SELECT {dialect.Text("w.id")}, coalesce({dialect.Text("w.metadata_id")}, 'null')
-                FROM {dialect.Table("work_queue")} w
-                LEFT JOIN {dialect.Table("metadata")} m ON m.id = w.metadata_id
-                WHERE w.status = {dialect.Status(WorkQueueStatus.Dispatched)} AND m.id IS NULL
-                ORDER BY w.id
-                """,
-                (id, run) =>
-                    new TraxInvariantViolation(
-                        DispatchedWithoutRun,
-                        dialect.Table("work_queue"),
-                        id,
-                        $"queue entry {id} is dispatched but its run ({run}) does not exist"
-                    ),
-                cancellationToken
-            )
+                    connection,
+                    $"""
+                    SELECT {dialect.Text("w.id")}, coalesce({dialect.Text("w.metadata_id")}, 'null')
+                    FROM {dialect.Table("work_queue")} w
+                    LEFT JOIN {dialect.Table("metadata")} m ON m.id = w.metadata_id
+                    WHERE w.status = {dialect.Status(WorkQueueStatus.Dispatched)} AND m.id IS NULL
+                    ORDER BY w.id
+                    """,
+                    (id, run) =>
+                        new TraxInvariantViolation(
+                            DispatchedWithoutRun,
+                            dialect.Table("work_queue"),
+                            id,
+                            $"queue entry {id} is dispatched but its run ({run}) does not exist"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
 
         // A run that completes deletes its own checkpoints in its terminal write: nothing may
         // resume it, and a row left behind is run data kept for no purpose.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
+                    connection,
+                    $"""
                 SELECT {dialect.Text("c.id")}, c.node_id || ' of run ' || {dialect.Text(
                     "m.id"
                 )} || ' of ' || m.name
@@ -392,24 +491,34 @@ public static class TraxInvariants
                 WHERE m.train_state = {dialect.State(TrainState.Completed)}
                 ORDER BY c.id
                 """,
-                (id, what) =>
-                    new TraxInvariantViolation(
-                        CheckpointOfCompletedRun,
-                        dialect.Table("checkpoint"),
-                        id,
-                        $"checkpoint {id} at {what} is kept, but that run completed"
-                    ),
-                cancellationToken
-            )
+                    (id, what) =>
+                        new TraxInvariantViolation(
+                            CheckpointOfCompletedRun,
+                            dialect.Table("checkpoint"),
+                            id,
+                            $"checkpoint {id} at {what} is kept, but that run completed"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
+    }
 
+    // A queue entry or a run that resumes a run that does not exist.
+    private static async Task AddResumeViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        List<TraxInvariantViolation> violations,
+        CancellationToken cancellationToken
+    )
+    {
         // Not a foreign key, like replay_decisions_of, so nothing in the database holds it: the
         // metadata cleanup keeps a run while a queued entry or a run that stays resumes it, and
         // deletes a resumed run with its source.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
+                    connection,
+                    $"""
                 SELECT {dialect.Text("w.id")}, {dialect.Text("w.resume_from")}
                 FROM {dialect.Table("work_queue")} w
                 WHERE w.resume_from IS NOT NULL
@@ -418,21 +527,22 @@ public static class TraxInvariants
                 )} m WHERE m.id = w.resume_from)
                 ORDER BY w.id
                 """,
-                (id, source) =>
-                    new TraxInvariantViolation(
-                        ResumeFromMissingRun,
-                        dialect.Table("work_queue"),
-                        id,
-                        $"queue entry {id} resumes run {source}, which does not exist"
-                    ),
-                cancellationToken
-            )
+                    (id, source) =>
+                        new TraxInvariantViolation(
+                            ResumeFromMissingRun,
+                            dialect.Table("work_queue"),
+                            id,
+                            $"queue entry {id} resumes run {source}, which does not exist"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
 
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
+                    connection,
+                    $"""
                 SELECT {dialect.Text("r.id")}, {dialect.Text("r.resume_from")}
                 FROM {dialect.Table("metadata")} r
                 WHERE r.resume_from IS NOT NULL
@@ -441,24 +551,34 @@ public static class TraxInvariants
                 )} m WHERE m.id = r.resume_from)
                 ORDER BY r.id
                 """,
-                (id, source) =>
-                    new TraxInvariantViolation(
-                        ResumeFromMissingRun,
-                        dialect.Table("metadata"),
-                        id,
-                        $"run {id} resumes run {source}, which does not exist"
-                    ),
-                cancellationToken
-            )
+                    (id, source) =>
+                        new TraxInvariantViolation(
+                            ResumeFromMissingRun,
+                            dialect.Table("metadata"),
+                            id,
+                            $"run {id} resumes run {source}, which does not exist"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
+    }
 
+    // An invoke token that names no run its instance queued.
+    private static async Task AddInvokeTokenViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        List<TraxInvariantViolation> violations,
+        CancellationToken cancellationToken
+    )
+    {
         // Entering an invoking state writes the token and the queue entry that carries the
         // instance as its invoker in one transaction, and the dispatcher copies the invoker onto
         // the run. A token with neither was set without its run, or outlived it.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
+                    connection,
+                    $"""
                 SELECT {dialect.Text("s.row_id")}, s.machine || ' ' || {dialect.Text(
                     "s.id"
                 )} || ' in ' || s.state || ' holds ' || s.invoke_token
@@ -479,22 +599,32 @@ public static class TraxInvariants
                       WHERE c.spawned_by = s.invoke_token)
                 ORDER BY s.row_id
                 """,
-                (id, what) =>
-                    new TraxInvariantViolation(
-                        InvokeTokenWithoutRun,
-                        dialect.Table("snapshot_draft"),
-                        id,
-                        $"{what}, which names no run this instance queued"
-                    ),
-                cancellationToken
-            )
+                    (id, what) =>
+                        new TraxInvariantViolation(
+                            InvokeTokenWithoutRun,
+                            dialect.Table("snapshot_draft"),
+                            id,
+                            $"{what}, which names no run this instance queued"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
+    }
 
+    // A draft below revision 1, and a user's draft with no owner key.
+    private static async Task AddRevisionAndOwnerViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        List<TraxInvariantViolation> violations,
+        CancellationToken cancellationToken
+    )
+    {
         // A row is inserted at revision 1 and the trigger adds one on every update, whatever the writer sets.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
+                    connection,
+                    $"""
                 SELECT {dialect.Text("s.row_id")}, s.machine || ' ' || {dialect.Text(
                     "s.id"
                 )} || ' is at revision ' || {dialect.Text("s.revision")}
@@ -502,73 +632,41 @@ public static class TraxInvariants
                 WHERE s.revision < 1
                 ORDER BY s.row_id
                 """,
-                (id, what) =>
-                    new TraxInvariantViolation(
-                        RevisionBelowOne,
-                        dialect.Table("snapshot_draft"),
-                        id,
-                        $"{what}, below the 1 every row starts at"
-                    ),
-                cancellationToken
-            )
+                    (id, what) =>
+                        new TraxInvariantViolation(
+                            RevisionBelowOne,
+                            dialect.Table("snapshot_draft"),
+                            id,
+                            $"{what}, below the 1 every row starts at"
+                        ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
         );
 
         // A user's draft is written only under a key a principal mapped to, and an empty or blank key is refused
         // as unauthenticated, so a user row with one was written around every user path.
         violations.AddRange(
             await ReadAsync(
-                connection,
-                $"""
-                SELECT {dialect.Text("s.row_id")}, s.machine || ' ' || {dialect.Text("s.id")}
-                FROM {dialect.Table("snapshot_draft")} s
-                WHERE s.owner_kind = {dialect.Owner(SnapshotOwnerKind.User)}
-                  AND {dialect.Blank("s.user_key")}
-                ORDER BY s.row_id
-                """,
-                (id, what) =>
-                    new TraxInvariantViolation(
-                        UserDraftWithoutOwner,
-                        dialect.Table("snapshot_draft"),
-                        id,
-                        $"{what} is a user's draft with an empty or blank owner key"
-                    ),
-                cancellationToken
-            )
-        );
-
-        // row_id is the table's key, so only a table whose key was dropped can hold two.
-        violations.AddRange(
-            await ReadAsync(
-                connection,
-                $"""
-                SELECT {dialect.Text("s.row_id")}, {dialect.Text("count(*)")}
-                FROM {dialect.Table("snapshot_draft")} s
-                GROUP BY s.row_id
-                HAVING count(*) > 1
-                ORDER BY s.row_id
-                """,
-                (id, count) =>
-                    new TraxInvariantViolation(
-                        DuplicateRowId,
-                        dialect.Table("snapshot_draft"),
-                        id,
-                        $"{count} rows share row id {id}"
-                    ),
-                cancellationToken
-            )
-        );
-
-        if (invoking.Count > 0)
-            violations.AddRange(
-                await FindInvokingStateViolationsAsync(
                     connection,
-                    dialect,
-                    invoking,
+                    $"""
+                    SELECT {dialect.Text("s.row_id")}, s.machine || ' ' || {dialect.Text("s.id")}
+                    FROM {dialect.Table("snapshot_draft")} s
+                    WHERE s.owner_kind = {dialect.Owner(SnapshotOwnerKind.User)}
+                      AND {dialect.Blank("s.user_key")}
+                    ORDER BY s.row_id
+                    """,
+                    (id, what) =>
+                        new TraxInvariantViolation(
+                            UserDraftWithoutOwner,
+                            dialect.Table("snapshot_draft"),
+                            id,
+                            $"{what} is a user's draft with an empty or blank owner key"
+                        ),
                     cancellationToken
                 )
-            );
-
-        return violations;
+                .ConfigureAwait(false)
+        );
     }
 
     // A due time is written as a timed state is entered and cleared as it is left, in the write that moves the
@@ -583,37 +681,32 @@ public static class TraxInvariants
         IReadOnlyCollection<TimedState> timed,
         TimeSpan? maxDraftLifetime,
         IReadOnlySet<KeptState> kept,
+        TimeProvider clock,
         CancellationToken cancellationToken
     )
     {
-        var timedMachines = timed.Select(s => s.Machine).ToHashSet();
+        var timedMachines = timed.Select(s => s.Machine).ToHashSet(StringComparer.Ordinal);
         var removed = invoking
             .Select(s => s.Machine)
             .Where(m => !timedMachines.Contains(m))
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
         if (timedMachines.Count == 0 && removed.Count == 0 && maxDraftLifetime is null)
             return [];
 
         var table = dialect.Table("snapshot_draft");
-        var bornBefore = DateTimeOffset.UtcNow - maxDraftLifetime;
+        var bornBefore = clock.GetUtcNow() - maxDraftLifetime;
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT {dialect.Text("s.row_id")}, s.machine, {dialect.Text(
-                "s.id"
-            )}, s.state, s.due_at IS NOT NULL, {dialect.Instant("s.created_at")}, {dialect.Instant(
-                "s.updated_at"
-            )}, s.owner_kind = {dialect.Owner(SnapshotOwnerKind.User)}
-            FROM {table} s
-            ORDER BY s.row_id
-            """;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
+        command.CommandText = TimerQuery(dialect, table);
+        var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
 
         var outside = new List<TraxInvariantViolation>();
         var missing = new List<TraxInvariantViolation>();
         var stale = new List<TraxInvariantViolation>();
         var old = new List<TraxInvariantViolation>();
-        while (await reader.ReadAsync(cancellationToken))
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var rowId = reader.GetString(0);
             var machine = reader.GetString(1);
@@ -621,37 +714,16 @@ public static class TraxInvariants
             var state = reader.GetString(3);
             var due = Convert.ToBoolean(reader.GetValue(4), CultureInfo.InvariantCulture);
 
-            if (timedMachines.Contains(machine))
-            {
-                var isTimed = timed.Contains(new TimedState(machine, state));
-                if (isTimed && !due)
-                    missing.Add(
-                        new TraxInvariantViolation(
-                            TimedStateWithoutDueAt,
-                            table,
-                            rowId,
-                            $"{machine} {id} is in {state}, which has a timer, and holds no due time"
-                        )
-                    );
-                else if (!isTimed && due)
-                    outside.Add(
-                        new TraxInvariantViolation(
-                            DueAtOutsideTimedState,
-                            table,
-                            rowId,
-                            $"{machine} {id} is in {state} and holds a due time, but that state has no timer"
-                        )
-                    );
-            }
-            else if (removed.Contains(machine) && due)
-                stale.Add(
-                    new TraxInvariantViolation(
-                        DueAtOfARemovedTimer,
-                        table,
-                        rowId,
-                        $"{machine} {id} in {state} holds a due time, but its machine declares no timer"
-                    )
-                );
+            ClassifyDueTime(
+                new TimerRow(rowId, machine, id, state, due),
+                table,
+                timed,
+                timedMachines,
+                removed,
+                outside,
+                missing,
+                stale
+            );
 
             var user = Convert.ToBoolean(reader.GetValue(7), CultureInfo.InvariantCulture);
             if (
@@ -661,31 +733,108 @@ public static class TraxInvariants
             )
                 continue;
             // The sweep counts a row written before created_at was recorded from its last write.
-            var born = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var born = await reader.IsDBNullAsync(5, cancellationToken).ConfigureAwait(false)
+                ? null
+                : reader.GetString(5);
             var since = born ?? reader.GetString(6);
-            if (
-                DateTimeOffset.Parse(
-                    since,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal
-                ) < bound
-            )
-                old.Add(
-                    new TraxInvariantViolation(
-                        DraftOlderThanMaxLifetime,
-                        table,
-                        rowId,
-                        (
-                            born is null
-                                ? $"{machine} {id} has no creation time and was last written at {since}"
-                                : $"{machine} {id} was created at {since}"
-                        ) + $", longer ago than the maximum lifetime of {maxDraftLifetime}"
-                    )
-                );
+            if (IsBefore(since, bound))
+                old.Add(OldDraft(table, rowId, machine, id, born, since, maxDraftLifetime));
         }
 
         return [.. outside, .. missing, .. stale, .. old];
     }
+
+    private static string TimerQuery(Dialect dialect, string table) =>
+        $"""
+            SELECT {dialect.Text("s.row_id")}, s.machine, {dialect.Text(
+                "s.id"
+            )}, s.state, s.due_at IS NOT NULL, {dialect.Instant("s.created_at")}, {dialect.Instant(
+                "s.updated_at"
+            )}, s.owner_kind = {dialect.Owner(SnapshotOwnerKind.User)}
+            FROM {table} s
+            ORDER BY s.row_id
+            """;
+
+    private static bool IsBefore(string since, DateTimeOffset bound) =>
+        DateTimeOffset.Parse(
+            since,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal
+        ) < bound;
+
+    // One row of the timer read: its key, machine, instance id, state, and whether it holds a
+    // due time.
+    private sealed record TimerRow(string RowId, string Machine, string Id, string State, bool Due);
+
+    // A row of a timed machine holds a due time exactly when it is in a timed state; a row of a
+    // machine whose timers were removed holds none.
+    private static void ClassifyDueTime(
+        TimerRow row,
+        string table,
+        IReadOnlyCollection<TimedState> timed,
+        HashSet<string> timedMachines,
+        HashSet<string> removed,
+        List<TraxInvariantViolation> outside,
+        List<TraxInvariantViolation> missing,
+        List<TraxInvariantViolation> stale
+    )
+    {
+        if (timedMachines.Contains(row.Machine))
+        {
+            var isTimed = timed.Contains(new TimedState(row.Machine, row.State));
+            if (isTimed && !row.Due)
+                missing.Add(
+                    new TraxInvariantViolation(
+                        TimedStateWithoutDueAt,
+                        table,
+                        row.RowId,
+                        $"{row.Machine} {row.Id} is in {row.State}, which has a timer, and holds no due time"
+                    )
+                );
+            else if (!isTimed && row.Due)
+                outside.Add(
+                    new TraxInvariantViolation(
+                        DueAtOutsideTimedState,
+                        table,
+                        row.RowId,
+                        $"{row.Machine} {row.Id} is in {row.State} and holds a due time, but that state has no timer"
+                    )
+                );
+        }
+        else if (removed.Contains(row.Machine) && row.Due)
+            stale.Add(
+                new TraxInvariantViolation(
+                    DueAtOfARemovedTimer,
+                    table,
+                    row.RowId,
+                    $"{row.Machine} {row.Id} in {row.State} holds a due time, but its machine declares no timer"
+                )
+            );
+    }
+
+    private static TraxInvariantViolation OldDraft(
+        string table,
+        string rowId,
+        string machine,
+        string id,
+        string? born,
+        string since,
+        TimeSpan? maxDraftLifetime
+    ) =>
+        new TraxInvariantViolation(
+            DraftOlderThanMaxLifetime,
+            table,
+            rowId,
+            (
+                born is null
+                    ? $"{machine} {id} has no creation time and was last written at {since}"
+                    : $"{machine} {id} was created at {since}"
+            )
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $", longer ago than the maximum lifetime of {maxDraftLifetime}"
+                )
+        );
 
     // The token is set as the state is entered and cleared as it is left, in the write that moves
     // the instance, so the two always agree. The one exception is an instance stranded in its
@@ -698,10 +847,11 @@ public static class TraxInvariants
         CancellationToken cancellationToken
     )
     {
-        var machines = invoking.Select(s => s.Machine).ToHashSet();
+        var machines = invoking.Select(s => s.Machine).ToHashSet(StringComparer.Ordinal);
         var table = dialect.Table("snapshot_draft");
 
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = $"""
             SELECT {dialect.Text("s.row_id")}, s.machine, {dialect.Text(
                 "s.id"
@@ -709,11 +859,12 @@ public static class TraxInvariants
             FROM {table} s
             ORDER BY s.row_id
             """;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
 
         var missing = new List<TraxInvariantViolation>();
         var outside = new List<TraxInvariantViolation>();
-        while (await reader.ReadAsync(cancellationToken))
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var machine = reader.GetString(1);
             if (!machines.Contains(machine))
@@ -722,11 +873,19 @@ public static class TraxInvariants
             var rowId = reader.GetString(0);
             var id = reader.GetString(2);
             var state = reader.GetString(3);
-            var token = reader.IsDBNull(4) ? null : reader.GetString(4);
-            var stranded = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var token = await reader.IsDBNullAsync(4, cancellationToken).ConfigureAwait(false)
+                ? null
+                : reader.GetString(4);
+            var stranded = await reader.IsDBNullAsync(5, cancellationToken).ConfigureAwait(false)
+                ? null
+                : reader.GetString(5);
             var invokes = invoking.Contains(new InvokingState(machine, state));
 
-            if (invokes && token is null && stranded != state)
+            if (
+                invokes
+                && token is null
+                && !string.Equals(stranded, state, StringComparison.Ordinal)
+            )
                 missing.Add(
                     new TraxInvariantViolation(
                         InvokingStateWithoutToken,
@@ -771,10 +930,11 @@ public static class TraxInvariants
     )
     {
         var violations = await FindViolationsAsync(
-            connectionString,
-            invokingStates,
-            cancellationToken
-        );
+                connectionString,
+                invokingStates,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         if (violations.Count > 0)
             throw new InvalidOperationException(Describe(violations));
     }
@@ -803,15 +963,15 @@ public static class TraxInvariants
     {
         ArgumentNullException.ThrowIfNull(fixture);
 
-        if (fixture.GetCustomAttribute<LeavesStuckRunsAttribute>(inherit: true) is not null)
+        if (Attribute.IsDefined(fixture, typeof(LeavesStuckRunsAttribute), inherit: true))
             return true;
 
         return methodName is not null
             && fixture
                 .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                .Where(m => m.Name == methodName)
                 .Any(m =>
-                    m.GetCustomAttribute<LeavesStuckRunsAttribute>(inherit: true) is not null
+                    string.Equals(m.Name, methodName, StringComparison.Ordinal)
+                    && Attribute.IsDefined(m, typeof(LeavesStuckRunsAttribute), inherit: true)
                 );
     }
 
@@ -822,12 +982,14 @@ public static class TraxInvariants
         CancellationToken cancellationToken
     )
     {
-        await using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
 
         var found = new List<TraxInvariantViolation>();
-        while (await reader.ReadAsync(cancellationToken))
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             found.Add(violation(reader.GetString(0), reader.GetString(1)));
 
         return found;
@@ -844,8 +1006,11 @@ public static class TraxInvariants
             connection switch
             {
                 NpgsqlConnection => new Dialect(postgres: true),
-                _ when connection.GetType().FullName == "Microsoft.Data.Sqlite.SqliteConnection" =>
-                    new Dialect(postgres: false),
+                _ when string.Equals(
+                        connection.GetType().FullName,
+                        "Microsoft.Data.Sqlite.SqliteConnection",
+                        StringComparison.Ordinal
+                    ) => new Dialect(postgres: false),
                 _ => throw new NotSupportedException(
                     $"TraxInvariants reads Postgres and SQLite, not {connection.GetType().FullName}."
                 ),
@@ -893,52 +1058,4 @@ public static class TraxInvariants
                 )
             );
     }
-}
-
-/// <summary>A state of a machine that invokes a train, as <see cref="TraxInvariants"/> checks it.</summary>
-/// <param name="Machine">The machine's name, as stored in <c>trax.snapshot_draft.machine</c>.</param>
-/// <param name="State">The state's name, as stored in <c>trax.snapshot_draft.state</c>.</param>
-public sealed record InvokingState(string Machine, string State);
-
-/// <summary>A state of a machine that has a timer, as <see cref="TraxInvariants"/> checks it.</summary>
-/// <param name="Machine">The machine's name, as stored in <c>trax.snapshot_draft.machine</c>.</param>
-/// <param name="State">The state's name, as stored in <c>trax.snapshot_draft.state</c>.</param>
-public sealed record TimedState(string Machine, string State);
-
-/// <summary>
-/// A state the draft sweep keeps a user's instance in however long it is idle or has lived, as
-/// <see cref="TraxInvariants"/> checks it: one only the server puts an instance in (a committed state, an effect's
-/// target, an invoked train's outcome target, a gated event's target), which is the record of what the server did.
-/// </summary>
-/// <param name="Machine">The machine's name, as stored in <c>trax.snapshot_draft.machine</c>.</param>
-/// <param name="State">The state's name, as stored in <c>trax.snapshot_draft.state</c>.</param>
-public sealed record KeptState(string Machine, string State);
-
-/// <summary>One row that breaks one of <see cref="TraxInvariants"/>' checks.</summary>
-/// <param name="Invariant">Which check, one of the <see cref="TraxInvariants"/> constants.</param>
-/// <param name="Table">The table the row is in, schema-qualified.</param>
-/// <param name="Id">The row's id: the run, queue entry, checkpoint or snapshot row id, or the effect key.</param>
-/// <param name="Detail">What is wrong with the row, in a sentence.</param>
-public sealed record TraxInvariantViolation(
-    string Invariant,
-    string Table,
-    string Id,
-    string Detail
-)
-{
-    /// <inheritdoc />
-    public override string ToString() => $"[{Invariant}] {Table} {Id}: {Detail}";
-}
-
-/// <summary>
-/// Marks a test, or a whole fixture, that leaves a Trax database inconsistent on purpose (a run
-/// stuck in progress, an effect claim abandoned in flight), so the fixture's teardown skips
-/// <see cref="TraxInvariants"/> for it.
-/// </summary>
-/// <param name="reason">Why the test leaves that state; it is read by the next person to wonder.</param>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = true)]
-public sealed class LeavesStuckRunsAttribute(string reason) : Attribute
-{
-    /// <summary>Why the test leaves the database inconsistent.</summary>
-    public string Reason { get; } = reason;
 }

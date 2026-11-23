@@ -30,17 +30,3 @@ internal sealed class NamespaceField
     internal static bool IsNamespace(IOutputFieldDefinition field) =>
         field is IFeatureProvider provider && provider.Features.Get<NamespaceField>() is not null;
 }
-
-/// <summary>
-/// Marks a resolver method that returns a nested namespace, such as
-/// <c>OperationsQueries.DeadLetters()</c>. See <see cref="NamespaceField"/>.
-/// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Property)]
-internal sealed class NamespaceFieldAttribute : ObjectFieldDescriptorAttribute
-{
-    protected override void OnConfigure(
-        IDescriptorContext context,
-        IObjectFieldDescriptor descriptor,
-        MemberInfo? member
-    ) => NamespaceField.Mark(descriptor);
-}

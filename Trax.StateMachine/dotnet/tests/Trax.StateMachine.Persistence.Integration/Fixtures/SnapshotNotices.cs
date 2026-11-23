@@ -43,19 +43,20 @@ internal sealed class SnapshotNotices : IAsyncDisposable
     {
         connectionString ??= PostgresSetup.ConnectionString;
         var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync().ConfigureAwait(false);
         var notices = new SnapshotNotices(connection, connectionString);
-        await using (var listen = connection.CreateCommand())
+        var listen = connection.CreateCommand();
+        await using (listen.ConfigureAwait(false))
         {
             listen.CommandText = $"LISTEN {Channel}; LISTEN {MarkerChannel}";
-            await listen.ExecuteNonQueryAsync();
+            await listen.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
         }
         notices._pump = notices.Pump();
         return notices;
     }
 
     /// <summary>Forgets everything heard so far.</summary>
-    public async Task Drain() => await Collect();
+    public async Task Drain() => await Collect().ConfigureAwait(false);
 
     /// <summary>
     /// Every snapshot-channel payload heard since the last collect, up to a marker sent now. Fails when the marker
@@ -64,7 +65,7 @@ internal sealed class SnapshotNotices : IAsyncDisposable
     public async Task<IReadOnlyList<string>> Collect()
     {
         var marker = Guid.NewGuid().ToString("N");
-        await Notify(MarkerChannel, marker, _connectionString);
+        await Notify(MarkerChannel, marker, _connectionString).ConfigureAwait(false);
 
         using var timeout = new CancellationTokenSource(MarkerWait);
         var payloads = new List<string>();
@@ -72,20 +73,23 @@ internal sealed class SnapshotNotices : IAsyncDisposable
         {
             while (true)
             {
-                var (channel, payload) = await _heard.Reader.ReadAsync(timeout.Token);
-                if (channel == MarkerChannel)
+                var (channel, payload) = await _heard
+                    .Reader.ReadAsync(timeout.Token)
+                    .ConfigureAwait(false);
+                if (string.Equals(channel, MarkerChannel, StringComparison.Ordinal))
                 {
-                    if (payload == marker)
+                    if (string.Equals(payload, marker, StringComparison.Ordinal))
                         return payloads;
                     continue;
                 }
                 payloads.Add(payload);
             }
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (timeout.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"The test's own marker notice was not heard within {MarkerWait}."
+                $"The test's own marker notice was not heard within {MarkerWait}.",
+                ex
             );
         }
     }
@@ -96,15 +100,15 @@ internal sealed class SnapshotNotices : IAsyncDisposable
     /// </summary>
     public static async Task Notify(string channel, string payload, string? connectionString = null)
     {
-        await using var connection = new NpgsqlConnection(
-            connectionString ?? PostgresSetup.ConnectionString
-        );
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(connectionString ?? PostgresSetup.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = "SELECT pg_notify(@channel, @payload)";
         command.Parameters.AddWithValue("@channel", channel);
         command.Parameters.AddWithValue("@payload", payload);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private async Task Pump()
@@ -112,7 +116,7 @@ internal sealed class SnapshotNotices : IAsyncDisposable
         try
         {
             while (!_stop.IsCancellationRequested)
-                await _connection.WaitAsync(_stop.Token);
+                await _connection.WaitAsync(_stop.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
@@ -122,9 +126,9 @@ internal sealed class SnapshotNotices : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _stop.CancelAsync();
-        await _pump;
-        await _connection.DisposeAsync();
+        await _stop.CancelAsync().ConfigureAwait(false);
+        await _pump.ConfigureAwait(false);
+        await _connection.DisposeAsync().ConfigureAwait(false);
         _stop.Dispose();
     }
 }

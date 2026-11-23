@@ -6,6 +6,7 @@ using NSubstitute.ExceptionExtensions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 
 namespace Trax.Effect.Tests.Broadcaster.UnitTests;
@@ -40,7 +41,7 @@ public class RabbitMqReceiverShutdownTests
 
         // Both still report open: the close from the broker lands after the check.
         var channel = Substitute.For<IChannel>();
-        channel.IsOpen.Returns(true);
+        channel.IsOpen.Returns(returnThis: true);
         channel
             .QueueDeleteAsync(
                 Arg.Any<string>(),
@@ -60,7 +61,7 @@ public class RabbitMqReceiverShutdownTests
             .ThrowsAsync(ClosedByPeer());
 
         var connection = Substitute.For<IConnection>();
-        connection.IsOpen.Returns(true);
+        connection.IsOpen.Returns(returnThis: true);
         connection
             .CloseAsync(
                 Arg.Any<ushort>(),
@@ -79,7 +80,8 @@ public class RabbitMqReceiverShutdownTests
 
     private static void Set(object target, string field, object value) =>
         typeof(RabbitMqTrainEventReceiver)
-            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)
+            .NotNull()
             .SetValue(target, value);
 
     [Test]
@@ -87,7 +89,8 @@ public class RabbitMqReceiverShutdownTests
     {
         var receiver = ReceiverWhoseConnectionIsClosedUnderIt();
 
-        var stop = async () => await receiver.StopAsync(CancellationToken.None);
+        var stop = async () =>
+            await receiver.StopAsync(CancellationToken.None).ConfigureAwait(false);
 
         await stop.Should().NotThrowAsync();
     }
@@ -97,7 +100,7 @@ public class RabbitMqReceiverShutdownTests
     {
         var receiver = ReceiverWhoseConnectionIsClosedUnderIt();
 
-        var dispose = async () => await receiver.DisposeAsync();
+        var dispose = async () => await receiver.DisposeAsync().ConfigureAwait(false);
 
         await dispose.Should().NotThrowAsync();
     }

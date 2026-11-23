@@ -1,8 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Trax.Core.Functional;
 
 /// <summary>
 /// "No meaningful value": what a junction or train returns when it does its work but carries nothing new.
-/// It stands in for <c>void</c> where C# needs a type, as in <c>Junction&lt;TInput, Unit&gt;</c> or
+/// It stands in for <see langword="void"/> where C# needs a type, as in <c>Junction&lt;TInput, Unit&gt;</c> or
 /// <c>Task&lt;Unit&gt;</c>. It has one value, <see cref="Default"/>, and every <c>Unit</c> equals every other.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/either">SDK reference</seealso>
@@ -15,7 +17,7 @@ public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
     public bool Equals(Unit other) => true;
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is Unit;
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is Unit;
 
     /// <inheritdoc />
     public override int GetHashCode() => 0;
@@ -31,4 +33,16 @@ public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
 
     /// <summary><c>()</c>.</summary>
     public override string ToString() => "()";
+
+    /// <summary>Always false: there is one value, so none comes before another.</summary>
+    public static bool operator <(Unit left, Unit right) => false;
+
+    /// <summary>Always true.</summary>
+    public static bool operator <=(Unit left, Unit right) => true;
+
+    /// <summary>Always false: there is one value, so none comes after another.</summary>
+    public static bool operator >(Unit left, Unit right) => false;
+
+    /// <summary>Always true.</summary>
+    public static bool operator >=(Unit left, Unit right) => true;
 }

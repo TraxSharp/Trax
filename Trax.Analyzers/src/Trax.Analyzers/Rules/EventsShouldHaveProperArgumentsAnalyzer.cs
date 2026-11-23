@@ -1,0 +1,199 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class EventsShouldHaveProperArgumentsAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor SenderInstanceRule = new(
+        RuleIdentifiers.SenderShouldBeThisForInstanceEvents,
+        title: "Sender should be 'this' for instance events",
+        messageFormat: "Sender parameter should be 'this' for instance events",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.SenderShouldBeThisForInstanceEvents));
+
+    private static readonly DiagnosticDescriptor SenderStaticRule = new(
+        RuleIdentifiers.SenderShouldBeNullForStaticEvents,
+        title: "Sender should be 'null' for static events",
+        messageFormat: "Sender parameter should be 'null' for static events",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.SenderShouldBeNullForStaticEvents));
+
+    private static readonly DiagnosticDescriptor EventArgsRule = new(
+        RuleIdentifiers.EventArgsSenderShouldNotBeNullForEvents,
+        title: "EventArgs should not be null when raising an event",
+        messageFormat: "EventArgs should not be null, use 'EventArgs.Empty' instead",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.EventArgsSenderShouldNotBeNullForEvents));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(SenderInstanceRule, SenderStaticRule, EventArgsRule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(compilationContext =>
+        {
+            var eventArgsSymbol = compilationContext.Compilation.GetTypeByMetadataName("System.EventArgs");
+            var multicastDelegateSymbol = compilationContext.Compilation.GetTypeByMetadataName("System.MulticastDelegate");
+            if (eventArgsSymbol is null || multicastDelegateSymbol is null)
+                return;
+
+            compilationContext.RegisterOperationAction(context => AnalyzeRaiseEvent(context, eventArgsSymbol, multicastDelegateSymbol), OperationKind.Invocation);
+        });
+    }
+
+    private static void AnalyzeRaiseEvent(OperationAnalysisContext context, ITypeSymbol eventArgsSymbol, ITypeSymbol multicastDelegateSymbol)
+    {
+        var operation = (IInvocationOperation)context.Operation;
+        var targetMethod = operation.TargetMethod;
+
+        if (targetMethod.Name != nameof(EventHandler.Invoke))
+            return;
+
+        if (targetMethod.Parameters.Length != 2)
+            return;
+
+        if (!targetMethod.Parameters[0].Type.IsObject())
+            return;
+
+        if (!targetMethod.Parameters[1].Type.IsOrInheritsFrom(eventArgsSymbol))
+            return;
+
+        if (!targetMethod.ContainingType.IsOrInheritsFrom(multicastDelegateSymbol))
+            return;
+
+        var instance = operation.Instance;
+        if (instance is null)
+            return;
+
+        var ev = FindEvent(instance, context.CancellationToken);
+        if (ev is null)
+            return;
+
+        // Argument validation
+        var senderArgument = operation.Arguments[0];
+        if (ev.IsStatic)
+        {
+            if (!IsNull(senderArgument))
+            {
+                context.ReportDiagnostic(SenderStaticRule, senderArgument);
+            }
+        }
+        else if (!IsThis(senderArgument))
+        {
+            // 'this' is not available in a static context, so the sender is the instance declaring the event, which must not be null
+            if (IsNull(senderArgument) || EventsShouldHaveProperArgumentsAnalyzerCommon.CanUseThis(operation.SemanticModel!, operation.Syntax.SpanStart, context.CancellationToken))
+            {
+                context.ReportDiagnostic(SenderInstanceRule, senderArgument.Value);
+            }
+        }
+
+        var eventArgsArgument = operation.Arguments[1];
+        if (IsNull(eventArgsArgument))
+        {
+            context.ReportDiagnostic(EventArgsRule, eventArgsArgument.Value);
+        }
+    }
+
+    private static bool IsNull(IArgumentOperation operation)
+    {
+        return operation.Value.ConstantValue.HasValue && operation.Value.ConstantValue.Value is null;
+    }
+
+    private static bool IsThis(IArgumentOperation operation)
+    {
+        var value = operation.Value;
+        while (value is IConversionOperation conversion)
+        {
+            value = conversion.Operand;
+        }
+
+        return value is IInstanceReferenceOperation;
+    }
+
+    private static IEventSymbol? FindEvent(IOperation operation, CancellationToken cancellationToken)
+    {
+        var eventFinder = new EventReferenceVisitor(cancellationToken);
+        eventFinder.Visit(operation);
+        return eventFinder.EventSymbol;
+    }
+
+    private sealed class EventReferenceVisitor(CancellationToken cancellationToken) : OperationVisitor
+    {
+        private readonly HashSet<ISymbol> _visitedLocals = new(SymbolEqualityComparer.Default);
+
+        public IEventSymbol? EventSymbol { get; set; }
+
+        public override void VisitEventReference(IEventReferenceOperation operation)
+        {
+            EventSymbol = operation.Event;
+            base.VisitEventReference(operation);
+        }
+
+        public override void VisitConditionalAccessInstance(IConditionalAccessInstanceOperation operation)
+        {
+            var semanticModel = operation.SemanticModel!;
+            var syntax = operation.Syntax;
+            var symbol = semanticModel.GetSymbolInfo(syntax).Symbol;
+            if (symbol is not null)
+            {
+                if (symbol is IEventSymbol eventSymbol)
+                {
+                    EventSymbol = eventSymbol;
+                    return;
+                }
+                else if (symbol is ILocalSymbol localSymbol)
+                {
+                    FindFromLocalSymbol(semanticModel, localSymbol);
+                }
+            }
+
+            base.VisitConditionalAccessInstance(operation);
+        }
+
+        private void FindFromLocalSymbol(SemanticModel semanticModel, ILocalSymbol localSymbol)
+        {
+            // The initializer of a local can reference the local itself or another local that references it back,
+            // so keep track of the visited locals to avoid an infinite recursion
+            if (!_visitedLocals.Add(localSymbol))
+                return;
+
+            foreach (var symbolLocation in localSymbol.DeclaringSyntaxReferences)
+            {
+                var variableDeclarator = symbolLocation.GetSyntax(cancellationToken) as Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax;
+                if ((variableDeclarator?.Initializer?.Value) is not null)
+                {
+                    var initializerSymbol = semanticModel.GetSymbolInfo(variableDeclarator.Initializer.Value, cancellationToken).Symbol;
+                    if (initializerSymbol is IEventSymbol initializerEventSymbol)
+                    {
+                        EventSymbol = initializerEventSymbol;
+                        return;
+                    }
+                    else if (initializerSymbol is ILocalSymbol initializerLocalSymbol)
+                    {
+                        FindFromLocalSymbol(semanticModel, initializerLocalSymbol);
+                    }
+                }
+            }
+        }
+
+        public override void VisitLocalReference(ILocalReferenceOperation operation)
+        {
+            if (operation.SemanticModel is not null)
+            {
+                FindFromLocalSymbol(operation.SemanticModel, operation.Local);
+            }
+
+            base.VisitLocalReference(operation);
+        }
+    }
+}

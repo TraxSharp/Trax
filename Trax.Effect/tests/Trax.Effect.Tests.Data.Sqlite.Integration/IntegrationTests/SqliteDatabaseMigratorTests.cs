@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using DbUp;
 using Microsoft.Data.Sqlite;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Sqlite.Utils;
 
 namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
@@ -37,7 +38,8 @@ public class SqliteDatabaseMigratorTests
         var invalidPath = "/proc/this-cannot-be-written/migrator-fail.db";
         var connectionString = $"Data Source={invalidPath}";
 
-        var act = async () => await DatabaseMigrator.Migrate(connectionString);
+        var act = async () =>
+            await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<Exception>();
     }
@@ -96,7 +98,8 @@ public class SqliteDatabaseMigratorTests
                     + "BEGIN SELECT RAISE(ABORT, 'backfill failed'); END;"
             );
 
-            var failed = async () => await DatabaseMigrator.Migrate(connectionString);
+            var failed = async () =>
+                await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
             await failed.Should().ThrowAsync<Exception>();
 
             (await ColumnExists(connectionString, "work_queue", "confirmed_at"))
@@ -105,7 +108,8 @@ public class SqliteDatabaseMigratorTests
 
             await Exec(connectionString, "DROP TRIGGER fail_backfill;");
 
-            var rerun = async () => await DatabaseMigrator.Migrate(connectionString);
+            var rerun = async () =>
+                await DatabaseMigrator.Migrate(connectionString).ConfigureAwait(false);
             await rerun.Should().NotThrowAsync();
             (await ColumnExists(connectionString, "work_queue", "confirmed_at")).Should().BeTrue();
         }
@@ -119,17 +123,27 @@ public class SqliteDatabaseMigratorTests
 
     private static int MigrationNumber(string resourceName)
     {
-        var file = resourceName[(resourceName.IndexOf(".Migrations.") + ".Migrations.".Length)..];
-        return int.Parse(file[..file.IndexOf('_')]);
+        var file = resourceName[
+            (
+                resourceName.IndexOf(".Migrations.", StringComparison.Ordinal)
+                + ".Migrations.".Length
+            )..
+        ];
+        return int.Parse(
+            file[..file.IndexOf('_', StringComparison.Ordinal)],
+            System.Globalization.CultureInfo.InvariantCulture
+        );
     }
 
     private static async Task Exec(string connectionString, string sql)
     {
-        await using var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new SqliteConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     private static async Task<bool> ColumnExists(
@@ -138,11 +152,13 @@ public class SqliteDatabaseMigratorTests
         string column
     )
     {
-        await using var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new SqliteConnection(connectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = $"SELECT count(*) FROM pragma_table_info('{table}') WHERE name = $c;";
         command.Parameters.AddWithValue("$c", column);
-        return (long)(await command.ExecuteScalarAsync())! > 0;
+        return (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull() > 0;
     }
 }

@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Checks;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
@@ -47,21 +49,7 @@ internal sealed class MainWindow : Window
         _tabs.Add(_machines);
         _tabs.ValueChanged += (_, _) => ShowHelp();
 
-        var feed = new FrameView
-        {
-            Title = "Live",
-            Y = Pos.Bottom(_tabs),
-            Width = Dim.Fill(),
-            Height = FeedLines + 2,
-        };
-        var feedList = new ListView
-        {
-            Width = Dim.Fill(),
-            Height = Dim.Fill(),
-            Source = new ListWrapper<string>(_feed),
-            CanFocus = false,
-        };
-        feed.Add(feedList);
+        var feed = NewFeed();
 
         _status = new Label
         {
@@ -100,6 +88,27 @@ internal sealed class MainWindow : Window
         };
     }
 
+    // The live feed under the tabs, as tall as FeedLines.
+    private FrameView NewFeed()
+    {
+        var feed = new FrameView
+        {
+            Title = "Live",
+            Y = Pos.Bottom(_tabs),
+            Width = Dim.Fill(),
+            Height = FeedLines + 2,
+        };
+        var feedList = new ListView
+        {
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            Source = new ListWrapper<string>(_feed),
+            CanFocus = false,
+        };
+        feed.Add(feedList);
+        return feed;
+    }
+
     private bool _started;
 
     /// <summary>Where the window is, to open it again where it was.</summary>
@@ -108,7 +117,7 @@ internal sealed class MainWindow : Window
             _tabs.Value is ListScreen screen ? _lists.IndexOf(screen)
                 : _tabs.Value == _machines ? _lists.Count
                 : 0,
-            _lists.ToDictionary(l => l.List.Name, l => l.State)
+            _lists.ToDictionary(l => l.List.Name, l => l.State, StringComparer.Ordinal)
         );
 
     /// <summary>The list screens, in tab order.</summary>
@@ -123,7 +132,7 @@ internal sealed class MainWindow : Window
     private void MoveTab(int? by, int? to)
     {
         var tabs = TabViews;
-        var at = Math.Max(0, tabs.ToList().IndexOf(_tabs.Value!));
+        var at = Math.Max(0, tabs.ToList().IndexOf(_tabs.Value.NotNull()));
         var next = to is { } number ? number - 1 : (at + (by ?? 0) + tabs.Count) % tabs.Count;
         if (next < 0 || next >= tabs.Count)
             return;
@@ -241,7 +250,10 @@ internal sealed class MainWindow : Window
                         return;
                     _feed.Add(
                         TerminalText.Line(
-                            $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
+                            )
                                 + $"{Wire.Name(change.TrainState)}"
                                 + (
                                     change.FailureReason is { } reason
@@ -283,7 +295,7 @@ internal sealed class MainWindow : Window
     private void OpenTrace(long run)
     {
         var window = new RunTraceWindow(_context, run);
-        _context.App.Run(window);
+        Ui.RunModal(_context.App, window);
         var code = window.CodeToOpen;
         window.Dispose();
         if (code is not null)
@@ -301,6 +313,3 @@ internal sealed class MainWindow : Window
         base.Dispose(disposing);
     }
 }
-
-/// <summary>Where the console was: its tab and each list's page and filters.</summary>
-internal sealed record ConsoleState(int Tab, IReadOnlyDictionary<string, ListState> Lists);

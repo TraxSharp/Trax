@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
+using Trax.Core.Extensions;
 using Trax.Samples.Bookworm.Auth;
 using Trax.Samples.Bookworm.E2E.Factories;
 using Trax.Samples.Bookworm.E2E.Utilities;
@@ -21,26 +22,32 @@ public class ProductionPostureTests
         }
     }
 
-    private ProductionFactory _production = null!;
-    private GraphQLClient _graphQL = null!;
+    private ProductionFactory? _production;
+    private GraphQLClient? _graphQL;
 
     [OneTimeSetUp]
     public void StartProduction()
     {
         _production = new ProductionFactory();
-        _graphQL = new GraphQLClient(_production.CreateClient());
+        _graphQL = new GraphQLClient(_production.NotNull().CreateClient());
     }
 
     [OneTimeTearDown]
-    public async Task StopProduction() => await _production.DisposeAsync();
+    public async Task StopProduction()
+    {
+        if (_production is not null)
+            await _production.DisposeAsync().ConfigureAwait(false);
+    }
 
     [Test]
     public async Task The_demo_member_key_reads_no_member_in_Production()
     {
-        var doc = await _graphQL.PostAsync(
-            "{ discover { lending { members { nodes { email } } } } }",
-            ApiKeyDefaults.MemberKey
-        );
+        var doc = await _graphQL
+            .NotNull()
+            .PostAsync(
+                "{ discover { lending { members { nodes { email } } } } }",
+                ApiKeyDefaults.MemberKey
+            );
 
         doc.RootElement.GetRawText().Should().NotContain("@example.com");
         doc.RootElement.GetProperty("errors")[0]
@@ -53,9 +60,9 @@ public class ProductionPostureTests
     [Test]
     public async Task The_catalog_stays_public_in_Production()
     {
-        var doc = await _graphQL.PostAsync(
-            "{ discover { catalog { books { nodes { title } } } } }"
-        );
+        var doc = await _graphQL
+            .NotNull()
+            .PostAsync("{ discover { catalog { books { nodes { title } } } } }");
 
         GraphQLClient.HasErrors(doc).Should().BeFalse(doc.RootElement.GetRawText());
     }

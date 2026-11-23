@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
@@ -26,8 +27,10 @@ public class PostgresFixture
     /// </para>
     /// </summary>
     public static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;"
-        + "Timeout=30;Command Timeout=30;Maximum Pool Size=16";
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;"
+        ) + "Timeout=30;Command Timeout=30;Maximum Pool Size=16";
 
     private static ServiceProvider? _services;
     private static readonly SemaphoreSlim _initLock = new(1, 1);
@@ -86,7 +89,10 @@ public class PostgresFixture
         try
         {
             using var conn = new NpgsqlConnection(
-                $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=5"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=5"
+                )
             );
             conn.Open();
             return true;
@@ -118,12 +124,18 @@ public class PostgresFixture
     /// </summary>
     public static async Task ClearAsync()
     {
-        await using var conn = new NpgsqlConnection(ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "truncate trax.persisted_operation, trax.persisted_operation_history;",
-            conn
-        );
-        await cmd.ExecuteNonQueryAsync();
+        var conn = new NpgsqlConnection(ConnectionString);
+        await using (conn.ConfigureAwait(false))
+        {
+            await conn.OpenAsync().ConfigureAwait(false);
+            var cmd = new NpgsqlCommand(
+                "truncate trax.persisted_operation, trax.persisted_operation_history;",
+                conn
+            );
+            await using (cmd.ConfigureAwait(false))
+            {
+                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

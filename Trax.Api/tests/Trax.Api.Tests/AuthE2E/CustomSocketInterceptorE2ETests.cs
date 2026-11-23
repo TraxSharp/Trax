@@ -51,12 +51,16 @@ public class CustomSocketInterceptorE2ETests
             {
                 payload = init.Payload?.Deserialize<MagicPayload>(
                     new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        RespectNullableAnnotations = false,
+                        RespectRequiredConstructorParameters = false,
+                    }
                 );
             }
             catch (JsonException) { }
 
             return new ValueTask<ConnectionStatus>(
-                payload?.Magic == "open-sesame"
+                string.Equals(payload?.Magic, "open-sesame", StringComparison.Ordinal)
                     ? ConnectionStatus.Accept()
                     : ConnectionStatus.Reject("magic word required")
             );
@@ -123,7 +127,7 @@ public class CustomSocketInterceptorE2ETests
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -187,14 +191,22 @@ public class CustomSocketInterceptorE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
+        return await client
+            .ConnectClosingAsync(new Uri(WsUri), CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static async Task SendInitAsync(WebSocket ws, object payload)
     {
         var msg = JsonSerializer.Serialize(new { type = "connection_init", payload });
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ws.SendAsync(Encoding.UTF8.GetBytes(msg), WebSocketMessageType.Text, true, cts.Token);
+        await ws.SendAsync(
+                Encoding.UTF8.GetBytes(msg),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cts.Token
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
@@ -204,13 +216,14 @@ public class CustomSocketInterceptorE2ETests
         using var ms = new MemoryStream();
         while (true)
         {
-            var result = await ws.ReceiveAsync(buffer, cts.Token);
+            var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new InvalidOperationException(
                     $"WebSocket closed unexpectedly: {result.CloseStatus} {result.CloseStatusDescription}"
                 );
             if (result.Count > 0)
-                ms.Write(buffer, 0, result.Count);
+                await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                    .ConfigureAwait(false);
             if (result.EndOfMessage && ms.Length > 0)
                 break;
         }
@@ -228,11 +241,12 @@ public class CustomSocketInterceptorE2ETests
                 using var ms = new MemoryStream();
                 while (!cts.IsCancellationRequested)
                 {
-                    var result = await ws.ReceiveAsync(buffer, cts.Token);
+                    var result = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                         return true;
                     if (result.Count > 0)
-                        ms.Write(buffer, 0, result.Count);
+                        await ms.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                            .ConfigureAwait(false);
                     if (result.EndOfMessage)
                         break;
                 }
@@ -242,9 +256,9 @@ public class CustomSocketInterceptorE2ETests
                     .Parse(Encoding.UTF8.GetString(ms.ToArray()))
                     .RootElement.GetProperty("type")
                     .GetString();
-                if (type == "connection_error")
+                if (string.Equals(type, "connection_error", StringComparison.Ordinal))
                     return true;
-                if (type == "connection_ack")
+                if (string.Equals(type, "connection_ack", StringComparison.Ordinal))
                     return false;
             }
         }

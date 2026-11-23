@@ -12,19 +12,27 @@ namespace Trax.Docs.Tests.Tests;
 [TestFixture]
 public class ApiDashboardPageTests
 {
-    private static string Page() =>
-        File.ReadAllText(
-                RepoRoot.Combine("sdk-reference", "api-dashboard", "use-trax-api-dashboard.md")
-            )
-            .Replace("\r\n", "\n");
+    private static async Task<string> PageAsync() =>
+        (
+            await File.ReadAllTextAsync(
+                    RepoRoot.Combine("sdk-reference", "api-dashboard", "use-trax-api-dashboard.md")
+                )
+                .ConfigureAwait(false)
+        ).Replace("\r\n", "\n", StringComparison.Ordinal);
 
-    private static string Flat() =>
-        string.Join(' ', Page().Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries));
+    private static async Task<string> FlatAsync() =>
+        string.Join(
+            ' ',
+            (await PageAsync().ConfigureAwait(false)).Split(
+                (char[])[' ', '\n'],
+                StringSplitOptions.RemoveEmptyEntries
+            )
+        );
 
     [Test]
-    public void The_credential_is_said_to_be_held_in_memory_and_never_stored()
+    public async Task The_credential_is_said_to_be_held_in_memory_and_never_stored()
     {
-        Flat()
+        (await FlatAsync().ConfigureAwait(false))
             .Should()
             .Contain("**The credential is held in memory only.**")
             .And.Contain(
@@ -35,9 +43,9 @@ public class ApiDashboardPageTests
     }
 
     [Test]
-    public void The_host_is_not_told_to_clear_a_stored_key()
+    public async Task The_host_is_not_told_to_clear_a_stored_key()
     {
-        Flat()
+        (await FlatAsync().ConfigureAwait(false))
             .Should()
             .NotContain("Clear-Site-Data", "nothing is stored for a sign-out path to clear")
             .And.NotContain("trax-dashboard-credential:")

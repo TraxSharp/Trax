@@ -1,6 +1,7 @@
 using Amazon.SQS;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -48,7 +49,10 @@ public class UseSqsWorkersBuilderTests
         // Assert
         var options = provider.GetService<SqsWorkerOptions>();
         options.Should().NotBeNull();
-        options!.QueueUrl.Should().Be("https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs");
+        options
+            .NotNull()
+            .QueueUrl.Should()
+            .Be("https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs");
     }
 
     [Test]
@@ -133,7 +137,7 @@ public class UseSqsWorkersBuilderTests
         var options = provider.GetRequiredService<SqsWorkerOptions>();
         options.ConfigureSqsClient.Should().NotBeNull();
 
-        options.ConfigureSqsClient!(new Amazon.SQS.AmazonSQSConfig());
+        options.ConfigureSqsClient.NotNull()(new Amazon.SQS.AmazonSQSConfig());
         callbackInvoked.Should().BeTrue();
     }
 
@@ -164,5 +168,3 @@ public class UseSqsWorkersBuilderTests
 
     #endregion
 }
-
-internal interface ITestSqsTrain { }

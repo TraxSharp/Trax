@@ -19,6 +19,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -44,7 +45,7 @@ namespace Trax.Api.Tests.Deploy;
 [Property("adr", "Trax.Docs/adr/0060-a-trax-app-is-deployed-from-what-its-host-reports.md")]
 public class DeployManifestExportTests
 {
-    private string _path = null!;
+    private string? _path;
 
     [SetUp]
     public void NewPath() =>
@@ -53,8 +54,8 @@ public class DeployManifestExportTests
     [TearDown]
     public void RemovePath()
     {
-        if (Directory.Exists(Path.GetDirectoryName(_path)))
-            Directory.Delete(Path.GetDirectoryName(_path)!, recursive: true);
+        if (Directory.Exists(Path.GetDirectoryName(_path.NotNull())))
+            Directory.Delete(Path.GetDirectoryName(_path.NotNull()).NotNull(), recursive: true);
     }
 
     [Test]
@@ -62,9 +63,14 @@ public class DeployManifestExportTests
     {
         await using var app = Build();
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Version.Should().Be(DeployManifest.CurrentVersion);
         manifest.Roles.Should().Equal("api");
         manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
@@ -82,7 +88,10 @@ public class DeployManifestExportTests
         await using var app = Build();
         var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
         lifetime.ApplicationStarted.IsCancellationRequested.Should().BeFalse();
     }
@@ -92,12 +101,17 @@ public class DeployManifestExportTests
     {
         await using var app = Build(s => s.AddSingleton<IHostedService, RefusingCheck>());
 
-        var act = async () => await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        var act = async () =>
+            await app.RunTraxAsync(
+                    ["--trax-export-deploy", _path.NotNull()],
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage(RefusingCheck.Message);
-        File.Exists(_path).Should().BeFalse();
+        File.Exists(_path.NotNull()).Should().BeFalse();
     }
 
     [Test]
@@ -111,9 +125,14 @@ public class DeployManifestExportTests
                 )
         );
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Transports.Should().Equal("rabbitmq");
     }
 
@@ -128,9 +147,14 @@ public class DeployManifestExportTests
             );
         });
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Transports.Should().Equal("rabbitmq");
     }
 
@@ -142,9 +166,14 @@ public class DeployManifestExportTests
             g => g.UsePersistedOperations(po => po.SingleNode())
         );
 
-        await app.RunTraxAsync(["--trax-export-deploy", _path]);
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
 
-        var manifest = DeployManifest.Read(await File.ReadAllTextAsync(_path));
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
         manifest.Transports.Should().BeEmpty();
     }
 
@@ -166,7 +195,7 @@ public class DeployManifestExportTests
         var services = builder.Services;
         services.AddSingleton(
             new DashboardAssets(
-                new Dictionary<string, byte[]>
+                new Dictionary<string, byte[]>(StringComparer.Ordinal)
                 {
                     ["index.html"] = Encoding.UTF8.GetBytes(
                         "<!doctype html><html><head></head><body></body></html>"
@@ -193,7 +222,10 @@ public class DeployManifestExportTests
         });
         services
             .AddAuthentication(TestUserHandler.Name)
-            .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(TestUserHandler.Name, null);
+            .AddScheme<AuthenticationSchemeOptions, TestUserHandler>(
+                TestUserHandler.Name,
+                configureOptions: null
+            );
         services.AddAuthorization(o => o.AddPolicy("Operator", p => p.RequireRole("Operator")));
         services.AddHealthChecks();
         more?.Invoke(services);

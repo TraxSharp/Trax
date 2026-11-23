@@ -28,7 +28,7 @@ public class ManifestOwnerTests
     private static Task<SchedulerE2EFixture> BillingHost(string applicationName = "billing") =>
         SchedulerE2EFixture.CreateAsync(
             s =>
-                s.RecoverStuckJobsOnStartup(false)
+                s.RecoverStuckJobsOnStartup(recover: false)
                     .Schedule<ISchedulerTestTrain>(
                         "billing-nightly",
                         new SchedulerTestInput { Value = "b" },
@@ -118,10 +118,9 @@ public class ManifestOwnerTests
         string? owner
     )
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            fx.DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await TestSetup
+            .CreateAndSaveManifestGroup(fx.DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -136,8 +135,8 @@ public class ManifestOwnerTests
         );
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
-        await fx.DataContext.Track(manifest);
-        await fx.DataContext.SaveChanges(CancellationToken.None);
+        await fx.DataContext.Track(manifest).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         fx.DataContext.Reset();
     }
 

@@ -46,13 +46,15 @@ public class SkillsAreWellFormedTests
     }
 
     [Test]
-    public void EveryDocsLink_InASkill_ResolvesToAPublishedPage()
+    public async Task EveryDocsLink_InASkill_ResolvesToAPublishedPage()
     {
-        var site = DocsSite.Load();
+        var site = await DocsSite.LoadAsync().ConfigureAwait(false);
         var offenders = new List<string>();
 
         foreach (var file in SkillFiles())
-        foreach (var target in SkillRules.Links(File.ReadAllText(file)))
+        foreach (
+            var target in SkillRules.Links(await File.ReadAllTextAsync(file).ConfigureAwait(false))
+        )
         {
             var problem = Check(target, site);
             if (problem is not null)
@@ -82,7 +84,7 @@ public class SkillsAreWellFormedTests
             .Should()
             .BeTrue($"`/plugin marketplace add TraxSharp/Trax` reads {path}. See {Adr}.");
         File.ReadAllText(path)
-            .Replace("\r\n", "\n")
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Should()
             .Be(
                 Stager.MarketplaceJson(),
@@ -97,16 +99,16 @@ public class SkillsAreWellFormedTests
     [TestCase("https://traxsharp.net/docs/no-such-page", "no published page")]
     [TestCase("https://traxsharp.net/docs/getting-started#no-such-heading", "no such heading")]
     [TestCase("http://traxsharp.net/docs/getting-started", "https")]
-    public void Check_RefusesWhatAnAgentCannotFollow(string target, string problem) =>
-        Check(target, DocsSite.Load()).Should().Contain(problem);
+    public async Task Check_RefusesWhatAnAgentCannotFollow(string target, string problem) =>
+        Check(target, await DocsSite.LoadAsync().ConfigureAwait(false)).Should().Contain(problem);
 
     [TestCase("https://traxsharp.net/docs/getting-started")]
     [TestCase("https://traxsharp.net/roadmap")]
     [TestCase("https://github.com/TraxSharp/Trax")]
     [TestCase("more.md")]
     [TestCase("#steps")]
-    public void Check_AcceptsWhatAnAgentCanFollow(string target) =>
-        Check(target, DocsSite.Load()).Should().BeNull();
+    public async Task Check_AcceptsWhatAnAgentCanFollow(string target) =>
+        Check(target, await DocsSite.LoadAsync().ConfigureAwait(false)).Should().BeNull();
 
     private static IEnumerable<string> SkillFiles() =>
         Directory.Exists(SkillsRoot)
@@ -127,7 +129,7 @@ public class SkillsAreWellFormedTests
             return null;
 
         var path = target[Site.Length..];
-        var hash = path.IndexOf('#');
+        var hash = path.IndexOf('#', StringComparison.Ordinal);
         var anchor = hash < 0 ? null : path[(hash + 1)..];
         var file = site.Resolve(hash < 0 ? path : path[..hash]);
         if (file is null)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -6,6 +7,7 @@ using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Trax.Client;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Tests.Client;
 
@@ -84,7 +86,13 @@ public class TraxClientTests
             .Should()
             .Be("""{"id":"trax_console_Runs_abc","operationName":"Runs","variables":{"take":5}}""");
         answer.Succeeded.Should().BeTrue();
-        answer.Data!.Operations!.Runs.Should().ContainSingle().Which.Id.Should().Be(7);
+        answer
+            .Data.NotNull()
+            .Operations.NotNull()
+            .Runs.Should()
+            .ContainSingle()
+            .Which.Id.Should()
+            .Be(7);
     }
 
     [Test]
@@ -94,9 +102,9 @@ public class TraxClientTests
 
         await Client(host, byId: _ => false).SendAsync(Runs, new RunsVariables { Take = 5 });
 
-        host.Bodies[0]["query"]!.GetValue<string>().Should().Be(Runs.Text);
+        host.Bodies[0]["query"].NotNull().GetValue<string>().Should().Be(Runs.Text);
         host.Bodies[0].ContainsKey("id").Should().BeFalse();
-        host.Bodies[0]["operationName"]!.GetValue<string>().Should().Be("Runs");
+        host.Bodies[0]["operationName"].NotNull().GetValue<string>().Should().Be("Runs");
     }
 
     [Test]
@@ -109,7 +117,7 @@ public class TraxClientTests
         await client.SendAsync(Runs, new RunsVariables { Take = 1, State = null });
         await client.SendAsync(Runs, new RunsVariables { Take = 1, State = "FAILED" });
 
-        host.Bodies.Select(b => b["variables"]!.ToJsonString())
+        host.Bodies.Select(b => b["variables"].NotNull().ToJsonString())
             .Should()
             .Equal(
                 """{"take":1}""",
@@ -142,7 +150,7 @@ public class TraxClientTests
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
         answer.Failure.Should().NotBeNull();
-        answer.Failure!.Status.Should().Be(502);
+        answer.Failure.NotNull().Status.Should().Be(502);
         answer.Code.Should().Be(TraxTransportFailure.Code);
     }
 
@@ -156,7 +164,10 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
-        answer.Failure!.Status.Should().Be(500, "the data of a failed response is not an answer");
+        answer
+            .Failure.NotNull()
+            .Status.Should()
+            .Be(500, "the data of a failed response is not an answer");
         answer.Data.Should().BeNull();
     }
 
@@ -181,7 +192,7 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
-        answer.Failure!.Message.Should().Contain("Connection refused");
+        answer.Failure.NotNull().Message.Should().Contain("Connection refused");
     }
 
     [Test]
@@ -191,7 +202,7 @@ public class TraxClientTests
 
         var answer = await Client(host).SendAsync(Runs, new RunsVariables { Take = 1 });
 
-        answer.Failure!.Message.Should().Contain("does not fit");
+        answer.Failure.NotNull().Message.Should().Contain("does not fit");
     }
 
     [Test]
@@ -273,7 +284,7 @@ public class TraxClientTests
         var failure = ended
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!;
+            .Which.Failure.NotNull();
         failure.Message.Should().Contain("4403");
         failure
             .CloseStatus.Should()
@@ -302,9 +313,11 @@ public class TraxClientTests
         var opened = await socket.Subscriptions.Take(Wait);
         opened.Sink.Next(
             (JsonObject)
-                JsonNode.Parse(
-                    """{"errors":[{"message":"No.","extensions":{"code":"AUTH_NOT_AUTHORIZED"}}]}"""
-                )!
+                JsonNode
+                    .Parse(
+                        """{"errors":[{"message":"No.","extensions":{"code":"AUTH_NOT_AUTHORIZED"}}]}"""
+                    )
+                    .NotNull()
         );
 
         var ended = (await events.Take(1)).Single();
@@ -340,7 +353,7 @@ public class TraxClientTests
 
         using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
         var opened = await socket.Subscriptions.Take(Wait);
-        opened.Sink.Next((JsonObject)JsonNode.Parse(frame)!);
+        opened.Sink.Next((JsonObject)JsonNode.Parse(frame).NotNull());
 
         var ended = (await events.Take(1)).Single();
         ended
@@ -363,9 +376,9 @@ public class TraxClientTests
         first.Sink.Error(
             new SubscriptionErrorException(
                 (JsonArray)
-                    JsonNode.Parse(
-                        """[{"message":"Not yours.","extensions":{"code":"FORBIDDEN"}}]"""
-                    )!
+                    JsonNode
+                        .Parse("""[{"message":"Not yours.","extensions":{"code":"FORBIDDEN"}}]""")
+                        .NotNull()
             )
         );
         var refusal = (await events.Take(1)).Single();
@@ -422,7 +435,8 @@ public class TraxClientTests
             .Single()
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
+            .Which.Failure.NotNull()
+            .Message.Should()
             .Contain("no socket");
     }
 
@@ -466,7 +480,12 @@ public class TraxClientTests
             time.Advance(TimeSpan.FromSeconds(delay) - TimeSpan.FromMilliseconds(1));
             (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
                 .Should()
-                .BeNull($"the {delay} second delay has not passed");
+                .BeNull(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the {delay} second delay has not passed"
+                    )
+                );
             time.Advance(TimeSpan.FromMilliseconds(1));
             current = await socket.Subscriptions.Take(Wait);
         }
@@ -526,7 +545,12 @@ public class TraxClientTests
         time.Advance(TimeSpan.FromMilliseconds(milliseconds - 1));
         (await socket.Subscriptions.TryTake(TimeSpan.FromMilliseconds(200)))
             .Should()
-            .BeNull($"the {milliseconds} ms wait has not passed");
+            .BeNull(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the {milliseconds} ms wait has not passed"
+                )
+            );
         time.Advance(TimeSpan.FromMilliseconds(1));
 
         (await socket.Subscriptions.Take(Wait)).Should().NotBeNull();
@@ -543,14 +567,21 @@ public class TraxClientTests
         ).Subscribe(Changed, TraxNoVariables.Instance, _ => { });
 
         (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
-        var ended = PendingTimer(stream)!;
+        var ended = PendingTimer(stream).NotNull();
         time.Advance(TimeSpan.FromSeconds(1));
         (await socket.Subscriptions.Take(Wait)).Sink.Error(new IOException("dropped"));
-        var pending = PendingTimer(stream)!;
+        var pending = PendingTimer(stream).NotNull();
         stream.Dispose();
 
-        IsDisposed(ended).Should().BeTrue("its delay ended and the stream was subscribed again");
-        IsDisposed(pending).Should().BeTrue("the stream was disposed while it was pending");
+        // A source is cancelled at once and disposed once its callbacks ran, on the thread pool.
+        SpinWait
+            .SpinUntil(() => IsDisposed(ended), Wait)
+            .Should()
+            .BeTrue("its delay ended and the stream was subscribed again");
+        SpinWait
+            .SpinUntil(() => IsDisposed(pending), Wait)
+            .Should()
+            .BeTrue("the stream was disposed while it was pending");
     }
 
     // The source of the resubscribe delay pending now, read from the stream's private field.
@@ -562,7 +593,8 @@ public class TraxClientTests
                     "_timer",
                     System.Reflection.BindingFlags.NonPublic
                         | System.Reflection.BindingFlags.Instance
-                )!
+                )
+                .NotNull()
                 .GetValue(stream);
 
     private static bool IsDisposed(CancellationTokenSource source)
@@ -629,7 +661,7 @@ public class TraxClientTests
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
             .Subject;
         ended.Errors.Should().BeEmpty();
-        ended.Failure!.Message.Should().Contain("socket");
+        ended.Failure.NotNull().Message.Should().Contain("socket");
     }
 
     [Test]
@@ -672,12 +704,11 @@ public class TraxClientTests
         var second = await socket.Subscriptions.Take(Wait);
         first.Sink.Next(Frame("A"));
         second.Sink.Next(Frame("B"));
-
-        (await broken.Take(2))
-            .Last()
+        (await broken.Take(2))[^1]
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
+            .Which.Failure.NotNull()
+            .Message.Should()
             .Contain("handler bug");
         first.Disposed.Should().BeTrue();
         (await healthy.Take(1)).Single().Should().BeOfType<TraxStreamEvent<ChangedResult>.Next>();
@@ -690,11 +721,12 @@ public class TraxClientTests
         // Each connection answers its subscribe at once and then drops, racing the socket's Started.
         Func<WirePeer, Task> drop = async peer =>
         {
-            await peer.AckAsync();
-            await peer.NextAsync(await peer.SubscribedAsync(), Frame("X"));
+            await peer.AckAsync().ConfigureAwait(false);
+            await peer.NextAsync(await peer.SubscribedAsync().ConfigureAwait(false), Frame("X"))
+                .ConfigureAwait(false);
             peer.Drop();
         };
-        await using var host = new WireHost(
+        var host = new WireHost(
             drop,
             drop,
             drop,
@@ -702,14 +734,17 @@ public class TraxClientTests
             drop,
             async peer =>
             {
-                await peer.AckAsync();
-                await peer.NextAsync(await peer.SubscribedAsync(), Frame("X"));
-                await peer.GoneAsync();
+                await peer.AckAsync().ConfigureAwait(false);
+                await peer.NextAsync(await peer.SubscribedAsync().ConfigureAwait(false), Frame("X"))
+                    .ConfigureAwait(false);
+                await peer.GoneAsync().ConfigureAwait(false);
             }
         );
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var events = new EventLog<ChangedResult>();
         var client = new TraxClient(
             Transport(socket),
@@ -733,10 +768,12 @@ public class TraxClientTests
     [Test]
     public async Task An_upgrade_the_host_refuses_ends_the_stream_instead_of_retrying()
     {
-        await using var host = new WireHost(peer => peer.RefuseAsync(401, "Unauthorized"));
-        await using var socket = new GraphQLSubscriptionSocket(
+        var host = new WireHost(peer => peer.RefuseAsync(401, "Unauthorized"));
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var events = new EventLog<ChangedResult>();
         var client = new TraxClient(
             Transport(socket),
@@ -749,7 +786,8 @@ public class TraxClientTests
             .Single()
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Status.Should()
+            .Which.Failure.NotNull()
+            .Status.Should()
             .Be(401);
         // negative-wait: a retry would have connected again within the 10 ms delay.
         await Task.Delay(300);
@@ -759,24 +797,30 @@ public class TraxClientTests
     [Test]
     public async Task A_malformed_frame_interrupts_the_stream_and_it_resumes_on_a_new_connection()
     {
-        await using var host = new WireHost(
+        var host = new WireHost(
             async peer =>
             {
-                await peer.AckAsync();
-                await peer.SubscribedAsync();
-                await peer.SendAsync("""{"type":5}""");
-                await peer.GoneAsync();
+                await peer.AckAsync().ConfigureAwait(false);
+                await peer.SubscribedAsync().ConfigureAwait(false);
+                await peer.SendAsync("""{"type":5}""").ConfigureAwait(false);
+                await peer.GoneAsync().ConfigureAwait(false);
             },
             async peer =>
             {
-                await peer.AckAsync();
-                await peer.NextAsync(await peer.SubscribedAsync(), Frame("DEAD_LETTER"));
-                await peer.GoneAsync();
+                await peer.AckAsync().ConfigureAwait(false);
+                await peer.NextAsync(
+                        await peer.SubscribedAsync().ConfigureAwait(false),
+                        Frame("DEAD_LETTER")
+                    )
+                    .ConfigureAwait(false);
+                await peer.GoneAsync().ConfigureAwait(false);
             }
         );
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var events = new EventLog<ChangedResult>();
         var client = new TraxClient(
             Transport(socket),
@@ -794,19 +838,22 @@ public class TraxClientTests
     [Test]
     public async Task A_frame_with_a_member_given_twice_ends_the_stream_instead_of_retrying()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            var id = await peer.SubscribedAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            var id = await peer.SubscribedAsync().ConfigureAwait(false);
             await peer.SendAsync(
-                $"{{\"type\":\"next\",\"id\":\"{id}\",\"payload\":"
-                    + """{"data":null,"data":{"onDataChanged":{"domain":"A"}}}}"""
-            );
-            await peer.GoneAsync();
+                    $"{{\"type\":\"next\",\"id\":\"{id}\",\"payload\":"
+                        + """{"data":null,"data":{"onDataChanged":{"domain":"A"}}}}"""
+                )
+                .ConfigureAwait(false);
+            await peer.GoneAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var events = new EventLog<ChangedResult>();
         var client = new TraxClient(
             Transport(socket),
@@ -819,7 +866,8 @@ public class TraxClientTests
             .Single()
             .Should()
             .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
-            .Which.Failure!.Message.Should()
+            .Which.Failure.NotNull()
+            .Message.Should()
             .Contain("not a GraphQL result");
         // negative-wait: a retry would have connected again within the 10 ms delay.
         await Task.Delay(300);
@@ -829,18 +877,21 @@ public class TraxClientTests
     [Test]
     public async Task An_error_whose_errors_cannot_be_read_ends_the_stream_with_a_failure()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            var id = await peer.SubscribedAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            var id = await peer.SubscribedAsync().ConfigureAwait(false);
             await peer.SendAsync(
-                $$$"""{"type":"error","id":"{{{id}}}","payload":[{"message":"m","extensions":{"code":"A","code":"B"}}]}"""
-            );
-            await peer.GoneAsync();
+                    $$$"""{"type":"error","id":"{{{id}}}","payload":[{"message":"m","extensions":{"code":"A","code":"B"}}]}"""
+                )
+                .ConfigureAwait(false);
+            await peer.GoneAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var events = new EventLog<ChangedResult>();
 
         using var stream = new TraxClient(Transport(socket)).Subscribe(
@@ -861,16 +912,19 @@ public class TraxClientTests
     [Test]
     public async Task An_error_with_no_errors_over_a_real_socket_ends_the_stream()
     {
-        await using var host = new WireHost(async peer =>
+        var host = new WireHost(async peer =>
         {
-            await peer.AckAsync();
-            var id = await peer.SubscribedAsync();
-            await peer.SendAsync($$"""{"type":"error","id":"{{id}}","payload":[]}""");
-            await peer.GoneAsync();
+            await peer.AckAsync().ConfigureAwait(false);
+            var id = await peer.SubscribedAsync().ConfigureAwait(false);
+            await peer.SendAsync($$"""{"type":"error","id":"{{id}}","payload":[]}""")
+                .ConfigureAwait(false);
+            await peer.GoneAsync().ConfigureAwait(false);
         });
-        await using var socket = new GraphQLSubscriptionSocket(
+        await using var hostDisposal = host.ConfigureAwait(false);
+        var socket = new GraphQLSubscriptionSocket(
             new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
         );
+        await using var socketDisposal = socket.ConfigureAwait(false);
         var events = new EventLog<ChangedResult>();
 
         using var stream = new TraxClient(Transport(socket)).Subscribe(
@@ -894,13 +948,13 @@ public class TraxClientTests
         var document = new TraxDocument<TraxNoVariables, Unreadable>(
             "Shape",
             TraxOperationKind.Query,
-            null,
+            Id: null,
             "query Shape { shape }"
         );
 
         var answer = await Client(host).SendAsync(document, TraxNoVariables.Instance);
 
-        answer.Failure!.Message.Should().Contain("does not fit");
+        answer.Failure.NotNull().Message.Should().Contain("does not fit");
     }
 
     public sealed record Unreadable
@@ -917,7 +971,7 @@ public class TraxClientTests
         var document = new TraxDocument<int, RunsResult>(
             "Runs",
             TraxOperationKind.Query,
-            null,
+            Id: null,
             "query Runs { x }"
         );
 
@@ -934,7 +988,7 @@ public class TraxClientTests
         var document = new TraxDocument<Unwritable, RunsResult>(
             "Runs",
             TraxOperationKind.Query,
-            null,
+            Id: null,
             "query Runs { x }"
         );
 
@@ -962,7 +1016,7 @@ public class TraxClientTests
         await Client(host, byId: _ => true).SendAsync(document, new RunsVariables { Take = 1 });
 
         host.Bodies[0].ContainsKey("id").Should().BeFalse();
-        host.Bodies[0]["query"]!.GetValue<string>().Should().Be(Runs.Text);
+        host.Bodies[0]["query"].NotNull().GetValue<string>().Should().Be(Runs.Text);
     }
 
     // ── Optional<T> with options of the caller's own ─────────────────────────────────────────────
@@ -988,7 +1042,7 @@ public class TraxClientTests
     private static readonly TraxDocument<JobVariables, JobResult> Job = new(
         "Job",
         TraxOperationKind.Mutation,
-        null,
+        Id: null,
         "mutation Job($maxActiveJobs: Int, $note: String) { x }"
     );
 
@@ -997,11 +1051,18 @@ public class TraxClientTests
         yield return new TestCaseData(
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
                 Converters = { new JsonStringEnumConverter() },
             }
         ).SetName("Optional_with_options_of_the_callers_own");
         yield return new TestCaseData(
-            new JsonSerializerOptions { TypeInfoResolver = OptionalTestJson.Default }
+            new JsonSerializerOptions
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+                TypeInfoResolver = OptionalTestJson.Default,
+            }
         ).SetName("Optional_with_a_source_generated_context");
     }
 
@@ -1025,10 +1086,10 @@ public class TraxClientTests
         await client.SendAsync(Job, new JobVariables { MaxActiveJobs = 0, Note = null });
         var answer = await client.SendAsync(Job, new JobVariables { MaxActiveJobs = 3 });
 
-        host.Bodies.Select(b => b["variables"]!.ToJsonString())
+        host.Bodies.Select(b => b["variables"].NotNull().ToJsonString())
             .Should()
             .Equal("""{}""", """{"maxActiveJobs":0,"note":null}""", """{"maxActiveJobs":3}""");
-        answer.Data!.MaxActiveJobs.HasValue.Should().BeFalse("it was absent");
+        answer.Data.NotNull().MaxActiveJobs.HasValue.Should().BeFalse("it was absent");
         answer.Data.Note.HasValue.Should().BeTrue("it was null, which is a value");
         answer.Data.Note.Value.Should().BeNull();
     }
@@ -1090,13 +1151,20 @@ public class TraxClientTests
         {
             Bodies.Add(
                 (JsonObject)
-                    JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!
+                    JsonNode
+                        .Parse(
+                            await request
+                                .Content.NotNull()
+                                .ReadAsStringAsync(cancellationToken)
+                                .ConfigureAwait(false)
+                        )
+                        .NotNull()
             );
             if (_error is not null)
                 throw _error;
             return new HttpResponseMessage(_status)
             {
-                Content = new StringContent(_answer!, Encoding.UTF8, "application/json"),
+                Content = new StringContent(_answer.NotNull(), Encoding.UTF8, "application/json"),
             };
         }
     }
@@ -1139,7 +1207,7 @@ public class TraxClientTests
         public async Task<T> Take(TimeSpan wait)
         {
             using var timeout = new CancellationTokenSource(wait);
-            return await _items.Reader.ReadAsync(timeout.Token);
+            return await _items.Reader.ReadAsync(timeout.Token).ConfigureAwait(false);
         }
 
         // The next item, or default when none comes within the wait.
@@ -1147,7 +1215,7 @@ public class TraxClientTests
         {
             try
             {
-                return await Take(wait);
+                return await Take(wait).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -1166,17 +1234,8 @@ public class TraxClientTests
         {
             var taken = new List<TraxStreamEvent<T>>();
             for (var i = 0; i < count; i++)
-                taken.Add(await _events.Take(Wait));
+                taken.Add(await _events.Take(Wait).ConfigureAwait(false));
             return taken;
         }
     }
 }
-
-// A source-generated context over the Optional records, as a trimmed or AOT app passes one. Each T an Optional<T> wraps
-// is listed too: the context cannot see through Optional's converter.
-[JsonSerializable(typeof(TraxClientTests.JobVariables))]
-[JsonSerializable(typeof(TraxClientTests.JobResult))]
-[JsonSerializable(typeof(int))]
-[JsonSerializable(typeof(int?))]
-[JsonSerializable(typeof(string))]
-internal sealed partial class OptionalTestJson : JsonSerializerContext;

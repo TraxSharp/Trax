@@ -1,3 +1,4 @@
+using Trax.Core.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Models;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -14,7 +15,7 @@ internal static class DefaultTraxJunctionClientEventProjection
     /// </summary>
     public static TraxJunctionClientEvent Project(TrainLifecycleEventMessage message, bool answers)
     {
-        var step = message.Junction!;
+        var step = message.Junction.NotNull();
         var withheld = !answers || step.AnswerWithheld;
 
         // A step on a decision's track (a junction, a question or a routing step) names the track

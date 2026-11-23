@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
+using Trax.Core.Extensions;
 using OperationKind = Trax.Cli.Models.OperationKind;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -26,7 +27,7 @@ public class ScaffoldCompilationTests
 {
     [TestCase(OperationKind.Query)]
     [TestCase(OperationKind.Mutation)]
-    public void A_rendered_train_compiles_against_the_referenced_Trax(OperationKind kind)
+    public async Task A_rendered_train_compiles_against_the_referenced_Trax(OperationKind kind)
     {
         var renderer = new CodeRenderer();
         var op = new ApiOperation
@@ -62,15 +63,27 @@ public class ScaffoldCompilationTests
             },
         };
 
-        AssertCompiles(
-            renderer,
-            op,
-            [
-                ("GraphQLNamespaces.cs", renderer.RenderGraphQLNamespaces(["Players"], "MyApi")),
-                ("Input.cs", renderer.RenderInput(op, "MyApi")),
-                ("Output.cs", renderer.RenderOutput(op, "MyApi")),
-            ]
-        );
+        await AssertCompilesAsync(
+                renderer,
+                op,
+                [
+                    (
+                        "GraphQLNamespaces.cs",
+                        await renderer
+                            .RenderGraphQLNamespacesAsync(["Players"], "MyApi")
+                            .ConfigureAwait(false)
+                    ),
+                    (
+                        "Input.cs",
+                        await renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false)
+                    ),
+                    (
+                        "Output.cs",
+                        await renderer.RenderOutputAsync(op, "MyApi").ConfigureAwait(false)
+                    ),
+                ]
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -79,7 +92,7 @@ public class ScaffoldCompilationTests
     /// branch. No output record is written for it.
     /// </summary>
     [Test]
-    public void A_rendered_train_with_a_Unit_output_compiles_against_the_referenced_Trax()
+    public async Task A_rendered_train_with_a_Unit_output_compiles_against_the_referenced_Trax()
     {
         var renderer = new CodeRenderer();
         var op = new ApiOperation
@@ -103,25 +116,33 @@ public class ScaffoldCompilationTests
             OutputType = new ApiType { Name = "Unit", IsBuiltIn = true },
         };
 
-        renderer
-            .RenderJunction(op, "MyApi")
+        (await renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false))
             .Should()
             .Contain(
                 "Junction<DeletePlayerInput, global::Trax.Core.Functional.Unit>",
                 "the premise is the Unit branch"
             );
 
-        AssertCompiles(
-            renderer,
-            op,
-            [
-                ("GraphQLNamespaces.cs", renderer.RenderGraphQLNamespaces(["Players"], "MyApi")),
-                ("Input.cs", renderer.RenderInput(op, "MyApi")),
-            ]
-        );
+        await AssertCompilesAsync(
+                renderer,
+                op,
+                [
+                    (
+                        "GraphQLNamespaces.cs",
+                        await renderer
+                            .RenderGraphQLNamespacesAsync(["Players"], "MyApi")
+                            .ConfigureAwait(false)
+                    ),
+                    (
+                        "Input.cs",
+                        await renderer.RenderInputAsync(op, "MyApi").ConfigureAwait(false)
+                    ),
+                ]
+            )
+            .ConfigureAwait(false);
     }
 
-    private static void AssertCompiles(
+    private static async Task AssertCompilesAsync(
         CodeRenderer renderer,
         ApiOperation op,
         (string Name, string Source)[] models
@@ -139,9 +160,15 @@ public class ScaffoldCompilationTests
                 global using System.Threading.Tasks;
                 """
             ),
-            ("ITrain.cs", renderer.RenderTrainInterface(op, "MyApi")),
-            ("Train.cs", renderer.RenderTrainImplementation(op, "MyApi")),
-            ("Junction.cs", renderer.RenderJunction(op, "MyApi")),
+            (
+                "ITrain.cs",
+                await renderer.RenderTrainInterfaceAsync(op, "MyApi").ConfigureAwait(false)
+            ),
+            (
+                "Train.cs",
+                await renderer.RenderTrainImplementationAsync(op, "MyApi").ConfigureAwait(false)
+            ),
+            ("Junction.cs", await renderer.RenderJunctionAsync(op, "MyApi").ConfigureAwait(false)),
         ];
 
         var errors = string.Join(
@@ -165,7 +192,7 @@ public class ScaffoldCompilationTests
     {
         // Every assembly deployed with the tests, which includes the Trax packages and their
         // dependencies whether or not anything has loaded them yet.
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES").NotNull())
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
 

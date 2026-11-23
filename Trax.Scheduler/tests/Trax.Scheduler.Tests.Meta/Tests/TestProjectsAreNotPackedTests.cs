@@ -1,3 +1,5 @@
+using Trax.Core.Extensions;
+
 namespace Trax.Scheduler.Tests.Meta.Tests;
 
 /// <summary>
@@ -64,7 +66,7 @@ public class TestProjectsAreNotPackedTests
     public void TheArrayLoggerHelperLibrary_IsCovered()
     {
         TestProjects()
-            .Select(c => (string)c.Arguments[0]!)
+            .Select(c => (string)c.Arguments[0].NotNull())
             .Should()
             .Contain(
                 p =>

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
@@ -25,26 +26,28 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class JobTimeoutCoverageTests : TestSetup
 {
-    private SchedulerConfiguration _config = null!;
+    private SchedulerConfiguration? _config;
     private TimeSpan _previousTimeout;
     private TimeSpan _previousStaleTimeout;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-        _previousTimeout = _config.DefaultJobTimeout;
-        _previousStaleTimeout = _config.StaleInProgressTimeout;
-        _config.DefaultJobTimeout = TimeSpan.FromMinutes(20);
-        _config.StaleInProgressTimeout = TimeSpan.FromMinutes(60);
+        _previousTimeout = _config.NotNull().DefaultJobTimeout;
+        _previousStaleTimeout = _config.NotNull().StaleInProgressTimeout;
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromMinutes(20);
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(60);
     }
 
     [TearDown]
     public void RestoreTimeout()
     {
-        _config.DefaultJobTimeout = _previousTimeout;
-        _config.StaleInProgressTimeout = _previousStaleTimeout;
-        _config.ExcludedTrainTypeNames.Remove(typeof(SchedulerTestTrain).FullName!);
+        _config.NotNull().DefaultJobTimeout = _previousTimeout;
+        _config.NotNull().StaleInProgressTimeout = _previousStaleTimeout;
+        _config
+            .NotNull()
+            .ExcludedTrainTypeNames.Remove(typeof(SchedulerTestTrain).FullName.NotNull());
     }
 
     [LeavesStuckRuns(
@@ -149,7 +152,7 @@ public class JobTimeoutCoverageTests : TestSetup
     [Test]
     public async Task An_excluded_train_past_DefaultJobTimeout_is_not_cancelled()
     {
-        _config.ExcludedTrainTypeNames.Add(typeof(SchedulerTestTrain).FullName!);
+        _config.NotNull().ExcludedTrainTypeNames.Add(typeof(SchedulerTestTrain).FullName.NotNull());
         var manifest = await CreateManifest(isEnabled: true);
         var run = await CreateInProgressRun(manifest.Id, startedMinutesAgo: 30);
 
@@ -166,7 +169,7 @@ public class JobTimeoutCoverageTests : TestSetup
     [Test]
     public async Task A_run_inside_a_long_DefaultJobTimeout_is_not_reaped_as_stale()
     {
-        _config.DefaultJobTimeout = TimeSpan.FromHours(2);
+        _config.NotNull().DefaultJobTimeout = TimeSpan.FromHours(2);
         var manifest = await CreateManifest(isEnabled: true);
         var run = await CreateInProgressRun(manifest.Id, startedMinutesAgo: 61);
 
@@ -200,7 +203,10 @@ public class JobTimeoutCoverageTests : TestSetup
 
     private async Task RunManifestManager()
     {
-        await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
+        await Scope
+            .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
+            .Run(Unit.Default)
+            .ConfigureAwait(false);
         DataContext.Reset();
     }
 
@@ -209,25 +215,24 @@ public class JobTimeoutCoverageTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = typeof(SchedulerTestTrain).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName.NotNull(),
                 Input = "{}",
                 InputTypeName = typeof(SchedulerTestInput).FullName,
-            }
+            },
+            TimeProvider.System
         );
         entry.Status = WorkQueueStatus.Dispatched;
         entry.MetadataId = metadataId;
-        entry.DispatchedAt = DateTime.UtcNow;
-        await DataContext.Track(entry);
-        await DataContext.SaveChanges(CancellationToken.None);
+        entry.DispatchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
+        await DataContext.Track(entry).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
     }
 
     private async Task<Manifest> CreateManifest(bool isEnabled, int? timeoutSeconds = null)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
         var manifest = Manifest.Create(
             new CreateManifest
             {
@@ -241,8 +246,8 @@ public class JobTimeoutCoverageTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return manifest;
     }
@@ -256,21 +261,26 @@ public class JobTimeoutCoverageTests : TestSetup
         var run = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "timeout" },
                 ManifestId = manifestId,
                 ParentId = parentId,
-            }
+            },
+            TimeProvider.System
         );
         run.TrainState = TrainState.InProgress;
-        await DataContext.Track(run);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(run).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         await DataContext
             .Metadatas.Where(m => m.Id == run.Id)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(m => m.StartTime, DateTime.UtcNow.AddMinutes(-startedMinutesAgo))
-            );
+                s.SetProperty(
+                    m => m.StartTime,
+                    TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-startedMinutesAgo)
+                )
+            )
+            .ConfigureAwait(false);
         DataContext.Reset();
         return run;
     }

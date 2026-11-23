@@ -31,11 +31,12 @@ public class CreateChatRoomTests
     [Test]
     public async Task PersistRoom_CreatesRoomWithTheCallerAsItsParticipant()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var junction = new PersistRoomJunction(
             db,
             ChatUsers.Alice,
-            NullLogger<PersistRoomJunction>.Instance
+            NullLogger<PersistRoomJunction>.Instance,
+            TestClock.Fixed()
         );
 
         var result = await junction.Run(new CreateChatRoomInput { Name = "General" });

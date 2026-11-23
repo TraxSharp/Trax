@@ -15,6 +15,7 @@ using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -43,7 +44,7 @@ public class QueryModelNavigationPostureTests
 
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
         ex.Message.Should()
-            .Contain(typeof(NavAccount).FullName!, Adr)
+            .Contain(typeof(NavAccount).FullName.NotNull(), Adr)
             .And.Contain("'NavPost.account'")
             .And.Contain("'NavPostFilterInput.account'")
             .And.Contain("'NavPostSortInput.account'")
@@ -62,7 +63,8 @@ public class QueryModelNavigationPostureTests
     public async Task An_anonymous_target_declared_on_its_class_is_readable_and_filterable()
     {
         var (provider, executor) = await StartAsync<OpenTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -90,7 +92,8 @@ public class QueryModelNavigationPostureTests
     )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, query, Anonymous());
 
@@ -107,7 +110,8 @@ public class QueryModelNavigationPostureTests
     )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, query, InRole("Player"));
 
@@ -124,7 +128,8 @@ public class QueryModelNavigationPostureTests
     )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, query, InRole("Admin"));
 
@@ -136,7 +141,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_target_gated_on_its_class_refuses_an_anonymous_filter_passed_as_a_variable()
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var result = await executor.ExecuteAsync(
             OperationRequestBuilder
@@ -144,7 +150,9 @@ public class QueryModelNavigationPostureTests
                 .SetDocument(
                     "query($p: String) { discover { gatedPosts(where: { owner: { apiToken: { startsWith: $p } } }) { nodes { title } } } }"
                 )
-                .SetVariableValues(new Dictionary<string, object?> { ["p"] = "tok_live" })
+                .SetVariableValues(
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["p"] = "tok_live" }
+                )
                 .SetUser(Anonymous())
                 .Build()
         );
@@ -160,14 +168,17 @@ public class QueryModelNavigationPostureTests
         var act = () => StartAsync<ConflictedTargetContext>();
 
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
-        ex.Message.Should().Contain(typeof(ConflictedAccount).FullName!).And.Contain("Pick one");
+        ex.Message.Should()
+            .Contain(typeof(ConflictedAccount).FullName.NotNull())
+            .And.Contain("Pick one");
     }
 
     [Test]
     public async Task A_navigation_left_out_of_the_exposed_field_set_needs_no_declaration()
     {
         var (provider, executor) = await StartAsync<HiddenNavigationContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(executor, "{ discover { hiddenNavPosts { nodes { title } } } }");
 
@@ -178,7 +189,8 @@ public class QueryModelNavigationPostureTests
     public async Task An_owned_value_is_part_of_its_entity_and_needs_no_declaration()
     {
         var (provider, executor) = await StartAsync<OwnedValueContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -199,7 +211,7 @@ public class QueryModelNavigationPostureTests
 
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
         ex.Message.Should()
-            .Contain(typeof(NavAccount).FullName!, Adr)
+            .Contain(typeof(NavAccount).FullName.NotNull(), Adr)
             .And.Contain("'MethodPost.primaryAccount'");
     }
 
@@ -207,7 +219,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_gated_entity_reached_through_a_method_refuses_an_anonymous_read()
     {
         var (provider, executor) = await StartAsync<MethodGatedContext>();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -225,8 +238,8 @@ public class QueryModelNavigationPostureTests
         var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
         ex.Message.Should()
             .StartWith("2 entities", Adr)
-            .And.Contain(typeof(NavAccount).FullName!)
-            .And.Contain(typeof(SecondAccount).FullName!);
+            .And.Contain(typeof(NavAccount).FullName.NotNull())
+            .And.Contain(typeof(SecondAccount).FullName.NotNull());
     }
 
     /// <summary>
@@ -238,7 +251,8 @@ public class QueryModelNavigationPostureTests
     public async Task A_context_that_cannot_be_resolved_fails_closed()
     {
         var (provider, _) = await StartAsync<OwnedValueContext>();
-        await using var _p = provider;
+        var _p = provider;
+        await using var _pDisposal = _p.ConfigureAwait(false);
         var validator = new Trax.Api.GraphQL.Startup.QueryModelReachValidator(
             provider.GetRequiredService<Trax.Api.GraphQL.Configuration.GraphQLConfiguration>(),
             new WithoutService(provider, typeof(OwnedValueContext))
@@ -248,7 +262,7 @@ public class QueryModelNavigationPostureTests
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .Contain(typeof(Place).FullName!, Adr);
+            .Contain(typeof(Place).FullName.NotNull(), Adr);
     }
 
     [Test]
@@ -261,7 +275,7 @@ public class QueryModelNavigationPostureTests
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .Contain(typeof(GatedOwner).FullName!, Adr)
+            .Contain(typeof(GatedOwner).FullName.NotNull(), Adr)
             .And.Contain("carries no @authorize directive");
     }
 
@@ -273,7 +287,7 @@ public class QueryModelNavigationPostureTests
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
             .Contain("NoSuchPostureTargetPolicy", Adr)
-            .And.Contain(typeof(UnknownPolicyOwner).FullName!);
+            .And.Contain(typeof(UnknownPolicyOwner).FullName.NotNull());
     }
 
     /// <summary>A provider, and every scope it creates, that cannot resolve one service.</summary>
@@ -323,7 +337,7 @@ public class QueryModelNavigationPostureTests
     }
 
     private static async Task<string> RunAsync(IRequestExecutor executor, string query) =>
-        (await executor.ExecuteAsync(query)).ExpectOperationResult().ToJson();
+        (await executor.ExecuteAsync(query).ConfigureAwait(false)).ExpectOperationResult().ToJson();
 
     private static async Task<string> RunAsync(
         IRequestExecutor executor,
@@ -331,9 +345,11 @@ public class QueryModelNavigationPostureTests
         ClaimsPrincipal user
     ) =>
         (
-            await executor.ExecuteAsync(
-                OperationRequestBuilder.New().SetDocument(query).SetUser(user).Build()
-            )
+            await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder.New().SetDocument(query).SetUser(user).Build()
+                )
+                .ConfigureAwait(false)
         )
             .ExpectOperationResult()
             .ToJson();
@@ -394,20 +410,25 @@ public class QueryModelNavigationPostureTests
         try
         {
             foreach (var hosted in provider.GetServices<IHostedService>())
-                await hosted.StartAsync(default);
+                await hosted.StartAsync(default).ConfigureAwait(false);
         }
         catch
         {
-            await provider.DisposeAsync();
+            await provider.DisposeAsync().ConfigureAwait(false);
             throw;
         }
 
-        using (var scope = provider.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<TContext>().SeedAsync();
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+            await scope
+                .ServiceProvider.GetRequiredService<TContext>()
+                .SeedAsync()
+                .ConfigureAwait(false);
 
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (provider, executor);
     }
 
@@ -576,9 +597,9 @@ public class QueryModelNavigationPostureTests
     public class TwoUndeclaredContext(DbContextOptions<TwoUndeclaredContext> options)
         : NavContextBase(options)
     {
-        public DbSet<TwoNavPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
-        public DbSet<SecondAccount> Seconds { get; set; } = null!;
+        public DbSet<TwoNavPost> Posts => Set<TwoNavPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
+        public DbSet<SecondAccount> Seconds => Set<SecondAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -586,8 +607,8 @@ public class QueryModelNavigationPostureTests
     public class UnknownPolicyTargetContext(DbContextOptions<UnknownPolicyTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<UnknownPolicyPost> Posts { get; set; } = null!;
-        public DbSet<UnknownPolicyOwner> Owners { get; set; } = null!;
+        public DbSet<UnknownPolicyPost> Posts => Set<UnknownPolicyPost>();
+        public DbSet<UnknownPolicyOwner> Owners => Set<UnknownPolicyOwner>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -595,8 +616,8 @@ public class QueryModelNavigationPostureTests
     public class MethodUndeclaredContext(DbContextOptions<MethodUndeclaredContext> options)
         : NavContextBase(options)
     {
-        public DbSet<MethodPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<MethodPost> Posts => Set<MethodPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -604,13 +625,13 @@ public class QueryModelNavigationPostureTests
     public class MethodGatedContext(DbContextOptions<MethodGatedContext> options)
         : NavContextBase(options)
     {
-        public DbSet<MethodGatedPost> Posts { get; set; } = null!;
-        public DbSet<MethodOwner> Owners { get; set; } = null!;
+        public DbSet<MethodGatedPost> Posts => Set<MethodGatedPost>();
+        public DbSet<MethodOwner> Owners => Set<MethodOwner>();
 
         public override async Task SeedAsync()
         {
             Posts.Add(new MethodGatedPost { Id = 1, Title = "hello" });
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
@@ -622,8 +643,8 @@ public class QueryModelNavigationPostureTests
     public class UndeclaredContext(DbContextOptions<UndeclaredContext> options)
         : NavContextBase(options)
     {
-        public DbSet<NavPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<NavPost> Posts => Set<NavPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -631,8 +652,8 @@ public class QueryModelNavigationPostureTests
     public class GatedEndpointContext(DbContextOptions<GatedEndpointContext> options)
         : NavContextBase(options)
     {
-        public DbSet<GatedEndpointPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<GatedEndpointPost> Posts => Set<GatedEndpointPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -640,8 +661,8 @@ public class QueryModelNavigationPostureTests
     public class OpenTargetContext(DbContextOptions<OpenTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<OpenPost> Posts { get; set; } = null!;
-        public DbSet<OpenAuthor> Authors { get; set; } = null!;
+        public DbSet<OpenPost> Posts => Set<OpenPost>();
+        public DbSet<OpenAuthor> Authors => Set<OpenAuthor>();
 
         public override async Task SeedAsync()
         {
@@ -656,15 +677,15 @@ public class QueryModelNavigationPostureTests
                     Author = author,
                 }
             );
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
     public class GatedTargetContext(DbContextOptions<GatedTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<GatedPost> Posts { get; set; } = null!;
-        public DbSet<GatedOwner> Owners { get; set; } = null!;
+        public DbSet<GatedPost> Posts => Set<GatedPost>();
+        public DbSet<GatedOwner> Owners => Set<GatedOwner>();
 
         public override async Task SeedAsync()
         {
@@ -679,15 +700,15 @@ public class QueryModelNavigationPostureTests
                     Owner = owner,
                 }
             );
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
     public class ConflictedTargetContext(DbContextOptions<ConflictedTargetContext> options)
         : NavContextBase(options)
     {
-        public DbSet<ConflictedPost> Posts { get; set; } = null!;
-        public DbSet<ConflictedAccount> Accounts { get; set; } = null!;
+        public DbSet<ConflictedPost> Posts => Set<ConflictedPost>();
+        public DbSet<ConflictedAccount> Accounts => Set<ConflictedAccount>();
 
         public override Task SeedAsync() => Task.CompletedTask;
     }
@@ -695,20 +716,20 @@ public class QueryModelNavigationPostureTests
     public class HiddenNavigationContext(DbContextOptions<HiddenNavigationContext> options)
         : NavContextBase(options)
     {
-        public DbSet<HiddenNavPost> Posts { get; set; } = null!;
-        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<HiddenNavPost> Posts => Set<HiddenNavPost>();
+        public DbSet<NavAccount> Accounts => Set<NavAccount>();
 
         public override async Task SeedAsync()
         {
             Posts.Add(new HiddenNavPost { Id = 1, Title = "hello" });
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
     public class OwnedValueContext(DbContextOptions<OwnedValueContext> options)
         : NavContextBase(options)
     {
-        public DbSet<OwnedValuePost> Posts { get; set; } = null!;
+        public DbSet<OwnedValuePost> Posts => Set<OwnedValuePost>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) =>
             modelBuilder.Entity<OwnedValuePost>().OwnsOne(p => p.Place);
@@ -723,7 +744,7 @@ public class QueryModelNavigationPostureTests
                     Place = new Place { City = "Lyon" },
                 }
             );
-            await SaveChangesAsync();
+            await SaveChangesAsync().ConfigureAwait(false);
         }
     }
 }

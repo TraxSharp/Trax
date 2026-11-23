@@ -47,14 +47,14 @@ public class RunGraphParallelTests
                             [
                                 new ChainGraphTrack(
                                     "Fast",
-                                    null,
-                                    false,
+                                    Description: null,
+                                    IsFallback: false,
                                     [Node(FastShip, ChainStepKind.Chain)]
                                 ),
                                 new ChainGraphTrack(
                                     "Slow",
-                                    null,
-                                    false,
+                                    Description: null,
+                                    IsFallback: false,
                                     [Node(SlowShip, ChainStepKind.Chain)]
                                 ),
                             ]
@@ -350,7 +350,7 @@ public class RunGraphParallelTests
             Kind = JunctionRunKind.Junction,
             Name = "ScoreCoCitation",
             State = JunctionRunState.Completed,
-            StartedAt = DateTime.UtcNow,
+            StartedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
             NodeId = CoCitation,
         };
 
@@ -366,7 +366,7 @@ public class RunGraphParallelTests
 
     private static Dictionary<string, RunGraphNode> Flatten(IEnumerable<RunGraphNode> nodes)
     {
-        var all = new Dictionary<string, RunGraphNode>();
+        var all = new Dictionary<string, RunGraphNode>(StringComparer.Ordinal);
         Walk(nodes);
         return all;
 
@@ -382,13 +382,13 @@ public class RunGraphParallelTests
     }
 
     private static ChainGraphTrack Branch(string name, params ChainGraphNode[] nodes) =>
-        new(name, null, false, nodes);
+        new(name, Description: null, IsFallback: false, nodes);
 
     private static ChainGraphNode Node(
         string id,
         ChainStepKind kind,
         IReadOnlyList<ChainGraphTrack>? tracks = null
-    ) => new(id, kind, id, "Paper", "Paper", false, tracks ?? []);
+    ) => new(id, kind, id, "Paper", "Paper", Opaque: false, tracks ?? []);
 
     private static JunctionStep Step(
         int position,
@@ -402,18 +402,18 @@ public class RunGraphParallelTests
             kind,
             nodeId ?? "Old",
             state,
-            DateTime.UtcNow,
-            null,
-            null,
-            null,
-            null,
+            TimeProvider.System.GetUtcNow().UtcDateTime,
+            EndedAt: null,
+            DurationMs: null,
+            FailureClass: null,
+            FailureException: null,
             kind == JunctionRunKind.Junction ? null : "Lane",
             answer,
-            null,
-            false,
-            null,
-            false,
-            null
+            Confidence: null,
+            Replayed: false,
+            Decider: null,
+            AnswerWithheld: false,
+            Attempt: null
         )
         {
             NodeId = nodeId,

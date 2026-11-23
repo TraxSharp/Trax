@@ -10,6 +10,17 @@ package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineInstances.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IMachineInstances.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineInstance.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineKey.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/MachineInstanceId.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IInvokedRunCancellation.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IMachineInternals.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/IDeclaredSystemKey.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ChainedOutcome.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/ServerEdge.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SpawnDeclaration.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeRuntime.cs
 ---
 
 # IMachineInstances

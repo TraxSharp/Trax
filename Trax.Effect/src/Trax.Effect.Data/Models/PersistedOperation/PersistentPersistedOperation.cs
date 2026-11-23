@@ -9,7 +9,7 @@ namespace Trax.Effect.Data.Models.PersistedOperation;
 /// Mirrors the <see cref="Trax.Effect.Data.Models.Manifest.PersistentManifest"/>
 /// pattern.
 /// </summary>
-internal class PersistentPersistedOperation : BaseModel
+internal sealed class PersistentPersistedOperation : BaseModel
 {
     /// <summary>
     /// Apply EF Core mapping for <see cref="BaseModel"/>. Public because
@@ -31,7 +31,7 @@ internal class PersistentPersistedOperation : BaseModel
             entity.Property(e => e.OperationName).IsRequired();
             entity.Property(e => e.Document).HasColumnType("text").IsRequired();
             entity.Property(e => e.ShapeFingerprint).IsRequired();
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasDefaultValue(value: true);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
 

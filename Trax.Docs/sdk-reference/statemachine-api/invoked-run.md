@@ -10,6 +10,7 @@ package: Trax.StateMachine.Persistence
 namespace: Trax.StateMachine.Persistence
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedRun.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedRunScope.cs
 ---
 
 # InvokedRun

@@ -11,6 +11,7 @@ nav_order: 4
 source:
   - Trax.Effect/src/Trax.Effect/Attributes/TraxQueryAttribute.cs
   - Trax.Effect/src/Trax.Effect/Attributes/TraxMutationAttribute.cs
+  - Trax.Effect/src/Trax.Effect/Attributes/GraphQLOperation.cs
 ---
 
 # TraxQuery and TraxMutation

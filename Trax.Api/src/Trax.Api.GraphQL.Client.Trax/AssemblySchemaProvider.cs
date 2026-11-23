@@ -27,7 +27,7 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
     /// requested, and drops the subscription type, the client's default.
     /// </summary>
     /// <param name="configure">Configures a HotChocolate request executor builder the same way the server does.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
     public AssemblySchemaProvider(Action<IRequestExecutorBuilder> configure)
         : this(configure, removeSubscriptionsFromSchema: true) { }
 
@@ -37,7 +37,7 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
     /// Whether the subscription type is dropped before queries are validated, as
     /// <see cref="IGraphQLClientConfiguration.RemoveSubscriptionsFromSchema"/> says.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
     public AssemblySchemaProvider(
         Action<IRequestExecutorBuilder> configure,
         bool removeSubscriptionsFromSchema
@@ -72,24 +72,27 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
         var builder = services.AddGraphQL();
         _configure(builder);
 
-        await using var provider = services.BuildServiceProvider();
-        var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
-        var executor = await resolver.GetExecutorAsync().ConfigureAwait(false);
-        var hcSchema = executor.Schema;
-
-        var sdl = hcSchema.ToString();
-
-        try
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
         {
-            return SdlSchema.Build(sdl, _removeSubscriptions);
-        }
-        catch (Exception ex)
-        {
-            throw new GraphQLSchemaIntrospectionException(
-                "Failed to build graphql-dotnet schema from HotChocolate-derived SDL. Generated SDL:\n"
-                    + sdl,
-                ex
-            );
+            var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
+            var executor = await resolver.GetExecutorAsync().ConfigureAwait(false);
+            var hcSchema = executor.Schema;
+
+            var sdl = hcSchema.ToString();
+
+            try
+            {
+                return SdlSchema.Build(sdl, _removeSubscriptions);
+            }
+            catch (Exception ex)
+            {
+                throw new GraphQLSchemaIntrospectionException(
+                    "Failed to build graphql-dotnet schema from HotChocolate-derived SDL. Generated SDL:\n"
+                        + sdl,
+                    ex
+                );
+            }
         }
     }
 }

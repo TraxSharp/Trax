@@ -1,3 +1,4 @@
+using System.Globalization;
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax Persisted Operations sample — Client
 //
@@ -17,6 +18,7 @@
 
 using System.Net.Http.Json;
 using System.Text.Json;
+using Trax.Samples.PersistedOperations.Client;
 
 const string ApiUrl = "http://localhost:5240/trax/graphql/";
 
@@ -32,51 +34,56 @@ using var app = new HttpClient { BaseAddress = new Uri(ApiUrl) };
 using var operatorHttp = new HttpClient { BaseAddress = new Uri(ApiUrl) };
 operatorHttp.DefaultRequestHeaders.Add("X-Api-Key", "operator-key-do-not-use-in-production");
 
+using var outputs = DemoOutput.Create();
+var output = outputs.CreateLogger("demo");
+
 try
 {
     // Upload the manifest. On a re-run this puts greet_v1 back to CASUAL: the response shape is
     // the same, so the guardrail accepts it like any other fix.
-    foreach (var op in LoadManifest())
+    foreach (var op in await LoadManifestAsync().ConfigureAwait(false))
     {
-        await UploadAsync(operatorHttp, op.Id, op.Document);
-        Console.WriteLine($"Uploaded {op.Id}");
+        await UploadAsync(operatorHttp, op.Id, op.Document).ConfigureAwait(false);
+        output.Say($"Uploaded {op.Id}");
     }
 
     // 1. The app calls by id.
-    Console.WriteLine("\n1. The app calls greet_v1 for Alice");
-    Expect(await GreetAsync(app), "Hey Alice!");
+    output.Say("\n1. The app calls greet_v1 for Alice");
+    Expect(await GreetAsync(app).ConfigureAwait(false), "Hey Alice!");
 
     var inline = await app.PostAsJsonAsync(
-        string.Empty,
-        new
-        {
-            query = "query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }",
-        }
-    );
-    var inlineBody = await inline.Content.ReadAsStringAsync();
+            string.Empty,
+            new
+            {
+                query = "query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }",
+            }
+        )
+        .ConfigureAwait(false);
+    var inlineBody = await inline.Content.ReadAsStringAsync().ConfigureAwait(false);
     if (!inlineBody.Contains("PERSISTED_OPERATION_REQUIRED", StringComparison.Ordinal))
         throw new InvalidOperationException($"The server ran an inline query: {inlineBody}");
-    Console.WriteLine($"   An inline query is refused: {inlineBody}");
+    output.Say($"   An inline query is refused: {inlineBody}");
 
     // 2. The operator fixes greet_v1; the app does not change.
-    await UploadAsync(operatorHttp, "greet_v1", FormalFix);
-    Console.WriteLine("\n2. The operator re-uploads greet_v1 with style FORMAL");
-    Expect(await GreetAsync(app), "Good day, Alice.");
+    await UploadAsync(operatorHttp, "greet_v1", FormalFix).ConfigureAwait(false);
+    output.Say("\n2. The operator re-uploads greet_v1 with style FORMAL");
+    Expect(await GreetAsync(app).ConfigureAwait(false), "Good day, Alice.");
 
     // 3. An upload that renames the field the app reads is refused.
-    var refusal = await TryUploadAsync(operatorHttp, "greet_v1", RenamedField);
+    var refusal = await TryUploadAsync(operatorHttp, "greet_v1", RenamedField)
+        .ConfigureAwait(false);
     if (refusal is null)
         throw new InvalidOperationException(
             "The server accepted an upload that renames the field the app reads."
         );
-    Console.WriteLine($"\n3. Renaming greeting to message is refused: {refusal}");
-    Expect(await GreetAsync(app), "Good day, Alice.");
+    output.Say($"\n3. Renaming greeting to message is refused: {refusal}");
+    Expect(await GreetAsync(app).ConfigureAwait(false), "Good day, Alice.");
 }
 catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
 {
     // A refused upload (the API not in Development, so no demo key), an API that is not running,
     // or a step that did not do what it should: say which, without a stack trace.
-    Console.Error.WriteLine($"\n{ex.Message}");
+    output.Fail($"\n{ex.Message}");
     return 1;
 }
 
@@ -86,10 +93,11 @@ return 0;
 static async Task<string> GreetAsync(HttpClient app)
 {
     var resp = await app.PostAsJsonAsync(
-        string.Empty,
-        new { id = "greet_v1", variables = new { name = "Alice" } }
-    );
-    var raw = await resp.Content.ReadAsStringAsync();
+            string.Empty,
+            new { id = "greet_v1", variables = new { name = "Alice" } }
+        )
+        .ConfigureAwait(false);
+    var raw = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
     using var doc = JsonDocument.Parse(raw);
     return
         doc.RootElement.TryGetProperty("data", out var data)
@@ -103,16 +111,16 @@ static async Task<string> GreetAsync(HttpClient app)
         : raw;
 }
 
-static void Expect(string actual, string expected)
+void Expect(string actual, string expected)
 {
-    Console.WriteLine($"   greet_v1 answers: {actual}");
-    if (actual != expected)
+    output.Say($"   greet_v1 answers: {actual}");
+    if (!string.Equals(actual, expected, StringComparison.Ordinal))
         throw new InvalidOperationException($"Expected \"{expected}\", got {actual}");
 }
 
 static async Task UploadAsync(HttpClient http, string id, string document)
 {
-    var error = await TryUploadAsync(http, id, document);
+    var error = await TryUploadAsync(http, id, document).ConfigureAwait(false);
     if (error is not null)
         throw new InvalidOperationException($"uploadPersistedOperation failed for '{id}': {error}");
 }
@@ -131,8 +139,8 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
         }
         """;
     var body = new { query = mutation, variables = new { input = new { id, document } } };
-    var resp = await http.PostAsJsonAsync(string.Empty, body);
-    var raw = await resp.Content.ReadAsStringAsync();
+    var resp = await http.PostAsJsonAsync(string.Empty, body).ConfigureAwait(false);
+    var raw = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
 
     JsonDocument doc;
     try
@@ -141,7 +149,10 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
     }
     catch (JsonException)
     {
-        return $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}";
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}"
+        );
     }
 
     using var _ = doc;
@@ -157,7 +168,10 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
     )
         return root.TryGetProperty("errors", out var topLevel) && topLevel.GetArrayLength() > 0
             ? DescribeError(topLevel[0])
-            : $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}";
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}"
+            );
 
     var payload = management.GetProperty("uploadPersistedOperation");
     if (payload.GetProperty("success").GetBoolean())
@@ -178,18 +192,22 @@ static string DescribeError(JsonElement error)
         : message ?? error.GetRawText();
 }
 
-static IEnumerable<ManifestEntry> LoadManifest()
+static async Task<List<ManifestEntry>> LoadManifestAsync()
 {
     var path = Path.Combine(AppContext.BaseDirectory, "manifest.json");
-    using var stream = File.OpenRead(path);
-    var doc = JsonDocument.Parse(stream);
-    foreach (var entry in doc.RootElement.GetProperty("operations").EnumerateArray())
+    var stream = File.OpenRead(path);
+    await using (stream.ConfigureAwait(false))
     {
-        yield return new ManifestEntry(
-            entry.GetProperty("id").GetString()!,
-            entry.GetProperty("document").GetString()!
-        );
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+        return doc
+            .RootElement.GetProperty("operations")
+            .EnumerateArray()
+            .Select(entry => new ManifestEntry(
+                entry.GetProperty("id").GetString()
+                    ?? throw new InvalidOperationException("A manifest operation has no id."),
+                entry.GetProperty("document").GetString()
+                    ?? throw new InvalidOperationException("A manifest operation has no document.")
+            ))
+            .ToList();
     }
 }
-
-internal sealed record ManifestEntry(string Id, string Document);

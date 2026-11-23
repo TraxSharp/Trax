@@ -24,14 +24,16 @@ public class InMemorySchedulerColumnTests : TestSetup
     private async Task<IDataContext> NewContext() =>
         await Scope
             .ServiceProvider.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
 
     [Test]
     public async Task The_scheduler_columns_are_kept()
     {
         long manifestId,
             entryId;
-        using (var context = await NewContext())
+        var context = await NewContext();
+        await using (context.ConfigureAwait(false))
         {
             var manifest = Manifest.Create(
                 new CreateManifest
@@ -52,7 +54,8 @@ public class InMemorySchedulerColumnTests : TestSetup
                     TrainName = manifest.Name,
                     ManifestId = manifest.Id,
                     ExplicitTrigger = true,
-                }
+                },
+                TestTime.Clock
             );
             await context.Track(entry);
 
@@ -65,7 +68,8 @@ public class InMemorySchedulerColumnTests : TestSetup
             entryId = entry.Id;
         }
 
-        using var readBack = await NewContext();
+        var readBack = await NewContext();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         var storedManifest = await readBack
             .Manifests.AsNoTracking()
             .SingleAsync(m => m.Id == manifestId);

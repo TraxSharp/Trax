@@ -36,7 +36,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task Explicit_binding_leaves_a_non_column_property_out_of_the_filter_input()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -50,7 +51,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task Explicit_binding_leaves_a_non_column_property_out_of_the_sort_input()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -64,7 +66,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task Explicit_binding_still_filters_and_sorts_on_a_column()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -78,7 +81,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task A_navigation_to_an_explicitly_bound_model_filters_only_on_its_columns()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -92,7 +96,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task A_navigation_to_an_explicitly_bound_model_sorts_only_on_its_columns()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -106,7 +111,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task A_navigation_to_an_exposed_as_model_filters_only_on_the_interface()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -120,7 +126,8 @@ public class QueryModelFilterSortFieldSetTests
     public async Task A_navigation_to_a_restricted_model_still_filters_on_an_exposed_field()
     {
         var (provider, executor) = await StartAsync();
-        await using var _ = provider;
+        var _ = provider;
+        await using var _Disposal = _.ConfigureAwait(false);
 
         var json = await RunAsync(
             executor,
@@ -131,7 +138,7 @@ public class QueryModelFilterSortFieldSetTests
     }
 
     private static async Task<string> RunAsync(IRequestExecutor executor, string query) =>
-        (await executor.ExecuteAsync(query)).ExpectOperationResult().ToJson();
+        (await executor.ExecuteAsync(query).ConfigureAwait(false)).ExpectOperationResult().ToJson();
 
     private static async Task<(ServiceProvider, IRequestExecutor)> StartAsync()
     {
@@ -151,9 +158,10 @@ public class QueryModelFilterSortFieldSetTests
         var provider = services.BuildServiceProvider();
 
         foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(default);
+            await hosted.StartAsync(default).ConfigureAwait(false);
 
-        using (var scope = provider.CreateScope())
+        var scope = provider.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var db = scope.ServiceProvider.GetRequiredService<FieldSetDbContext>();
             var account = new FieldSetAccount
@@ -181,12 +189,13 @@ public class QueryModelFilterSortFieldSetTests
                     Assignee = assignee,
                 }
             );
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
         var executor = await provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return (provider, executor);
     }
 
@@ -232,8 +241,8 @@ public class QueryModelFilterSortFieldSetTests
 
     public class FieldSetDbContext(DbContextOptions<FieldSetDbContext> options) : DbContext(options)
     {
-        public DbSet<FieldSetAccount> Accounts { get; set; } = null!;
-        public DbSet<FieldSetAssignee> Assignees { get; set; } = null!;
-        public DbSet<FieldSetTicket> Tickets { get; set; } = null!;
+        public DbSet<FieldSetAccount> Accounts => Set<FieldSetAccount>();
+        public DbSet<FieldSetAssignee> Assignees => Set<FieldSetAssignee>();
+        public DbSet<FieldSetTicket> Tickets => Set<FieldSetTicket>();
     }
 }

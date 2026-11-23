@@ -1,46 +1,5 @@
 namespace Trax.Adr.Guard;
 
-/// <summary>One ADR on disk, with the two views every check needs: named sections and frontmatter.</summary>
-public sealed class Adr
-{
-    private static readonly string[] LineBreak = ["\n"];
-
-    public required string AbsolutePath { get; init; }
-
-    /// <summary>Path relative to the repo root, forward-slashed, for offender messages.</summary>
-    public required string RelativePath { get; init; }
-
-    /// <summary>The file name, which is what the index and a supersession link cite.</summary>
-    public required string FileName { get; init; }
-
-    /// <summary>The four-digit number an ADR is cited by, from its file name.</summary>
-    public required string Number { get; init; }
-
-    public required string Text { get; init; }
-
-    public required Frontmatter Frontmatter { get; init; }
-
-    /// <summary>The <c>#</c> heading, which the index entry must match. Null when absent.</summary>
-    public string? Title
-    {
-        get
-        {
-            foreach (var line in Text.Split(LineBreak, StringSplitOptions.None))
-            {
-                if (line.StartsWith("# ", StringComparison.Ordinal))
-                    return line[2..].Trim();
-            }
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// The body of a <c>## Heading</c> section, or null when the document has no such
-    /// heading. Fence-aware: see <see cref="Markdown.Section"/>.
-    /// </summary>
-    public string? Section(string heading) => Markdown.Section(Text, heading);
-}
-
 /// <summary>
 /// Finds the ADRs a run is checking, and the index that must agree with them.
 /// </summary>
@@ -50,15 +9,17 @@ public sealed class Adr
 /// <see cref="GuardResult.Inspected"/>, and the runner treats a zero as a failure rather
 /// than a pass.
 /// </remarks>
-public static class AdrCorpus
+public static partial class AdrCorpus
 {
     public const string IndexFileName = "README.md";
 
     /// <summary>A well-formed ADR file name: four digits, a hyphen, then a kebab-case slug.</summary>
-    public static readonly Regex FileNamePattern = new(
+    [GeneratedRegex(
         @"^(?<number>\d{4})-(?<slug>[a-z0-9]+(?:-[a-z0-9]+)*)\.md$",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    public static partial Regex FileNamePattern { get; }
 
     public static string AdrDirectory(GuardOptions options) =>
         Path.Combine(options.RepoRoot, options.AdrRoot.Replace('/', Path.DirectorySeparatorChar));
@@ -87,7 +48,7 @@ public static class AdrCorpus
     /// and is excluded. Files that do not match the naming pattern are still returned, so
     /// the naming check can report them rather than discovery hiding them.
     /// </summary>
-    public static IReadOnlyList<Adr> Discover(GuardOptions options)
+    public static async Task<IReadOnlyList<Adr>> DiscoverAsync(GuardOptions options)
     {
         var dir = AdrDirectory(options);
         if (!Directory.Exists(dir))
@@ -95,19 +56,26 @@ public static class AdrCorpus
 
         // Recursive on purpose. Scanning only the top directory meant a file moved into an
         // archive/ subfolder silently left enforcement while still looking like an ADR.
-        return Directory
+        var files = Directory
             .EnumerateFiles(dir, "*.md", SearchOption.AllDirectories)
             .Where(f =>
                 !Path.GetFileName(f).Equals(IndexFileName, StringComparison.OrdinalIgnoreCase)
             )
-            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
-            .Select(f => Load(f, options))
-            .ToList();
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal);
+
+        var adrs = new List<Adr>();
+        foreach (var file in files)
+            adrs.Add(await LoadAsync(file, options).ConfigureAwait(false));
+        return adrs;
     }
 
-    private static Adr Load(string absolutePath, GuardOptions options)
+    private static async Task<Adr> LoadAsync(string absolutePath, GuardOptions options)
     {
-        var text = File.ReadAllText(absolutePath).Replace("\r\n", "\n");
+        var text = (await File.ReadAllTextAsync(absolutePath).ConfigureAwait(false)).Replace(
+            "\r\n",
+            "\n",
+            StringComparison.Ordinal
+        );
         var fileName = Path.GetFileName(absolutePath);
         var match = FileNamePattern.Match(fileName);
 

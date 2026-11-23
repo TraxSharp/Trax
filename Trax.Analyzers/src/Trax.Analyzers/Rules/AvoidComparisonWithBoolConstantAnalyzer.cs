@@ -1,0 +1,91 @@
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class AvoidComparisonWithBoolConstantAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.AvoidComparisonWithBoolConstant,
+        title: "Avoid comparison with bool constant",
+        messageFormat: "Avoid comparison with bool constant",
+        RuleCategories.Style,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.AvoidComparisonWithBoolConstant));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterOperationAction(AnalyzeBinaryOperation, OperationKind.Binary);
+    }
+
+    private static void AnalyzeBinaryOperation(OperationAnalysisContext context)
+    {
+        var binaryOperation = (IBinaryOperation)context.Operation;
+
+        if (binaryOperation.OperatorKind is not BinaryOperatorKind.Equals and not BinaryOperatorKind.NotEquals)
+        {
+            return;
+        }
+
+        // Only the built-in bool operators can be replaced by the operand
+        if (binaryOperation.OperatorMethod is not null)
+            return;
+
+        // There must be 2 valid operands
+        if (binaryOperation.LeftOperand?.Type is null || binaryOperation.RightOperand?.Type is null)
+            return;
+
+        // Operands must be explicit
+        if (binaryOperation.LeftOperand.IsImplicit || binaryOperation.RightOperand.IsImplicit)
+            return;
+
+        // Neither operand can be dynamic
+        if (binaryOperation.LeftOperand.Type.TypeKind == TypeKind.Dynamic || binaryOperation.RightOperand.Type.TypeKind == TypeKind.Dynamic)
+            return;
+
+        IOperation nodeToKeep;
+        IOperation nodeToRemove;
+        if (IsConstantBool(binaryOperation.LeftOperand))
+        {
+            nodeToKeep = binaryOperation.RightOperand;
+            nodeToRemove = binaryOperation.LeftOperand;
+        }
+        else if (IsConstantBool(binaryOperation.RightOperand))
+        {
+            nodeToKeep = binaryOperation.LeftOperand;
+            nodeToRemove = binaryOperation.RightOperand;
+        }
+        else
+        {
+            return;
+        }
+
+        if (!nodeToKeep.Type.IsBoolean())
+            return;
+
+        // The fixer will need to prefix the remaining operand with '!' if the original comparison is "!= true" or "== false"
+        var logicalNotOperatorNeeded = (bool)nodeToRemove.ConstantValue.Value! ?
+            binaryOperation.OperatorKind == BinaryOperatorKind.NotEquals :
+            binaryOperation.OperatorKind == BinaryOperatorKind.Equals;
+
+        var properties = ImmutableDictionary.Create<string, string?>(StringComparer.Ordinal)
+            .Add(AvoidComparisonWithBoolConstantAnalyzerCommon.NodeToKeepSpanStartKey, nodeToKeep.Syntax.Span.Start.ToString(CultureInfo.InvariantCulture))
+            .Add(AvoidComparisonWithBoolConstantAnalyzerCommon.NodeToKeepSpanLengthKey, nodeToKeep.Syntax.Span.Length.ToString(CultureInfo.InvariantCulture))
+            .Add(AvoidComparisonWithBoolConstantAnalyzerCommon.LogicalNotOperatorNeededKey, logicalNotOperatorNeeded.ToString());
+
+        var operatorTokenLocation = ((BinaryExpressionSyntax)binaryOperation.Syntax).OperatorToken.GetLocation();
+        context.ReportDiagnostic(Rule, properties, operatorTokenLocation);
+    }
+
+    private static bool IsConstantBool(IOperation operation)
+    {
+        return operation.Type.IsBoolean() && operation.ConstantValue.HasValue;
+    }
+}

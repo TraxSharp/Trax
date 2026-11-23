@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Trax.Core.Extensions;
 
 namespace Shopfront.Tests.IntegrationTests;
 
@@ -11,8 +12,12 @@ internal static class GraphQL
         object? variables = null
     )
     {
-        var response = await client.PostAsJsonAsync("/trax/graphql", new { query, variables });
-        return (await response.Content.ReadFromJsonAsync<JsonElement>())!;
+        var response = await client
+            .PostAsJsonAsync("/trax/graphql", new { query, variables })
+            .ConfigureAwait(false);
+        return (
+            await response.Content.ReadFromJsonAsync<JsonElement>().ConfigureAwait(false)
+        ).NotNull();
     }
 
     // The extensions.code of each error, empty when there are none.

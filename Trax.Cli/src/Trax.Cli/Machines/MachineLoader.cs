@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
@@ -74,7 +75,7 @@ internal static class MachineLoader
             );
 
         var type = SelectMachine(machines, machineFullName, Path.GetFileName(fullPath));
-        return (IMachine)Activator.CreateInstance(type)!;
+        return (IMachine)Activator.CreateInstance(type).NotNull();
     }
 
     /// <summary>
@@ -119,7 +120,9 @@ internal static class MachineLoader
     )
     {
         if (machineFullName is not null)
-            return machines.FirstOrDefault(t => t.FullName == machineFullName)
+            return machines.FirstOrDefault(t =>
+                    string.Equals(t.FullName, machineFullName, StringComparison.Ordinal)
+                )
                 ?? throw new InvalidOperationException(
                     $"Machine '{machineFullName}' not found in {assemblyName}. Available:\n  "
                         + string.Join("\n  ", machines.Select(t => t.FullName))

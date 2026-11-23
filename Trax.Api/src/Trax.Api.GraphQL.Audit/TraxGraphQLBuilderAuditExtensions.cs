@@ -96,18 +96,3 @@ public static class TraxGraphQLBuilderAuditExtensions
         services.AddSingleton<IHostedService, TraxAuditDisclaimerHostedService>();
     }
 }
-
-internal sealed class TraxAuditDisclaimerHostedService(ILoggerFactory loggerFactory)
-    : IHostedService
-{
-    private const string Message =
-        "Trax auth enabled. Trax provides NO WARRANTY for security breaches against systems using this package. You are solely responsible. See SECURITY-DISCLAIMER.md.";
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-        loggerFactory.CreateLogger("Trax.Api.GraphQL.Audit").LogWarning(Message);
-        return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 
@@ -39,8 +40,8 @@ public class MachineDocumentsE2ETests
     /// <summary>A body nobody generated, written over a stored document by hand.</summary>
     private const string TamperedBody = "query Tampered { __typename }";
 
-    private IHost _host = null!;
-    private CountingDataContexts _reads = null!;
+    private IHost? _host;
+    private CountingDataContexts? _reads;
 
     /// <summary>The host's options: the wizard exposed, the operations gated, the documents persisted.</summary>
     private static E2EHostOptions Options(Action<IServiceCollection>? services = null) =>
@@ -67,13 +68,13 @@ public class MachineDocumentsE2ETests
             new CountingCharge(),
             Options(CountingDataContexts.Install)
         );
-        _reads = _host.Services.GetRequiredService<CountingDataContexts>();
+        _reads = _host.NotNull().Services.GetRequiredService<CountingDataContexts>();
     }
 
     [OneTimeTearDown]
     public async Task Down()
     {
-        await ShelfHosts.StopAsync(_host);
+        await ShelfHosts.StopAsync(_host.NotNull());
         await E2EHost.DropDatabaseAsync(Database);
     }
 
@@ -81,7 +82,13 @@ public class MachineDocumentsE2ETests
     public async Task Every_machine_document_is_registered_at_startup_under_the_reserved_prefix()
     {
         var documents = (await MachineDocumentOps.MachineDocumentsAsync(Database))
-            .Where(d => d.Operation(WizardMachine.MachineId) != MachineDocumentOps.MachineChanged)
+            .Where(d =>
+                !string.Equals(
+                    d.Operation(WizardMachine.MachineId),
+                    MachineDocumentOps.MachineChanged,
+                    StringComparison.Ordinal
+                )
+            )
             .ToList();
 
         documents
@@ -114,11 +121,13 @@ public class MachineDocumentsE2ETests
             .Should()
             .BeEmpty("a machine the host does not expose has no documents");
 
-        using var started = await _host.PostPersistedAsync(
-            await MachineDocumentOps.IdOfAsync(Database, WizardMachine.MachineId, "start"),
-            new { input = new { title = "Atlas" }, requestId = WizardOps.NewRequestId() },
-            E2EHost.AliceKey
-        );
+        using var started = await _host
+            .NotNull()
+            .PostPersistedAsync(
+                await MachineDocumentOps.IdOfAsync(Database, WizardMachine.MachineId, "start"),
+                new { input = new { title = "Atlas" }, requestId = WizardOps.NewRequestId() },
+                E2EHost.AliceKey
+            );
         MachineDocumentOps
             .Succeeded(started, WizardMachine.MachineId, "start")
             .Should()
@@ -174,11 +183,9 @@ public class MachineDocumentsE2ETests
         using var alerts = new DocumentAlerts();
         try
         {
-            using var answer = await _host.PostPersistedAsync(
-                getId,
-                new { id = Guid.NewGuid() },
-                E2EHost.AliceKey
-            );
+            using var answer = await _host
+                .NotNull()
+                .PostPersistedAsync(getId, new { id = Guid.NewGuid() }, E2EHost.AliceKey);
 
             answer
                 .RootElement.TryGetProperty("errors", out var errors)
@@ -265,11 +272,13 @@ public class MachineDocumentsE2ETests
         );
         try
         {
-            using var answer = await _host.PostPersistedAsync(
-                startId,
-                new { input = new { title = "Atlas" }, requestId = WizardOps.NewRequestId() },
-                E2EHost.AliceKey
-            );
+            using var answer = await _host
+                .NotNull()
+                .PostPersistedAsync(
+                    startId,
+                    new { input = new { title = "Atlas" }, requestId = WizardOps.NewRequestId() },
+                    E2EHost.AliceKey
+                );
 
             MachineDocumentOps
                 .Succeeded(answer, WizardMachine.MachineId, "start")
@@ -347,35 +356,18 @@ public class MachineDocumentsE2ETests
     [Test]
     public async Task Unknown_reserved_prefix_ids_read_the_store_at_most_once_per_refresh_interval()
     {
-        // A background read that another test's made-up ids asked for may still be due: count from once the reads
-        // have stayed put for longer than a refresh interval.
-        var settle = System.Diagnostics.Stopwatch.StartNew();
-        int settled;
-        do
-        {
-            settle
-                .Elapsed.Should()
-                .BeLessThan(E2EWait.DefaultTimeout, "the background reads settle");
-            settled = _reads.Count;
-            // measuring-interval: a read still due runs within one refresh interval of the miss that asked for it.
-            await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 1.5);
-        } while (_reads.Count != settled);
+        await WaitForBackgroundReadsToSettleAsync();
 
         // An ordinary unknown id, remembered as a miss: it must still be remembered afterwards.
         const string Plain = "plain_unknown_v1";
-        using (await _host.PostPersistedAsync(Plain)) { }
-        var before = _reads.Count;
-        using (await _host.PostPersistedAsync(Plain)) { }
-        (_reads.Count - before).Should().Be(0, "a remembered miss is not read again");
+        using (await _host.NotNull().PostPersistedAsync(Plain)) { }
+        var before = _reads.NotNull().Count;
+        using (await _host.NotNull().PostPersistedAsync(Plain)) { }
+        (_reads.NotNull().Count - before).Should().Be(0, "a remembered miss is not read again");
 
-        for (var i = 0; i < 1_000; i++)
-        {
-            using var answer = await _host.PostPersistedAsync(
-                $"{MachineDocuments.ReservedIdPrefix}wizard_submit_{Guid.NewGuid():N}"
-            );
-        }
+        await PostReservedIdsNotShapedLikeGeneratedOnesAsync();
 
-        (_reads.Count - before)
+        (_reads.NotNull().Count - before)
             .Should()
             .Be(
                 0,
@@ -386,30 +378,62 @@ public class MachineDocumentsE2ETests
 
         // Well-formed made-up ids, of the machine this node serves and of one it does not: each is answered at once,
         // and together they cause at most one read of the store per refresh interval.
-        var flood = System.Diagnostics.Stopwatch.StartNew();
+        var flood = TimeProvider.System.GetTimestamp();
         for (var i = 0; i < 1_000; i++)
         {
             var machine = i % 2 == 0 ? WizardMachine.MachineId : "ledger";
-            using var answer = await _host.PostPersistedAsync(MadeUp(machine, i));
+            using var answer = await _host.NotNull().PostPersistedAsync(MadeUp(machine, i));
         }
         // allowed-delay: lets the last background reads the flood asked for finish before counting.
-        await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 3);
-        flood.Stop();
+        await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 3, TimeProvider.System);
+        var floodTook = TimeProvider.System.GetElapsedTime(flood);
 
         // One read per interval over the flood and the wait after it, and the first one at once.
-        (_reads.Count - before)
+        (_reads.NotNull().Count - before)
             .Should()
             .BeLessThanOrEqualTo(
-                (int)(flood.Elapsed / MachineDocumentRegistry.MinRefreshInterval) + 1,
+                (int)(floodTook / MachineDocumentRegistry.MinRefreshInterval) + 1,
                 "made-up well-formed ids read the store at most once per refresh interval, however many arrive, "
                     + "per "
                     + Adr
             );
-        var reads = _reads.Count;
-        using (await _host.PostPersistedAsync(Plain)) { }
-        (_reads.Count - reads)
+        var reads = _reads.NotNull().Count;
+        using (await _host.NotNull().PostPersistedAsync(Plain)) { }
+        (_reads.NotNull().Count - reads)
             .Should()
             .Be(0, "the reserved ids do not fill the miss cache and evict what it remembered");
+    }
+
+    private async Task WaitForBackgroundReadsToSettleAsync()
+    {
+        // A background read that another test's made-up ids asked for may still be due: count from once the reads
+        // have stayed put for longer than a refresh interval.
+        var settle = TimeProvider.System.GetTimestamp();
+        int settled;
+        do
+        {
+            TimeProvider
+                .System.GetElapsedTime(settle)
+                .Should()
+                .BeLessThan(E2EWait.DefaultTimeout, "the background reads settle");
+            settled = _reads.NotNull().Count;
+            // measuring-interval: a read still due runs within one refresh interval of the miss that asked for it.
+            await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 1.5, TimeProvider.System)
+                .ConfigureAwait(false);
+        } while (_reads.NotNull().Count != settled);
+    }
+
+    private async Task PostReservedIdsNotShapedLikeGeneratedOnesAsync()
+    {
+        for (var i = 0; i < 1_000; i++)
+        {
+            using var answer = await _host
+                .NotNull()
+                .PostPersistedAsync(
+                    $"{MachineDocuments.ReservedIdPrefix}wizard_submit_{Guid.NewGuid():N}"
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     [Test]
@@ -417,7 +441,9 @@ public class MachineDocumentsE2ETests
     {
         foreach (var machine in new[] { WizardMachine.MachineId, "ledger" })
         {
-            var (status, body) = await _host.PostPersistedWithStatusAsync(MadeUp(machine, 7));
+            var (status, body) = await _host
+                .NotNull()
+                .PostPersistedWithStatusAsync(MadeUp(machine, 7));
             using (body)
             {
                 MachineDocumentOps
@@ -457,7 +483,11 @@ public class MachineDocumentsE2ETests
         );
         try
         {
-            await ClientManifestExport.WriteAsync(_host.Services, path, CancellationToken.None);
+            await ClientManifestExport.WriteAsync(
+                _host.NotNull().Services,
+                path,
+                CancellationToken.None
+            );
             var listed = ClientManifest
                 .Read(await File.ReadAllTextAsync(path))
                 .Machines.SelectMany(m => m.Documents)
@@ -477,17 +507,16 @@ public class MachineDocumentsE2ETests
         }
         finally
         {
-            Directory.Delete(System.IO.Path.GetDirectoryName(path)!, recursive: true);
+            Directory.Delete(System.IO.Path.GetDirectoryName(path).NotNull(), recursive: true);
         }
     }
 
     [Test]
     public async Task The_operations_manifest_field_is_gone()
     {
-        using var response = await _host.PostAsync(
-            "{ operations { machineDocuments { id } } }",
-            apiKey: E2EHost.OperatorKey
-        );
+        using var response = await _host
+            .NotNull()
+            .PostAsync("{ operations { machineDocuments { id } } }", apiKey: E2EHost.OperatorKey);
 
         WizardOps
             .FirstErrorMessage(response)
@@ -509,8 +538,8 @@ public class MachineDocumentsE2ETests
         {
             started = await ShelfHosts
                 .StartAsync(Database, shape, $"machine_documents_{shape}".ToLowerInvariant())
-                .WaitAsync(TimeSpan.FromMinutes(1));
-            await started.ExecutorAsync().WaitAsync(TimeSpan.FromMinutes(1));
+                .WaitAsync(TimeSpan.FromMinutes(1), TimeProvider.System);
+            await started.ExecutorAsync().WaitAsync(TimeSpan.FromMinutes(1), TimeProvider.System);
         }
         catch (TimeoutException)
         {
@@ -532,19 +561,25 @@ public class MachineDocumentsE2ETests
                     + "startup, per "
                     + Adr
             );
-        refusal!.ToString().Should().Contain(nameof(ShelfNode), "the refusal names the type");
+        refusal
+            .NotNull()
+            .ToString()
+            .Should()
+            .Contain(nameof(ShelfNode), "the refusal names the type");
     }
 
     // Writes a body nobody generated over a stored document, returning the original.
     private static async Task<string> TamperAsync(string id)
     {
-        var original = await StoredBodyAsync(id);
-        await E2ESql.ExecuteAsync(
-            Database,
-            "UPDATE trax.persisted_operation SET document = @body WHERE tenant_key = '' AND id = @id",
-            ("body", TamperedBody),
-            ("id", id)
-        );
+        var original = await StoredBodyAsync(id).ConfigureAwait(false);
+        await E2ESql
+            .ExecuteAsync(
+                Database,
+                "UPDATE trax.persisted_operation SET document = @body WHERE tenant_key = '' AND id = @id",
+                ("body", TamperedBody),
+                ("id", id)
+            )
+            .ConfigureAwait(false);
         return original;
     }
 
@@ -558,12 +593,14 @@ public class MachineDocumentsE2ETests
 
     private static async Task<string> StoredBodyAsync(string id) =>
         (
-            await E2ESql.ScalarAsync<string>(
-                Database,
-                "SELECT document FROM trax.persisted_operation WHERE tenant_key = '' AND id = @id",
-                ("id", id)
-            )
-        )!;
+            await E2ESql
+                .ScalarAsync<string>(
+                    Database,
+                    "SELECT document FROM trax.persisted_operation WHERE tenant_key = '' AND id = @id",
+                    ("id", id)
+                )
+                .ConfigureAwait(false)
+        ).NotNull();
 
     /// <summary>Records every persisted-operation change a node broadcasts.</summary>
     private sealed class CountingBroadcaster : IPersistedOperationBroadcaster
@@ -604,11 +641,14 @@ public class MachineDocumentsE2ETests
                 return;
             var executor = await Services
                 .GetRequiredService<IRequestExecutorProvider>()
-                .GetExecutorAsync("trax", cancellationToken);
-            await executor.ExecuteAsync(
-                OperationRequestBuilder.New().SetDocumentId(documentId).Build(),
-                cancellationToken
-            );
+                .GetExecutorAsync("trax", cancellationToken)
+                .ConfigureAwait(false);
+            await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder.New().SetDocumentId(documentId).Build(),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

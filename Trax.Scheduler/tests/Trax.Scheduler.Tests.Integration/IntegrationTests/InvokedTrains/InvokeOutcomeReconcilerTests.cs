@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
@@ -21,39 +22,42 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
 [NonParallelizable]
 public class InvokeOutcomeReconcilerTests(ClusterStore store)
 {
-    private InvokeCluster _cluster = null!;
-    private ClusterHost _api = null!;
-    private ClusterHost _worker = null!;
+    private InvokeCluster? _cluster;
+    private ClusterHost? _api;
+    private ClusterHost? _worker;
 
     [OneTimeSetUp]
     public async Task CreateCluster()
     {
         _cluster = await InvokeCluster.Create(store);
-        _api = _cluster.Host(machines: true, scheduler: false);
-        _worker = _cluster.Host(machines: false, scheduler: true);
+        _api = _cluster.NotNull().Host(machines: true, scheduler: false);
+        _worker = _cluster.NotNull().Host(machines: false, scheduler: true);
     }
 
     [OneTimeTearDown]
     public async Task DisposeCluster()
     {
-        await _api.DisposeAsync();
-        await _worker.DisposeAsync();
-        await _cluster.DisposeAsync();
+        if (_api is not null)
+            await _api.DisposeAsync();
+        if (_worker is not null)
+            await _worker.DisposeAsync();
+        if (_cluster is not null)
+            await _cluster.DisposeAsync();
     }
 
     [SetUp]
     public async Task Reset()
     {
         InvokedStepGate.Reset();
-        await _cluster.Reset();
+        await _cluster.NotNull().Reset();
     }
 
     [TearDown]
     public void Restore()
     {
         InvokedStepGate.Release();
-        _api.Reconciler.PageSize = 200;
-        _api.Reconciler.Time = TimeProvider.System;
+        _api.NotNull().Reconciler.PageSize = 200;
+        _api.NotNull().Reconciler.Time = TimeProvider.System;
     }
 
     [Test]
@@ -63,17 +67,18 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
         for (var i = 0; i < 5; i++)
         {
             var token = await StartedToken();
-            await _worker.DispatchAndRun(token);
+            await _worker.NotNull().DispatchAndRun(token);
             ended.Add(token);
         }
 
         // Still going: one queued, one dispatched and not yet run.
         var queued = await StartedToken();
         var dispatched = await StartedToken();
-        await _worker.Dispatch(dispatched);
+        await _worker.NotNull().Dispatch(dispatched);
 
         var pages = new List<EndedPage>();
-        using (var scope = _api.Services.CreateScope())
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var delivery = scope.ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>();
             string? after = null;
@@ -98,8 +103,8 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
                 "each ended run once, in token order, and none still going"
             );
 
-        _api.Reconciler.PageSize = 2;
-        var swept = await _api.Sweep();
+        _api.NotNull().Reconciler.PageSize = 2;
+        var swept = await _api.NotNull().Sweep();
 
         swept.Should().HaveCount(5).And.AllBeOfType<InvokeDelivery.Moved>();
         (await RowHolding(queued)).Should().NotBeNull("a queued run has not ended");
@@ -110,18 +115,19 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
     public async Task A_batch_of_notices_delivers_each_ended_run_once()
     {
         var ended = await StartedToken();
-        await _worker.DispatchAndRun(ended);
+        await _worker.NotNull().DispatchAndRun(ended);
         var queued = await StartedToken();
 
         var deliveries = new ConcurrentBag<string>();
-        void Count(string run, InvokeDelivery _) => deliveries.Add(run);
-        _api.Reconciler.Delivered += Count;
+        void Count(object? sender, InvokeDeliveredEventArgs e) => deliveries.Add(e.InvokeToken);
+        _api.NotNull().Reconciler.Delivered += Count;
         try
         {
-            var results = await _api.Reconciler.DeliverAmong(
-                [ended, queued, ended, "no-such-run", ended],
-                CancellationToken.None
-            );
+            var results = await _api.NotNull()
+                .Reconciler.DeliverAmong(
+                    [ended, queued, ended, "no-such-run", ended],
+                    CancellationToken.None
+                );
 
             results
                 .Should()
@@ -131,7 +137,7 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
         }
         finally
         {
-            _api.Reconciler.Delivered -= Count;
+            _api.NotNull().Reconciler.Delivered -= Count;
         }
 
         deliveries
@@ -146,40 +152,40 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
     [Test]
     public async Task A_row_this_host_cannot_read_is_tried_again_only_after_a_growing_wait()
     {
-        var time = new ManualTime(DateTimeOffset.UtcNow);
-        _api.Reconciler.Time = time;
+        var time = new ManualTime(TimeProvider.System.GetUtcNow());
+        _api.NotNull().Reconciler.Time = time;
         var token = await StartedToken();
-        await _worker.DispatchAndRun(token);
+        await _worker.NotNull().DispatchAndRun(token);
 
         // Written by a newer definition than this host's: it cannot read the snapshot.
         await SetVersion(token, 2);
 
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
             .BeOfType<InvokeDelivery.NotHere>();
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .BeEmpty("the row waits before it is tried, and its failure logged, again");
-        (await _api.Reconciler.DeliverAmong([token], CancellationToken.None))
+        (await _api.NotNull().Reconciler.DeliverAmong([token], CancellationToken.None))
             .Should()
             .BeEmpty("a notice does not cut the wait short");
 
         time.Advance(InvokeOutcomeReconciler.NotHereBackoff + TimeSpan.FromSeconds(1));
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
             .BeOfType<InvokeDelivery.NotHere>();
 
         time.Advance(InvokeOutcomeReconciler.NotHereBackoff + TimeSpan.FromSeconds(1));
-        (await _api.Sweep()).Should().BeEmpty("the second wait is twice the first");
+        (await _api.NotNull().Sweep()).Should().BeEmpty("the second wait is twice the first");
 
         // A host that can read it again applies the outcome once its wait is over.
         await SetVersion(token, 1);
         time.Advance(InvokeOutcomeReconciler.NotHereBackoffCap);
-        (await _api.Sweep())
+        (await _api.NotNull().Sweep())
             .Should()
             .ContainSingle()
             .Which.Should()
@@ -188,27 +194,37 @@ public class InvokeOutcomeReconcilerTests(ClusterStore store)
 
     private async Task<string> StartedToken()
     {
-        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
-        return (await _api.Row(instance.Id, SystemStepMachine.MachineId))!.InvokeToken!;
+        var instance = await _api.NotNull()
+            .Start(StepMachine.Context(InvokedStepModes.Ok))
+            .ConfigureAwait(false);
+        return (
+            await _api.NotNull().Row(instance.Id, SystemStepMachine.MachineId).ConfigureAwait(false)
+        )
+            .NotNull()
+            .InvokeToken.NotNull();
     }
 
     private async Task<SnapshotDraft?> RowHolding(string token)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         return await scope
             .ServiceProvider.GetRequiredService<IDataContext>()
             .SnapshotDrafts.AsNoTracking()
-            .SingleOrDefaultAsync(d => d.InvokeToken == token);
+            .SingleOrDefaultAsync(d => d.InvokeToken == token)
+            .ConfigureAwait(false);
     }
 
     private async Task SetVersion(string token, int version)
     {
-        using var scope = _api.Services.CreateScope();
+        var scope = _api.NotNull().Services.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         (
             await scope
                 .ServiceProvider.GetRequiredService<IDataContext>()
                 .SnapshotDrafts.Where(d => d.InvokeToken == token)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.Version, version))
+                .ConfigureAwait(false)
         )
             .Should()
             .Be(1);

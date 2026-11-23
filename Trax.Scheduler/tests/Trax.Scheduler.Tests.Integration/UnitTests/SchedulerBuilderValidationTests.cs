@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -249,7 +250,7 @@ public class SchedulerBuilderValidationTests
 
         var options = services.BuildServiceProvider().GetService<LocalWorkerOptions>();
         options.Should().NotBeNull();
-        options!.WorkerCount.Should().Be(8);
+        options.NotNull().WorkerCount.Should().Be(8);
     }
 
     #endregion
@@ -570,7 +571,3 @@ public class SchedulerBuilderValidationTests
 
     #endregion
 }
-
-internal interface ITestTrain { }
-
-internal interface ITestTrainB { }

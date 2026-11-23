@@ -12,6 +12,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -50,7 +51,7 @@ public class RunProgressInvokedRunE2ETests
 
     private const string EventFields = "sequence state problem { code }";
 
-    private IHost _host = null!;
+    private IHost? _host;
 
     [OneTimeSetUp]
     public async Task StartHost()
@@ -59,7 +60,7 @@ public class RunProgressInvokedRunE2ETests
         // The scheduler's workers and the machines' listeners need more than the AuthE2E pool of 8.
         var connectionString = AuthE2EHost
             .ConnectionString(Database)
-            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20");
+            .Replace("Maximum Pool Size=8", "Maximum Pool Size=20", StringComparison.Ordinal);
 
         _host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -97,8 +98,8 @@ public class RunProgressInvokedRunE2ETests
                         services.AddTraxGraphQL(graphql =>
                             graphql.UsePersistedOperations(po =>
                                 po.SingleNode()
-                                    .RequirePersisted(false)
-                                    .LogNonPersistedRequests(true)
+                                    .RequirePersisted(require: false)
+                                    .LogNonPersistedRequests(log: true)
                             )
                         );
                     })
@@ -112,15 +113,15 @@ public class RunProgressInvokedRunE2ETests
                     })
             )
             .Build();
-        await _host.StartAsync();
+        await _host.NotNull().StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task StopHost()
     {
         ProgressMarkerTrain.Gate.TrySetResult();
-        await _host.StopAsync();
-        _host.Dispose();
+        await _host.NotNull().StopAsync();
+        _host?.Dispose();
     }
 
     [Test]
@@ -129,11 +130,14 @@ public class RunProgressInvokedRunE2ETests
         ProgressMarkerTrain.Reset(open: false);
         var id = await StartAsync(AliceKey);
         var runId = await GoAsync(AliceKey, id);
-        await ProgressMarkerTrain.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await ProgressMarkerTrain.Waiting.Task.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TimeProvider.System
+        );
 
         // Older than its lifetime, then swept: the draft goes, and its run is asked to cancel.
         await ExpireAsync(id);
-        await _host.Services.GetRequiredService<DraftSweeper>().SweepOnce();
+        await _host.NotNull().Services.GetRequiredService<DraftSweeper>().SweepOnce();
         (await DraftExistsAsync(id)).Should().BeFalse("the draft outlived its lifetime");
 
         (await ReadAsync(runId, AliceKey))
@@ -151,7 +155,10 @@ public class RunProgressInvokedRunE2ETests
             .Should()
             .Be("NOT_FOUND");
 
-        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(_host, AliceKey);
+        await using var alice = await RunProgressE2ETests.Socket.ConnectAsync(
+            _host.NotNull(),
+            AliceKey
+        );
         await alice.SubscribeAsync(
             $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
         );
@@ -176,25 +183,31 @@ public class RunProgressInvokedRunE2ETests
 
     private async Task<Guid> StartAsync(string apiKey)
     {
-        using var doc = await _host.PostGraphQLAsync(
-            $$"""mutation { machines { errand { start(input: { note: "{{RunProgressE2ETests.Marker}}" }, requestId: "{{Guid.NewGuid():N}}") { id problem { code message } } } } }""",
-            r => r.Headers.Add("X-Api-Key", apiKey)
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostGraphQLAsync(
+                $$"""mutation { machines { errand { start(input: { note: "{{RunProgressE2ETests.Marker}}" }, requestId: "{{Guid.NewGuid():N}}") { id problem { code message } } } } }""",
+                r => r.Headers.Add("X-Api-Key", apiKey)
+            )
+            .ConfigureAwait(false);
         var start = Answer(doc, "start");
         start.GetProperty("problem").ValueKind.Should().Be(JsonValueKind.Null, start.GetRawText());
-        return Guid.Parse(start.GetProperty("id").GetString()!);
+        return Guid.Parse(start.GetProperty("id").GetString().NotNull());
     }
 
     // Enters the invoking state and answers the run it queued, as its owner reads it from the event's answer.
     private async Task<string> GoAsync(string apiKey, Guid id)
     {
-        using var doc = await _host.PostGraphQLAsync(
-            $$"""mutation { machines { errand { go(id: "{{id}}", requestId: "{{Guid.NewGuid():N}}") { state invokedRun { runId } problem { code message } } } } }""",
-            r => r.Headers.Add("X-Api-Key", apiKey)
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostGraphQLAsync(
+                $$"""mutation { machines { errand { go(id: "{{id}}", requestId: "{{Guid.NewGuid():N}}") { state invokedRun { runId } problem { code message } } } } }""",
+                r => r.Headers.Add("X-Api-Key", apiKey)
+            )
+            .ConfigureAwait(false);
         var go = Answer(doc, "go");
         go.GetProperty("state").GetString().Should().Be("Running", go.GetRawText());
-        return go.GetProperty("invokedRun").GetProperty("runId").GetString()!;
+        return go.GetProperty("invokedRun").GetProperty("runId").GetString().NotNull();
     }
 
     private static JsonElement Answer(JsonDocument doc, string field)
@@ -212,10 +225,13 @@ public class RunProgressInvokedRunE2ETests
 
     private async Task<JsonElement> ReadAsync(string runId, string apiKey)
     {
-        using var doc = await _host.PostGraphQLAsync(
-            $$"""{ runProgress(runId: "{{runId}}") { runId state problem { code } } }""",
-            r => r.Headers.Add("X-Api-Key", apiKey)
-        );
+        using var doc = await _host
+            .NotNull()
+            .PostGraphQLAsync(
+                $$"""{ runProgress(runId: "{{runId}}") { runId state problem { code } } }""",
+                r => r.Headers.Add("X-Api-Key", apiKey)
+            )
+            .ConfigureAwait(false);
         doc.RootElement.TryGetProperty("errors", out var errors)
             .Should()
             .BeFalse(errors.ToString());
@@ -225,103 +241,45 @@ public class RunProgressInvokedRunE2ETests
     // The store stamps every write with now; this makes the draft look created and last written an hour ago.
     private async Task ExpireAsync(Guid id)
     {
-        var past = DateTimeOffset.UtcNow.AddHours(-1);
-        await using var db = await _host
+        var past = TimeProvider.System.GetUtcNow().AddHours(-1);
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        await db
-            .SnapshotDrafts.Where(x => x.Id == id && x.Machine == ErrandMachine.MachineId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(x => x.CreatedAt, past).SetProperty(x => x.UpdatedAt, past)
-            );
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            await db
+                .SnapshotDrafts.Where(x => x.Id == id && x.Machine == ErrandMachine.MachineId)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(x => x.CreatedAt, past).SetProperty(x => x.UpdatedAt, past)
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<bool> DraftExistsAsync(Guid id)
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        return await db
-            .SnapshotDrafts.AsNoTracking()
-            .AnyAsync(x => x.Id == id && x.Machine == ErrandMachine.MachineId);
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db
+                .SnapshotDrafts.AsNoTracking()
+                .AnyAsync(x => x.Id == id && x.Machine == ErrandMachine.MachineId)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>The snapshot user key is the authenticated caller's principal id.</summary>
     private sealed class CallerPrincipal(TraxCaller caller) : ISnapshotPrincipal
     {
-        public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal!.Id : null;
+        public string? CurrentUserKey =>
+            caller.IsAuthenticated ? caller.Principal.NotNull().Id : null;
     }
 
     #endregion
-}
-
-public enum ErrandState
-{
-    Idle,
-    Running,
-    Done,
-    Failed,
-    Cancelled,
-}
-
-public enum ErrandTrigger
-{
-    Go,
-}
-
-public sealed record ErrandContext
-{
-    public string? Note { get; init; }
-
-    public string? Echo { get; init; }
-}
-
-public sealed record ErrandStartInput
-{
-    public string Note { get; init; } = "";
-}
-
-/// <summary>
-/// A user's errand: <c>Go</c> enters <c>Running</c>, which invokes <see cref="IProgressMarkerTrain"/>. Registered
-/// only by <see cref="RunProgressInvokedRunE2ETests"/>.
-/// </summary>
-[TraxMachine]
-public sealed class ErrandMachine : Machine<ErrandState, ErrandTrigger>
-{
-    public const string MachineId = "errand";
-
-    protected override void Configure(IMachineBuilder<ErrandState, ErrandTrigger> m)
-    {
-        m.Id(MachineId).Version(1).StartsAt(ErrandState.Idle, () => new JsonObject());
-        m.Start<ErrandStartInput>(s =>
-            s.Reduce(Set((ErrandContext c) => c.Note).FromInput((ErrandStartInput i) => i.Note))
-                .AnyAuthenticated()
-        );
-        m.Get(r => r.OwnerOnly());
-        m.Watch(r => r.OwnerOnly());
-        m.Discard(r => r.OwnerOnly());
-
-        m.In(ErrandState.Idle)
-            .Context<ErrandContext>()
-            .On(ErrandTrigger.Go)
-            .AnyAuthenticated()
-            .To(ErrandState.Running);
-
-        m.In(ErrandState.Running)
-            .Context<ErrandContext>()
-            .Invokes<IProgressMarkerTrain, ProgressMarkerInput, ProgressMarkerOutput>(
-                ctx => new ProgressMarkerInput { Note = ctx["note"]?.GetValue<string>() ?? "" }
-            )
-            .OnDone(
-                ErrandState.Done,
-                reduce: Set((ErrandContext c) => c.Echo)
-                    .FromInput((ProgressMarkerOutput o) => o.Echo)
-            )
-            .OnFailed(ErrandState.Failed)
-            .OnCancelled(ErrandState.Cancelled);
-
-        m.In(ErrandState.Done).Context<ErrandContext>();
-        m.In(ErrandState.Failed).Context<ErrandContext>();
-        m.In(ErrandState.Cancelled).Context<ErrandContext>();
-    }
 }

@@ -31,7 +31,13 @@ public static class RepoConventionGuards
                 .FirstOrDefault()
                 ?.Value.Trim();
 
-            if (version != options.ExpectedDirectoryBuildPropsVersion)
+            if (
+                !string.Equals(
+                    version,
+                    options.ExpectedDirectoryBuildPropsVersion,
+                    StringComparison.Ordinal
+                )
+            )
                 offenders.Add(
                     $"Directory.Build.props <Version> is '{version ?? "<missing>"}', expected "
                         + $"'{options.ExpectedDirectoryBuildPropsVersion}'"
@@ -61,25 +67,7 @@ public static class RepoConventionGuards
         var offenders = new List<string>();
         var inspected = 0;
 
-        // Collect the centrally-pinned package ids from Directory.Packages.props (if present).
-        var centralPins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var cpmPath = Path.Combine(root, "Directory.Packages.props");
-        if (File.Exists(cpmPath))
-        {
-            try
-            {
-                foreach (var pv in XDocument.Load(cpmPath).Descendants("PackageVersion"))
-                {
-                    var id = pv.Attribute("Include")?.Value;
-                    if (id is not null)
-                        centralPins.Add(id);
-                }
-            }
-            catch (Exception ex)
-            {
-                offenders.Add($"Directory.Packages.props (could not parse: {ex.Message})");
-            }
-        }
+        var centralPins = CentralPins(root, offenders);
 
         foreach (var csproj in SourceFiles.ProjectsUnder(root))
         {
@@ -100,35 +88,7 @@ public static class RepoConventionGuards
             }
 
             foreach (var reference in doc.Descendants("PackageReference"))
-            {
-                var include = reference.Attribute("Include")?.Value;
-                if (
-                    include is null
-                    || !include.StartsWith(options.TraxPackagePrefix, StringComparison.Ordinal)
-                )
-                    continue;
-
-                var version =
-                    reference.Attribute("Version")?.Value ?? reference.Element("Version")?.Value;
-
-                // VersionOverride sidesteps the central pin just as an inline Version does.
-                var versionOverride =
-                    reference.Attribute("VersionOverride")?.Value
-                    ?? reference.Element("VersionOverride")?.Value;
-
-                if (version is not null)
-                    offenders.Add(
-                        $"{rel} -> {include} carries inline Version=\"{version}\" (must be centrally managed)"
-                    );
-                else if (versionOverride is not null)
-                    offenders.Add(
-                        $"{rel} -> {include} carries VersionOverride=\"{versionOverride}\" (must be centrally managed)"
-                    );
-                else if (!centralPins.Contains(include))
-                    offenders.Add(
-                        $"{rel} -> {include} has no <PackageVersion> pin in Directory.Packages.props"
-                    );
-            }
+                CheckTraxReference(reference, rel, options, centralPins, offenders);
         }
 
         var message =
@@ -139,5 +99,66 @@ public static class RepoConventionGuards
             + string.Join("\n  ", offenders);
 
         return new GuardResult(offenders, inspected, message);
+    }
+
+    // Collect the centrally-pinned package ids from Directory.Packages.props (if present).
+    private static HashSet<string> CentralPins(string root, List<string> offenders)
+    {
+        var centralPins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var cpmPath = Path.Combine(root, "Directory.Packages.props");
+        if (File.Exists(cpmPath))
+        {
+            try
+            {
+                foreach (var pv in XDocument.Load(cpmPath).Descendants("PackageVersion"))
+                {
+                    var id = pv.Attribute("Include")?.Value;
+                    if (id is not null)
+                        centralPins.Add(id);
+                }
+            }
+            catch (Exception ex)
+            {
+                offenders.Add($"Directory.Packages.props (could not parse: {ex.Message})");
+            }
+        }
+
+        return centralPins;
+    }
+
+    private static void CheckTraxReference(
+        XElement reference,
+        string rel,
+        ArchitectureGuardOptions options,
+        HashSet<string> centralPins,
+        List<string> offenders
+    )
+    {
+        var include = reference.Attribute("Include")?.Value;
+        if (
+            include is null
+            || !include.StartsWith(options.TraxPackagePrefix, StringComparison.Ordinal)
+        )
+            return;
+
+        var version = reference.Attribute("Version")?.Value ?? reference.Element("Version")?.Value;
+
+        // VersionOverride sidesteps the central pin just as an inline Version does.
+        var versionOverride =
+            reference.Attribute("VersionOverride")?.Value
+            ?? reference.Element("VersionOverride")?.Value;
+
+        if (version is not null)
+            offenders.Add(
+                $"{rel} -> {include} carries inline Version=\"{version}\" (must be centrally managed)"
+            );
+        else if (versionOverride is not null)
+            offenders.Add(
+                $"{rel} -> {include} carries VersionOverride=\"{versionOverride}\" (must be centrally managed)"
+            );
+        else if (!centralPins.Contains(include))
+            offenders.Add(
+                $"{rel} -> {include} has no <PackageVersion> pin in Directory.Packages.props"
+            );
     }
 }

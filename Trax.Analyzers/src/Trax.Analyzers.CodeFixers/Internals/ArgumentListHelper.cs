@@ -1,0 +1,237 @@
+namespace Trax.Analyzers.Internals;
+
+/// <summary>
+/// Creates the argument lists of the code fixes that add an argument to an invocation.
+/// </summary>
+internal static class ArgumentListHelper
+{
+    /// <summary>
+    /// Creates a copy of <paramref name="invocationExpression"/> with an additional argument bound to the parameter
+    /// named <paramref name="parameterName"/>, declared at the index <paramref name="parameterIndex"/> of the invoked
+    /// overload, or <see langword="null"/> when the argument cannot be added without changing how the invocation binds.
+    /// </summary>
+    /// <param name="parameterIndex">The index of the parameter in the overload the invocation must be bound to after the fix.</param>
+    /// <param name="parameterName">The name of that parameter.</param>
+    /// <param name="argumentExpression">The expression of the argument to add.</param>
+    /// <param name="isExpectedParameter">Validates the parameter the new argument is bound to.</param>
+    /// <param name="overload">The overload the invocation must be bound to after the fix, when it is known. It is used to rename the existing named arguments when the overload declares the parameters with other names.</param>
+    /// <param name="namespaceToImport">The namespace the fix imports to call the overload, when it is an extension method declared in a namespace that is not imported. The new invocation is bound as if the namespace was imported.</param>
+    public static InvocationExpressionSyntax? AddArgument(
+        SemanticModel semanticModel,
+        SyntaxGenerator generator,
+        InvocationExpressionSyntax invocationExpression,
+        int parameterIndex,
+        string parameterName,
+        SyntaxNode argumentExpression,
+        Func<IParameterSymbol, bool> isExpectedParameter,
+        IMethodSymbol? overload = null,
+        string? namespaceToImport = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (parameterIndex < 0)
+            return null;
+
+        var bindingContext = new BindingContext(semanticModel, invocationExpression, namespaceToImport, cancellationToken);
+        var arguments = invocationExpression.ArgumentList.Arguments;
+
+        // A positional argument can only be added at the index of the parameter when all the arguments written before it are positional.
+        // Otherwise, C# does not allow it (CS1738, CS1739, CS8323) or it would be bound to another parameter.
+        if (parameterIndex <= arguments.Count && !arguments.Take(parameterIndex).Any(argument => argument.NameColon is not null))
+        {
+            var positionalArgument = (ArgumentSyntax)generator.Argument(argumentExpression);
+            var candidate = WithArguments(invocationExpression, arguments.Insert(parameterIndex, positionalArgument));
+            if (GetBoundParameter(bindingContext, candidate, parameterIndex) is { } parameter && isExpectedParameter(parameter))
+                return candidate;
+        }
+
+        // The new parameter shifts the parameters declared after it, so the positional arguments written at their
+        // positions would be bound to other parameters once the argument is added at the end of the list.
+        for (var i = parameterIndex; i < arguments.Count; i++)
+        {
+            if (arguments[i].NameColon is null)
+                return null;
+        }
+
+        var namedArgument = (ArgumentSyntax)generator.Argument(parameterName, RefKind.None, argumentExpression);
+
+        // A named argument added at the end of the list is valid whatever the order of the existing arguments, and keeps their evaluation order
+        var namedCandidate = WithArguments(invocationExpression, arguments.Add(namedArgument));
+        if (GetBoundParameter(bindingContext, namedCandidate, parameterName) is { } namedParameter && isExpectedParameter(namedParameter))
+            return namedCandidate;
+
+        // The overload can declare the parameters with other names, in which case the existing named arguments must be renamed
+        if (overload is not null && RenameArguments(semanticModel, invocationExpression, parameterIndex, overload, cancellationToken) is { } renamedArguments)
+        {
+            var renamedCandidate = WithArguments(invocationExpression, renamedArguments.Add(namedArgument));
+            if (GetBoundParameter(bindingContext, renamedCandidate, parameterName) is { } renamedParameter && isExpectedParameter(renamedParameter))
+                return renamedCandidate;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a copy of <paramref name="invocationExpression"/> with the arguments <paramref name="arguments"/>.
+    /// </summary>
+    public static InvocationExpressionSyntax WithArguments(InvocationExpressionSyntax invocationExpression, SeparatedSyntaxList<ArgumentSyntax> arguments)
+    {
+        return invocationExpression.WithArgumentList(invocationExpression.ArgumentList.WithArguments(arguments));
+    }
+
+    /// <summary>
+    /// Gets the method <paramref name="newInvocation"/> would be bound to at the position of <paramref name="invocationExpression"/>,
+    /// so a code fix is only offered when the new invocation compiles and its arguments are bound to the expected parameters.
+    /// </summary>
+    /// <param name="namespaceToImport">The namespace the fix imports, if any. The new invocation is bound as if the namespace was imported.</param>
+    public static IMethodSymbol? GetTargetMethod(SemanticModel semanticModel, InvocationExpressionSyntax invocationExpression, InvocationExpressionSyntax newInvocation, string? namespaceToImport = null, CancellationToken cancellationToken = default)
+    {
+        return new BindingContext(semanticModel, invocationExpression, namespaceToImport, cancellationToken).GetTargetMethod(newInvocation);
+    }
+
+    private static IParameterSymbol? GetBoundParameter(BindingContext bindingContext, InvocationExpressionSyntax newInvocation, int parameterIndex)
+    {
+        var method = bindingContext.GetTargetMethod(newInvocation);
+        if (method is null || parameterIndex >= method.Parameters.Length)
+            return null;
+
+        return method.Parameters[parameterIndex];
+    }
+
+    private static IParameterSymbol? GetBoundParameter(BindingContext bindingContext, InvocationExpressionSyntax newInvocation, string parameterName)
+    {
+        var method = bindingContext.GetTargetMethod(newInvocation);
+        return method?.Parameters.FirstOrDefault(parameter => string.Equals(parameter.Name, parameterName, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Binds the new invocations at the position of the original invocation. When the fix imports a namespace, the invocations are
+    /// bound in a copy of the compilation where the document imports the namespace, as the new overload is not in scope otherwise.
+    /// The copy is only created when an invocation is bound, and is shared by the invocations bound with the same context.
+    /// When the original invocation is part of a conditional access (<c>x?.M()</c>), its receiver is only known in the conditional
+    /// access expression, so it cannot be bound speculatively: each new invocation is bound in a copy of the compilation where it
+    /// replaces the original invocation.
+    /// </summary>
+    private sealed class BindingContext(SemanticModel semanticModel, InvocationExpressionSyntax invocationExpression, string? namespaceToImport, CancellationToken cancellationToken)
+    {
+        private readonly bool _isInConditionalAccess = IsInConditionalAccess(invocationExpression.Expression);
+
+        // An attribute argument must be a constant (CS0182), so an invocation cannot be one, and the speculative binding can throw there
+        private readonly bool _isInAttributeArgument = invocationExpression.FirstAncestorOrSelf<AttributeArgumentSyntax>() is not null;
+
+        private (SemanticModel SemanticModel, int Position)? _bindingLocation;
+
+        public IMethodSymbol? GetTargetMethod(InvocationExpressionSyntax newInvocation)
+        {
+            if (_isInAttributeArgument)
+                return null;
+
+            if (_isInConditionalAccess)
+            {
+                var (newSemanticModel, newNode) = ReplaceInvocation(newInvocation);
+                return newSemanticModel.GetSymbolInfo(newNode, cancellationToken).Symbol as IMethodSymbol;
+            }
+
+            var (bindingSemanticModel, position) = _bindingLocation ??= CreateBindingLocation();
+            return bindingSemanticModel.GetSpeculativeSymbolInfo(position, newInvocation, SpeculativeBindingOption.BindAsExpression).Symbol as IMethodSymbol;
+        }
+
+        private (SemanticModel SemanticModel, int Position) CreateBindingLocation()
+        {
+            if (namespaceToImport is null)
+                return (semanticModel, invocationExpression.SpanStart);
+
+            var (newSemanticModel, newNode) = ReplaceInvocation(invocationExpression);
+            return (newSemanticModel, newNode.SpanStart);
+        }
+
+        /// <summary>
+        /// Creates a copy of the compilation where <paramref name="newInvocation"/> replaces the original invocation, and the document
+        /// imports <c>namespaceToImport</c> if any, and returns the node of <paramref name="newInvocation"/> in the new syntax tree.
+        /// </summary>
+        private (SemanticModel SemanticModel, SyntaxNode Node) ReplaceInvocation(InvocationExpressionSyntax newInvocation)
+        {
+            var syntaxTree = invocationExpression.SyntaxTree;
+            var annotation = new SyntaxAnnotation();
+            var root = syntaxTree.GetRoot(cancellationToken).ReplaceNode(invocationExpression, newInvocation.WithAdditionalAnnotations(annotation));
+            if (namespaceToImport is not null)
+            {
+                root = UsingDirectiveHelper.AddUsingDirective(root, root.GetAnnotatedNodes(annotation).First(), namespaceToImport);
+            }
+
+            var newSyntaxTree = syntaxTree.WithRootAndOptions(root, syntaxTree.Options);
+            var newSemanticModel = semanticModel.Compilation.ReplaceSyntaxTree(syntaxTree, newSyntaxTree).GetSemanticModel(newSyntaxTree);
+            return (newSemanticModel, newSyntaxTree.GetRoot(cancellationToken).GetAnnotatedNodes(annotation).First());
+        }
+
+        /// <summary>
+        /// Indicates whether <paramref name="expression"/> starts with a member binding (<c>.M</c>) or an element binding (<c>[0]</c>),
+        /// whose receiver is the expression of the enclosing conditional access.
+        /// </summary>
+        private static bool IsInConditionalAccess(ExpressionSyntax expression)
+        {
+            return expression switch
+            {
+                MemberBindingExpressionSyntax or ElementBindingExpressionSyntax => true,
+                MemberAccessExpressionSyntax memberAccess => IsInConditionalAccess(memberAccess.Expression),
+                InvocationExpressionSyntax invocation => IsInConditionalAccess(invocation.Expression),
+                ElementAccessExpressionSyntax elementAccess => IsInConditionalAccess(elementAccess.Expression),
+                ConditionalAccessExpressionSyntax conditionalAccess => IsInConditionalAccess(conditionalAccess.Expression),
+                PostfixUnaryExpressionSyntax postfixUnary => IsInConditionalAccess(postfixUnary.Operand),
+                _ => false,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Binds the arguments of <paramref name="invocationExpression"/> to the parameters of <paramref name="overload"/>,
+    /// renaming the named arguments when the overload declares the parameters with other names, or returns
+    /// <see langword="null"/> when the arguments cannot be reused.
+    /// </summary>
+    private static SeparatedSyntaxList<ArgumentSyntax>? RenameArguments(SemanticModel semanticModel, InvocationExpressionSyntax invocationExpression, int parameterIndex, IMethodSymbol overload, CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetOperation(invocationExpression, cancellationToken) is not IInvocationOperation invocationOperation)
+            return null;
+
+        var arguments = invocationExpression.ArgumentList.Arguments;
+        var newArguments = arguments;
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            var argument = arguments[i];
+            if (argument.NameColon is null)
+                continue;
+
+            var parameter = GetParameter(invocationOperation, argument);
+            if (parameter is null)
+                return null;
+
+            // The new parameter shifts the parameters declared after it
+            var overloadParameterIndex = parameter.Ordinal < parameterIndex ? parameter.Ordinal : parameter.Ordinal + 1;
+            if (overloadParameterIndex >= overload.Parameters.Length)
+                return null;
+
+            // The overload can declare the parameters in a different order, in which case the arguments cannot be reused
+            var overloadParameter = overload.Parameters[overloadParameterIndex];
+            if (!overloadParameter.Type.IsEqualTo(parameter.Type))
+                return null;
+
+            if (!string.Equals(argument.NameColon.Name.Identifier.ValueText, overloadParameter.Name, StringComparison.Ordinal))
+            {
+                var newArgument = argument.WithNameColon(argument.NameColon.WithName(SyntaxFactory.IdentifierName(overloadParameter.Name)));
+                newArguments = newArguments.Replace(newArguments[i], newArgument);
+            }
+        }
+
+        return newArguments;
+
+        static IParameterSymbol? GetParameter(IInvocationOperation invocationOperation, ArgumentSyntax argument)
+        {
+            foreach (var argumentOperation in invocationOperation.Arguments)
+            {
+                if (argumentOperation.Syntax == argument)
+                    return argumentOperation.Parameter;
+            }
+
+            return null;
+        }
+    }
+}

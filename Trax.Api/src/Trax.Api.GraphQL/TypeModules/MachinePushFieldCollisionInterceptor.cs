@@ -46,7 +46,7 @@ internal sealed class MachinePushFieldCollisionInterceptor : TypeInterceptor
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p =>
                 $"The machine '{p.Value}' is pushed on the subscription field '{p.Key}', which "
-                + string.Join(" and ", _others[p.Key].Distinct())
+                + string.Join(" and ", _others[p.Key].Distinct(StringComparer.Ordinal))
                 + " already puts there. Give the machine another id, or rename the other field."
             )
             .ToList();
@@ -57,7 +57,11 @@ internal sealed class MachinePushFieldCollisionInterceptor : TypeInterceptor
     private static bool OnSubscriptionRoot(ObjectTypeConfiguration type) =>
         type.RuntimeType == typeof(LifecycleSubscriptions)
         || type.ExtendsType == typeof(LifecycleSubscriptions)
-        || type.Name == MachineChangedSubscription.SubscriptionType;
+        || string.Equals(
+            type.Name,
+            MachineChangedSubscription.SubscriptionType,
+            StringComparison.Ordinal
+        );
 
     private static string Owner(TypeSystemObject type, ObjectFieldConfiguration field)
     {

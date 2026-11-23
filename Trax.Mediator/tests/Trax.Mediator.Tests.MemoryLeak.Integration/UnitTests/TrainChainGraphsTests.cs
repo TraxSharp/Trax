@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
@@ -30,12 +31,16 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
-        var graph = graphs.Find(typeof(IGraphedTrain).FullName!);
+        var graph = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
         graph.Should().NotBeNull();
-        graph!.Train.Should().Be(typeof(GraphedTrain).FullName);
+        graph.NotNull().Train.Should().Be(typeof(GraphedTrain).FullName);
         graph.Input.Should().Be(nameof(GraphInput));
         graph.Nodes.Select(n => n.Id).Should().Equal("TextToCount#0", "CountToFlag#0", "Resolve#0");
     }
@@ -47,10 +52,14 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
-        var first = graphs.Find(typeof(IGraphedTrain).FullName!);
-        var second = graphs.Find(typeof(IGraphedTrain).FullName!);
+        var first = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
+        var second = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
         second.Should().BeSameAs(first);
         GraphedTrain.Declared.Should().Be(1, "a chain cannot change while the host runs");
@@ -63,19 +72,26 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
-        var declared = graphs.FindDeclared(typeof(IGraphedTrain).FullName!);
-        var graph = graphs.Find(typeof(IGraphedTrain).FullName!);
+        var declared = graphs.FindDeclared(typeof(IGraphedTrain).FullName.NotNull());
+        var graph = graphs.Find(typeof(IGraphedTrain).FullName.NotNull());
 
         declared.Should().NotBeNull();
-        declared!.Train.Should().Be(typeof(GraphedTrain));
+        declared.NotNull().Train.Should().Be(typeof(GraphedTrain));
         declared.Input.Should().Be(typeof(GraphInput));
         declared.Output.Should().Be(typeof(bool));
         ChainGraph
             .From(declared.Chain, declared.Train, declared.Input, declared.Output)
             .Hash.Should()
-            .Be(graph!.Hash, "a resume is checked against the chain the graph is drawn from");
+            .Be(
+                graph.NotNull().Hash,
+                "a resume is checked against the chain the graph is drawn from"
+            );
         GraphedTrain.Declared.Should().Be(1, "the graph and the chain are read together");
         graphs.FindDeclared("System.IO.File").Should().BeNull();
     }
@@ -91,7 +107,11 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IGraphedTrain, GraphedTrain>()
         );
-        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IGraphedTrain, GraphedTrain>(),
+            new ManualTime()
+        );
 
         graphs
             .Find(name)
@@ -108,9 +128,13 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IUnbuildableTrain, UnbuildableTrain>()
         );
-        var graphs = Graphs(provider, Registration<IUnbuildableTrain, UnbuildableTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IUnbuildableTrain, UnbuildableTrain>(),
+            new ManualTime()
+        );
 
-        graphs.Find(typeof(IUnbuildableTrain).FullName!).Should().BeNull();
+        graphs.Find(typeof(IUnbuildableTrain).FullName.NotNull()).Should().BeNull();
     }
 
     [Test]
@@ -119,10 +143,14 @@ public class TrainChainGraphsTests
         await using var provider = Provider(services =>
             services.AddScoped<IRequestOnlyTrain, RequestOnlyTrain>()
         );
-        var graphs = Graphs(provider, Registration<IRequestOnlyTrain, RequestOnlyTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IRequestOnlyTrain, RequestOnlyTrain>(),
+            new ManualTime()
+        );
 
         graphs
-            .Find(typeof(IRequestOnlyTrain).FullName!)
+            .Find(typeof(IRequestOnlyTrain).FullName.NotNull())
             .Should()
             .NotBeNull("reading a declaration needs the class, not the request");
     }
@@ -135,10 +163,14 @@ public class TrainChainGraphsTests
                 .AddScoped<AsyncOnlyDisposable>()
                 .AddScoped<IAsyncDependentTrain, AsyncDependentTrain>()
         );
-        var graphs = Graphs(provider, Registration<IAsyncDependentTrain, AsyncDependentTrain>());
+        var graphs = Graphs(
+            provider,
+            Registration<IAsyncDependentTrain, AsyncDependentTrain>(),
+            new ManualTime()
+        );
 
         graphs
-            .Find(typeof(IAsyncDependentTrain).FullName!)
+            .Find(typeof(IAsyncDependentTrain).FullName.NotNull())
             .Should()
             .NotBeNull("the scope it was built in is disposed asynchronously, as a request's is");
     }
@@ -153,7 +185,7 @@ public class TrainChainGraphsTests
         );
         var time = new ManualTime();
         var graphs = Graphs(provider, Registration<IFlakyTrain, FlakyTrain>(), time);
-        var name = typeof(IFlakyTrain).FullName!;
+        var name = typeof(IFlakyTrain).FullName.NotNull();
 
         graphs.Find(name).Should().BeNull("building the train failed");
         var attempts = FlakyTrain.Built;
@@ -240,7 +272,7 @@ public class TrainChainGraphsTests
             IsMutation = false,
             IsRemote = false,
             IsBroadcastEnabled = false,
-            GraphQLOperations = 0,
+            GraphQLOperations = (Trax.Effect.Attributes.GraphQLOperation)0,
         };
 
     public sealed record GraphInput(string Text);
@@ -259,11 +291,17 @@ public class TrainChainGraphsTests
 
     public class GraphedTrain : ServiceTrain<GraphInput, bool>, IGraphedTrain
     {
-        public static int Declared;
+        private static int _declared;
+
+        public static int Declared
+        {
+            get => Volatile.Read(ref _declared);
+            set => Volatile.Write(ref _declared, value);
+        }
 
         protected override Task<Either<Exception, bool>> Junctions()
         {
-            Interlocked.Increment(ref Declared);
+            Interlocked.Increment(ref _declared);
             return Chain<TextToCount>().Chain<CountToFlag>().Resolve();
         }
     }
@@ -323,12 +361,18 @@ public class TrainChainGraphsTests
     /// <summary>Fails to build while <see cref="Fails"/> is set, and counts its builds.</summary>
     public class FlakyTrain : ServiceTrain<GraphInput, bool>, IFlakyTrain
     {
-        public static bool Fails;
-        public static int Built;
+        public static bool Fails { get; set; }
+        private static int _built;
+
+        public static int Built
+        {
+            get => Volatile.Read(ref _built);
+            set => Volatile.Write(ref _built, value);
+        }
 
         public FlakyTrain()
         {
-            Interlocked.Increment(ref Built);
+            Interlocked.Increment(ref _built);
             if (Fails)
                 throw new InvalidOperationException("the database is down");
         }

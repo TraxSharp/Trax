@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -38,23 +39,32 @@ public sealed class JunctionEventStream : IAsyncDisposable
     {
         client.ConfigureRequest = request =>
             request.Headers["Sec-WebSocket-Protocol"] = "graphql-transport-ws";
-        var socket = await client.ConnectAsync(
-            new Uri("ws://localhost/trax/graphql"),
-            CancellationToken.None
-        );
+        var socket = await client
+            .ConnectAsync(new Uri("ws://localhost/trax/graphql"), CancellationToken.None)
+            .ConfigureAwait(false);
         var stream = new JunctionEventStream(socket);
 
         // Browsers cannot set headers on a WebSocket upgrade, so the key travels in connection_init.
-        await stream.SendAsync(
-            apiKey is null
-                ? new { type = "connection_init" }
-                : new { type = "connection_init", payload = (object)new { apiKey } }
-        );
-        var ack = await stream.ReceiveAsync(TimeSpan.FromSeconds(5));
-        if (ack.GetProperty("type").GetString() != "connection_ack")
+        await stream
+            .SendAsync(
+                apiKey is null
+                    ? new { type = "connection_init" }
+                    : new { type = "connection_init", payload = (object)new { apiKey } }
+            )
+            .ConfigureAwait(false);
+        var ack = await stream
+            .ReceiveAsync(TimeSpan.FromSeconds(5), stream._stop.Token)
+            .ConfigureAwait(false);
+        if (
+            !string.Equals(
+                ack.GetProperty("type").GetString(),
+                "connection_ack",
+                StringComparison.Ordinal
+            )
+        )
             throw new InvalidOperationException($"Expected connection_ack, got {ack}");
 
-        stream._reader = Task.Run(stream.ReadLoop);
+        stream._reader = Task.Run(stream.ReadLoop, CancellationToken.None);
         return stream;
     }
 
@@ -65,11 +75,14 @@ public sealed class JunctionEventStream : IAsyncDisposable
         return SendAsync(
             new
             {
-                id = metadataId.ToString(),
+                id = metadataId.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 type = "subscribe",
                 payload = new
                 {
-                    query = $"subscription {{ onJunctionEvent(metadataId: {metadataId}) {{ {StepFields} }} }}",
+                    query = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"subscription {{ onJunctionEvent(metadataId: {metadataId}) {{ {StepFields} }} }}"
+                    ),
                 },
             }
         );
@@ -88,15 +101,20 @@ public sealed class JunctionEventStream : IAsyncDisposable
         {
             while (!_stop.IsCancellationRequested && _socket.State == WebSocketState.Open)
             {
-                var message = await ReceiveAsync(Timeout.InfiniteTimeSpan, _stop.Token);
+                var message = await ReceiveAsync(Timeout.InfiniteTimeSpan, _stop.Token)
+                    .ConfigureAwait(false);
                 var type = message.GetProperty("type").GetString();
-                if (type == "ping")
-                    await SendAsync(new { type = "pong" });
-                else if (type == "error")
+                if (string.Equals(type, "ping", StringComparison.Ordinal))
+                    await SendAsync(new { type = "pong" }).ConfigureAwait(false);
+                else if (string.Equals(type, "error", StringComparison.Ordinal))
                     _errors.Enqueue(message.ToString());
                 else if (
-                    type == "next"
-                    && long.TryParse(message.GetProperty("id").GetString(), out var id)
+                    string.Equals(type, "next", StringComparison.Ordinal)
+                    && long.TryParse(
+                        message.GetProperty("id").GetString(),
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var id
+                    )
                 )
                 {
                     var payload = message.GetProperty("payload");
@@ -118,10 +136,17 @@ public sealed class JunctionEventStream : IAsyncDisposable
     private async Task SendAsync(object message)
     {
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
-        await _sending.WaitAsync();
+        await _sending.WaitAsync(_stop.Token).ConfigureAwait(false);
         try
         {
-            await _socket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+            await _socket
+                .SendAsync(
+                    bytes,
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -143,10 +168,10 @@ public sealed class JunctionEventStream : IAsyncDisposable
         WebSocketReceiveResult result;
         do
         {
-            result = await _socket.ReceiveAsync(buffer, cts.Token);
+            result = await _socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new WebSocketException("Closed by the server.");
-            ms.Write(buffer, 0, result.Count);
+            await ms.WriteAsync(buffer, 0, result.Count, cancellationToken).ConfigureAwait(false);
         } while (!result.EndOfMessage);
 
         return JsonSerializer.Deserialize<JsonElement>(ms.ToArray());
@@ -154,18 +179,16 @@ public sealed class JunctionEventStream : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _stop.CancelAsync();
+        await _stop.CancelAsync().ConfigureAwait(false);
         try
         {
             if (_socket.State == WebSocketState.Open)
-                await _socket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "done",
-                    CancellationToken.None
-                );
+                await _socket
+                    .CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                    .ConfigureAwait(false);
         }
         catch (WebSocketException) { }
-        await _reader;
+        await _reader.ConfigureAwait(false);
         _socket.Dispose();
         _stop.Dispose();
         _sending.Dispose();

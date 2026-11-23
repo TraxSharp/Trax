@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -49,7 +51,12 @@ public class SharedNonceStoreTests
         await using var first = RunnerInstance();
         await using var second = RunnerInstance();
         var body = Encoding.UTF8.GetBytes($$"""{"trainName":"{{Guid.NewGuid()}}"}""");
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         (await Verify(first, body, signature)).Should().Be(RunnerRequestVerdict.Accepted);
 
@@ -67,7 +74,12 @@ public class SharedNonceStoreTests
         await using var first = RunnerInstance();
         await using var second = RunnerInstance();
         var body = Encoding.UTF8.GetBytes($$"""{"trainName":"{{Guid.NewGuid()}}"}""");
-        var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+        var signature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            body,
+            TimeProvider.System
+        );
 
         var verdicts = await Task.WhenAll(
             Enumerable
@@ -90,8 +102,15 @@ public class SharedNonceStoreTests
 
         for (var i = 0; i < 4; i++)
         {
-            var body = Encoding.UTF8.GetBytes($$"""{"n":{{i}}}""");
-            var signature = RunnerRequestSignature.Create(Key, RunnerRequestPurpose.Run, body);
+            var body = Encoding.UTF8.GetBytes(
+                string.Create(CultureInfo.InvariantCulture, $$"""{"n":{{i}}}""")
+            );
+            var signature = RunnerRequestSignature.Create(
+                Key,
+                RunnerRequestPurpose.Run,
+                body,
+                TimeProvider.System
+            );
             (await Verify(i % 2 == 0 ? first : second, body, signature))
                 .Should()
                 .Be(RunnerRequestVerdict.Accepted);
@@ -104,7 +123,7 @@ public class SharedNonceStoreTests
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
         var nonce = Convert.ToHexString(Guid.NewGuid().ToByteArray());
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
 
         (await store.TryRecordAsync(nonce, now.AddMinutes(-1), now, CancellationToken.None))
             .Should()
@@ -122,7 +141,7 @@ public class SharedNonceStoreTests
     {
         await using var instance = RunnerInstance();
         var store = instance.GetRequiredService<INonceStore>();
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         var expired = Convert.ToHexString(Guid.NewGuid().ToByteArray());
         await store.TryRecordAsync(expired, now.AddMinutes(-1), now, CancellationToken.None);
 
@@ -139,7 +158,7 @@ public class SharedNonceStoreTests
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM trax.runner_nonce WHERE nonce = @n";
         command.Parameters.AddWithValue("n", expired);
-        ((long)(await command.ExecuteScalarAsync())!)
+        ((long)(await command.ExecuteScalarAsync()).NotNull())
             .Should()
             .Be(0, "the store deletes expired records as it goes");
     }

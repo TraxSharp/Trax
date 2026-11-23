@@ -22,7 +22,11 @@ public class MachineTrainHookOutputTests
             .Assembly.GetTypes()
             .Where(t =>
                 t is { IsClass: true, IsAbstract: false }
-                && t.Namespace == typeof(ISaveSnapshot).Namespace
+                && string.Equals(
+                    t.Namespace,
+                    typeof(ISaveSnapshot).Namespace,
+                    StringComparison.Ordinal
+                )
                 && t.GetInterfaces()
                     .Any(i =>
                         i.IsGenericType

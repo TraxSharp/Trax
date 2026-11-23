@@ -1,5 +1,6 @@
 using GreenDonut;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.DataLoaders.CrossSchema;
 
@@ -32,7 +33,7 @@ public sealed class CrossSchemaLoader<TContext, TEntity>(
 {
     /// <summary>
     /// Loads every requested key in one query against a fresh context from the factory. A key with
-    /// no matching row is absent from the result, so the field resolves to <c>null</c>.
+    /// no matching row is absent from the result, so the field resolves to <see langword="null"/>.
     /// </summary>
     /// <param name="keys">The distinct <c>Id</c> values requested in this batch.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
@@ -41,21 +42,24 @@ public sealed class CrossSchemaLoader<TContext, TEntity>(
         CancellationToken cancellationToken
     )
     {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // EF.Property translates inside the SQL WHERE, but cannot be used as a client-side key
+            // selector, so the rows are materialized and then keyed by reflecting the Id.
+            var rows = await db.Set<TEntity>()
+                .Where(e => keys.Contains(EF.Property<int>(e, "Id")))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
-        // EF.Property translates inside the SQL WHERE, but cannot be used as a client-side key
-        // selector, so the rows are materialized and then keyed by reflecting the Id.
-        var rows = await db.Set<TEntity>()
-            .Where(e => keys.Contains(EF.Property<int>(e, "Id")))
-            .ToListAsync(cancellationToken);
+            var idProperty =
+                typeof(TEntity).GetProperty("Id")
+                ?? throw new InvalidOperationException(
+                    $"{typeof(TEntity).Name} has no Id property; CrossSchemaLoader requires an integer "
+                        + "Id primary key on the target entity."
+                );
 
-        var idProperty =
-            typeof(TEntity).GetProperty("Id")
-            ?? throw new InvalidOperationException(
-                $"{typeof(TEntity).Name} has no Id property; CrossSchemaLoader requires an integer "
-                    + "Id primary key on the target entity."
-            );
-
-        return rows.ToDictionary(row => (int)idProperty.GetValue(row)!);
+            return rows.ToDictionary(row => (int)idProperty.GetValue(row).NotNull());
+        }
     }
 }

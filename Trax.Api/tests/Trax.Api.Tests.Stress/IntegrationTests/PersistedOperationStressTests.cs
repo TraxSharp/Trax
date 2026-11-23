@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Language;
@@ -74,7 +75,9 @@ public class PersistedOperationStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var storage = (IOperationDocumentStorage)Store(sp);
-                var document = await storage.TryReadAsync(new OperationDocumentId(SeededId), ct);
+                var document = await storage
+                    .TryReadAsync(new OperationDocumentId(SeededId), ct)
+                    .ConfigureAwait(false);
                 document.Should().NotBeNull();
             }
         );
@@ -90,10 +93,9 @@ public class PersistedOperationStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var storage = (IOperationDocumentStorage)Store(sp);
-                var document = await storage.TryReadAsync(
-                    new OperationDocumentId("NoSuchOperation_v1"),
-                    ct
-                );
+                var document = await storage
+                    .TryReadAsync(new OperationDocumentId("NoSuchOperation_v1"), ct)
+                    .ConfigureAwait(false);
                 document.Should().BeNull();
             }
         );
@@ -135,12 +137,29 @@ public class PersistedOperationStressTests : StressTestSetup
         Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read =
             storage.ReadMachineDocumentVersionsAsync;
 
-        var kinds = new (string Label, Func<int, Task> Run)[]
+        var kinds = MachineDocumentIdKinds(hot, registry, own, irHash, Text, read);
+
+        await MeasurePerIdCostAsync(kinds, Rounds);
+    }
+
+    /// <summary>The id kinds measured, each a request of that kind against the same catalog.</summary>
+    private static (string Label, Func<int, Task> Run)[] MachineDocumentIdKinds(
+        IOperationDocumentStorage hot,
+        MachineDocumentRegistry registry,
+        MachineDocument own,
+        string irHash,
+        string text,
+        Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read
+    ) =>
+        new (string Label, Func<int, Task> Run)[]
         {
             (
                 "ordinary id (stored)",
                 async _ =>
-                    (await hot.TryReadAsync(new OperationDocumentId(SeededId), default))
+                    (
+                        await hot.TryReadAsync(new OperationDocumentId(SeededId), default)
+                            .ConfigureAwait(false)
+                    )
                         .Should()
                         .NotBeNull()
             ),
@@ -148,60 +167,96 @@ public class PersistedOperationStressTests : StressTestSetup
                 "own machine document (read and verified)",
                 async _ =>
                 {
-                    (await registry.ClassifyAsync(own.Id, read, default))
+                    (await registry.ClassifyAsync(own.Id, read, default).ConfigureAwait(false))
                         .Should()
                         .Be(MachineDocumentVerdict.Own);
-                    (await hot.TryReadAsync(new OperationDocumentId(own.Id), default))
+                    (
+                        await hot.TryReadAsync(new OperationDocumentId(own.Id), default)
+                            .ConfigureAwait(false)
+                    )
                         .Should()
                         .NotBeNull();
                 }
             ),
             (
                 "machine this node does not serve",
-                async i =>
-                    (
-                        await registry.ClassifyAsync(
-                            MachineDocuments.IdOf("unserved", "get", irHash, i.ToString()),
-                            read,
-                            default
-                        )
-                    )
-                        .Should()
-                        .NotBe(MachineDocumentVerdict.Own)
+                i => AssertUnservedMachineIsNotOwnAsync(registry, irHash, read, i)
             ),
             (
                 "unseen id of a served machine",
                 async i =>
-                    await registry.ClassifyAsync(
-                        MachineDocuments.IdOf(
-                            "stress-machine",
-                            "get",
-                            $"{i:x8}".PadLeft(MachineDocuments.IrHashLength, 'b'),
-                            Text
-                        ),
-                        read,
-                        default
-                    )
+                    await registry
+                        .ClassifyAsync(
+                            MachineDocuments.IdOf(
+                                "stress-machine",
+                                "get",
+                                $"{i:x8}".PadLeft(MachineDocuments.IrHashLength, 'b'),
+                                text
+                            ),
+                            read,
+                            default
+                        )
+                        .ConfigureAwait(false)
             ),
         };
 
+    private static async Task AssertUnservedMachineIsNotOwnAsync(
+        MachineDocumentRegistry registry,
+        string irHash,
+        Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read,
+        int i
+    ) =>
+        (
+            await registry
+                .ClassifyAsync(
+                    MachineDocuments.IdOf(
+                        "unserved",
+                        "get",
+                        irHash,
+                        i.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    ),
+                    read,
+                    default
+                )
+                .ConfigureAwait(false)
+        )
+            .Should()
+            .NotBe(MachineDocumentVerdict.Own);
+
+    /// <summary>Times <paramref name="rounds"/> requests of each kind and prints and bounds the spread.</summary>
+    private async Task MeasurePerIdCostAsync(
+        (string Label, Func<int, Task> Run)[] kinds,
+        int rounds
+    )
+    {
         foreach (var (label, run) in kinds)
         {
-            await run(-1);
-            var samples = new double[Rounds];
-            for (var i = 0; i < Rounds; i++)
+            await run(-1).ConfigureAwait(false);
+            var samples = new double[rounds];
+            for (var i = 0; i < rounds; i++)
             {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                await run(i);
-                samples[i] = sw.Elapsed.TotalMilliseconds;
+                var sw = TimeProvider.System.GetTimestamp();
+                await run(i).ConfigureAwait(false);
+                samples[i] = TimeProvider.System.GetElapsedTime(sw).TotalMilliseconds;
             }
             Array.Sort(samples);
-            TestContext.Out.WriteLine(
-                $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
-                    + $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
-                    + $"({Profile.PersistedOperations:N0} stored operations)"
-            );
-            samples[(int)(Rounds * 0.99)]
+            await TestContext
+                .Out.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{label}: mean {samples.Average():F3}ms, p50 {samples[rounds / 2]:F3}ms, "
+                    )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"p99 {samples[(int)(rounds * 0.99)]:F3}ms over {rounds:N0} requests "
+                        )
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"({Profile.PersistedOperations:N0} stored operations)"
+                        )
+                )
+                .ConfigureAwait(false);
+            samples[(int)(rounds * 0.99)]
                 .Should()
                 .BeLessThan(
                     HotPathBudget.TotalMilliseconds,
@@ -222,11 +277,9 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(Factory(sp), ct, take: 50)
+                    .ConfigureAwait(false);
                 page.Items.Should().HaveCount(50);
                 page.TotalCount.Should().BeGreaterThanOrEqualTo(Profile.PersistedOperations);
             }
@@ -241,12 +294,14 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    new PersistedOperationFilter(IsActive: true, TenantKey: "tenant-3"),
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(
+                        Factory(sp),
+                        ct,
+                        new PersistedOperationFilter(IsActive: true, TenantKey: "tenant-3"),
+                        take: 50
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(p => p.IsActive && p.TenantKey == "tenant-3");
             }
@@ -261,12 +316,14 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    new PersistedOperationFilter(IdStartsWith: "StressOp4242"),
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(
+                        Factory(sp),
+                        ct,
+                        new PersistedOperationFilter(IdStartsWith: "StressOp4242"),
+                        take: 50
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
             }
         );
@@ -281,12 +338,14 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new PersistedOperationQueries().PersistedOperations(
-                    Factory(sp),
-                    ct,
-                    skip: Profile.PersistedOperations - 50,
-                    take: 50
-                );
+                var page = await new PersistedOperationQueries()
+                    .PersistedOperations(
+                        Factory(sp),
+                        ct,
+                        skip: Profile.PersistedOperations - 50,
+                        take: 50
+                    )
+                    .ConfigureAwait(false);
                 page.Items.Should().NotBeEmpty();
             }
         );
@@ -300,11 +359,9 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var row = await new PersistedOperationQueries().PersistedOperation(
-                    SeededId,
-                    Factory(sp),
-                    ct
-                );
+                var row = await new PersistedOperationQueries()
+                    .PersistedOperation(SeededId, Factory(sp), ct)
+                    .ConfigureAwait(false);
                 row.Should().NotBeNull();
             }
         );
@@ -318,11 +375,9 @@ public class PersistedOperationStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var history = await new PersistedOperationQueries().PersistedOperationHistory(
-                    SeededId,
-                    Factory(sp),
-                    ct
-                );
+                var history = await new PersistedOperationQueries()
+                    .PersistedOperationHistory(SeededId, Factory(sp), ct)
+                    .ConfigureAwait(false);
                 history.Should().NotBeEmpty();
             }
         );
@@ -347,14 +402,16 @@ public class PersistedOperationStressTests : StressTestSetup
                 ),
             async (sp, ct) =>
             {
-                var payload = await new PersistedOperationMutations().UploadPersistedOperation(
-                    new UploadPersistedOperationInput(
-                        UploadedId,
-                        "query StressUpload { operations { health { status } } }"
-                    ),
-                    Store(sp),
-                    ct
-                );
+                var payload = await new PersistedOperationMutations()
+                    .UploadPersistedOperation(
+                        new UploadPersistedOperationInput(
+                            UploadedId,
+                            "query StressUpload { operations { health { status } } }"
+                        ),
+                        Store(sp),
+                        ct
+                    )
+                    .ConfigureAwait(false);
                 payload.Errors.Should().BeEmpty();
             }
         );
@@ -369,11 +426,13 @@ public class PersistedOperationStressTests : StressTestSetup
             ReactivateSeededOperation,
             async (sp, ct) =>
                 (
-                    await new PersistedOperationMutations().DeactivatePersistedOperation(
-                        new DeactivatePersistedOperationInput(SeededId, "stress"),
-                        Store(sp),
-                        ct
-                    )
+                    await new PersistedOperationMutations()
+                        .DeactivatePersistedOperation(
+                            new DeactivatePersistedOperationInput(SeededId, "stress"),
+                            Store(sp),
+                            ct
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Success.Should()
                     .BeTrue()
@@ -393,12 +452,14 @@ public class PersistedOperationStressTests : StressTestSetup
                 ),
             async (sp, ct) =>
                 (
-                    await new PersistedOperationMutations().RestorePersistedOperation(
-                        new RestorePersistedOperationInput(SeededId),
-                        Store(sp),
-                        Factory(sp),
-                        ct
-                    )
+                    await new PersistedOperationMutations()
+                        .RestorePersistedOperation(
+                            new RestorePersistedOperationInput(SeededId),
+                            Store(sp),
+                            Factory(sp),
+                            ct
+                        )
+                        .ConfigureAwait(false)
                 )
                     .Success.Should()
                     .BeTrue(),

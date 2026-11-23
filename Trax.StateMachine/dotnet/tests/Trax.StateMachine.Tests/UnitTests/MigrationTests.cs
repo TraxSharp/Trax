@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -15,8 +16,8 @@ public class MigrationTests
 
         var ok = result.Should().BeOfType<RehydrationResult.Ok>().Which;
         ok.Snapshot.Version.Should().Be(2);
-        ok.Snapshot.Context["paidWith"]!.GetValue<string>().Should().Be("quarter");
-        ok.Snapshot.Context["migrated"]!.GetValue<bool>().Should().BeTrue();
+        ok.Snapshot.Context["paidWith"].NotNull().GetValue<string>().Should().Be("quarter");
+        ok.Snapshot.Context["migrated"].NotNull().GetValue<bool>().Should().BeTrue();
     }
 
     [Test]

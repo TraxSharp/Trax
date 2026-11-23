@@ -29,7 +29,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     [TraxQueryModel]
     [TraxAllowAnonymous]
     [Table("anon_default_rows", Schema = "test_tm_anon")]
-    private class AnonDefaultRow
+    private sealed class AnonDefaultRow
     {
         [Column("id")]
         public long Id { get; set; }
@@ -38,10 +38,10 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         public string Title { get; set; } = "";
     }
 
-    private class AnonDefaultDbContext(DbContextOptions<AnonDefaultDbContext> options)
+    private sealed class AnonDefaultDbContext(DbContextOptions<AnonDefaultDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AnonDefaultRow> Rows { get; set; } = null!;
+        public DbSet<AnonDefaultRow> Rows => Set<AnonDefaultRow>();
     }
 
     [Test]
@@ -49,12 +49,18 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     {
         var schema = await BuildSchemaAsync<AnonDefaultDbContext>();
 
-        var discoverField = schema.QueryType.Fields.Single(f => f.Name == "discover");
+        var discoverField = schema.QueryType.Fields.Single(f =>
+            string.Equals(f.Name, "discover", StringComparison.Ordinal)
+        );
         var discoverType = (IObjectTypeDefinition)discoverField.Type.NamedType();
-        var entry = discoverType.Fields.Single(f => f.Name == "anonDefaultRows");
+        var entry = discoverType.Fields.Single(f =>
+            string.Equals(f.Name, "anonDefaultRows", StringComparison.Ordinal)
+        );
 
         entry
-            .Directives.Any(d => d.Definition.Name == "authorize")
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
             .Should()
             .BeFalse("an anonymous entry field must not carry the @authorize directive");
     }
@@ -69,7 +75,9 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
             .First(t => t.RuntimeType == typeof(AnonDefaultRow));
 
         anonType
-            .Directives.Any(d => d.Definition.Name == "authorize")
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
             .Should()
             .BeFalse("the ObjectType of an anonymous entity must not carry @authorize");
     }
@@ -79,7 +87,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     [TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
     [TraxAllowAnonymous]
     [Table("anon_explicit_rows", Schema = "test_tm_anon")]
-    private class AnonExplicitRow
+    private sealed class AnonExplicitRow
     {
         [Column("id")]
         public long Id { get; set; }
@@ -91,10 +99,10 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         public string InternalDetail { get; set; } = "";
     }
 
-    private class AnonExplicitDbContext(DbContextOptions<AnonExplicitDbContext> options)
+    private sealed class AnonExplicitDbContext(DbContextOptions<AnonExplicitDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AnonExplicitRow> Rows { get; set; } = null!;
+        public DbSet<AnonExplicitRow> Rows => Set<AnonExplicitRow>();
     }
 
     [Test]
@@ -113,11 +121,16 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         var fieldNames = anonType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToArray();
         fieldNames.Should().BeEquivalentTo(new[] { "id", "publicField" });
 
-        anonType.Directives.Any(d => d.Definition.Name == "authorize").Should().BeFalse();
+        anonType
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
+            .Should()
+            .BeFalse();
     }
 
     // ── ExposeAs branch ──────────────────────────────────────────────────
@@ -131,7 +144,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
     [TraxQueryModel(ExposeAs = typeof(IAnonExposed))]
     [TraxAllowAnonymous]
     [Table("anon_exposed_rows", Schema = "test_tm_anon")]
-    private class AnonExposedRow : IAnonExposed
+    private sealed class AnonExposedRow : IAnonExposed
     {
         [Column("id")]
         public long Id { get; set; }
@@ -143,10 +156,10 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         public string InternalBody { get; set; } = "";
     }
 
-    private class AnonExposedDbContext(DbContextOptions<AnonExposedDbContext> options)
+    private sealed class AnonExposedDbContext(DbContextOptions<AnonExposedDbContext> options)
         : DbContext(options)
     {
-        public DbSet<AnonExposedRow> Rows { get; set; } = null!;
+        public DbSet<AnonExposedRow> Rows => Set<AnonExposedRow>();
     }
 
     [Test]
@@ -165,11 +178,16 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         var fieldNames = anonType
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToArray();
         fieldNames.Should().BeEquivalentTo(new[] { "headline", "id" });
 
-        anonType.Directives.Any(d => d.Definition.Name == "authorize").Should().BeFalse();
+        anonType
+            .Directives.Any(d =>
+                string.Equals(d.Definition.Name, "authorize", StringComparison.Ordinal)
+            )
+            .Should()
+            .BeFalse();
     }
 
     // ── Schema-build helper ─────────────────────────────────────────────
@@ -199,7 +217,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
 
         var provider = services.BuildServiceProvider();
         var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
-        var executor = await resolver.GetExecutorAsync();
+        var executor = await resolver.GetExecutorAsync().ConfigureAwait(false);
         return executor.Schema;
     }
 

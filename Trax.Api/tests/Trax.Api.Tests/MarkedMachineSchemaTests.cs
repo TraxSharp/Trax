@@ -3,6 +3,7 @@ using System.Reflection.Emit;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.StateMachine.Persistence;
 
@@ -98,7 +99,8 @@ public class MarkedMachineSchemaTests
             .NotBeNull(
                 $"AddTraxGraphQL cannot read a factory, so with no other marked machine the schema has no machines root, and the host says so rather than leave the machine unserved, per {Adr}"
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain($"'{PartsMachine.MachineId}'")
@@ -126,7 +128,8 @@ public class MarkedMachineSchemaTests
             .NotBeNull(
                 $"the attribute is not inherited, so an unmarked subclass is not served and says so, per {Adr}"
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain("UnmarkedStepSubclass")
@@ -153,12 +156,13 @@ public class MarkedMachineSchemaTests
             .NotBeNull(
                 $"a subclass has its base's id, and every machine is looked up by id, so the two would break every machine request, per {Adr}"
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain("'library-step'")
-            .And.Contain(library.FullName!)
-            .And.Contain(served.FullName!)
+            .And.Contain(library.FullName.NotNull())
+            .And.Contain(served.FullName.NotNull())
             .And.Contain($"Register only {served.FullName}");
     }
 
@@ -177,7 +181,8 @@ public class MarkedMachineSchemaTests
             "machines"
         );
         machines.Should().NotBeNull($"a machine registered twice is one machine, per {Adr}");
-        machines!
+        machines
+            .NotNull()
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
             .Should()
@@ -207,10 +212,12 @@ public class MarkedMachineSchemaTests
             type.DefineDefaultConstructor(MethodAttributes.Public);
         else
         {
-            var baseConstructor = parent.GetConstructor(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                [typeof(string)]
-            )!;
+            var baseConstructor = parent
+                .GetConstructor(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    [typeof(string)]
+                )
+                .NotNull();
             var il = type.DefineConstructor(
                     MethodAttributes.Public,
                     CallingConventions.Standard,
@@ -225,7 +232,7 @@ public class MarkedMachineSchemaTests
         if (marked)
             type.SetCustomAttribute(
                 new CustomAttributeBuilder(
-                    typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes)!,
+                    typeof(TraxMachineAttribute).GetConstructor(Type.EmptyTypes).NotNull(),
                     []
                 )
             );

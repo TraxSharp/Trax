@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Deploy;
 
@@ -22,6 +24,8 @@ internal sealed partial class DeployFile
         WriteIndented = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
     };
 
     public int Version { get; set; } = CurrentVersion;
@@ -59,7 +63,7 @@ internal sealed partial class DeployFile
                     : $"{FileName} has no environment '{name}'. It has: {string.Join(", ", Environments.Keys)}."
             );
         string Problem(string what) => $"Environment '{name}': {what}";
-        if (!EnvironmentName().IsMatch(name))
+        if (!EnvironmentName.IsMatch(name))
             throw new InvalidOperationException(
                 Problem(
                     "its name must be lower-case letters and digits only. The stack is <app>-<environment>, and "
@@ -72,17 +76,31 @@ internal sealed partial class DeployFile
             );
         if (string.IsNullOrWhiteSpace(env.Region))
             throw new InvalidOperationException(Problem("it names no region (us-west-2)."));
-        if (env.Profile == DeployEnvironment.Production && string.IsNullOrWhiteSpace(env.Domain))
+        if (
+            string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(env.Domain)
+        )
             throw new InvalidOperationException(
                 Problem(
                     "the production profile needs a domain: HTTPS needs a certificate, and a certificate needs a "
                         + "domain. Name one, or use the try profile, which serves on a CloudFront address."
                 )
             );
-        if (env.Profile == DeployEnvironment.Try && env.Domain is not null)
+        if (
+            string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
+            && env.Domain is not null
+        )
             throw new InvalidOperationException(
                 Problem("the try profile serves on a CloudFront address and takes no domain.")
             );
+        CheckNetworkAndCounts(name, env);
+        CheckSettingsAndAuth(name, env);
+        return env;
+    }
+
+    private void CheckNetworkAndCounts(string name, DeployEnvironment env)
+    {
+        string Problem(string what) => $"Environment '{name}': {what}";
         if (env.Network is { } network)
         {
             if (string.IsNullOrWhiteSpace(network.VpcId) || string.IsNullOrWhiteSpace(network.Cidr))
@@ -102,6 +120,11 @@ internal sealed partial class DeployFile
                 throw new InvalidOperationException(
                     Problem($"counts names '{service}', which is not a service.")
                 );
+    }
+
+    private void CheckSettingsAndAuth(string name, DeployEnvironment env)
+    {
+        string Problem(string what) => $"Environment '{name}': {what}";
         var provided = env.Auth is { Kind: DeployAuth.Cognito } auth
             ? new HashSet<string>([auth.AuthorityKey, auth.AudienceKey], StringComparer.Ordinal)
             : [];
@@ -121,14 +144,16 @@ internal sealed partial class DeployFile
                     $"settings gives {string.Join(", ", unknown)}, which the app does not list under \"settings\"."
                 )
             );
-        if (env.Auth is { } a && a.Kind != DeployAuth.Cognito)
+        if (
+            env.Auth is { } a
+            && !string.Equals(a.Kind, DeployAuth.Cognito, StringComparison.Ordinal)
+        )
             throw new InvalidOperationException(
                 Problem(
                     $"auth kind '{a.Kind}' is not one trax creates. Use cognito, or leave auth out and give an "
                         + "existing issuer's address in settings."
                 )
             );
-        return env;
     }
 
     /// <summary>
@@ -153,7 +178,7 @@ internal sealed partial class DeployFile
     /// Reads the file at <paramref name="path"/> and checks it. Throws <see cref="InvalidOperationException"/> naming
     /// the first problem.
     /// </summary>
-    public static DeployFile Read(string path)
+    public static async Task<DeployFile> ReadAsync(string path)
     {
         if (!File.Exists(path))
             throw new InvalidOperationException(
@@ -163,8 +188,10 @@ internal sealed partial class DeployFile
         try
         {
             file =
-                JsonSerializer.Deserialize<DeployFile>(File.ReadAllText(path), Json)
-                ?? throw new InvalidOperationException($"{path} is empty.");
+                JsonSerializer.Deserialize<DeployFile>(
+                    await File.ReadAllTextAsync(path).ConfigureAwait(false),
+                    Json
+                ) ?? throw new InvalidOperationException($"{path} is empty.");
         }
         catch (JsonException ex)
         {
@@ -181,10 +208,13 @@ internal sealed partial class DeployFile
         if (Version != CurrentVersion)
             throw new InvalidOperationException(
                 Problem(
-                    $"version {Version} is not one this trax reads ({CurrentVersion}). Update the trax tool."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"version {Version} is not one this trax reads ({CurrentVersion}). Update the trax tool."
+                    )
                 )
             );
-        if (!Name().IsMatch(App))
+        if (!Name.IsMatch(App))
             throw new InvalidOperationException(
                 Problem(
                     $"app '{App}' must be lower case, start with a letter and hold only letters, digits and dashes."
@@ -194,11 +224,36 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem("services is empty. Name at least one project to deploy.")
             );
-        var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        CheckServices(path);
+        foreach (var setting in Settings.Concat(Secrets))
+            if (!Variable.IsMatch(setting))
+                throw new InvalidOperationException(
+                    Problem(
+                        $"'{setting}' is not an environment name: use letters, digits and underscores, and __ for "
+                            + "a ':' in configuration (Auth__Authority)."
+                    )
+                );
+        var both = Settings.Intersect(Secrets, StringComparer.Ordinal).ToList();
+        if (both.Count > 0)
+            throw new InvalidOperationException(
+                Problem($"'{both[0]}' is listed as both a setting and a secret.")
+            );
+        foreach (var connection in new[] { ConnectionStrings.Trax, ConnectionStrings.RabbitMq })
+            if (!Variable.IsMatch(connection))
+                throw new InvalidOperationException(
+                    Problem($"connection string name '{connection}' is not a configuration key.")
+                );
+    }
+
+    private void CheckServices(string path)
+    {
+        string Problem(string what) => $"{path}: {what}";
+
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path)).NotNull();
         var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
         {
-            if (!Name().IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
+            if (!Name.IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
                 throw new InvalidOperationException(
                     Problem(
                         $"service '{name}' must be lower case, start with a letter, hold only letters, digits and "
@@ -213,12 +268,17 @@ internal sealed partial class DeployFile
                 );
             if (service.Port is < 1 or > 65535)
                 throw new InvalidOperationException(
-                    Problem($"service '{name}' has port {service.Port}, which is not a TCP port.")
+                    Problem(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"service '{name}' has port {service.Port}, which is not a TCP port."
+                        )
+                    )
                 );
             if (service.Port is { } port && !ports.TryAdd(port, name))
                 throw new InvalidOperationException(
                     Problem(
-                        $"service '{name}' has port {port}, which service '{ports[port]}' has too."
+                        $"service '{name}' has port {port.ToString(CultureInfo.InvariantCulture)}, which service '{ports[port]}' has too."
                     )
                 );
             if (service.Count < 1)
@@ -226,138 +286,23 @@ internal sealed partial class DeployFile
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
                 );
         }
-        foreach (var setting in Settings.Concat(Secrets))
-            if (!Variable().IsMatch(setting))
-                throw new InvalidOperationException(
-                    Problem(
-                        $"'{setting}' is not an environment name: use letters, digits and underscores, and __ for "
-                            + "a ':' in configuration (Auth__Authority)."
-                    )
-                );
-        var both = Settings.Intersect(Secrets, StringComparer.Ordinal).ToList();
-        if (both.Count > 0)
-            throw new InvalidOperationException(
-                Problem($"'{both[0]}' is listed as both a setting and a secret.")
-            );
-        foreach (var connection in new[] { ConnectionStrings.Trax, ConnectionStrings.RabbitMq })
-            if (!Variable().IsMatch(connection))
-                throw new InvalidOperationException(
-                    Problem($"connection string name '{connection}' is not a configuration key.")
-                );
     }
 
     /// <summary>The full path of <paramref name="service"/>'s project.</summary>
     public static string ProjectPath(string deployFilePath, DeployService service) =>
         Path.GetFullPath(
-            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(deployFilePath))!, service.Project)
+            Path.Combine(
+                Path.GetDirectoryName(Path.GetFullPath(deployFilePath)).NotNull(),
+                service.Project
+            )
         );
 
-    [GeneratedRegex("^[a-z][a-z0-9-]*$")]
-    internal static partial Regex Name();
+    [GeneratedRegex("^[a-z][a-z0-9-]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    internal static partial Regex Name { get; }
 
-    [GeneratedRegex("^[a-z0-9]+$")]
-    private static partial Regex EnvironmentName();
+    [GeneratedRegex("^[a-z0-9]+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EnvironmentName { get; }
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
-    private static partial Regex Variable();
-}
-
-/// <summary>One cloud environment: a stack of its own.</summary>
-internal sealed class DeployEnvironment
-{
-    public const string Production = "production";
-    public const string Try = "try";
-
-    /// <summary>
-    /// <c>production</c>: private subnets behind a NAT gateway, a domain with its certificate, a Multi-AZ database
-    /// kept on delete. <c>try</c>: public subnets locked by security groups, a CloudFront address, a small database
-    /// deleted with the stack.
-    /// </summary>
-    public string Profile { get; set; } = Production;
-
-    public string Region { get; set; } = "";
-
-    /// <summary>The host name the app serves on (<c>orders.example.com</c>). Production only.</summary>
-    public string? Domain { get; set; }
-
-    /// <summary>
-    /// The Route 53 hosted zone that holds <see cref="Domain"/>. With it the certificate is validated and the name
-    /// pointed at the load balancer automatically; without it trax prints the records to add.
-    /// </summary>
-    public string? HostedZoneId { get; set; }
-
-    /// <summary>An existing VPC to deploy into, in place of the one the stack creates.</summary>
-    public DeployNetwork? Network { get; set; }
-
-    /// <summary>
-    /// A Secrets Manager secret holding the hosts' whole Postgres connection string, in place of the database the
-    /// stack creates.
-    /// </summary>
-    public string? DatabaseSecretArn { get; set; }
-
-    /// <summary>The sign-in the stack creates: <c>cognito</c>, or none when the hosts trust an existing issuer.</summary>
-    public DeployAuth? Auth { get; set; }
-
-    /// <summary>Copies per service in this environment, over the file's <c>count</c>.</summary>
-    public SortedDictionary<string, int> Counts { get; set; } = new(StringComparer.Ordinal);
-
-    /// <summary>A value for each name the file lists under <c>settings</c>.</summary>
-    public SortedDictionary<string, string> Settings { get; set; } = new(StringComparer.Ordinal);
-}
-
-/// <summary>An existing VPC, with the subnets the load balancer and the services use.</summary>
-internal sealed class DeployNetwork
-{
-    public string VpcId { get; set; } = "";
-
-    /// <summary>The VPC's address range, which the hosts trust forwarded headers from.</summary>
-    public string Cidr { get; set; } = "";
-
-    public List<string> PublicSubnets { get; set; } = [];
-
-    public List<string> PrivateSubnets { get; set; } = [];
-}
-
-/// <summary>The sign-in a stack creates.</summary>
-internal sealed class DeployAuth
-{
-    public const string Cognito = "cognito";
-
-    public string Kind { get; set; } = Cognito;
-
-    /// <summary>The setting the hosts read the issuer from.</summary>
-    public string AuthorityKey { get; set; } = "Auth__Authority";
-
-    /// <summary>The setting the hosts read the audience (the app client's id) from.</summary>
-    public string AudienceKey { get; set; } = "Auth__Audience";
-}
-
-/// <summary>One deployed project.</summary>
-internal sealed class DeployService
-{
-    /// <summary>The project, relative to <c>trax.deploy.json</c>.</summary>
-    public string Project { get; set; } = "";
-
-    /// <summary>How many copies run. A service that runs the <c>api</c> role runs one until hosts hold leases.</summary>
-    public int Count { get; set; } = 1;
-
-    /// <summary>
-    /// The port on 127.0.0.1 a compose stack publishes this service's HTTP on. Compose publishes one only for a hub
-    /// (a service that serves HTTP and runs the api or scheduler role); without this it takes 8080, or the next port
-    /// no other service has.
-    /// </summary>
-    public int? Port { get; set; }
-}
-
-/// <summary>The names under <c>ConnectionStrings:</c> a host reads, which the deployment sets.</summary>
-internal sealed class DeployConnectionStrings
-{
-    public string Trax { get; set; } = "Trax";
-
-    /// <summary>
-    /// The name a host reads its broker under, with <c>UseRabbitMq(configuration, name: ...)</c>. Compose sets
-    /// <c>&lt;name&gt;__Host</c>, <c>__UserName</c> and <c>__Password</c>, and no connection string, so the password is
-    /// never part of a URI.
-    /// </summary>
-    public string RabbitMq { get; set; } = "RabbitMq";
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Variable { get; }
 }

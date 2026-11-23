@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Attributes a consumer puts on their own code to tune a rule (which arguments must be named,
+       which types are culture-insensitive, and so on). They are [Conditional], so a compiled
+       assembly keeps no reference to this one unless TRAX_ANALYZERS_ANNOTATIONS is defined.
+       Copied from Meziantou.Analyzer.Annotations by tools/sync-upstream.sh. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Trax.Analyzers.Annotations</PackageId>
+    <Description>Attributes that tune the Trax.Analyzers rules from your own code: mark a parameter whose arguments must be named, a type that is culture-insensitive, a call to leave out of the blocking-call or cancellation-token checks. They are conditional and leave no reference in the compiled assembly.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- This package has a README of its own, copied with the attributes. -->
+  <ItemGroup>
+    <None Remove="$(MSBuildThisFileDirectory)../../README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

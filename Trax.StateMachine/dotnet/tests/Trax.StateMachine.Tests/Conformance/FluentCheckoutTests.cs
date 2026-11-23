@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 using Trax.StateMachine.Tests.Helpers;
 
@@ -42,81 +43,109 @@ public class FluentCheckoutTests
     // The shared fixtures but those that send a bad input: this checkout's guards and reducers are delegates, which
     // read the input themselves, so it declares no input schema and no invalid-input can come from it. The
     // declarative checkout replays those (CheckoutConformanceTests).
-    public static IEnumerable<TestCaseData> DelegateAdvanceFixtures() =>
-        CheckoutConformanceTests
-            .AdvanceFixtures()
-            .Where(c =>
-                JsonNode.Parse(File.ReadAllText((string)c.Arguments[0]!))!["expect"]!
-                    ["reason"]
-                    ?.GetValue<string>() != RefusalCode.InvalidInput.ToWire()
-            );
+    public static async Task<IEnumerable<TestCaseData>> DelegateAdvanceFixtures()
+    {
+        var fixtures = new List<TestCaseData>();
+        foreach (var c in CheckoutConformanceTests.AdvanceFixtures())
+        {
+            var text = await File.ReadAllTextAsync((string)c.Arguments[0].NotNull())
+                .ConfigureAwait(false);
+            if (
+                !string.Equals(
+                    JsonNode
+                        .Parse(text)
+                        .NotNull()["expect"]
+                        .NotNull()["reason"]
+                        ?.GetValue<string>(),
+                    RefusalCode.InvalidInput.ToWire(),
+                    StringComparison.Ordinal
+                )
+            )
+                fixtures.Add(c);
+        }
+        return fixtures;
+    }
 
     [TestCaseSource(nameof(DelegateAdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path)
+    public async Task Advance_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
-        var given = ToSnapshot((JsonObject)fixture["given"]!);
-        var when = (JsonObject)fixture["when"]!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
+        var given = ToSnapshot((JsonObject)fixture["given"].NotNull());
+        var when = (JsonObject)fixture["when"].NotNull();
         var input = when["input"]?.DeepClone();
-        var expect = (JsonObject)fixture["expect"]!;
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = FluentCheckout.Machine.Advance(
             given,
-            when["trigger"]!.GetValue<string>(),
+            when["trigger"].NotNull().GetValue<string>(),
             input
         );
 
-        if (expect["outcome"]!.GetValue<string>() == "transitioned")
+        if (
+            string.Equals(
+                expect["outcome"].NotNull().GetValue<string>(),
+                "transitioned",
+                StringComparison.Ordinal
+            )
+        )
             result
                 .Should()
                 .BeOfType<AdvanceResult.Transitioned>()
                 .Which.Snapshot.Should()
-                .Be(ToSnapshot((JsonObject)expect["snapshot"]!));
+                .Be(ToSnapshot((JsonObject)expect["snapshot"].NotNull()));
         else
             result
                 .Should()
                 .BeOfType<AdvanceResult.Rejected>()
                 .Which.Reason.ToWire()
                 .Should()
-                .Be(expect["reason"]!.GetValue<string>());
+                .Be(expect["reason"].NotNull().GetValue<string>());
     }
 
     [TestCaseSource(
         typeof(CheckoutConformanceTests),
         nameof(CheckoutConformanceTests.RehydrateFixtures)
     )]
-    public void Rehydrate_matches_the_shared_fixture(string path)
+    public async Task Rehydrate_matches_the_shared_fixture(string path)
     {
-        var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
+        var fixture = (JsonObject)
+            JsonNode.Parse(await File.ReadAllTextAsync(path).ConfigureAwait(false)).NotNull();
         var json =
             fixture["raw"] is JsonNode raw && raw.GetValueKind() == JsonValueKind.String
                 ? raw.GetValue<string>()
-                : fixture["json"]!.ToJsonString();
-        var expect = (JsonObject)fixture["expect"]!;
+                : fixture["json"].NotNull().ToJsonString();
+        var expect = (JsonObject)fixture["expect"].NotNull();
 
         var result = FluentCheckout.Machine.Rehydrate(json);
 
-        if (expect["result"]!.GetValue<string>() == "ok")
+        if (
+            string.Equals(
+                expect["result"].NotNull().GetValue<string>(),
+                "ok",
+                StringComparison.Ordinal
+            )
+        )
             result
                 .Should()
                 .BeOfType<RehydrationResult.Ok>()
                 .Which.Snapshot.Should()
-                .Be(ToSnapshot((JsonObject)expect["snapshot"]!));
+                .Be(ToSnapshot((JsonObject)expect["snapshot"].NotNull()));
         else
             result
                 .Should()
                 .BeOfType<RehydrationResult.Error>()
                 .Which.Code.ToWire()
                 .Should()
-                .Be(expect["code"]!.GetValue<string>());
+                .Be(expect["code"].NotNull().GetValue<string>());
     }
 
     private static Snapshot ToSnapshot(JsonObject o) =>
         new()
         {
-            Machine = o["machine"]!.GetValue<string>(),
-            Version = o["version"]!.GetValue<int>(),
-            State = o["state"]!.GetValue<string>(),
-            Context = (JsonObject)o["context"]!.DeepClone(),
+            Machine = o["machine"].NotNull().GetValue<string>(),
+            Version = o["version"].NotNull().GetValue<int>(),
+            State = o["state"].NotNull().GetValue<string>(),
+            Context = (JsonObject)o["context"].NotNull().DeepClone(),
         };
 }

@@ -2,6 +2,7 @@ using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -37,7 +38,9 @@ public class CancellationCheckProviderTests
 
         // train.Metadata is null — should be a no-op.
         Func<Task> act = async () =>
-            await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .BeforeJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -54,14 +57,17 @@ public class CancellationCheckProviderTests
                 Name = "T",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         SetTrainMetadata(train, meta);
         var junction = new TestEffectJunction();
 
         // Metadata not persisted to DB — query returns default(false) → no throw.
         Func<Task> act = async () =>
-            await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+            await provider
+                .BeforeJunctionExecution(junction, train, CancellationToken.None)
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -91,10 +97,11 @@ public class CancellationCheckProviderTests
 
     private static void SetTrainMetadata(TestTrain train, Metadata metadata) =>
         typeof(ServiceTrain<string, string>)
-            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)
+            .NotNull()
             .SetValue(train, metadata);
 
-    private class TestTrain : ServiceTrain<string, string>
+    private sealed class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<PassThrough1_263>().Resolve();
@@ -105,7 +112,7 @@ public class CancellationCheckProviderTests
         }
     }
 
-    private class TestEffectJunction : EffectJunction<string, string>
+    private sealed class TestEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input);
     }

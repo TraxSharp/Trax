@@ -30,10 +30,10 @@ public class MediatorConfiguration
     /// Per-train concurrency overrides from the builder, keyed by interface FullName.
     /// Takes precedence over <see cref="Trax.Effect.Attributes.TraxConcurrencyLimitAttribute"/> values.
     /// </summary>
-    internal Dictionary<string, int> ConcurrencyOverrides { get; } = new();
+    internal Dictionary<string, int> ConcurrencyOverrides { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// When <c>true</c>, the host may start without registering an
+    /// When <see langword="true"/>, the host may start without registering an
     /// <c>ITrainAuthorizationService</c> even though some trains carry
     /// <c>[TraxAuthorize]</c>. Intended for scheduler-only or dashboard-only processes
     /// that never accept API submissions. Opt in via
@@ -80,10 +80,10 @@ public class MediatorConfiguration
     /// Maximum concurrent RUN executions per authenticated principal. When the
     /// limit is reached, additional requests from the same principal queue on a
     /// per-principal semaphore until an in-flight request completes. Defaults to
-    /// <c>null</c> (no per-principal cap — global and per-train limits still apply).
+    /// <see langword="null"/> (no per-principal cap — global and per-train limits still apply).
     /// Principals are identified by
     /// <see cref="Services.Principal.ICurrentPrincipalProvider"/>. The default registered by
-    /// <c>AddMediator</c> returns <c>null</c>, so the cap has no effect until a provider that
+    /// <c>AddMediator</c> returns <see langword="null"/>, so the cap has no effect until a provider that
     /// returns an id is registered, as <c>AddTraxApi</c> does. A run with no principal id is not
     /// capped per principal. Queued work is not counted.
     /// </summary>

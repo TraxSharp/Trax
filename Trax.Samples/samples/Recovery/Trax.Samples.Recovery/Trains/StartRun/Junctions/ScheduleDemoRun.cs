@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectJunction;
@@ -20,7 +21,8 @@ public class ScheduleDemoRun(
     CaseFiles caseFiles,
     FaultInjector faults,
     ICurrentPrincipalProvider caller,
-    IDataContextProviderFactory dataContexts
+    IDataContextProviderFactory dataContexts,
+    TimeProvider clock
 ) : EffectJunction<StartRunInput, StartRunOutput>
 {
     /// <summary>Two retries: three attempts in all.</summary>
@@ -36,22 +38,7 @@ public class ScheduleDemoRun(
         // armed before the manifest is scheduled, since the dispatcher may start the first run
         // before the start below sees it queued, and disarmed if the start fails, so a refused or
         // timed-out start leaves nothing armed.
-        CrashPoint[] crashes = !input.CrashOnce
-            ? []
-            : input.Scenario switch
-            {
-                Scenario.Refund => input.CrashWhile switch
-                {
-                    RefundCrash.Emailing => [CrashPoint.RefundEmail],
-                    RefundCrash.PayingThenEmailing =>
-                    [
-                        CrashPoint.RefundTrack,
-                        CrashPoint.RefundEmail,
-                    ],
-                    _ => [CrashPoint.RefundTrack],
-                },
-                _ => [CrashPoint.CoCitation],
-            };
+        var crashes = CrashesFor(input);
         faults.Arm(runId, crashes);
 
         Trax.Effect.Models.Manifest.Manifest manifest;
@@ -61,16 +48,22 @@ public class ScheduleDemoRun(
             manifest = input.Scenario switch
             {
                 Scenario.Refund => await ScheduleRefund(
-                    runId,
-                    externalId,
-                    input.OrderId ?? "A-1001"
+                        runId,
+                        externalId,
+                        input.OrderId ?? "A-1001"
+                    )
+                    .ConfigureAwait(false),
+                Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input)
+                    .ConfigureAwait(false),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(input),
+                    input.Scenario,
+                    message: null
                 ),
-                Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input),
-                _ => throw new ArgumentOutOfRangeException(nameof(input), input.Scenario, null),
             };
 
             // The page follows the first run, so a start that never sees it queued fails here.
-            firstRunId = await FirstRunOf(manifest.Id);
+            firstRunId = await FirstRunOf(manifest.Id).ConfigureAwait(false);
         }
         catch
         {
@@ -90,29 +83,56 @@ public class ScheduleDemoRun(
         };
     }
 
+    // Where the run crashes: nowhere unless it asks to crash once, else by its scenario.
+    private static CrashPoint[] CrashesFor(StartRunInput input) =>
+        !input.CrashOnce
+            ? []
+            : input.Scenario switch
+            {
+                Scenario.Refund => input.CrashWhile switch
+                {
+                    RefundCrash.Emailing => [CrashPoint.RefundEmail],
+                    RefundCrash.PayingThenEmailing =>
+                    [
+                        CrashPoint.RefundTrack,
+                        CrashPoint.RefundEmail,
+                    ],
+                    _ => [CrashPoint.RefundTrack],
+                },
+                _ => [CrashPoint.CoCitation],
+            };
+
     // The scheduler queues the manifest's first run on its next pass, a second at most in this demo: its id is what
     // the page follows.
     private async Task<string> FirstRunOf(long manifestId)
     {
-        var deadline = DateTime.UtcNow + FirstRunWait;
+        var deadline = clock.GetUtcNow().UtcDateTime + FirstRunWait;
         while (true)
         {
-            await using (var context = await dataContexts.CreateDbContextAsync(CancellationToken))
+            var context = await dataContexts
+                .CreateDbContextAsync(CancellationToken)
+                .ConfigureAwait(false);
+            await using (context.ConfigureAwait(false))
             {
                 var queued = await context
                     .WorkQueues.AsNoTracking()
                     .Where(w => w.ManifestId == manifestId)
                     .OrderBy(w => w.Id)
                     .Select(w => w.ExternalId)
-                    .FirstOrDefaultAsync(CancellationToken);
+                    .FirstOrDefaultAsync(CancellationToken)
+                    .ConfigureAwait(false);
                 if (queued is not null)
                     return queued;
             }
-            if (DateTime.UtcNow > deadline)
+            if (clock.GetUtcNow().UtcDateTime > deadline)
                 throw new TimeoutException(
-                    $"The scheduler did not queue the run within {FirstRunWait.TotalSeconds} seconds."
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The scheduler did not queue the run within {FirstRunWait.TotalSeconds} seconds."
+                    )
                 );
-            await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(100), clock, CancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
@@ -131,7 +151,8 @@ public class ScheduleDemoRun(
             new RefundInput { RunId = runId, OrderId = orderId },
             TimeSpan.Zero,
             // Every run of the manifest, each retry included, is the caller's to follow.
-            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId())
+            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId()),
+            CancellationToken
         );
     }
 
@@ -142,7 +163,7 @@ public class ScheduleDemoRun(
     )
     {
         var fields = input.Fields is { Count: > 0 } chosen ? chosen : CorpusFixture.Fields;
-        var unknown = fields.Except(CorpusFixture.Fields).ToList();
+        var unknown = fields.Except(CorpusFixture.Fields, StringComparer.Ordinal).ToList();
         if (unknown.Count > 0)
             throw new ArgumentException(
                 $"The corpus has no field {string.Join(", ", unknown)}.",
@@ -154,13 +175,14 @@ public class ScheduleDemoRun(
             new TopicMapInput
             {
                 RunId = runId,
-                Fields = fields.Distinct().ToList(),
+                Fields = fields.Distinct(StringComparer.Ordinal).ToList(),
                 FromYear = input.FromYear ?? 2016,
                 ToYear = input.ToYear ?? 2025,
             },
             TimeSpan.Zero,
             // Every run of the manifest, each retry included, is the caller's to follow.
-            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId())
+            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId()),
+            CancellationToken
         );
     }
 }

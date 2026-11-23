@@ -6,9 +6,21 @@ area: trains
 nav_order: 5
 source:
   - Trax.Core/src/Trax.Core/Decisions/IDecider.cs
+  - Trax.Core/src/Trax.Core/Decisions/Answer.cs
+  - Trax.Core/src/Trax.Core/Decisions/ChoiceAnswer.cs
+  - Trax.Core/src/Trax.Core/Decisions/ChoiceQuestion.cs
+  - Trax.Core/src/Trax.Core/Decisions/Criterion.cs
+  - Trax.Core/src/Trax.Core/Decisions/DecisionRequest.cs
+  - Trax.Core/src/Trax.Core/Decisions/DecisionResult.cs
+  - Trax.Core/src/Trax.Core/Decisions/Question.cs
+  - Trax.Core/src/Trax.Core/Decisions/ScoreAnswer.cs
+  - Trax.Core/src/Trax.Core/Decisions/ScoreQuestion.cs
+  - Trax.Core/src/Trax.Core/Decisions/YesNoAnswer.cs
+  - Trax.Core/src/Trax.Core/Decisions/YesNoQuestion.cs
   - Trax.Core/src/Trax.Core/Decisions/RuleDecider.cs
   - Trax.Core/src/Trax.Core/Decisions/CascadingDecider.cs
   - Trax.Core/src/Trax.Core/Decisions/IVetsQuestions.cs
+  - Trax.Core/src/Trax.Core/Decisions/DeclaredQuestions.cs
 ---
 
 # Write a decider

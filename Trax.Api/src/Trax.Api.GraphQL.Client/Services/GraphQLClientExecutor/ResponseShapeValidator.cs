@@ -18,7 +18,7 @@ namespace Trax.Api.GraphQL.Client;
 /// </summary>
 internal static class ResponseShapeValidator
 {
-    private record ShapeCacheKey(Type Type, string JsonShape);
+    private sealed record ShapeCacheKey(Type Type, string JsonShape);
 
     private static readonly ConcurrentDictionary<ShapeCacheKey, DriftResult> Cache = new();
 
@@ -42,8 +42,12 @@ internal static class ResponseShapeValidator
         foreach (var prop in element.EnumerateObject())
             jsonFields.Add(prop.Name);
 
-        var key = new ShapeCacheKey(targetType, string.Join("|", jsonFields));
-        var drift = Cache.GetOrAdd(key, k => ComputeDrift(k.Type, jsonFields, options));
+        var key = new ShapeCacheKey(targetType, string.Join('|', jsonFields));
+        var drift = Cache.GetOrAdd(
+            key,
+            static (k, arg) => ComputeDrift(k.Type, arg.Fields, arg.Options),
+            (Fields: jsonFields, Options: options)
+        );
 
         if (!drift.HasDrift)
             return;
@@ -54,8 +58,8 @@ internal static class ResponseShapeValidator
                 logger?.LogWarning(
                     "GraphQL response shape drift for {Type}: extra=[{Extra}] missing=[{Missing}]",
                     targetType.Name,
-                    string.Join(",", drift.ExtraJsonFields),
-                    string.Join(",", drift.MissingJsonFields)
+                    string.Join(',', drift.ExtraJsonFields),
+                    string.Join(',', drift.MissingJsonFields)
                 );
                 break;
 
@@ -74,7 +78,11 @@ internal static class ResponseShapeValidator
         JsonSerializerOptions options
     )
     {
-        var pocoNames = PropertyNameCache.GetOrAdd(targetType, t => BuildPocoNameSet(t, options));
+        var pocoNames = PropertyNameCache.GetOrAdd(
+            targetType,
+            (t, arg) => BuildPocoNameSet(t, arg),
+            options
+        );
 
         var extra = jsonFields.Where(j => !pocoNames.Contains(j)).ToArray();
         var missing = pocoNames.Where(p => !jsonFields.Contains(p)).ToArray();

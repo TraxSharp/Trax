@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 
@@ -24,36 +25,38 @@ public class SnapshotWatchHubTests(StoreProvider provider)
 
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(15);
 
-    private InstanceHost _host = null!;
+    private InstanceHost? _host;
 
     [SetUp]
     public void SetUp()
     {
         _host = InstanceHost.Create(provider);
-        _host.Services.GetRequiredService<SnapshotChangeListener>().PollInterval =
+        _host.NotNull().Services.GetRequiredService<SnapshotChangeListener>().PollInterval =
             TimeSpan.FromMilliseconds(50);
     }
 
     // The host's hub; the container owns it and disposes it with the host.
-    private SnapshotWatchHub Hub => _host.Services.GetRequiredService<SnapshotWatchHub>();
+    private SnapshotWatchHub Hub => _host.NotNull().Services.GetRequiredService<SnapshotWatchHub>();
 
     [TearDown]
-    public void TearDown() => _host.Dispose();
+    public void TearDown() => _host?.Dispose();
 
     private async Task<(Guid Id, long RowId)> Saved()
     {
         var id = Guid.NewGuid();
-        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
-        return (id, await _host.RowId(id));
+        await _host.NotNull().SeedDraft(User, id, TestTurnstile.InitialJson).ConfigureAwait(false);
+        return (id, await _host.NotNull().RowId(id).ConfigureAwait(false));
     }
 
     private async Task Coin(Guid id)
     {
-        using var scope = _host.Scope();
+        using var scope = _host.NotNull().Scope();
         (
             await _host
+                .NotNull()
                 .Service(scope, "turnstile")
                 .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+                .ConfigureAwait(false)
         )
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -62,7 +65,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     private static async Task<SnapshotRowChange> Next(SnapshotWatch watch)
     {
         using var timeout = new CancellationTokenSource(Within);
-        return await watch.Changes.ReadAsync(timeout.Token);
+        return await watch.Changes.ReadAsync(timeout.Token).ConfigureAwait(false);
     }
 
     // Whether the watch ends within the bound, once whatever it still holds is read.
@@ -71,7 +74,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         using var timeout = new CancellationTokenSource(Within);
         try
         {
-            await foreach (var _ in watch.Changes.ReadAllAsync(timeout.Token)) { }
+            await foreach (var _ in watch.Changes.ReadAllAsync(timeout.Token).ConfigureAwait(false))
+            { }
             return true;
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
@@ -84,7 +88,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     public async Task The_first_change_is_the_row_as_it_is_and_each_write_follows()
     {
         var (id, rowId) = await Saved();
-        await using var watch = Hub.Watch(rowId);
+        var watch = Hub.Watch(rowId);
+        await using var watchDisposal = watch.ConfigureAwait(false);
 
         var first = await Next(watch);
         first.Kind.Should().Be(SnapshotRowChangeKind.Changed);
@@ -101,7 +106,13 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         next.Revision.Should()
             .Be(2, $"each write reaches the watcher as the re-read row. See {Adr}");
         next.State.Should().Be("Unlocked");
-        JsonNode.Parse(next.Context!)!["paidWith"]!.GetValue<string>().Should().Be("quarter");
+        JsonNode
+            .Parse(next.Context.NotNull())
+            .NotNull()["paidWith"]
+            .NotNull()
+            .GetValue<string>()
+            .Should()
+            .Be("quarter");
     }
 
     [Test]
@@ -111,7 +122,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         var watch = Hub.Watch(rowId);
         (await Next(watch)).Revision.Should().Be(1);
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
 
         var gone = await Next(watch);
@@ -136,15 +147,18 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         var (brokenId, broken) = await Saved();
         var (healthyId, healthy) = await Saved();
         var brokenWatch = Hub.Watch(broken);
-        await using var healthyWatch = Hub.Watch(healthy);
+        var healthyWatch = Hub.Watch(healthy);
+        await using var healthyWatchDisposal = healthyWatch.ConfigureAwait(false);
         (await Next(brokenWatch)).Revision.Should().Be(1);
         (await Next(healthyWatch)).Revision.Should().Be(1);
 
         // As a newer version of the machine would leave it: a state this host's machine does not have.
-        await _host.Execute(
-            $"UPDATE {_host.DraftTable} SET state = 'StateFromANewerVersion' WHERE row_id = @p0",
-            broken
-        );
+        await _host
+            .NotNull()
+            .Execute(
+                $"UPDATE {_host.NotNull().DraftTable} SET state = 'StateFromANewerVersion' WHERE row_id = @p0",
+                broken
+            );
 
         var unreadable = await Next(brokenWatch);
         unreadable
@@ -193,7 +207,8 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     [Test]
     public async Task Watching_every_row_reports_writes_and_deletes()
     {
-        await using var all = Hub.WatchAll("turnstile");
+        var all = Hub.WatchAll("turnstile");
+        await using var allDisposal = all.ConfigureAwait(false);
         (await Next(all))
             .Kind.Should()
             .Be(SnapshotRowChangeKind.Reload, "a watch on every row starts by listing again");
@@ -204,7 +219,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
         created.RowId.Should().Be(rowId);
         created.State.Should().Be("Locked");
 
-        using (var scope = _host.Scope())
+        using (var scope = _host.NotNull().Scope())
             await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
         var gone = await Next(all);
         gone.Kind.Should().Be(SnapshotRowChangeKind.Gone);

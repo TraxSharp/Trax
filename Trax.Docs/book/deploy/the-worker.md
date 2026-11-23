@@ -65,7 +65,7 @@ builder.Services.AddTrax(trax =>
                             // network. A broker anywhere else is reached over amqps://.
                             rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
                                 "Broadcast:AllowInsecureTransport",
-                                false
+                                defaultValue: false
                             );
                         }
                     )
@@ -91,7 +91,7 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 app.MapHealthChecks("/health/live");
-await app.RunAsync();
+await app.RunAsync().ConfigureAwait(false);
 ```
 
 The worker publishes the events of every run it executes, signed with the same

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.StateMachine.Persistence.Integration;
 
@@ -37,7 +38,7 @@ public class SnapshotStoreDefaultMembersTests
         var stored = await store.Get("u", "turnstile", id);
 
         stored.Should().NotBeNull();
-        stored!.Json.Should().Be(Draft("turnstile"));
+        stored.NotNull().Json.Should().Be(Draft("turnstile"));
     }
 
     [Test]
@@ -78,7 +79,7 @@ public class SnapshotStoreDefaultMembersTests
         var stored = await store.Get("u", "turnstile", id);
 
         stored.Should().NotBeNull();
-        stored!.Json.Should().Be(json);
+        stored.NotNull().Json.Should().Be(json);
     }
 
     [Test]
@@ -109,7 +110,7 @@ public class SnapshotStoreDefaultMembersTests
         var id = Guid.NewGuid();
         var store = new MachineLessStore().With("u", id, Draft("turnstile"));
         ISnapshotStore contract = store;
-        var token = (await contract.Get("u", id))!.Token;
+        var token = (await contract.Get("u", id)).NotNull().Token;
 
         var written = await contract.UpdateWithRequest(
             "u",
@@ -120,9 +121,9 @@ public class SnapshotStoreDefaultMembersTests
         );
 
         written.Should().BeTrue();
-        var stored = (await contract.Get("u", id))!;
+        var stored = (await contract.Get("u", id)).NotNull();
         stored.LastRequestId.Should().Be("req-1");
-        stored.LastRequest.Should().Be(new AppliedRequest("req-1", null, null));
+        stored.LastRequest.Should().Be(new AppliedRequest("req-1", Trigger: null, FromState: null));
     }
 
     [Test]
@@ -131,13 +132,13 @@ public class SnapshotStoreDefaultMembersTests
         var id = Guid.NewGuid();
         var store = new MachineLessStore().With("u", id, Draft("turnstile"), "req-0");
         ISnapshotStore contract = store;
-        var token = (await contract.Get("u", id))!.Token;
+        var token = (await contract.Get("u", id)).NotNull().Token;
 
         (await contract.UpdateWithRequest("u", id, Snapshot("turnstile"), token, request: null))
             .Should()
             .BeTrue();
 
-        (await contract.Get("u", id))!.LastRequest.Should().BeNull();
+        (await contract.Get("u", id)).NotNull().LastRequest.Should().BeNull();
     }
 
     /// <summary>An in-memory store implementing only the members every store must provide.</summary>
@@ -151,7 +152,7 @@ public class SnapshotStoreDefaultMembersTests
                 json,
                 Guid.NewGuid(),
                 requestId,
-                DateTimeOffset.UtcNow
+                TimeProvider.System.GetUtcNow()
             );
             return this;
         }

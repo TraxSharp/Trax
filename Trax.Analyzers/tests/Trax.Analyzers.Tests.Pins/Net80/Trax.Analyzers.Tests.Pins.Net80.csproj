@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ReferenceAssemblies.Net.Net80, and ASP.NET Core 8. -->
+  <Import Project="../Pins.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETCore.App.Ref" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.App.Ref" Version="8.0.0" />
+  </ItemGroup>
+</Project>

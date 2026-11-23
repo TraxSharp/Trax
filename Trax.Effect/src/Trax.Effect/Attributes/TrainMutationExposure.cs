@@ -9,6 +9,9 @@ namespace Trax.Effect.Attributes;
 /// <param name="Implementation">The train class the exposure applies to.</param>
 /// <param name="Mutation">The mutation the train is served as, exactly as the attribute would declare it.</param>
 /// <param name="Policy">An authorization policy every caller of the mutation must satisfy, or null for none.</param>
+[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+    System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All
+)]
 internal sealed record TrainMutationExposure(
     Type Implementation,
     TraxMutationAttribute Mutation,

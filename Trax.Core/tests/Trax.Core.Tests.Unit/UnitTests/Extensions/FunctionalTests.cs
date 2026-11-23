@@ -29,7 +29,7 @@ public class FunctionalTests : TestSetup
         );
 
         // Act
-        Func<Task> act = async () => await either.Unwrap();
+        Func<Task> act = async () => await either.Unwrap().ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Test exception");
@@ -94,31 +94,29 @@ public class FunctionalTests : TestSetup
     public async Task TestUnwrapTaskEitherLeftDifferentTypes()
     {
         // Arrange
-        var exception = new ArgumentNullException("param");
-        var either = Task.FromResult<Either<ArgumentException, bool>>(
-            Either<ArgumentException, bool>.Left(exception)
+        var exception = new FileNotFoundException("missing");
+        var either = Task.FromResult<Either<IOException, bool>>(
+            Either<IOException, bool>.Left(exception)
         );
 
         // Act
-        Func<Task> act = async () => await either.Unwrap();
+        Func<Task> act = async () => await either.Unwrap().ConfigureAwait(false);
 
         // Assert
-        await act.Should()
-            .ThrowAsync<ArgumentNullException>()
-            .WithMessage("Value cannot be null. (Parameter 'param')");
+        await act.Should().ThrowAsync<FileNotFoundException>().WithMessage("missing");
     }
 
     [Theory]
     public void TestUnwrapEitherLeftDifferentTypes()
     {
         // Arrange
-        var exception = new ArgumentException("Test exception");
+        var exception = new InvalidOperationException("Test exception");
         var either = Either<Exception, char>.Left(exception);
 
         // Act
         Action act = () => either.Unwrap();
 
         // Assert
-        act.Should().Throw<ArgumentException>().WithMessage("Test exception");
+        act.Should().Throw<InvalidOperationException>().WithMessage("Test exception");
     }
 }

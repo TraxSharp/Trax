@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Samples.Recovery.Machines;
 using Trax.StateMachine;
 
@@ -29,7 +30,7 @@ internal static class TopicMapArtifacts
     /// page sends. Written by <c>--trax-export-client</c>, then <c>trax client</c> generates the client beside it.
     /// </summary>
     public static string ClientManifest =>
-        Path.Combine(Path.GetDirectoryName(Folder)!, "trax", "manifest.json");
+        Path.Combine(Path.GetDirectoryName(Folder).NotNull(), "trax", "manifest.json");
 
     /// <summary>
     /// The topic map's engine, built from the machine's own declaration. The machine is sealed and keeps its

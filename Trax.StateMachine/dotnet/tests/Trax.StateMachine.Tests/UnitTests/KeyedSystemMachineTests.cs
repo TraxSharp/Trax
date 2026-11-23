@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Persistence;
@@ -64,30 +65,35 @@ public class KeyedSystemMachineTests
         """;
 
     [Test]
-    public void A_keyed_system_machine_is_derived_and_fired_by_the_server_only()
+    public async Task A_keyed_system_machine_is_derived_and_fired_by_the_server_only()
     {
-        var derived = Derive(Tickets);
+        var derived = await Derive(Tickets).ConfigureAwait(false);
 
         derived.Problems.Should().BeEmpty();
-        var host = JsonNode.Parse(derived.Host!)!["machines"]!["ticket"]!;
-        host["owner"]!.ToJsonString().Should().Be("""{"system":{"keyedBy":["id"]}}""");
-        host["triggers"]!
+        var host = JsonNode
+            .Parse(derived.Host.NotNull())
+            .NotNull()["machines"]
+            .NotNull()["ticket"]
+            .NotNull();
+        host["owner"].NotNull().ToJsonString().Should().Be("""{"system":{"keyedBy":["id"]}}""");
+        host["triggers"]
+            .NotNull()
             .ToJsonString()
             .Should()
             .Be("""{"Close":{"server":true},"Triage":{"server":true}}""");
         derived.Access.Should().Contain("ticket Close: the server only\n");
-        HostFile.Read(derived.Host!).Machines["ticket"].KeyedBy.Should().Equal("id");
+        HostFile.Read(derived.Host.NotNull()).Machines["ticket"].KeyedBy.Should().Equal("id");
     }
 
     [Test]
-    public void It_is_served_as_a_system_machine_and_the_host_starts_none_of_it()
+    public async Task It_is_served_as_a_system_machine_and_the_host_starts_none_of_it()
     {
-        var derived = Derive(Tickets);
-        var file = HostFile.Read(derived.Host!);
+        var derived = await Derive(Tickets).ConfigureAwait(false);
+        var file = HostFile.Read(derived.Host.NotNull());
 
         var machine = IrMachines.Create(
             new IrMachines.Source(
-                JsonNode.Parse(derived.Irs["ticket"])!.AsObject(),
+                JsonNode.Parse(derived.Irs["ticket"]).NotNull().AsObject(),
                 file.Machines["ticket"]
             ),
             []
@@ -98,17 +104,20 @@ public class KeyedSystemMachineTests
     }
 
     [Test]
-    public void A_person_firing_a_keyed_system_machine_is_refused()
+    public async Task A_person_firing_a_keyed_system_machine_is_refused()
     {
-        var derived = Derive(
-            """
-            Feature: Tickets
-              Scenario: Fay closes a ticket
-                Given Fay is a fixer
-                And ticket "T-12" is in triage
-                When Fay ticket "T-12" gets closed
-                Then ticket "T-12" is closed
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Tickets
+                      Scenario: Fay closes a ticket
+                        Given Fay is a fixer
+                        And ticket "T-12" is in triage
+                        When Fay ticket "T-12" gets closed
+                        Then ticket "T-12" is closed
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -117,41 +126,47 @@ public class KeyedSystemMachineTests
     }
 
     [Test]
-    public void A_step_that_names_no_key_matches_nothing()
+    public async Task A_step_that_names_no_key_matches_nothing()
     {
-        var derived = Derive(
-            """
-            Feature: Tickets
-              Scenario: A ticket with no key
-                Given ticket is new
-                When ticket gets triaged
-                Then ticket is in triage
-            """
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Tickets
+                      Scenario: A ticket with no key
+                        Given ticket is new
+                        When ticket gets triaged
+                        Then ticket is in triage
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived.Problems.Should().Contain(p => p.Message.Contains("No phrase in the glossary"));
     }
 
     [Test]
-    public void A_policy_set_off_by_a_keyed_system_machine_is_refused()
+    public async Task A_policy_set_off_by_a_keyed_system_machine_is_refused()
     {
-        var derived = Derive(
-            """
-            Feature: Tickets
-              Scenario: Triage clocks a fixer in
-                Given Fay is a fixer
-                And Fay has a shift
-                And ticket "T-12" is new
-                When ticket "T-12" gets triaged
-                Then ticket "T-12" is in triage
-                And Fay's shift is on
+        var derived = (
+            await Derive(
+                    """
+                    Feature: Tickets
+                      Scenario: Triage clocks a fixer in
+                        Given Fay is a fixer
+                        And Fay has a shift
+                        And ticket "T-12" is new
+                        When ticket "T-12" gets triaged
+                        Then ticket "T-12" is in triage
+                        And Fay's shift is on
 
-              Scenario: A fixer clocks in
-                Given Fay is a fixer
-                And Fay has a shift
-                When Fay clocks in for her shift
-                Then Fay's shift is on
-            """
+                      Scenario: A fixer clocks in
+                        Given Fay is a fixer
+                        And Fay has a shift
+                        When Fay clocks in for her shift
+                        Then Fay's shift is on
+                    """
+                )
+                .ConfigureAwait(false)
         );
 
         derived
@@ -167,7 +182,8 @@ public class KeyedSystemMachineTests
             """
             "views": { "tickets": { "reads": [ { "machine": "ticket" } ], "fields": { "status": { "from": "ticket.state" } } } },
             "machines": {
-            """
+            """,
+            StringComparison.Ordinal
         );
 
         var read = () => Trax.StateMachine.Features.Glossary.Read(glossary);
@@ -175,8 +191,8 @@ public class KeyedSystemMachineTests
         read.Should().Throw<FormatException>().WithMessage("*keyed system machine*");
     }
 
-    private static Derived Derive(string feature, string glossary = Glossary) =>
-        FeatureDerivation.Derive(
+    private static Task<Derived> Derive(string feature, string glossary = Glossary) =>
+        FeatureDerivation.DeriveAsync(
             Trax.StateMachine.Features.Glossary.Read(glossary),
             [("tickets.feature", feature)]
         );

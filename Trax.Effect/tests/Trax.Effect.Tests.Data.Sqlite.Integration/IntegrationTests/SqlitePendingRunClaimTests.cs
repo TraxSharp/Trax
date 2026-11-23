@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -36,14 +37,16 @@ public class SqlitePendingRunClaimTests : TestSetup
         var id = await CreatePendingRow();
         var copyA = await ReadRow(id);
         var copyB = await ReadRow(id);
-        using var scopeA = Scope.ServiceProvider.CreateScope();
-        using var scopeB = Scope.ServiceProvider.CreateScope();
+        var scopeA = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeADisposal = scopeA.ConfigureAwait(false);
+        var scopeB = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeBDisposal = scopeB.ConfigureAwait(false);
         var trainA = (CountingTrain)scopeA.ServiceProvider.GetRequiredService<ICountingTrain>();
         var trainB = (CountingTrain)scopeB.ServiceProvider.GetRequiredService<ICountingTrain>();
 
         var outcomes = await Task.WhenAll(
-            Settle(Task.Run(() => trainA.Run(Unit.Default, copyA))),
-            Settle(Task.Run(() => trainB.Run(Unit.Default, copyB)))
+            Settle(Task.Run(() => trainA.Run(Unit.Default, copyA, CancellationToken.None))),
+            Settle(Task.Run(() => trainB.Run(Unit.Default, copyB, CancellationToken.None)))
         );
 
         CountingTrain.BodyRuns.Should().Be(1, "only one delivery may run the train");
@@ -60,15 +63,18 @@ public class SqlitePendingRunClaimTests : TestSetup
         var id = await CreatePendingRow();
         var staleCopy = await ReadRow(id);
 
-        using (var first = Scope.ServiceProvider.CreateScope())
+        var first = Scope.ServiceProvider.CreateAsyncScope();
+        await using (first.ConfigureAwait(false))
             await ((CountingTrain)first.ServiceProvider.GetRequiredService<ICountingTrain>()).Run(
                 Unit.Default,
                 await ReadRow(id)
             );
 
-        using var second = Scope.ServiceProvider.CreateScope();
+        var second = Scope.ServiceProvider.CreateAsyncScope();
+        await using var secondDisposal = second.ConfigureAwait(false);
         var train = (CountingTrain)second.ServiceProvider.GetRequiredService<ICountingTrain>();
-        var act = async () => await train.Run(Unit.Default, staleCopy);
+        var act = async () =>
+            await train.Run(Unit.Default, staleCopy, CancellationToken.None).ConfigureAwait(false);
 
         await act.Should().ThrowAsync<TrainAlreadyStartedException>();
         CountingTrain.BodyRuns.Should().Be(1);
@@ -78,18 +84,20 @@ public class SqlitePendingRunClaimTests : TestSetup
     [Test]
     public async Task A_supplied_row_that_was_never_saved_is_the_runs_own()
     {
-        using var scope = Scope.ServiceProvider.CreateScope();
+        var scope = Scope.ServiceProvider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = (CountingTrain)scope.ServiceProvider.GetRequiredService<ICountingTrain>();
         var unsaved = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICountingTrain).FullName!,
+                Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
-        await train.Run(Unit.Default, unsaved);
+        await train.Run(Unit.Default, unsaved, CancellationToken.None);
 
         CountingTrain.BodyRuns.Should().Be(1);
         (await ReadRow(unsaved.Id)).TrainState.Should().Be(TrainState.Completed);
@@ -99,7 +107,7 @@ public class SqlitePendingRunClaimTests : TestSetup
     {
         try
         {
-            await run;
+            await run.ConfigureAwait(false);
             return null;
         }
         catch (Exception ex)
@@ -110,26 +118,32 @@ public class SqlitePendingRunClaimTests : TestSetup
 
     private async Task<long> CreatePendingRow()
     {
-        using var context = (IDataContext)
+        var context = (IDataContext)
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ICountingTrain).FullName!,
+                Name = typeof(ICountingTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = Unit.Default,
-            }
+            },
+            TestTime.Clock
         );
-        await context.Track(metadata);
-        await context.SaveChanges(CancellationToken.None);
+        await context.Track(metadata).ConfigureAwait(false);
+        await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata.Id;
     }
 
     private async Task<Metadata> ReadRow(long id)
     {
-        using var context = (IDataContext)
+        var context = (IDataContext)
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
-        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id);
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == id)
+            .ConfigureAwait(false);
     }
 
     public interface ICountingTrain : IServiceTrain<Unit, Unit>;

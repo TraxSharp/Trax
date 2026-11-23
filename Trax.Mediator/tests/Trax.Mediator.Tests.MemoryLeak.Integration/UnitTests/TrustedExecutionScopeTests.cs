@@ -1,5 +1,7 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Mediator.Services.TrustedExecution;
+using Trax.Testing;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
@@ -68,7 +70,7 @@ public class TrustedExecutionScopeTests
     {
         var scope = new TrustedExecutionScope();
 
-        var act = () => scope.BeginTrusted(null!);
+        var act = () => scope.BeginTrusted(Null.Of<string>());
 
         act.Should().Throw<ArgumentException>();
     }
@@ -94,13 +96,13 @@ public class TrustedExecutionScopeTests
         var trustedTask = Task.Run(async () =>
         {
             using var _ = scope.BeginTrusted("task-a");
-            await Task.Delay(50);
+            await Task.Delay(50).ConfigureAwait(false);
             return (scope.IsTrusted, scope.CurrentReason);
         });
 
         var untrustedTask = Task.Run(async () =>
         {
-            await Task.Delay(10);
+            await Task.Delay(10).ConfigureAwait(false);
             return (scope.IsTrusted, scope.CurrentReason);
         });
 
@@ -174,7 +176,7 @@ public class TrustedExecutionScopeTests
             // Started inside the scope and not awaited there, so it captures the scope's flow.
             captured = Task.Run(async () =>
             {
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 return (scope.IsTrusted, scope.CurrentReason);
             });
             trustedBeforeDispose = scope.IsTrusted;
@@ -202,7 +204,7 @@ public class TrustedExecutionScopeTests
         {
             captured = Task.Run(async () =>
             {
-                await release.Task;
+                await release.Task.ConfigureAwait(false);
                 return (scope.IsTrusted, scope.CurrentReason);
             });
         }

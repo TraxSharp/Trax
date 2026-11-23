@@ -1,25 +1,9 @@
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 using Trax.StateMachine.Persistence;
 using static Trax.StateMachine.Rules;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
-
-public enum FeatureState
-{
-    Idle,
-    Deciding,
-    Shortening,
-    Done,
-    Failed,
-    Cancelled,
-}
-
-public enum FeatureTrigger
-{
-    Decide,
-    Shorten,
-    Retry,
-}
 
 /// <summary>
 /// A user's machine whose states invoke trains using other Trax features: <c>Deciding</c> invokes
@@ -57,5 +41,5 @@ public sealed class InvokedFeatureMachine : Machine<FeatureState, FeatureTrigger
     }
 
     private static InvokedStepInput Input(System.Text.Json.Nodes.JsonObject ctx) =>
-        new(ctx["mode"]!.GetValue<string>(), ctx["note"]!.GetValue<string>());
+        new(ctx["mode"].NotNull().GetValue<string>(), ctx["note"].NotNull().GetValue<string>());
 }

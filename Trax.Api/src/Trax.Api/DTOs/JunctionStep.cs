@@ -20,23 +20,23 @@ namespace Trax.Api.DTOs;
 /// <param name="Name">The junction's class name without its namespace, or a question's key.</param>
 /// <param name="State">Where the step stands.</param>
 /// <param name="StartedAt">When the junction started, or when the question was answered or the track taken (UTC).</param>
-/// <param name="EndedAt">When the junction returned (UTC), or <c>null</c> while it runs.</param>
-/// <param name="DurationMs">Milliseconds from <paramref name="StartedAt"/> to <paramref name="EndedAt"/>, or <c>null</c> while it runs.</param>
-/// <param name="FailureClass">How a failed junction's failure is classified; <c>null</c> unless it failed.</param>
+/// <param name="EndedAt">When the junction returned (UTC), or <see langword="null"/> while it runs.</param>
+/// <param name="DurationMs">Milliseconds from <paramref name="StartedAt"/> to <paramref name="EndedAt"/>, or <see langword="null"/> while it runs.</param>
+/// <param name="FailureClass">How a failed junction's failure is classified; <see langword="null"/> unless it failed.</param>
 /// <param name="FailureException">The type name of the exception a junction failed or was cancelled with, never its message.</param>
 /// <param name="QuestionKey">The question's key, for a question or a track.</param>
-/// <param name="Answer">The answer the run acted on, or <c>null</c> for a junction, a refused answer and a withheld one.</param>
-/// <param name="Confidence">How sure the decider was, for a choice or a score; <c>null</c> when withheld.</param>
+/// <param name="Answer">The answer the run acted on, or <see langword="null"/> for a junction, a refused answer and a withheld one.</param>
+/// <param name="Confidence">How sure the decider was, for a choice or a score; <see langword="null"/> when withheld.</param>
 /// <param name="Replayed">True when the answer came from an earlier run rather than a decider.</param>
 /// <param name="Decider">The full name of the decider's type. Live events only; the recorded timeline does not keep it.</param>
 /// <param name="AnswerWithheld">True when the question is about a <c>[TraxSensitive]</c> type, so its answer and confidence are absent.</param>
-/// <param name="Attempt">Which attempt of its manifest the run is, or <c>null</c> for a run with no manifest.</param>
+/// <param name="Attempt">Which attempt of its manifest the run is, or <see langword="null"/> for a run with no manifest.</param>
 /// <param name="NameWithheld">
 /// True when <paramref name="Name"/> is <c>(withheld)</c>: the step is on a decision track, and its
 /// name would give away an answer this caller is not shown.
 /// </param>
 /// <param name="TrackPosition">
-/// The position of the latest routing step before this one, or <c>null</c> before any. Every step
+/// The position of the latest routing step before this one, or <see langword="null"/> before any. Every step
 /// after a route, a junction, a question or a further route, counts as on its track.
 /// </param>
 public sealed record JunctionStep(

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -37,7 +38,7 @@ public class QueueCancellationTests
         using var cts = new CancellationTokenSource();
 
         var receipt = await execution.QueueAsync(
-            typeof(ISchedulerTestTrain).FullName!,
+            typeof(ISchedulerTestTrain).FullName.NotNull(),
             """{"value":"not-recallable"}""",
             ct: cts.Token
         );
@@ -45,12 +46,15 @@ public class QueueCancellationTests
         // The caller gives up — a client timeout, a closed connection, a cancelled request.
         await cts.CancelAsync();
 
-        await fx.RunJobDispatcherAsync();
+        await fx.RunJobDispatcherAsync(CancellationToken.None);
         fx.DataContext.Reset();
 
         var entry = await fx
             .DataContext.WorkQueues.AsNoTracking()
-            .FirstAsync(w => w.Id == receipt.WorkQueueId);
+            .FirstAsync(
+                w => w.Id == receipt.WorkQueueId,
+                cancellationToken: CancellationToken.None
+            );
 
         entry
             .Status.Should()
@@ -65,7 +69,7 @@ public class QueueCancellationTests
         // to have finished rather than been cancelled by the token the caller abandoned.
         var run = await fx
             .DataContext.Metadatas.AsNoTracking()
-            .FirstAsync(m => m.Id == entry.MetadataId);
+            .FirstAsync(m => m.Id == entry.MetadataId, cancellationToken: CancellationToken.None);
 
         run.TrainState.Should()
             .Be(
@@ -91,16 +95,20 @@ public class QueueCancellationTests
         await cts.CancelAsync();
 
         var queue = async () =>
-            await execution.QueueAsync(
-                typeof(ISchedulerTestTrain).FullName!,
-                """{"value":"never-queued"}""",
-                ct: cts.Token
-            );
+            await execution
+                .QueueAsync(
+                    typeof(ISchedulerTestTrain).FullName.NotNull(),
+                    """{"value":"never-queued"}""",
+                    ct: cts.Token
+                )
+                .ConfigureAwait(false);
 
         await queue.Should().ThrowAsync<OperationCanceledException>();
 
         fx.DataContext.Reset();
-        var entries = await fx.DataContext.WorkQueues.AsNoTracking().ToListAsync();
+        var entries = await fx
+            .DataContext.WorkQueues.AsNoTracking()
+            .ToListAsync(cancellationToken: CancellationToken.None);
         entries.Should().BeEmpty("the token does govern the enqueue itself");
     }
 }

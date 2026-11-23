@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Enums;
@@ -20,43 +21,55 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// </summary>
 public class MachineInstancesByIdTests
 {
-    private string _dir = null!;
-    private string _file = null!;
-    private ServiceProvider _provider = null!;
+    private string? _dir;
+    private string? _file;
+    private ServiceProvider? _provider;
 
     [SetUp]
     public async Task SetUp()
     {
         _dir = Path.Combine(Path.GetTempPath(), $"trax-by-id-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(_dir.NotNull());
         _file = Path.Combine(Path.GetTempPath(), $"sm_by_id_{Guid.NewGuid():N}.db");
         var (irs, host) = PolicyRunnerTests.Definitions();
         foreach (var (id, ir) in irs)
-            File.WriteAllText(Path.Combine(_dir, id + IrDirectory.IrSuffix), ir.ToJsonString());
-        File.WriteAllText(Path.Combine(_dir, IrDirectory.HostFileName), host.ToJsonString());
+            await File.WriteAllTextAsync(
+                    Path.Combine(_dir.NotNull(), id + IrDirectory.IrSuffix),
+                    ir.ToJsonString()
+                )
+                .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(_dir.NotNull(), IrDirectory.HostFileName),
+                host.ToJsonString()
+            )
+            .ConfigureAwait(false);
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(e => e.UseSqlite($"Data Source={_file}"))
-                .AddStateMachines(o => o.ServeFeatures(_dir))
+            trax.AddEffects(e => e.UseSqlite($"Data Source={_file.NotNull()}"))
+                .AddStateMachines(o => o.ServeFeatures(_dir.NotNull()))
         );
         _provider = services.BuildServiceProvider();
         foreach (
-            var service in _provider.GetServices<IHostedService>().OfType<IHostedLifecycleService>()
+            var service in _provider
+                .NotNull()
+                .GetServices<IHostedService>()
+                .OfType<IHostedLifecycleService>()
         )
-            await service.StartingAsync(CancellationToken.None);
+            await service.StartingAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     [TearDown]
     public async Task TearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         SqliteConnection.ClearAllPools();
-        Directory.Delete(_dir, recursive: true);
+        Directory.Delete(_dir.NotNull(), recursive: true);
         try
         {
-            File.Delete(_file);
+            File.Delete(_file.NotNull());
         }
         catch (IOException)
         {
@@ -67,7 +80,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task Host_code_advances_a_served_machine_by_its_id_and_the_history_records_the_host()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var outcome = await instances.Advance("p-shop", "main", "Open");
@@ -92,7 +106,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task Host_code_starts_a_served_machine_by_its_id_at_its_key()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var started = await instances.Start("p-shop", "main");
@@ -105,7 +120,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task A_system_machine_at_a_fixed_key_is_refused_at_another()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var start = () => instances.Start("p-shop", "second");
@@ -130,7 +146,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task An_id_the_host_does_not_serve_is_refused()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var advance = () => instances.Advance("p-nothing", "main", "Open");
@@ -145,7 +162,8 @@ public class MachineInstancesByIdTests
     [Test]
     public async Task A_user_owned_machine_is_refused_by_its_id()
     {
-        await using var scope = _provider.CreateAsyncScope();
+        var scope = _provider.NotNull().CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var instances = scope.ServiceProvider.GetRequiredService<IMachineInstances>();
 
         var start = () => instances.Start("p-order", "main", new JsonObject());

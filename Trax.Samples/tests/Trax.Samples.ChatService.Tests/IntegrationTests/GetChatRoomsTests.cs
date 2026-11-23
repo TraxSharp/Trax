@@ -11,7 +11,7 @@ public class GetChatRoomsTests
     [Test]
     public async Task FetchRooms_ReturnsOnlyTheCallersRooms()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         var mine = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         await ChatUsers.SeedRoomAsync(db, ChatUsers.Bob);
 
@@ -23,7 +23,7 @@ public class GetChatRoomsTests
     [Test]
     public async Task FetchRooms_IncludesParticipantCount()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
         await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice, ChatUsers.Bob);
 
         var result = await new FetchRoomsJunction(db, ChatUsers.Alice).Run(new GetChatRoomsInput());
@@ -34,7 +34,7 @@ public class GetChatRoomsTests
     [Test]
     public async Task FetchRooms_NoRooms_ReturnsEmpty()
     {
-        using var db = ChatDbContextFixture.Create();
+        await using var db = ChatDbContextFixture.Create();
 
         var result = await new FetchRoomsJunction(db, ChatUsers.Alice).Run(new GetChatRoomsInput());
 

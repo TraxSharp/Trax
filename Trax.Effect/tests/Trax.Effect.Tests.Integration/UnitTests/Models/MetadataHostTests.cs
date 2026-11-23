@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -26,7 +27,10 @@ public class MetadataHostTests
             HostName = "test-host",
             HostEnvironment = "lambda",
             HostInstanceId = "stream-abc",
-            Labels = new Dictionary<string, string> { ["region"] = "us-east-1" },
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["region"] = "us-east-1",
+            },
         };
 
         var metadata = Metadata.Create(
@@ -35,7 +39,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostName.Should().Be("test-host");
@@ -55,7 +60,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostName.Should().BeNull();
@@ -72,7 +78,7 @@ public class MetadataHostTests
             HostName = "test-host",
             HostEnvironment = "server",
             HostInstanceId = "test-1",
-            Labels = new Dictionary<string, string>
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["region"] = "us-east-1",
                 ["service"] = "api",
@@ -85,11 +91,14 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostLabels.Should().NotBeNull();
-        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(metadata.HostLabels!);
+        var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(
+            metadata.HostLabels.NotNull()
+        );
         labels.Should().ContainKey("region").WhoseValue.Should().Be("us-east-1");
         labels.Should().ContainKey("service").WhoseValue.Should().Be("api");
     }
@@ -102,7 +111,7 @@ public class MetadataHostTests
             HostName = "test-host",
             HostEnvironment = "server",
             HostInstanceId = "test-1",
-            Labels = new Dictionary<string, string>(),
+            Labels = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
         var metadata = Metadata.Create(
@@ -111,7 +120,8 @@ public class MetadataHostTests
                 Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString(),
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
 
         metadata.HostLabels.Should().BeNull();

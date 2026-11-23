@@ -1,0 +1,67 @@
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class RemoveEmptyBlockAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.RemoveEmptyBlock,
+        title: "Remove empty else/finally block",
+        messageFormat: "Remove empty {0} block",
+        RuleCategories.Design,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.RemoveEmptyBlock));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterSyntaxNodeAction(AnalyzeFinally, SyntaxKind.FinallyClause);
+        context.RegisterSyntaxNodeAction(AnalyzeElse, SyntaxKind.ElseClause);
+    }
+
+    private static void AnalyzeFinally(SyntaxNodeAnalysisContext context)
+    {
+        var finallyClause = (FinallyClauseSyntax)context.Node;
+        if (IsEmptyBlock(finallyClause.Block))
+        {
+            context.ReportDiagnostic(Rule, finallyClause, "finally");
+        }
+    }
+
+    private static void AnalyzeElse(SyntaxNodeAnalysisContext context)
+    {
+        var elseClause = (ElseClauseSyntax)context.Node;
+        if (elseClause.Statement is BlockSyntax blockSyntax)
+        {
+            if (IsEmptyBlock(blockSyntax))
+            {
+                context.ReportDiagnostic(Rule, elseClause, "else");
+            }
+        }
+    }
+
+    private static bool IsEmptyBlock(BlockSyntax? block)
+    {
+        if (block is not null)
+        {
+            if (block.Statements.Count > 0)
+                return false;
+
+            if (block.ContainsDirectives)
+                return false;
+
+            if (block.DescendantTrivia().Any(node => node.IsKind(SyntaxKind.MultiLineCommentTrivia) || node.IsKind(SyntaxKind.SingleLineCommentTrivia)))
+                return false;
+        }
+
+        return true;
+    }
+}

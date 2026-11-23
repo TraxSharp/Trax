@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Extensions;
 
 namespace Trax.Mediator.Tests.Meta.Tests;
@@ -109,7 +110,7 @@ public class InterfaceFullNameInvariantTests
         // in CanonicalName by treating it as a non-nullable string, we want to know.
         var name = typeof(IFakeRoute).FullName;
         name.Should().NotBeNull();
-        name!
+        name.NotNull()
             .Should()
             .NotContain(
                 "?",

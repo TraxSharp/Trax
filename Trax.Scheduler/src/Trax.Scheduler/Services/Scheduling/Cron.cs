@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Scheduler.Services.Scheduling;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// For complex schedules, use <see cref="Expression"/> with a raw cron string.
 ///
 /// Every time is in UTC: <c>Cron.Daily(hour: 3)</c> runs at 03:00 UTC. Each method builds its
-/// schedule through <see cref="Schedule.FromCron"/>, so a value out of range (an hour of 25, a
+/// schedule through <see cref="Schedule.FromCron(string)"/>, so a value out of range (an hour of 25, a
 /// minute of 60) throws <see cref="FormatException"/>. A new cron schedule first runs at its
 /// first occurrence after it is scheduled.
 /// </remarks>
@@ -40,20 +42,24 @@ public static class Cron
     /// (default: 5 seconds) limits the effective resolution of cron evaluation.
     /// </remarks>
     /// <returns>A Schedule configured to run every second</returns>
-    public static Schedule Secondly() => Schedule.FromCron("* * * * * *");
+    public static Schedule Secondly() => Schedule.FromCron("* * * * * *", TimeProvider.System);
 
     /// <summary>
     /// Creates a schedule that runs every minute.
     /// </summary>
     /// <returns>A Schedule configured to run every minute</returns>
-    public static Schedule Minutely() => Schedule.FromCron("* * * * *");
+    public static Schedule Minutely() => Schedule.FromCron("* * * * *", TimeProvider.System);
 
     /// <summary>
     /// Creates a schedule that runs every minute at the specified second.
     /// </summary>
     /// <param name="second">The second of the minute to run (0-59)</param>
     /// <returns>A Schedule configured to run every minute at the specified second</returns>
-    public static Schedule Minutely(int second) => Schedule.FromCron($"{second} * * * * *");
+    public static Schedule Minutely(int second) =>
+        Schedule.FromCron(
+            string.Create(CultureInfo.InvariantCulture, $"{second} * * * * *"),
+            TimeProvider.System
+        );
 
     /// <summary>
     /// Creates a schedule that runs hourly at the specified minute and second.
@@ -64,8 +70,14 @@ public static class Cron
     /// <returns>A Schedule configured to run hourly</returns>
     public static Schedule Hourly(int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} * * * *")
-            : Schedule.FromCron($"{second} {minute} * * * *");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} * * * *"),
+                TimeProvider.System
+            )
+            : Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{second} {minute} * * * *"),
+                TimeProvider.System
+            );
 
     /// <summary>
     /// Creates a schedule that runs daily at the specified UTC time.
@@ -77,8 +89,14 @@ public static class Cron
     /// <returns>A Schedule configured to run daily</returns>
     public static Schedule Daily(int hour = 0, int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} {hour} * * *")
-            : Schedule.FromCron($"{second} {minute} {hour} * * *");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} {hour} * * *"),
+                TimeProvider.System
+            )
+            : Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{second} {minute} {hour} * * *"),
+                TimeProvider.System
+            );
 
     /// <summary>
     /// Creates a schedule that runs weekly on the specified day and UTC time.
@@ -91,8 +109,17 @@ public static class Cron
     /// <returns>A Schedule configured to run weekly</returns>
     public static Schedule Weekly(DayOfWeek day, int hour = 0, int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} {hour} * * {(int)day}")
-            : Schedule.FromCron($"{second} {minute} {hour} * * {(int)day}");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} {hour} * * {(int)day}"),
+                TimeProvider.System
+            )
+            : Schedule.FromCron(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{second} {minute} {hour} * * {(int)day}"
+                ),
+                TimeProvider.System
+            );
 
     /// <summary>
     /// Creates a schedule that runs monthly on the specified day and UTC time.
@@ -105,8 +132,14 @@ public static class Cron
     /// <returns>A Schedule configured to run monthly</returns>
     public static Schedule Monthly(int day = 1, int hour = 0, int minute = 0, int second = 0) =>
         second == 0
-            ? Schedule.FromCron($"{minute} {hour} {day} * *")
-            : Schedule.FromCron($"{second} {minute} {hour} {day} * *");
+            ? Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{minute} {hour} {day} * *"),
+                TimeProvider.System
+            )
+            : Schedule.FromCron(
+                string.Create(CultureInfo.InvariantCulture, $"{second} {minute} {hour} {day} * *"),
+                TimeProvider.System
+            );
 
     /// <summary>
     /// Creates a schedule from a custom cron expression.
@@ -127,5 +160,6 @@ public static class Cron
     /// - "*/15 * * * * *" - Every 15 seconds (6-field)
     /// - "30 0 3 * * *" - Daily at 03:00:30 UTC (6-field)
     /// </remarks>
-    public static Schedule Expression(string cronExpression) => Schedule.FromCron(cronExpression);
+    public static Schedule Expression(string cronExpression) =>
+        Schedule.FromCron(cronExpression, TimeProvider.System);
 }

@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Decisions;
 
@@ -207,8 +208,8 @@ internal static class StateDigest
                 return plan.Kind switch
                 {
                     Kind.Array => Array((Array)value, depth),
-                    Kind.InlineArray => Elements(plan.Spread!(value), depth),
-                    Kind.Wrapper => Value(plan.Inner!(value), depth + 1)
+                    Kind.InlineArray => Elements(plan.Spread.NotNull()(value), depth),
+                    Kind.Wrapper => Value(plan.Inner.NotNull()(value), depth + 1)
                         && Comparers(value, plan, depth)
                         && Fields(value, plan, depth),
                     Kind.Collection => Collection((IEnumerable)value, plan, depth)
@@ -380,7 +381,11 @@ internal static class StateDigest
             {
                 var held = field.GetValue(value);
 
-                if (spread is null ? !Value(held, depth + 1) : !Elements(spread(held!), depth))
+                if (
+                    spread is null
+                        ? !Value(held, depth + 1)
+                        : !Elements(spread(held.NotNull()), depth)
+                )
                     return false;
             }
 
@@ -388,7 +393,12 @@ internal static class StateDigest
         }
 
         /// <summary>Writes a value encoded directly rather than by its fields.</summary>
-        private bool Leaf(object value)
+        private bool Leaf(object value) => TextOrNumberLeaf(value) ?? OtherLeaf(value);
+
+        /// <summary>
+        /// Writes a string, a bool or a number; null when <paramref name="value"/> is none of them.
+        /// </summary>
+        private bool? TextOrNumberLeaf(object value)
         {
             switch (value)
             {
@@ -437,6 +447,16 @@ internal static class StateDigest
                     return Long(unchecked((long)(ulong)n));
                 case BigInteger n:
                     return Text(n.ToString(CultureInfo.InvariantCulture));
+            }
+
+            return null;
+        }
+
+        /// <summary>Writes a time, an identifier or a culture; false for anything else.</summary>
+        private bool OtherLeaf(object value)
+        {
+            switch (value)
+            {
                 // All 64 bits: the ticks, the kind, and whether a local time is the second of
                 // the two instants it names in the hour a clock goes back.
                 case DateTime t:
@@ -604,7 +624,7 @@ internal static class StateDigest
                 ? Refused
                 : Fields(type, collection, Kind.Collection);
 
-        return Fields(type, null, Kind.Fields);
+        return Fields(type, collection: null, Kind.Fields);
     }
 
     /// <summary>
@@ -618,13 +638,52 @@ internal static class StateDigest
         Func<object, object?>? inner = null
     )
     {
+        if (FieldPlans(type, collection) is not { } fields)
+            return Refused;
+
+        var unordered =
+            collection is not null && kind == Kind.Collection && IsUnordered(collection);
+        var comparers =
+            collection is not null && kind is Kind.Collection or Kind.Wrapper
+                ? ComparerNames
+                    .Select(name =>
+                        collection.GetProperty(name, BindingFlags.Public | BindingFlags.Instance)
+                    )
+                    .Where(p => p is not null && p.GetIndexParameters().Length == 0)
+                    .Select(p => p.NotNull())
+                    .ToArray()
+                : [];
+
+        return new TypePlan
+        {
+            Kind = kind,
+            Header = Header(
+                type,
+                kind,
+                fields: fields,
+                unordered: unordered,
+                comparers: comparers,
+                collection: collection
+            ),
+            Fields = [.. fields],
+            Unordered = unordered,
+            Comparers = comparers,
+            Inner = inner,
+        };
+    }
+
+    /// <summary>
+    /// The fields a type is written by, base type first and each level's in name order; null when
+    /// one is a pointer or a ref struct, which cannot be read.
+    /// </summary>
+    private static List<FieldPlan>? FieldPlans(Type type, Type? collection)
+    {
         var levels = new List<Type>();
 
         for (var level = type; level is not null && level != collection; level = level.BaseType)
             levels.Insert(0, level);
 
         var fields = new List<FieldPlan>();
-
         foreach (var level in levels)
         {
             var declared = level
@@ -650,41 +709,13 @@ internal static class StateDigest
                 }
 
                 if (field.FieldType.IsPointer || field.FieldType.IsByRefLike)
-                    return Refused;
+                    return null;
 
-                fields.Add(new FieldPlan(field, null));
+                fields.Add(new FieldPlan(field, Spread: null));
             }
         }
 
-        var unordered =
-            collection is not null && kind == Kind.Collection && IsUnordered(collection);
-        var comparers =
-            collection is not null && kind is Kind.Collection or Kind.Wrapper
-                ? ComparerNames
-                    .Select(name =>
-                        collection.GetProperty(name, BindingFlags.Public | BindingFlags.Instance)
-                    )
-                    .Where(p => p is not null && p.GetIndexParameters().Length == 0)
-                    .Select(p => p!)
-                    .ToArray()
-                : [];
-
-        return new TypePlan
-        {
-            Kind = kind,
-            Header = Header(
-                type,
-                kind,
-                fields: fields,
-                unordered: unordered,
-                comparers: comparers,
-                collection: collection
-            ),
-            Fields = [.. fields],
-            Unordered = unordered,
-            Comparers = comparers,
-            Inner = inner,
-        };
+        return fields;
     }
 
     private static readonly string[] ComparerNames = ["Comparer", "KeyComparer", "ValueComparer"];
@@ -708,27 +739,9 @@ internal static class StateDigest
         var header = new ArrayBufferWriter<byte>();
 
         void Write(ReadOnlySpan<byte> bytes) => header.Write(bytes);
-
-        void Int(int n)
-        {
-            Span<byte> buffer = stackalloc byte[4];
-            BitConverter.TryWriteBytes(buffer, n);
-            Write(buffer);
-        }
-
-        void Text(string s)
-        {
-            var bytes = Encoding.UTF8.GetBytes(s);
-            Int(bytes.Length);
-            Write(bytes);
-        }
-
-        void Long(long n)
-        {
-            Span<byte> buffer = stackalloc byte[8];
-            BitConverter.TryWriteBytes(buffer, n);
-            Write(buffer);
-        }
+        void Int(int n) => HeaderInt(header, n);
+        void Text(string s) => HeaderText(header, s);
+        void Long(long n) => HeaderLong(header, n);
 
         Text(Identity(type));
         Write([(byte)kind]);
@@ -748,7 +761,7 @@ internal static class StateDigest
                 foreach (var member in members)
                 {
                     Text(member.Name);
-                    Long(EnumBits(member.GetRawConstantValue()!, code));
+                    Long(EnumBits(member.GetRawConstantValue().NotNull(), code));
                 }
                 break;
             case Kind.InlineArray:
@@ -766,7 +779,7 @@ internal static class StateDigest
                 Int(fields?.Count ?? 0);
                 foreach (var (field, spread) in fields ?? [])
                 {
-                    Text(Identity(field.DeclaringType!));
+                    Text(Identity(field.DeclaringType.NotNull()));
                     Text(field.Name);
                     Write([spread is null ? (byte)0 : (byte)1]);
                 }
@@ -774,6 +787,27 @@ internal static class StateDigest
         }
 
         return header.WrittenSpan.ToArray();
+    }
+
+    private static void HeaderInt(ArrayBufferWriter<byte> header, int n)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        BitConverter.TryWriteBytes(buffer, n);
+        header.Write(buffer);
+    }
+
+    private static void HeaderText(ArrayBufferWriter<byte> header, string s)
+    {
+        var bytes = Encoding.UTF8.GetBytes(s);
+        HeaderInt(header, bytes.Length);
+        header.Write(bytes);
+    }
+
+    private static void HeaderLong(ArrayBufferWriter<byte> header, long n)
+    {
+        Span<byte> buffer = stackalloc byte[8];
+        BitConverter.TryWriteBytes(buffer, n);
+        header.Write(buffer);
     }
 
     /// <summary>
@@ -784,7 +818,7 @@ internal static class StateDigest
     {
         if (type.IsArray)
         {
-            var element = Identity(type.GetElementType()!);
+            var element = Identity(type.GetElementType().NotNull());
             return type.IsSZArray ? $"[{element}][]"
                 : type.GetArrayRank() == 1 ? $"[{element}][*]"
                 : $"[{element}][{new string(',', type.GetArrayRank() - 1)}]";
@@ -793,7 +827,7 @@ internal static class StateDigest
         if (type.IsGenericType && !type.IsGenericTypeDefinition)
             return Identity(type.GetGenericTypeDefinition())
                 + "["
-                + string.Join(",", type.GetGenericArguments().Select(a => $"[{Identity(a)}]"))
+                + string.Join(',', type.GetGenericArguments().Select(a => $"[{Identity(a)}]"))
                 + "]";
 
         return $"{type.FullName ?? type.Name}, {type.Assembly.GetName().Name}";
@@ -805,9 +839,11 @@ internal static class StateDigest
     private static Func<object, object?[]> Spreader(Type buffer, Type element, int length) =>
         (Func<object, object?[]>)
             typeof(StateDigest)
-                .GetMethod(nameof(Spread), BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetMethod(nameof(Spread), BindingFlags.NonPublic | BindingFlags.Static)
+                .NotNull()
                 .MakeGenericMethod(buffer, element)
-                .Invoke(null, [length])!;
+                .Invoke(null, [length])
+                .NotNull();
 
     private static Func<object, object?[]> Spread<TBuffer, TElement>(int length)
         where TBuffer : struct
@@ -904,7 +940,7 @@ internal static class StateDigest
         && type != typeof(string)
         && type.Namespace is { } ns
         && ns.StartsWith("System.Collections", StringComparison.Ordinal)
-        && ns != "System.Collections.Specialized"
+        && !string.Equals(ns, "System.Collections.Specialized", StringComparison.Ordinal)
         // A default ImmutableArray cannot be enumerated; its one field, an array, can be read.
         && !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ImmutableArray<>))
         && IsFramework(type.Assembly);
@@ -916,13 +952,13 @@ internal static class StateDigest
     private static bool EnumeratesByItsOwnCode(Type type) =>
         !type.IsInterface
         && type.GetInterfaces()
-            .Where(i =>
-                i == typeof(IEnumerable)
-                || (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-            )
             .Any(i =>
-                type.GetInterfaceMap(i)
-                    .TargetMethods.Any(m => !IsFramework(m.DeclaringType!.Assembly))
+                (
+                    i == typeof(IEnumerable)
+                    || (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                )
+                && type.GetInterfaceMap(i)
+                    .TargetMethods.Any(m => !IsFramework(m.DeclaringType.NotNull().Assembly))
             );
 
     private static bool IsFramework(Assembly assembly) =>
@@ -930,8 +966,8 @@ internal static class StateDigest
         || assembly.GetName().Name is { } name
             && (
                 name.StartsWith("System.", StringComparison.Ordinal)
-                || name == "System"
-                || name == "netstandard"
+                || string.Equals(name, "System", StringComparison.Ordinal)
+                || string.Equals(name, "netstandard", StringComparison.Ordinal)
             );
 
     /// <summary>
@@ -960,13 +996,15 @@ internal static class StateDigest
             // A member the framework no longer has fails the plan, so the type is refused.
             if (property is not null)
                 return level
-                    .GetProperty(property, BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .GetProperty(property, BindingFlags.NonPublic | BindingFlags.Instance)
+                    .NotNull()
                     .GetValue;
 
             foreach (var (view, field) in KeyViews)
                 if (definition == view)
                     return level
-                        .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
+                        .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)
+                        .NotNull()
                         .GetValue;
         }
 
@@ -978,10 +1016,9 @@ internal static class StateDigest
         (typeof(Dictionary<,>.KeyCollection), "_dictionary"),
         (typeof(SortedDictionary<,>.KeyCollection), "_dictionary"),
         (
-            typeof(SortedList<,>).GetNestedType(
-                "KeyList",
-                BindingFlags.Public | BindingFlags.NonPublic
-            )!,
+            typeof(SortedList<,>)
+                .GetNestedType("KeyList", BindingFlags.Public | BindingFlags.NonPublic)
+                .NotNull(),
             "_dict"
         ),
     ];

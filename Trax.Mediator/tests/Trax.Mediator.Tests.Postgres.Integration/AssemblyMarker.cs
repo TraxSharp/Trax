@@ -1,3 +1,3 @@
 namespace Trax.Mediator.Tests.Postgres.Integration;
 
-public class AssemblyMarker { }
+public static class AssemblyMarker;

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
@@ -41,11 +42,12 @@ public class DuplicateDeliveryTests : TestSetup
 
             // Whichever delivery lost does not wait for the train; the winner is held open until
             // the loser has finished, so the loser always meets a row that is not Pending.
-            var loser = await Task.WhenAny(first, second).WaitAsync(TimeSpan.FromSeconds(30));
+            var loser = await Task.WhenAny(first, second)
+                .WaitAsync(TimeSpan.FromSeconds(30), TimeProvider.System);
             await loser;
             gate.SetResult();
 
-            var both = async () => await Task.WhenAll(first, second);
+            var both = async () => await Task.WhenAll(first, second).ConfigureAwait(false);
             await both.Should().NotThrowAsync("the losing delivery is acknowledged, not failed");
 
             DeliveryProbeTrain.Runs[key].Should().Be(1, "only one delivery owns the run");
@@ -91,7 +93,8 @@ public class DuplicateDeliveryTests : TestSetup
 
         try
         {
-            var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
+            var act = async () =>
+                await JobRunner.Run(new RunJobRequest(metadata.Id, input)).ConfigureAwait(false);
 
             await act.Should().NotThrowAsync("another delivery owns, or owned, this run");
             DeliveryProbeTrain.Runs.ContainsKey(key).Should().BeFalse();
@@ -123,12 +126,15 @@ public class DuplicateDeliveryTests : TestSetup
         var metadata = await CreatePendingRun(input);
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true));
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(m => m.CancellationRequested, valueExpression: true)
+            );
         DataContext.Reset();
 
         try
         {
-            var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
+            var act = async () =>
+                await JobRunner.Run(new RunJobRequest(metadata.Id, input)).ConfigureAwait(false);
 
             await act.Should().NotThrowAsync("the delivery is settled, not failed");
             DeliveryProbeTrain
@@ -162,15 +168,13 @@ public class DuplicateDeliveryTests : TestSetup
             .ServiceProvider.GetRequiredService<IServiceScopeFactory>()
             .CreateScope();
         var runner = scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
-        await runner.Run(request);
+        await runner.Run(request).ConfigureAwait(false);
     }
 
     private async Task<Metadata> CreatePendingRun(DeliveryProbeInput input)
     {
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -183,20 +187,21 @@ public class DuplicateDeliveryTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
 
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(DeliveryProbeTrain).FullName!,
+                Name = typeof(DeliveryProbeTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.StateMachine.Persistence;
 
@@ -17,7 +18,7 @@ internal sealed class FaultingLauncher(IInvokedTrainLauncher inner) : IInvokedTr
     {
         var registered = services.Last(d => d.ServiceType == typeof(IInvokedTrainLauncher));
         services.Remove(registered);
-        var implementation = registered.ImplementationType!;
+        var implementation = registered.ImplementationType.NotNull();
         services.AddScoped<IInvokedTrainLauncher>(sp => new FaultingLauncher(
             (IInvokedTrainLauncher)ActivatorUtilities.CreateInstance(sp, implementation)
         ));
@@ -34,7 +35,7 @@ internal sealed class FaultingLauncher(IInvokedTrainLauncher inner) : IInvokedTr
         CancellationToken cancellationToken = default
     )
     {
-        await inner.Launch(launch, context, cancellationToken);
+        await inner.Launch(launch, context, cancellationToken).ConfigureAwait(false);
 
         if (Armed && launch.FromOutcome)
             throw new InvalidOperationException("The host died before the outcome committed.");

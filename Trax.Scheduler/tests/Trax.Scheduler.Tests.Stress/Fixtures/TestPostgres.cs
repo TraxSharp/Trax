@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Trax.Core.Extensions;
 
 namespace Trax.Scheduler.Tests.Stress.Fixtures;
 
@@ -11,7 +12,11 @@ namespace Trax.Scheduler.Tests.Stress.Fixtures;
 internal static class TestPostgres
 {
     public static int Port { get; } =
-        int.TryParse(Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"), out var port)
+        int.TryParse(
+            Environment.GetEnvironmentVariable("TRAX_TEST_PG_PORT"),
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var port
+        )
             ? port
             : 5432;
 
@@ -21,7 +26,8 @@ internal static class TestPostgres
                 .SetBasePath(AppContext.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build()
-                .GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+                .GetRequiredSection("Configuration")["DatabaseConnectionString"]
+                .NotNull()
         )
         {
             Port = Port,

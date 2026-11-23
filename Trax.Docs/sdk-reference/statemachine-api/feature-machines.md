@@ -10,7 +10,24 @@ package: Trax.StateMachine.Gherkin
 namespace: Trax.StateMachine.Gherkin
 source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureMachines.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureGlossary.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureFile.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureProblem.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/DerivedMachines.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureStatus.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureStepResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureScenarioResult.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureRunReport.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureRunOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureGap.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureScenarioRef.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureSticky.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureLink.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/FeatureBoard.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/Lexicon.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/LexiconReading.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/LexiconSource.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/TrainShapes.cs
 ---
 
 # Feature machines

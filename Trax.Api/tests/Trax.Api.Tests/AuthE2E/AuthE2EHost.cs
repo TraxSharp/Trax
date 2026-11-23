@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -31,7 +33,7 @@ namespace Trax.Api.Tests.AuthE2E;
 /// combination of auth schemes. Points at the docker-compose Postgres so
 /// the mediator's data context is real.
 /// </summary>
-public static class AuthE2EHost
+public static partial class AuthE2EHost
 {
     // Each AuthE2E test class passes its own database name to keep migrations
     // and advisory locks isolated; the database is provisioned on demand by
@@ -49,7 +51,10 @@ public static class AuthE2EHost
     //   - Pool Size=8 — small enough that 5 fixtures × 8 = 40 connections
     //     stays well under postgres's default max_connections=100.
     public static string ConnectionString(string database) =>
-        $"Host=localhost;Port={TestPostgres.Port};Database={database};Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database={database};Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -68,8 +73,10 @@ public static class AuthE2EHost
     /// </remarks>
     public static void EnsureDatabaseExists(string database)
     {
-        var maintenanceConnectionString =
-            $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=30";
+        var maintenanceConnectionString = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=30"
+        );
 
         using var connection = new Npgsql.NpgsqlConnection(maintenanceConnectionString);
         connection.Open();
@@ -79,7 +86,7 @@ public static class AuthE2EHost
         // binding for identifiers. The test fixtures always pass compile-time
         // literals, but enforce the shape defensively to make accidental
         // misuse loud.
-        if (!System.Text.RegularExpressions.Regex.IsMatch(database, "^[a-z_][a-z0-9_]*$"))
+        if (!DatabaseName.IsMatch(database))
             throw new ArgumentException(
                 $"Database name '{database}' contains characters outside [a-z0-9_]. "
                     + "Test fixtures must use snake_case ASCII identifiers.",
@@ -91,7 +98,8 @@ public static class AuthE2EHost
         {
             command.ExecuteNonQuery();
         }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P04")
+        catch (Npgsql.PostgresException ex)
+            when (string.Equals(ex.SqlState, "42P04", StringComparison.Ordinal))
         {
             // Database already exists — idempotent no-op.
         }
@@ -125,109 +133,119 @@ public static class AuthE2EHost
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                    {
-                        services.AddLogging();
-                        services.AddRouting();
-
-                        // Auth — registered conditionally per test.
-                        if (schemes.HasFlag(Schemes.ApiKey))
-                        {
-                            services.AddTraxApiKeyAuth(keys =>
-                                keys.Add(AdminApiKey, id: "admin", "Admin", "Player")
-                                    .Add(PlayerApiKey, id: "player", "Player")
-                            );
-                        }
-                        if (schemes.HasFlag(Schemes.Jwt))
-                        {
-                            services.AddTraxJwtAuth(jwt =>
-                                jwt.UseSymmetricKey(JwtIssuer, JwtAudience, JwtKey)
-                                    .WithClockSkew(TimeSpan.FromSeconds(5))
-                            );
-                        }
-
-                        // The pipeline below runs UseAuthentication, which needs the
-                        // services even when no scheme is registered.
-                        if (schemes == Schemes.None)
-                            services.AddAuthentication();
-
-                        // [TraxAuthorize(Policy="AdminPolicy")] requires a
-                        // matching ASP.NET Core policy definition.
-                        services.AddAuthorization(opts =>
-                            opts.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"))
-                        );
-
-                        // Trax core + mediator. The mediator scans this
-                        // assembly so the test trains are registered.
-                        services.AddTrax(trax =>
-                            trax.AddEffects(effects =>
-                                    effects.UsePostgres(connectionString).AddJson()
-                                )
-                                .AddMediator(typeof(AuthE2EHost).Assembly)
-                        );
-
-                        services.AddTraxApi();
-
-                        services.AddDbContextFactory<TestDbContext>(o =>
-                            o.UseNpgsql(connectionString)
-                        );
-
-                        // Second DbContext for [TraxAuthorize]-on-[TraxQueryModel]
-                        // coverage. Lives in the `test_authz` schema so it does
-                        // not interfere with the unauthorized fixtures. Only the
-                        // QueryModelAuthorize E2E suite seeds it; the other
-                        // suites tolerate its presence because none of their
-                        // queries touch its fields.
-                        services.AddDbContextFactory<AuthzTestDbContext>(o =>
-                            o.UseNpgsql(connectionString)
-                        );
-
-                        services.AddTraxGraphQL(graphql =>
-                            (graphQL ?? (g => g))(graphql)
-                                // Default is generous (15) and covers the
-                                // discover/namespace/entity/nodes/field chain
-                                // without needing an explicit override.
-                                .AddDbContext<TestDbContext>()
-                                .AddDbContext<AuthzTestDbContext>()
-                                // The host runs as Production, where introspection is off by
-                                // default; a few tests here read the schema through it.
-                                .AllowIntrospection(_ => true)
-                                // Registered by name rather than by scanning the test
-                                // assembly. A scan pulls in every [ExtendObjectType] any other
-                                // test file happens to declare, which is how unrelated fixtures
-                                // ended up in this host's schema.
-                                .ConfigureSchema(b =>
-                                    b.AddTypeExtension<TestSubscriptions>()
-                                        .AddTypeExtension<TestMutations>()
-                                        .AddTypeExtension<TraxCallerProbeQueries>()
-                                        .AddTypeExtension<TraxCallerProbeMutations>()
-                                )
-                        );
-                    })
-                    .Configure(app =>
-                    {
-                        app.UseRouting();
-                        app.UseAuthentication();
-                        app.UseAuthorization();
-                        app.UseWebSockets();
-                        // AddTraxGraphQL registers its schema under the name
-                        // "trax"; MapGraphQL with no schema name targets the
-                        // default schema and produces an empty "RootQuery".
-                        app.UseEndpoints(endpoints =>
-                        {
-                            endpoints.MapGraphQL("/trax/graphql", "trax");
-                            // Parallel endpoint that gates every request on
-                            // the combined TraxAuthPolicy, used by tests that
-                            // need 401 on bad credentials.
-                            endpoints
-                                .MapGraphQL("/trax/graphql/protected", "trax")
-                                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
-                        });
-                    })
+                        ConfigureHostServices(services, schemes, connectionString, graphQL)
+                    )
+                    .Configure(app => ConfigureApp(app))
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
+    }
+
+    private static void ConfigureApp(IApplicationBuilder app)
+    {
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseWebSockets();
+        // AddTraxGraphQL registers its schema under the name
+        // "trax"; MapGraphQL with no schema name targets the
+        // default schema and produces an empty "RootQuery".
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapGraphQL("/trax/graphql", "trax");
+            // Parallel endpoint that gates every request on
+            // the combined TraxAuthPolicy, used by tests that
+            // need 401 on bad credentials.
+            endpoints
+                .MapGraphQL("/trax/graphql/protected", "trax")
+                .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+        });
+    }
+
+    private static void ConfigureHostServices(
+        IServiceCollection services,
+        Schemes schemes,
+        string connectionString,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphQL
+    )
+    {
+        services.AddLogging();
+        services.AddRouting();
+
+        AddAuth(services, schemes);
+
+        // Trax core + mediator. The mediator scans this
+        // assembly so the test trains are registered.
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
+                .AddMediator(typeof(AuthE2EHost).Assembly)
+        );
+
+        services.AddTraxApi();
+
+        services.AddDbContextFactory<TestDbContext>(o => o.UseNpgsql(connectionString));
+
+        // Second DbContext for [TraxAuthorize]-on-[TraxQueryModel]
+        // coverage. Lives in the `test_authz` schema so it does
+        // not interfere with the unauthorized fixtures. Only the
+        // QueryModelAuthorize E2E suite seeds it; the other
+        // suites tolerate its presence because none of their
+        // queries touch its fields.
+        services.AddDbContextFactory<AuthzTestDbContext>(o => o.UseNpgsql(connectionString));
+
+        services.AddTraxGraphQL(graphql =>
+            (graphQL ?? (g => g))(graphql)
+                // Default is generous (15) and covers the
+                // discover/namespace/entity/nodes/field chain
+                // without needing an explicit override.
+                .AddDbContext<TestDbContext>()
+                .AddDbContext<AuthzTestDbContext>()
+                // The host runs as Production, where introspection is off by
+                // default; a few tests here read the schema through it.
+                .AllowIntrospection(_ => true)
+                // Registered by name rather than by scanning the test
+                // assembly. A scan pulls in every [ExtendObjectType] any other
+                // test file happens to declare, which is how unrelated fixtures
+                // ended up in this host's schema.
+                .ConfigureSchema(b =>
+                    b.AddTypeExtension<TestSubscriptions>()
+                        .AddTypeExtension<TestMutations>()
+                        .AddTypeExtension<TraxCallerProbeQueries>()
+                        .AddTypeExtension<TraxCallerProbeMutations>()
+                )
+        );
+    }
+
+    private static void AddAuth(IServiceCollection services, Schemes schemes)
+    {
+        // Auth — registered conditionally per test.
+        if (schemes.HasFlag(Schemes.ApiKey))
+        {
+            services.AddTraxApiKeyAuth(keys =>
+                keys.Add(AdminApiKey, id: "admin", "Admin", "Player")
+                    .Add(PlayerApiKey, id: "player", "Player")
+            );
+        }
+        if (schemes.HasFlag(Schemes.Jwt))
+        {
+            services.AddTraxJwtAuth(jwt =>
+                jwt.UseSymmetricKey(JwtIssuer, JwtAudience, JwtKey)
+                    .WithClockSkew(TimeSpan.FromSeconds(5))
+            );
+        }
+
+        // The pipeline below runs UseAuthentication, which needs the
+        // services even when no scheme is registered.
+        if (schemes == Schemes.None)
+            services.AddAuthentication();
+
+        // [TraxAuthorize(Policy="AdminPolicy")] requires a
+        // matching ASP.NET Core policy definition.
+        services.AddAuthorization(opts =>
+            opts.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"))
+        );
     }
 
     /// <summary>
@@ -242,7 +260,7 @@ public static class AuthE2EHost
         foreach (var role in roles)
             claims.Add(new System.Security.Claims.Claim("role", role));
 
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
             issuer: JwtIssuer,
             audience: JwtAudience,
@@ -289,8 +307,11 @@ public static class AuthE2EHost
         };
         configureRequest?.Invoke(req);
 
-        var res = await client.SendAsync(req);
-        var body = await res.Content.ReadAsStringAsync();
+        var res = await client.SendAsync(req).ConfigureAwait(false);
+        var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
         return System.Text.Json.JsonDocument.Parse(body);
     }
+
+    [GeneratedRegex("^[a-z_][a-z0-9_]*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DatabaseName { get; }
 }

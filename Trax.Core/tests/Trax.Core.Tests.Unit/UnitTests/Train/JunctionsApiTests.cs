@@ -39,7 +39,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedChainInstanceTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("hi-done");
     }
@@ -49,7 +49,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedChainTypeOnlyTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("hi-done");
     }
@@ -59,7 +59,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedIChainTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("hi-done");
     }
@@ -69,7 +69,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedExtractFromMemoryTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("payload-extracted");
     }
@@ -79,7 +79,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedExtractFromInputTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("payload-extracted");
     }
@@ -89,7 +89,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedShortCircuitTypeOnlyTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("short-circuited");
     }
@@ -99,7 +99,7 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedShortCircuitInstanceTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("short-circuited");
     }
@@ -109,74 +109,74 @@ public class JunctionsApiTests : TestSetup
     {
         var train = new ProtectedAddServicesTrain();
 
-        var result = await train.Run("hi");
+        var result = await train.Run("hi", CancellationToken.None);
 
         result.Should().Be("seven");
     }
 
     #region Test fixtures
 
-    private interface IS1 { }
+    private interface IS1;
 
-    private interface IS2 { }
+    private interface IS2;
 
-    private interface IS3 { }
+    private interface IS3;
 
-    private interface IS4 { }
+    private interface IS4;
 
-    private interface IS5 { }
+    private interface IS5;
 
-    private interface IS6 { }
+    private interface IS6;
 
-    private interface IS7 { }
+    private interface IS7;
 
-    private class S1 : IS1 { }
+    private sealed class S1 : IS1;
 
-    private class S2 : IS2 { }
+    private sealed class S2 : IS2;
 
-    private class S3 : IS3 { }
+    private sealed class S3 : IS3;
 
-    private class S4 : IS4 { }
+    private sealed class S4 : IS4;
 
-    private class S5 : IS5 { }
+    private sealed class S5 : IS5;
 
-    private class S6 : IS6 { }
+    private sealed class S6 : IS6;
 
-    private class S7 : IS7 { }
+    private sealed class S7 : IS7;
 
-    private class DoneJunction : Junction<string, string>
+    private sealed class DoneJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult($"{input}-done");
     }
 
-    private interface IDoneJunction : IJunction<string, string> { }
+    private interface IDoneJunction : IJunction<string, string>;
 
-    private class IDoneJunctionImpl : Junction<string, string>, IDoneJunction
+    private sealed class IDoneJunctionImpl : Junction<string, string>, IDoneJunction
     {
         public override Task<string> Run(string input) => Task.FromResult($"{input}-done");
     }
 
-    private class HasInner
+    private sealed class HasInner
     {
         public string Inner { get; set; } = "payload";
     }
 
-    private class ProduceHasInnerJunction : Junction<string, HasInner>
+    private sealed class ProduceHasInnerJunction : Junction<string, HasInner>
     {
         public override Task<HasInner> Run(string input) => Task.FromResult(new HasInner());
     }
 
-    private class ExtractedJunction : Junction<string, string>
+    private sealed class ExtractedJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult($"{input}-extracted");
     }
 
-    private class ShortCircuitJunctionShort : Junction<string, string>
+    private sealed class ShortCircuitJunctionShort : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult("short-circuited");
     }
 
-    private class ConsumeAllServicesJunction : Junction<string, string>
+    private sealed class ConsumeAllServicesJunction : Junction<string, string>
     {
         public ConsumeAllServicesJunction(IS1 s1, IS2 s2, IS3 s3, IS4 s4, IS5 s5, IS6 s6, IS7 s7)
         { }
@@ -184,67 +184,73 @@ public class JunctionsApiTests : TestSetup
         public override Task<string> Run(string input) => Task.FromResult("seven");
     }
 
-    private class EmptyJunctionsTrain : Train<string, string> { }
+    private sealed class EmptyJunctionsTrain : Train<string, string>;
 
-    private class ThrowingJunctionsTrain : Train<string, string>
+    private sealed class ThrowingJunctionsTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new InvalidOperationException("boom");
     }
 
-    private class ProtectedChainInstanceTrain : Train<string, string>
+    private sealed class ProtectedChainInstanceTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() =>
-            await Chain(new DoneJunction()).Resolve();
+            await Chain(new DoneJunction()).Resolve().ConfigureAwait(false);
     }
 
-    private class ProtectedChainTypeOnlyTrain : Train<string, string>
+    private sealed class ProtectedChainTypeOnlyTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() =>
-            await Chain<DoneJunction>().Resolve();
+            await Chain<DoneJunction>().Resolve().ConfigureAwait(false);
     }
 
-    private class ProtectedIChainTrain : Train<string, string>
+    private sealed class ProtectedIChainTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions()
         {
             AddServices<IDoneJunction>(new IDoneJunctionImpl());
-            return await IChain<IDoneJunction>().Resolve();
+            return await IChain<IDoneJunction>().Resolve().ConfigureAwait(false);
         }
     }
 
-    private class ProtectedExtractFromMemoryTrain : Train<string, string>
+    private sealed class ProtectedExtractFromMemoryTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions()
         {
-            await Chain(new ProduceHasInnerJunction());
+            await Chain(new ProduceHasInnerJunction()).ConfigureAwait(false);
             Extract<HasInner, string>();
-            return await Chain(new ExtractedJunction()).Resolve();
+            return await Chain(new ExtractedJunction()).Resolve().ConfigureAwait(false);
         }
     }
 
-    private class ProtectedExtractFromInputTrain : Train<string, string>
+    private sealed class ProtectedExtractFromInputTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions()
         {
             Extract<HasInner, string>(new HasInner());
-            return await Chain(new ExtractedJunction()).Resolve();
+            return await Chain(new ExtractedJunction()).Resolve().ConfigureAwait(false);
         }
     }
 
-    private class ProtectedShortCircuitTypeOnlyTrain : Train<string, string>
+    private sealed class ProtectedShortCircuitTypeOnlyTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() =>
-            await ShortCircuit<ShortCircuitJunctionShort>().Chain(new DoneJunction()).Resolve();
+            await ShortCircuit<ShortCircuitJunctionShort>()
+                .Chain(new DoneJunction())
+                .Resolve()
+                .ConfigureAwait(false);
     }
 
-    private class ProtectedShortCircuitInstanceTrain : Train<string, string>
+    private sealed class ProtectedShortCircuitInstanceTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions() =>
-            await ShortCircuit(new ShortCircuitJunctionShort()).Chain(new DoneJunction()).Resolve();
+            await ShortCircuit(new ShortCircuitJunctionShort())
+                .Chain(new DoneJunction())
+                .Resolve()
+                .ConfigureAwait(false);
     }
 
-    private class ProtectedAddServicesTrain : Train<string, string>
+    private sealed class ProtectedAddServicesTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> Junctions()
         {
@@ -282,7 +288,8 @@ public class JunctionsApiTests : TestSetup
                         new S7()
                     )
                 )
-                .Resolve();
+                .Resolve()
+                .ConfigureAwait(false);
         }
     }
 

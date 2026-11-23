@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <!-- The Recovery suite's host process, its Postgres port, its GraphQL client and its draft clean-up, compiled
-       here rather than referenced: a test project is not a library, and these five files are all the browser tests
+       here rather than referenced: a test project is not a library, and these six files are all the browser tests
        share. -->
   <ItemGroup>
     <Compile
@@ -32,6 +32,10 @@
     <Compile
       Include="..\Trax.Samples.Recovery.E2E\Utilities\GraphQLClient.cs"
       Link="Shared\GraphQLClient.cs"
+    />
+    <Compile
+      Include="..\Trax.Samples.Recovery.E2E\Utilities\GraphQLResponse.cs"
+      Link="Shared\GraphQLResponse.cs"
     />
     <Compile
       Include="..\Trax.Samples.Recovery.E2E\Utilities\TopicMapDrafts.cs"

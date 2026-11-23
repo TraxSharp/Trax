@@ -67,7 +67,8 @@ public class ProgressDocumentsTests
                 id.Replace(
                     "HASH",
                     new string('a', MachineDocuments.IrHashLength)
-                        + new string('b', MachineDocuments.TextHashLength)
+                        + new string('b', MachineDocuments.TextHashLength),
+                    StringComparison.Ordinal
                 )
             )
             .Should()
@@ -122,7 +123,7 @@ public class ProgressDocumentsTests
             .AddQueryType(d =>
                 d.Name("RootQuery").Field("_ping").Type<StringType>().Resolve("pong")
             )
-            .AddMutationType<Trax.Api.GraphQL.Mutations.RootMutation>()
+            .AddMutationType<GraphQL.Mutations.RootMutation>()
             .AddTypeExtension(
                 new ObjectTypeExtension(d =>
                     d.Name("RootMutation").Field("_ping").Type<StringType>().Resolve("pong")
@@ -138,7 +139,8 @@ public class ProgressDocumentsTests
             .AddTypeModule<RunProgressTypeModule>()
             .Services.BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
         return executor.Schema;
     }
 
@@ -173,7 +175,7 @@ public class ProgressDocumentsTests
 
     private interface IStubTrain;
 
-    private sealed class StubTrain;
+    private static class StubTrain;
 
     #endregion
 }

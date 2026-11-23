@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Templates.Tests.Utils;
 
@@ -30,7 +32,13 @@ internal static class Dotnet
         string workingDirectory,
         bool allowFailure,
         params string[] args
-    ) => Run(workingDirectory, new Dictionary<string, string>(), allowFailure, args);
+    ) =>
+        Run(
+            workingDirectory,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            allowFailure,
+            args
+        );
 
     /// <summary>Runs dotnet to completion with <paramref name="environment"/> added to its own.</summary>
     public static async Task<(int ExitCode, string Output)> Run(
@@ -43,27 +51,31 @@ internal static class Dotnet
         var psi = StartInfo(workingDirectory, args);
         foreach (var (name, value) in environment)
             psi.Environment[name] = value;
-        using var process = Process.Start(psi)!;
+        using var process = Process.Start(psi).NotNull();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
 
         using var timeout = new CancellationTokenSource(ProcessTimeout);
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException inner)
         {
             process.Kill(entireProcessTree: true);
             throw new TimeoutException(
-                $"dotnet {string.Join(' ', args)} did not finish within {ProcessTimeout}"
+                $"dotnet {string.Join(' ', args)} did not finish within {ProcessTimeout}",
+                inner
             );
         }
 
-        var output = await stdout + await stderr;
+        var output = await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false);
         if (!allowFailure && process.ExitCode != 0)
             throw new InvalidOperationException(
-                $"dotnet {string.Join(' ', args)} exited {process.ExitCode}:\n{output}"
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"dotnet {string.Join(' ', args)} exited {process.ExitCode}:\n{output}"
+                )
             );
         return (process.ExitCode, output);
     }
@@ -84,8 +96,8 @@ internal static class Dotnet
         foreach (var (name, value) in environment)
             psi.Environment[name] = value;
 
-        var running = new RunningProcess(Process.Start(psi)!, args);
-        await running.WaitFor(ready);
+        var running = new RunningProcess(Process.Start(psi).NotNull(), args);
+        await running.WaitFor(ready).ConfigureAwait(false);
         return running;
     }
 
@@ -113,69 +125,5 @@ internal static class Dotnet
         psi.Environment.Remove("DOTNET_ENVIRONMENT");
         psi.Environment.Remove("ASPNETCORE_URLS");
         return psi;
-    }
-}
-
-/// <summary>An application started by <see cref="Dotnet.Start"/>; disposing it kills it.</summary>
-internal sealed class RunningProcess : IAsyncDisposable
-{
-    private readonly Process _process;
-    private readonly string[] _args;
-    private readonly StringBuilder _output = new();
-    private readonly object _gate = new();
-
-    public RunningProcess(Process process, string[] args)
-    {
-        _process = process;
-        _args = args;
-        _process.OutputDataReceived += (_, e) => Append(e.Data);
-        _process.ErrorDataReceived += (_, e) => Append(e.Data);
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
-    }
-
-    public string Output
-    {
-        get
-        {
-            lock (_gate)
-                return _output.ToString();
-        }
-    }
-
-    public async Task WaitFor(string text)
-    {
-        var deadline = DateTime.UtcNow + Dotnet.ProcessTimeout;
-        while (!Output.Contains(text, StringComparison.Ordinal))
-        {
-            if (_process.HasExited)
-                throw new InvalidOperationException(
-                    $"dotnet {string.Join(' ', _args)} exited {_process.ExitCode} before printing "
-                        + $"'{text}':\n{Output}"
-                );
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException(
-                    $"dotnet {string.Join(' ', _args)} did not print '{text}' within "
-                        + $"{Dotnet.ProcessTimeout}:\n{Output}"
-                );
-            // determinism: polls for the condition, bounded by ProcessTimeout above.
-            await Task.Delay(TimeSpan.FromMilliseconds(200));
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (!_process.HasExited)
-            _process.Kill(entireProcessTree: true);
-        await _process.WaitForExitAsync();
-        _process.Dispose();
-    }
-
-    private void Append(string? line)
-    {
-        if (line is null)
-            return;
-        lock (_gate)
-            _output.AppendLine(line);
     }
 }

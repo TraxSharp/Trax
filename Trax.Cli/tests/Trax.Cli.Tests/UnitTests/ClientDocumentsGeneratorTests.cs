@@ -4,6 +4,7 @@ using Trax.Cli.Clients;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.StateMachine;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -17,7 +18,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <para>Enforces <c>Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md</c>.</para>
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md")]
-public class ClientDocumentsGeneratorTests
+public partial class ClientDocumentsGeneratorTests
 {
     private const string Adr =
         "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
@@ -113,7 +114,7 @@ public class ClientDocumentsGeneratorTests
         [
             Train(
                 "query",
-                null,
+                ns: null,
                 "findOrder",
                 "Order!",
                 "query FindOrder($input: FindInput!) { discover { findOrder(input: $input) { title } } }"
@@ -127,21 +128,21 @@ public class ClientDocumentsGeneratorTests
             ),
             Train(
                 "query",
-                null,
+                ns: null,
                 "search",
                 "[Found!]!",
                 "query Search($input: FindInput!) { discover { search(input: $input) { __typename } } }"
             ),
             Train(
                 "mutation",
-                null,
+                ns: null,
                 "recordNote",
                 "NoteResponse!",
                 "mutation RecordNote($input: NoteInput!, $priority: Int) { dispatch { recordNote(input: $input, priority: $priority) { externalId } } }"
             ),
             Train(
                 "mutation",
-                null,
+                ns: null,
                 "other",
                 "NoteResponse!",
                 "mutation Other($input: NoteInput!) { dispatch { other(input: $input) { externalId } } }"
@@ -207,15 +208,16 @@ public class ClientDocumentsGeneratorTests
     #region What it writes
 
     [Test]
-    public void A_document_selecting_a_query_model_returns_exactly_that()
+    public async Task A_document_selecting_a_query_model_returns_exactly_that()
     {
-        var files = Render(
-            (
-                "src/orderList.graphql",
-                "query OrderList($level: Level, $after: String) { discover { orders(first: 2, after: $after, "
-                    + "where: { level: { eq: $level } }, order: [{ title: ASC }]) { totalCount nodes { title } } } }"
+        var files = await RenderAsync(
+                (
+                    "src/orderList.graphql",
+                    "query OrderList($level: Level, $after: String) { discover { orders(first: 2, after: $after, "
+                        + "where: { level: { eq: $level } }, order: [{ title: ASC }]) { totalCount nodes { title } } } }"
+                )
             )
-        );
+            .ConfigureAwait(false);
         var module = Text(files, "documents/orderList.g.ts");
 
         module
@@ -243,16 +245,17 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void A_query_with_a_train_and_a_query_model_answers_both()
+    public async Task A_query_with_a_train_and_a_query_model_answers_both()
     {
         var module = Text(
-            Render(
-                (
-                    "src/both.graphql",
-                    "query Both($input: FindInput!) { discover { findOrder(input: $input) { title } "
-                        + "orders { totalCount } runs { ledger { title } } } }"
+            await RenderAsync(
+                    (
+                        "src/both.graphql",
+                        "query Both($input: FindInput!) { discover { findOrder(input: $input) { title } "
+                            + "orders { totalCount } runs { ledger { title } } } }"
+                    )
                 )
-            ),
+                .ConfigureAwait(false),
             "documents/both.g.ts"
         );
 
@@ -284,43 +287,55 @@ public class ClientDocumentsGeneratorTests
     [TestCase("readonly")]
     [TestCase("unique")]
     [TestCase("infer")]
-    public void A_type_named_as_a_global_generic_is_refused(string name)
+    public async Task A_type_named_as_a_global_generic_is_refused(string name)
     {
-        var manifest = Manifest with
-        {
-            Types = System.Text.RegularExpressions.Regex.Replace(Types, @"\bLevel\b", name),
-        };
+        var manifest = Manifest with { Types = LevelWord.Replace(Types, name) };
 
-        var render = () =>
-            new ClientGenerator(new FakeNodeRunner()).Render(
-                new ClientGenerateOptions(
-                    manifest,
-                    Documents:
-                    [
-                        new ClientDocumentFile(
-                            "src/shop.graphql",
-                            "query Shop { discover { shop { catalog { level } } } }"
-                        ),
-                    ]
-                )
+        var render = async () =>
+            (
+                await new ClientGenerator(new FakeNodeRunner())
+                    .RenderAsync(
+                        new ClientGenerateOptions(
+                            manifest,
+                            Documents:
+                            [
+                                new ClientDocumentFile(
+                                    "src/shop.graphql",
+                                    "query Shop { discover { shop { catalog { level } } } }"
+                                ),
+                            ]
+                        )
+                    )
+                    .ConfigureAwait(false)
             );
 
-        render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*reserves*");
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage($"*'{name}'*reserves*");
     }
 
     [Test]
-    public void A_namespace_holding_only_query_models_resolves()
+    public async Task A_namespace_holding_only_query_models_resolves()
     {
-        var render = () =>
-            Render(("src/shop.graphql", "query Shop { discover { shop { catalog { title } } } }"));
+        var render = async () =>
+            await RenderAsync(
+                    ("src/shop.graphql", "query Shop { discover { shop { catalog { title } } } }")
+                )
+                .ConfigureAwait(false);
 
-        render.Should().NotThrow("a namespace counts when a query model is in it");
+        await render
+            .Should()
+            .NotThrowAsync("a namespace counts when a query model is in it")
+            .ConfigureAwait(false);
     }
 
     [Test]
-    public void The_editor_schema_holds_the_query_models_under_their_namespaces()
+    public async Task The_editor_schema_holds_the_query_models_under_their_namespaces()
     {
-        var schema = Text(Render(("src/orderCard.graphql", OrderCard)), "schema.graphql");
+        var schema = Text(
+            await RenderAsync(("src/orderCard.graphql", OrderCard)).ConfigureAwait(false),
+            "schema.graphql"
+        );
 
         schema
             .Should()
@@ -332,9 +347,10 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void A_document_selecting_a_subset_returns_exactly_that()
+    public async Task A_document_selecting_a_subset_returns_exactly_that()
     {
-        var files = Render(("src/trax/orderCard.graphql", OrderCard));
+        var files = await RenderAsync(("src/trax/orderCard.graphql", OrderCard))
+            .ConfigureAwait(false);
         var module = Text(files, "documents/orderCard.g.ts");
 
         module
@@ -362,7 +378,7 @@ public class ClientDocumentsGeneratorTests
         var entry = json.GetProperty("documents").EnumerateArray().Single();
         entry.GetProperty("name").GetString().Should().Be("OrderCard");
         entry.GetProperty("source").GetString().Should().Be("src/trax/orderCard.graphql");
-        var text = entry.GetProperty("text").GetString()!;
+        var text = entry.GetProperty("text").GetString().NotNull();
         module
             .Should()
             .Contain(
@@ -373,37 +389,40 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void The_cli_and_the_host_hash_a_document_alike()
+    public async Task The_cli_and_the_host_hash_a_document_alike()
     {
-        foreach (var (name, text, id) in FixtureCases())
+        foreach (var (name, text, id) in (await FixtureCasesAsync().ConfigureAwait(false)))
             ClientDocumentSet.IdOf(name, text).Should().Be(id, $"the fixture's id for {name}");
     }
 
     [Test]
-    public void Reformatting_a_document_does_not_move_its_id_and_changing_a_field_does()
+    public async Task Reformatting_a_document_does_not_move_its_id_and_changing_a_field_does()
     {
         var compact =
             "query OrderCard($input: FindInput!) { discover { findOrder(input: $input) { title customer { name } } } }";
-        var commented = "# the order card\n" + OrderCard.Replace("title", "title # heading");
-        var changed = compact.Replace("title", "level");
+        var commented =
+            "# the order card\n"
+            + OrderCard.Replace("title", "title # heading", StringComparison.Ordinal);
+        var changed = compact.Replace("title", "level", StringComparison.Ordinal);
 
-        var a = Id(Render(("a.graphql", compact)));
-        Id(Render(("a.graphql", OrderCard))).Should().Be(a);
-        Id(Render(("a.graphql", commented))).Should().Be(a);
-        Id(Render(("a.graphql", changed))).Should().NotBe(a);
+        var a = Id(await RenderAsync(("a.graphql", compact)).ConfigureAwait(false));
+        Id(await RenderAsync(("a.graphql", OrderCard)).ConfigureAwait(false)).Should().Be(a);
+        Id(await RenderAsync(("a.graphql", commented)).ConfigureAwait(false)).Should().Be(a);
+        Id(await RenderAsync(("a.graphql", changed)).ConfigureAwait(false)).Should().NotBe(a);
     }
 
     [Test]
-    public void A_query_of_two_trains_answers_both_under_their_keys()
+    public async Task A_query_of_two_trains_answers_both_under_their_keys()
     {
         var module = Text(
-            Render(
-                (
-                    "two.graphql",
-                    "query Two($input: FindInput!) { discover { findOrder(input: $input) { title } "
-                        + "runs { findRun(input: $input) { level } } } }"
+            await RenderAsync(
+                    (
+                        "two.graphql",
+                        "query Two($input: FindInput!) { discover { findOrder(input: $input) { title } "
+                            + "runs { findRun(input: $input) { level } } } }"
+                    )
                 )
-            ),
+                .ConfigureAwait(false),
             "documents/two.g.ts"
         );
 
@@ -428,16 +447,17 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void Two_aliases_of_one_field_are_two_keys()
+    public async Task Two_aliases_of_one_field_are_two_keys()
     {
         var module = Text(
-            Render(
-                (
-                    "pair.graphql",
-                    "query Pair($a: FindInput!, $b: FindInput!) { discover { first: findOrder(input: $a) { title } "
-                        + "second: findOrder(input: $b) { heading: title } } }"
+            await RenderAsync(
+                    (
+                        "pair.graphql",
+                        "query Pair($a: FindInput!, $b: FindInput!) { discover { first: findOrder(input: $a) { title } "
+                            + "second: findOrder(input: $b) { heading: title } } }"
+                    )
                 )
-            ),
+                .ConfigureAwait(false),
             "documents/pair.g.ts"
         );
 
@@ -450,19 +470,20 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void A_fragment_in_another_file_is_carried_by_every_document_that_spreads_it()
+    public async Task A_fragment_in_another_file_is_carried_by_every_document_that_spreads_it()
     {
-        var files = Render(
-            ("fragments/badge.graphql", "fragment CustomerBadge on Customer { name }"),
-            (
-                "a.graphql",
-                "query A($input: FindInput!) { discover { findOrder(input: $input) { title customer { ...CustomerBadge } } } }"
-            ),
-            (
-                "b.graphql",
-                "query B($input: FindInput!) { discover { runs { findRun(input: $input) { customer { ...CustomerBadge orders { title } } } } } }"
+        var files = await RenderAsync(
+                ("fragments/badge.graphql", "fragment CustomerBadge on Customer { name }"),
+                (
+                    "a.graphql",
+                    "query A($input: FindInput!) { discover { findOrder(input: $input) { title customer { ...CustomerBadge } } } }"
+                ),
+                (
+                    "b.graphql",
+                    "query B($input: FindInput!) { discover { runs { findRun(input: $input) { customer { ...CustomerBadge orders { title } } } } } }"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         Text(files, "fragments.g.ts")
             .Should()
@@ -501,15 +522,16 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void An_inline_fragment_on_a_union_member_types_that_member()
+    public async Task An_inline_fragment_on_a_union_member_types_that_member()
     {
         Text(
-                Render(
-                    (
-                        "s.graphql",
-                        "query S($input: FindInput!) { discover { search(input: $input) { __typename ... on Order { title } } } }"
+                await RenderAsync(
+                        (
+                            "s.graphql",
+                            "query S($input: FindInput!) { discover { search(input: $input) { __typename ... on Order { title } } } }"
+                        )
                     )
-                ),
+                    .ConfigureAwait(false),
                 "documents/s.g.ts"
             )
             .Should()
@@ -526,17 +548,18 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void A_back_reference_may_be_selected_explicitly_paged_or_not()
+    public async Task A_back_reference_may_be_selected_explicitly_paged_or_not()
     {
         var module = Text(
-            Render(
-                (
-                    "deep.graphql",
-                    "query Deep($input: FindInput!, $first: Int) { discover { findOrder(input: $input) { customer { "
-                        + "orders { title } ordersPage(first: $first) { nodes { title } pageInfo { hasNextPage } } "
-                        + "orderById(id: 3) { title } } } } }"
+            await RenderAsync(
+                    (
+                        "deep.graphql",
+                        "query Deep($input: FindInput!, $first: Int) { discover { findOrder(input: $input) { customer { "
+                            + "orders { title } ordersPage(first: $first) { nodes { title } pageInfo { hasNextPage } } "
+                            + "orderById(id: 3) { title } } } } }"
+                    )
                 )
-            ),
+                .ConfigureAwait(false),
             "documents/deep.g.ts"
         );
 
@@ -552,15 +575,16 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void A_required_argument_may_be_a_variable()
+    public async Task A_required_argument_may_be_a_variable()
     {
         Text(
-                Render(
-                    (
-                        "byId.graphql",
-                        "query ById($input: FindInput!, $id: Int!) { discover { findOrder(input: $input) { customer { orderById(id: $id) { title } } } } }"
+                await RenderAsync(
+                        (
+                            "byId.graphql",
+                            "query ById($input: FindInput!, $id: Int!) { discover { findOrder(input: $input) { customer { orderById(id: $id) { title } } } } }"
+                        )
                     )
-                ),
+                    .ConfigureAwait(false),
                 "documents/byId.g.ts"
             )
             .Should()
@@ -568,15 +592,16 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void A_mutation_sends_its_train_and_optional_variables_with_their_defaults()
+    public async Task A_mutation_sends_its_train_and_optional_variables_with_their_defaults()
     {
         Text(
-                Render(
-                    (
-                        "note.graphql",
-                        "mutation Note($input: NoteInput!, $priority: Int = 2) { dispatch { recordNote(input: $input, priority: $priority) { output { text } } } }"
+                await RenderAsync(
+                        (
+                            "note.graphql",
+                            "mutation Note($input: NoteInput!, $priority: Int = 2) { dispatch { recordNote(input: $input, priority: $priority) { output { text } } } }"
+                        )
                     )
-                ),
+                    .ConfigureAwait(false),
                 "documents/note.g.ts"
             )
             .Should()
@@ -587,14 +612,18 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void The_editor_gets_a_schema_holding_the_trains_and_a_config_naming_the_globs()
+    public async Task The_editor_gets_a_schema_holding_the_trains_and_a_config_naming_the_globs()
     {
-        var files = new ClientGenerator(new FakeNodeRunner()).Render(
-            new ClientGenerateOptions(
-                Manifest,
-                Documents: [new ClientDocumentFile("src/a.graphql", OrderCard)],
-                DocumentGlobs: ["../**/*.graphql"]
-            )
+        var files = (
+            await new ClientGenerator(new FakeNodeRunner())
+                .RenderAsync(
+                    new ClientGenerateOptions(
+                        Manifest,
+                        Documents: [new ClientDocumentFile("src/a.graphql", OrderCard)],
+                        DocumentGlobs: ["../**/*.graphql"]
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
         Text(files, "schema.graphql")
@@ -615,7 +644,7 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void One_input_writes_the_same_bytes()
+    public async Task One_input_writes_the_same_bytes()
     {
         (string, string)[] documents =
         [
@@ -627,16 +656,21 @@ public class ClientDocumentsGeneratorTests
             ("b.graphql", OrderCard),
         ];
 
-        Render(documents)
+        (await RenderAsync(documents).ConfigureAwait(false))
             .Should()
-            .BeEquivalentTo(Render([.. documents.Reverse()]), o => o.WithStrictOrdering());
+            .BeEquivalentTo(
+                await RenderAsync([.. documents.Reverse()]).ConfigureAwait(false),
+                o => o.WithStrictOrdering()
+            );
     }
 
     [Test]
-    public void Without_documents_none_of_their_files_are_written()
+    public async Task Without_documents_none_of_their_files_are_written()
     {
-        var files = new ClientGenerator(new FakeNodeRunner()).Render(
-            new ClientGenerateOptions(Manifest)
+        var files = (
+            await new ClientGenerator(new FakeNodeRunner())
+                .RenderAsync(new ClientGenerateOptions(Manifest))
+                .ConfigureAwait(false)
         );
 
         files
@@ -652,7 +686,7 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void Generating_without_documents_removes_and_check_reports_the_files_a_run_with_them_wrote()
+    public async Task Generating_without_documents_removes_and_check_reports_the_files_a_run_with_them_wrote()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"trax-docs-stale-{Guid.NewGuid():N}");
         var generator = new ClientGenerator(new FakeNodeRunner());
@@ -663,20 +697,19 @@ public class ClientDocumentsGeneratorTests
         var without = new ClientGenerateOptions(Manifest);
         try
         {
-            generator.Write(with, dir);
+            await generator.WriteAsync(with, dir).ConfigureAwait(false);
             string[] written = ["trax.documents.json", "schema.graphql", "graphql.config.yml"];
             foreach (var name in written)
                 File.Exists(Path.Combine(dir, name)).Should().BeTrue();
 
-            generator
-                .Check(without, dir)
+            (await generator.CheckAsync(without, dir).ConfigureAwait(false))
                 .Should()
                 .Contain(written.Select(name => new ClientDrift(name, DriftStatus.Drifted)));
 
-            generator.Write(without, dir);
+            await generator.WriteAsync(without, dir).ConfigureAwait(false);
             foreach (var name in written)
                 File.Exists(Path.Combine(dir, name)).Should().BeFalse(name);
-            generator.Check(without, dir).Should().BeEmpty();
+            (await generator.CheckAsync(without, dir).ConfigureAwait(false)).Should().BeEmpty();
         }
         finally
         {
@@ -686,7 +719,7 @@ public class ClientDocumentsGeneratorTests
     }
 
     [Test]
-    public void Generating_without_documents_keeps_files_of_those_names_it_did_not_write()
+    public async Task Generating_without_documents_keeps_files_of_those_names_it_did_not_write()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"trax-docs-own-{Guid.NewGuid():N}");
         var generator = new ClientGenerator(new FakeNodeRunner());
@@ -694,17 +727,29 @@ public class ClientDocumentsGeneratorTests
         Directory.CreateDirectory(dir);
         try
         {
-            File.WriteAllText(Path.Combine(dir, "trax.documents.json"), "{\"format\": 1}\n");
-            File.WriteAllText(Path.Combine(dir, "schema.graphql"), "type Query { a: Int }\n");
-            File.WriteAllText(Path.Combine(dir, "graphql.config.yml"), "schema: x.graphql\n");
+            await File.WriteAllTextAsync(
+                Path.Combine(dir, "trax.documents.json"),
+                "{\"format\": 1}\n"
+            );
+            await File.WriteAllTextAsync(
+                Path.Combine(dir, "schema.graphql"),
+                "type Query { a: Int }\n"
+            );
+            await File.WriteAllTextAsync(
+                Path.Combine(dir, "graphql.config.yml"),
+                "schema: x.graphql\n"
+            );
 
             string[] own = ["trax.documents.json", "schema.graphql", "graphql.config.yml"];
-            generator.Check(without, dir).Select(d => d.Path).Should().NotContain(own);
-            generator.Write(without, dir);
+            (await generator.CheckAsync(without, dir).ConfigureAwait(false))
+                .Select(d => d.Path)
+                .Should()
+                .NotContain(own);
+            await generator.WriteAsync(without, dir).ConfigureAwait(false);
 
             foreach (var name in own)
                 File.Exists(Path.Combine(dir, name)).Should().BeTrue(name);
-            generator.Check(without, dir).Should().BeEmpty();
+            (await generator.CheckAsync(without, dir).ConfigureAwait(false)).Should().BeEmpty();
         }
         finally
         {
@@ -845,14 +890,16 @@ public class ClientDocumentsGeneratorTests
         "*a.graphql:1:29: 'A' declares the variable '$input' more than once.*"
     )]
     [TestCase("type X { a: Int }", "*neither an operation nor a fragment*")]
-    public void A_document_the_host_would_refuse_is_refused_naming_where(
+    public async Task A_document_the_host_would_refuse_is_refused_naming_where(
         string text,
         string message
     )
     {
-        var render = () => Render(("a.graphql", text));
+        var render = async () => await RenderAsync(("a.graphql", text)).ConfigureAwait(false);
 
-        render.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
     }
 
     [TestCase(
@@ -880,69 +927,88 @@ public class ClientDocumentsGeneratorTests
         "query A { discover { findOrder(input: { id: 1 }) { title } } }",
         "*'Badge' is on 'Nothing'*"
     )]
-    public void A_fragment_the_host_would_refuse_is_refused(
+    public async Task A_fragment_the_host_would_refuse_is_refused(
         string fragments,
         string operation,
         string message
     )
     {
-        var render = () => Render(("fragments.graphql", fragments), ("a.graphql", operation));
+        var render = async () =>
+            await RenderAsync(("fragments.graphql", fragments), ("a.graphql", operation))
+                .ConfigureAwait(false);
 
-        render.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
     }
 
     [TestCase("ConfigureTrax", "CustomerBadge", "*configureTrax*")]
     [TestCase("OrderCard", "OrderCardResult", "*OrderCardResult*")]
     [TestCase("OrderCard", "StartRun", "*")]
-    public void A_name_another_part_of_the_client_uses_is_refused(
+    public async Task A_name_another_part_of_the_client_uses_is_refused(
         string operation,
         string fragment,
         string message
     )
     {
-        var render = () =>
-            Render(
-                ("fragments.graphql", $"fragment {fragment} on Customer {{ name }}"),
-                (
-                    "a.graphql",
-                    $"query {operation}($input: FindInput!) {{ discover {{ findOrder(input: $input) {{ customer {{ ...{fragment} }} }} }} }}"
+        var render = async () =>
+            await RenderAsync(
+                    ("fragments.graphql", $"fragment {fragment} on Customer {{ name }}"),
+                    (
+                        "a.graphql",
+                        $"query {operation}($input: FindInput!) {{ discover {{ findOrder(input: $input) {{ customer {{ ...{fragment} }} }} }} }}"
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
-        if (fragment == "StartRun")
-            render.Should().NotThrow("a fragment named like nothing else is fine");
+        if (string.Equals(fragment, "StartRun", StringComparison.Ordinal))
+            await render
+                .Should()
+                .NotThrowAsync("a fragment named like nothing else is fine")
+                .ConfigureAwait(false);
         else
-            render.Should().Throw<InvalidOperationException>().WithMessage(message);
+            (
+                await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+            ).WithMessage(message);
     }
 
     [Test]
-    public void Two_operations_of_one_name_are_refused()
+    public async Task Two_operations_of_one_name_are_refused()
     {
-        var render = () =>
-            Render(
-                ("a.graphql", "query Same { discover { findOrder(input: { id: 1 }) { title } } }"),
-                ("b.graphql", "query Same { discover { findOrder(input: { id: 2 }) { title } } }")
-            );
+        var render = async () =>
+            await RenderAsync(
+                    (
+                        "a.graphql",
+                        "query Same { discover { findOrder(input: { id: 1 }) { title } } }"
+                    ),
+                    (
+                        "b.graphql",
+                        "query Same { discover { findOrder(input: { id: 2 }) { title } } }"
+                    )
+                )
+                .ConfigureAwait(false);
 
-        render
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*a.graphql and b.graphql: the operation name 'Same' is used twice*");
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*a.graphql and b.graphql: the operation name 'Same' is used twice*");
     }
 
     [Test]
-    public void Every_refusal_is_reported_at_once()
+    public async Task Every_refusal_is_reported_at_once()
     {
-        var render = () =>
-            Render(
-                ("a.graphql", "query A { discover { findOrder(input: { id: 1 }) { colour } } }"),
-                ("b.graphql", "query B { discover { findOrder(input: { id: 1 }) { shade } } }")
-            );
+        var render = async () =>
+            await RenderAsync(
+                    (
+                        "a.graphql",
+                        "query A { discover { findOrder(input: { id: 1 }) { colour } } }"
+                    ),
+                    ("b.graphql", "query B { discover { findOrder(input: { id: 1 }) { shade } } }")
+                )
+                .ConfigureAwait(false);
 
-        render
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*a.graphql*colour*b.graphql*shade*");
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*a.graphql*colour*b.graphql*shade*");
     }
 
     #endregion
@@ -950,84 +1016,51 @@ public class ClientDocumentsGeneratorTests
     #region The command
 
     [Test]
-    public void The_command_reads_its_globs_and_check_reports_a_stale_documents_file()
+    public async Task The_command_reads_its_globs_and_check_reports_a_stale_documents_file()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"trax-docs-cmd-{Guid.NewGuid():N}");
         var src = Path.Combine(dir, "src", "trax");
         Directory.CreateDirectory(Path.Combine(src, "cards"));
         var manifest = Path.Combine(dir, "manifest.json");
-        File.WriteAllText(manifest, ClientManifest.Write(Manifest));
-        File.WriteAllText(Path.Combine(src, "cards", "orderCard.graphql"), OrderCard);
+        await File.WriteAllTextAsync(manifest, ClientManifest.Write(Manifest));
+        await File.WriteAllTextAsync(Path.Combine(src, "cards", "orderCard.graphql"), OrderCard);
         var previous = Directory.GetCurrentDirectory();
         try
         {
             Directory.SetCurrentDirectory(dir);
-            ClientCommand
-                .Run(
-                    "react",
-                    manifest,
-                    src,
-                    check: false,
-                    null,
-                    null,
-                    new FakeNodeRunner(),
-                    ["src/**/*.graphql"]
-                )
+            (
+                await RunReactClientAsync(manifest, src, check: false, "src/**/*.graphql")
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .Be(0);
 
-            var json = File.ReadAllText(Path.Combine(src, "trax.documents.json"));
-            json.Should().Contain("\"source\": \"src/trax/cards/orderCard.graphql\"");
-            File.ReadAllText(Path.Combine(src, "graphql.config.yml"))
-                .Should()
-                .Contain("  - \"../**/*.graphql\"");
-            File.Exists(Path.Combine(src, "documents", "orderCard.g.ts")).Should().BeTrue();
-            ClientCommand
-                .Run(
-                    "react",
-                    manifest,
-                    src,
-                    check: true,
-                    null,
-                    null,
-                    new FakeNodeRunner(),
-                    ["src/**/*.graphql"]
-                )
+            await AssertWroteDocumentsAsync(src).ConfigureAwait(false);
+            (
+                await RunReactClientAsync(manifest, src, check: true, "src/**/*.graphql")
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .Be(0);
-
-            File.WriteAllText(
-                Path.Combine(src, "cards", "orderCard.graphql"),
-                OrderCard.Replace("title", "level")
-            );
-            ClientCommand
-                .Run(
-                    "react",
-                    manifest,
-                    src,
-                    check: true,
-                    null,
-                    null,
-                    new FakeNodeRunner(),
-                    ["src/**/*.graphql"]
+            await File.WriteAllTextAsync(
+                    Path.Combine(src, "cards", "orderCard.graphql"),
+                    OrderCard.Replace("title", "level", StringComparison.Ordinal)
                 )
+                .ConfigureAwait(false);
+            (
+                await RunReactClientAsync(manifest, src, check: true, "src/**/*.graphql")
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .Be(
                     1,
                     "the committed trax.documents.json and orderCard.g.ts no longer match the documents"
                 );
 
-            ClientCommand
-                .Run(
-                    "react",
-                    manifest,
-                    src,
-                    check: false,
-                    null,
-                    null,
-                    new FakeNodeRunner(),
-                    ["nowhere/*.graphql"]
-                )
+            (
+                await RunReactClientAsync(manifest, src, check: false, "nowhere/*.graphql")
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .Be(1, "a glob that matches nothing is an error");
         }
@@ -1038,10 +1071,43 @@ public class ClientDocumentsGeneratorTests
         }
     }
 
+    // What a run over the glob writes under --out: the documents file naming each document by its source, the editor's
+    // config, and each document's module.
+    private static async Task AssertWroteDocumentsAsync(string src)
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(src, "trax.documents.json"))
+            .ConfigureAwait(false);
+        json.Should().Contain("\"source\": \"src/trax/cards/orderCard.graphql\"");
+        (await File.ReadAllTextAsync(Path.Combine(src, "graphql.config.yml")).ConfigureAwait(false))
+            .Should()
+            .Contain("  - \"../**/*.graphql\"");
+        File.Exists(Path.Combine(src, "documents", "orderCard.g.ts")).Should().BeTrue();
+    }
+
+    // Runs `trax client react` over the glob with a fake node, writing nothing to the console.
+    private static Task<int> RunReactClientAsync(
+        string manifest,
+        string src,
+        bool check,
+        string glob
+    ) =>
+        ClientCommand.RunAsync(
+            "react",
+            manifest,
+            src,
+            check: check,
+            specifier: null,
+            toolsDir: null,
+            new FakeNodeRunner(),
+            TextWriter.Null,
+            TextWriter.Null,
+            [glob]
+        );
+
     // The schema written for the editor sits under --out, where the glob matches it too. Named through a link, --out
     // must still be the folder the glob finds it in, or the second run reads the schema as a document.
     [Test]
-    public void The_command_never_reads_its_editor_schema_when_out_is_named_through_a_link()
+    public async Task The_command_never_reads_its_editor_schema_when_out_is_named_through_a_link()
     {
         var real = Directory.CreateTempSubdirectory("trax-docs-real-").FullName;
         var link = Path.Combine(Path.GetTempPath(), $"trax-docs-link-{Guid.NewGuid():N}");
@@ -1049,30 +1115,39 @@ public class ClientDocumentsGeneratorTests
         Directory.CreateDirectory(Path.Combine(src, "cards"));
         Directory.CreateSymbolicLink(link, real);
         var manifest = Path.Combine(real, "manifest.json");
-        File.WriteAllText(manifest, ClientManifest.Write(Manifest));
-        File.WriteAllText(Path.Combine(src, "cards", "orderCard.graphql"), OrderCard);
+        await File.WriteAllTextAsync(manifest, ClientManifest.Write(Manifest));
+        await File.WriteAllTextAsync(Path.Combine(src, "cards", "orderCard.graphql"), OrderCard);
         var outDir = Path.Combine(link, "src", "trax");
         var previous = Directory.GetCurrentDirectory();
-        int Run(bool check) =>
-            ClientCommand.Run(
-                "react",
-                manifest,
-                outDir,
-                check,
-                null,
-                null,
-                new FakeNodeRunner(),
-                ["src/**/*.graphql"]
-            );
+        async Task<int> RunAsync(bool check) =>
+            await ClientCommand
+                .RunAsync(
+                    "react",
+                    manifest,
+                    outDir,
+                    check,
+                    specifier: null,
+                    toolsDir: null,
+                    new FakeNodeRunner(),
+                    TextWriter.Null,
+                    TextWriter.Null,
+                    ["src/**/*.graphql"]
+                )
+                .ConfigureAwait(false);
         try
         {
             Directory.SetCurrentDirectory(real);
-            Run(check: false).Should().Be(0);
+            (await RunAsync(check: false).ConfigureAwait(false)).Should().Be(0);
             File.Exists(Path.Combine(src, ClientGenerator.EditorSchemaFileName)).Should().BeTrue();
 
-            Run(check: false).Should().Be(0, "the editor schema is not a document");
-            Run(check: true).Should().Be(0);
-            File.ReadAllText(Path.Combine(src, "trax.documents.json"))
+            (await RunAsync(check: false).ConfigureAwait(false))
+                .Should()
+                .Be(0, "the editor schema is not a document");
+            (await RunAsync(check: true).ConfigureAwait(false)).Should().Be(0);
+            (
+                await File.ReadAllTextAsync(Path.Combine(src, "trax.documents.json"))
+                    .ConfigureAwait(false)
+            )
                 .Should()
                 .NotContain(ClientGenerator.EditorSchemaFileName);
         }
@@ -1105,7 +1180,7 @@ public class ClientDocumentsGeneratorTests
             }
         )
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dir, file))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dir, file)).NotNull());
             File.WriteAllText(Path.Combine(dir, file), "");
         }
         try
@@ -1257,21 +1332,28 @@ public class ClientDocumentsGeneratorTests
         "query Q { discover { runs { ledger(first: 2) { title } } } }",
         "*src/a.graphql:1:*the query model 'ledger' takes no argument 'first'*"
     )]
-    public void A_query_model_document_the_host_would_refuse_is_refused(string text, string message)
+    public async Task A_query_model_document_the_host_would_refuse_is_refused(
+        string text,
+        string message
+    )
     {
-        var render = () => Render(("src/a.graphql", text));
+        var render = async () => await RenderAsync(("src/a.graphql", text)).ConfigureAwait(false);
 
-        render.Should().Throw<InvalidOperationException>().WithMessage(message, "per " + Adr);
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message, "per " + Adr);
     }
 
     [TestCase("query Q { discover { orders(where: { colour: { eq: \"x\" } }) { totalCount } } }")]
     [TestCase("query Q { discover { orders(where: { title: { eq: 5 } }) { totalCount } } }")]
     [TestCase("query Q { discover { orders(order: [{ colour: ASC }]) { totalCount } } }")]
-    public void An_inline_filter_or_sort_the_types_do_not_hold_is_refused(string text)
+    public async Task An_inline_filter_or_sort_the_types_do_not_hold_is_refused(string text)
     {
-        var render = () => Render(("src/a.graphql", text));
+        var render = async () => await RenderAsync(("src/a.graphql", text)).ConfigureAwait(false);
 
-        render.Should().Throw<InvalidOperationException>().WithMessage("*src/a.graphql:1:*");
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*src/a.graphql:1:*");
     }
 
     #endregion
@@ -1296,7 +1378,8 @@ public class ClientDocumentsGeneratorTests
                 .Parser.Parse(document)
                 .Definitions.OfType<GraphQLParser.AST.GraphQLOperationDefinition>()
                 .Single()
-                .Variables!.Items.Select(v => new ClientManifestArgument
+                .Variables.NotNull()
+                .Items.Select(v => new ClientManifestArgument
                 {
                     Name = v.Variable.Name.StringValue,
                     Type = PrintType(v.Type),
@@ -1313,32 +1396,44 @@ public class ClientDocumentsGeneratorTests
             _ => "",
         };
 
-    private static IReadOnlyList<ClientFile> Render(
+    private static async Task<IReadOnlyList<ClientFile>> RenderAsync(
         params (string Source, string Text)[] documents
     ) =>
-        new ClientGenerator(new FakeNodeRunner()).Render(
-            new ClientGenerateOptions(
-                Manifest,
-                Documents: documents.Select(d => new ClientDocumentFile(d.Source, d.Text)).ToList()
-            )
+        (
+            await new ClientGenerator(new FakeNodeRunner())
+                .RenderAsync(
+                    new ClientGenerateOptions(
+                        Manifest,
+                        Documents: documents
+                            .Select(d => new ClientDocumentFile(d.Source, d.Text))
+                            .ToList()
+                    )
+                )
+                .ConfigureAwait(false)
         );
 
     private static string Text(IReadOnlyList<ClientFile> files, string path) =>
-        files.Single(f => f.Path == path).Text;
+        files.Single(f => string.Equals(f.Path, path, StringComparison.Ordinal)).Text;
 
     private static JsonElement Json(IReadOnlyList<ClientFile> files) =>
         JsonDocument.Parse(Text(files, "trax.documents.json")).RootElement;
 
     private static string Id(IReadOnlyList<ClientFile> files)
     {
-        var text = Json(files).GetProperty("documents")[0].GetProperty("text").GetString()!;
+        var text = Json(files)
+            .GetProperty("documents")[0]
+            .GetProperty("text")
+            .GetString()
+            .NotNull();
         return ClientDocumentSet.IdOf(
-            Json(files).GetProperty("documents")[0].GetProperty("name").GetString()!,
+            Json(files).GetProperty("documents")[0].GetProperty("name").GetString().NotNull(),
             text
         );
     }
 
-    private static IEnumerable<(string Name, string Text, string Id)> FixtureCases()
+    private static async Task<
+        IEnumerable<(string Name, string Text, string Id)>
+    > FixtureCasesAsync()
     {
         for (
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -1357,15 +1452,17 @@ public class ClientDocumentsGeneratorTests
             );
             if (!File.Exists(candidate))
                 continue;
-            using var json = JsonDocument.Parse(File.ReadAllText(candidate));
+            using var json = JsonDocument.Parse(
+                await File.ReadAllTextAsync(candidate).ConfigureAwait(false)
+            );
             return json
                 .RootElement.GetProperty("cases")
                 .EnumerateArray()
                 .Select(c =>
                     (
-                        c.GetProperty("name").GetString()!,
-                        c.GetProperty("text").GetString()!,
-                        c.GetProperty("id").GetString()!
+                        c.GetProperty("name").GetString().NotNull(),
+                        c.GetProperty("text").GetString().NotNull(),
+                        c.GetProperty("id").GetString().NotNull()
                     )
                 )
                 .ToList();
@@ -1375,4 +1472,11 @@ public class ClientDocumentsGeneratorTests
     }
 
     #endregion
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\bLevel\b",
+        System.Text.RegularExpressions.RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial System.Text.RegularExpressions.Regex LevelWord { get; }
 }

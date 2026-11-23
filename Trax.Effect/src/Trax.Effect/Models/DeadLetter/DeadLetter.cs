@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -57,7 +58,11 @@ public class DeadLetter : IModel
     /// Gets the reason why this job was moved to the dead letter queue.
     /// </summary>
     [Column("reason")]
-    public string Reason { get; private set; } = null!;
+    public string Reason
+    {
+        get => field.NotNull(nameof(Reason));
+        private set;
+    }
 
     /// <summary>
     /// Gets the number of retry attempts made before this job was dead-lettered.
@@ -103,11 +108,20 @@ public class DeadLetter : IModel
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static DeadLetter Create(CreateDeadLetter createDeadLetter)
     {
+        return Create(createDeadLetter, TimeProvider.System);
+    }
+
+    /// <summary>Creates a new DeadLetter record for a failed job execution, stamped on the given clock.</summary>
+    /// <param name="createDeadLetter">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static DeadLetter Create(CreateDeadLetter createDeadLetter, TimeProvider timeProvider)
+    {
         return new DeadLetter
         {
             ManifestId = createDeadLetter.Manifest.Id,
             Manifest = createDeadLetter.Manifest,
-            DeadLetteredAt = DateTime.UtcNow,
+            DeadLetteredAt = timeProvider.GetUtcNow().UtcDateTime,
             Reason = createDeadLetter.Reason,
             RetryCountAtDeadLetter = createDeadLetter.RetryCount,
             Status = DeadLetterStatus.AwaitingIntervention,
@@ -120,8 +134,16 @@ public class DeadLetter : IModel
     /// <param name="note">A note explaining the acknowledgement</param>
     public void Acknowledge(string note)
     {
+        Acknowledge(note, TimeProvider.System);
+    }
+
+    /// <summary>Marks this dead letter as acknowledged without retrying, at the given clock's time.</summary>
+    /// <param name="note">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    public void Acknowledge(string note, TimeProvider timeProvider)
+    {
         Status = DeadLetterStatus.Acknowledged;
-        ResolvedAt = DateTime.UtcNow;
+        ResolvedAt = timeProvider.GetUtcNow().UtcDateTime;
         ResolutionNote = note;
     }
 
@@ -131,8 +153,16 @@ public class DeadLetter : IModel
     /// <param name="retryMetadataId">The ID of the new Metadata record for the retry</param>
     public void MarkRetried(long retryMetadataId)
     {
+        MarkRetried(retryMetadataId, TimeProvider.System);
+    }
+
+    /// <summary>Marks this dead letter as retried, at the given clock's time.</summary>
+    /// <param name="retryMetadataId">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    public void MarkRetried(long retryMetadataId, TimeProvider timeProvider)
+    {
         Status = DeadLetterStatus.Retried;
-        ResolvedAt = DateTime.UtcNow;
+        ResolvedAt = timeProvider.GetUtcNow().UtcDateTime;
         RetryMetadataId = retryMetadataId;
     }
 
@@ -143,8 +173,16 @@ public class DeadLetter : IModel
     /// <param name="note">A note explaining the requeue action</param>
     public void Requeue(string note)
     {
+        Requeue(note, TimeProvider.System);
+    }
+
+    /// <summary>Marks this dead letter as requeued, at the given clock's time.</summary>
+    /// <param name="note">As for the overload without a clock.</param>
+    /// <param name="timeProvider">The clock the times it stamps are read from.</param>
+    public void Requeue(string note, TimeProvider timeProvider)
+    {
         Status = DeadLetterStatus.Retried;
-        ResolvedAt = DateTime.UtcNow;
+        ResolvedAt = timeProvider.GetUtcNow().UtcDateTime;
         ResolutionNote = note;
     }
 
@@ -176,7 +214,7 @@ public class DeadLetter : IModel
 
     /// <summary>
     /// For EF Core materialization and deserialization. Build a new dead letter with
-    /// <see cref="Create"/>, which stamps <see cref="DeadLetteredAt"/> and sets the status to
+    /// <see cref="Create(CreateDeadLetter)"/>, which stamps <see cref="DeadLetteredAt"/> and sets the status to
     /// <see cref="DeadLetterStatus.AwaitingIntervention"/>.
     /// </summary>
     public DeadLetter() { }

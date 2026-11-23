@@ -5,10 +5,10 @@ namespace Trax.Api.GraphQL.Client.Utils.Converters;
 
 /// <summary>
 /// Reads and writes <see cref="DateOnly"/> for the GraphQL client's default JSON options. Reads an
-/// ISO-8601 date or date-time string (a JSON <c>null</c> reads as <see cref="DateOnly.MinValue"/>) and writes
+/// ISO-8601 date or date-time string (a JSON <see langword="null"/> reads as <see cref="DateOnly.MinValue"/>) and writes
 /// midnight UTC as a full ISO-8601 date-time. Infrastructure not intended to be used directly.
 /// </summary>
-internal class DateOnlyConverter : JsonConverter<DateOnly>
+internal sealed class DateOnlyConverter : JsonConverter<DateOnly>
 {
     /// <inheritdoc/>
     public override DateOnly Read(

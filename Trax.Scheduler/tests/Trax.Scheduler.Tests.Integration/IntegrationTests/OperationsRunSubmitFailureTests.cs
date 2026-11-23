@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -32,7 +33,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OperationsRunSubmitFailureTests
 {
-    private ServiceProvider _provider = null!;
+    private ServiceProvider? _provider;
 
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
@@ -60,12 +61,16 @@ public class OperationsRunSubmitFailureTests
     }
 
     [OneTimeTearDown]
-    public async Task RunAfterAnyTests() => await _provider.DisposeAsync();
+    public async Task RunAfterAnyTests()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+    }
 
     [SetUp]
     public async Task TestSetUp()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.NotNull().CreateAsyncScope();
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
@@ -75,11 +80,11 @@ public class OperationsRunSubmitFailureTests
     [Test]
     public async Task A_failed_submit_does_not_overwrite_a_run_the_runner_claimed_meanwhile()
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.NotNull().CreateAsyncScope();
         var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
 
         var result = await operations.RunTrainAsync(
-            new RunTrainInput(typeof(ISchedulerTestTrain).FullName!, """{"value":"x"}"""),
+            new RunTrainInput(typeof(ISchedulerTestTrain).FullName.NotNull(), """{"value":"x"}"""),
             CancellationToken.None
         );
 
@@ -89,9 +94,9 @@ public class OperationsRunSubmitFailureTests
 
         var runner = StartsTheRunThenThrows.Runner;
         runner.Should().NotBeNull("the submitter started the run");
-        await runner!;
+        await runner.NotNull();
 
-        using var check = _provider.CreateScope();
+        await using var check = _provider.NotNull().CreateAsyncScope();
         var db = check.ServiceProvider.GetRequiredService<IDataContext>();
         var run = await db.Metadatas.AsNoTracking().SingleAsync();
         run.TrainState.Should()
@@ -123,18 +128,19 @@ public class OperationsRunSubmitFailureTests
         public async Task<string> EnqueueAsync(long metadataId, CancellationToken ct)
         {
             var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
-            await connection.OpenAsync(CancellationToken.None);
-            var claim = await connection.BeginTransactionAsync(CancellationToken.None);
-            await using (
-                var update = new NpgsqlCommand(
-                    "UPDATE trax.metadata SET train_state = 'in_progress' WHERE id = @id",
-                    connection,
-                    claim
-                )
-            )
+            await connection.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+            var claim = await connection
+                .BeginTransactionAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var update = new NpgsqlCommand(
+                "UPDATE trax.metadata SET train_state = 'in_progress' WHERE id = @id",
+                connection,
+                claim
+            );
+            await using (update.ConfigureAwait(false))
             {
                 update.Parameters.AddWithValue("id", metadataId);
-                await update.ExecuteNonQueryAsync(CancellationToken.None);
+                await update.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
             }
 
             Runner = CommitOnceAnotherWriterWaits(connection, claim);
@@ -146,28 +152,36 @@ public class OperationsRunSubmitFailureTests
             NpgsqlTransaction claim
         )
         {
-            var deadline = DateTime.UtcNow.AddSeconds(30);
-            await using (var probe = new NpgsqlConnection(TestPostgres.ConnectionString))
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(30);
+            var probe = new NpgsqlConnection(TestPostgres.ConnectionString);
+            await using (probe.ConfigureAwait(false))
             {
-                await probe.OpenAsync();
-                while (DateTime.UtcNow < deadline)
+                await probe.OpenAsync().ConfigureAwait(false);
+                while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
                 {
-                    await using var waiting = new NpgsqlCommand(
+                    var waiting = new NpgsqlCommand(
                         """
                         SELECT count(*) FROM pg_stat_activity
                         WHERE wait_event_type = 'Lock' AND query ILIKE '%UPDATE%metadata%'
                         """,
                         probe
                     );
-                    if ((long)(await waiting.ExecuteScalarAsync())! > 0)
-                        break;
-                    await Task.Yield();
+                    await using (waiting.ConfigureAwait(false))
+                    {
+                        if (
+                            (long)
+                                (await waiting.ExecuteScalarAsync().ConfigureAwait(false)).NotNull()
+                            > 0
+                        )
+                            break;
+                        await Task.Yield();
+                    }
                 }
             }
 
-            await claim.CommitAsync();
-            await claim.DisposeAsync();
-            await connection.DisposeAsync();
+            await claim.CommitAsync().ConfigureAwait(false);
+            await claim.DisposeAsync().ConfigureAwait(false);
+            await connection.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.Api.Console.Terminal.Connection;
 using Trax.Api.Console.Terminal.Lists;
@@ -31,19 +32,22 @@ internal static class HeadlessCommands
         RefuseUnknownFilters(list, filters);
         if (take is < 1 or > 500)
             throw new InvalidOperationException("--take is between 1 and 500.");
-        var answer = await list.LoadAsync(session.Client, new ListQuery(take, after, filters), ct);
+        var answer = await list.LoadAsync(session.Client, new ListQuery(take, after, filters), ct)
+            .ConfigureAwait(false);
         if (answer.Data is not { } page)
-            return Refused(answer, error);
+            return await RefusedAsync(answer, error).ConfigureAwait(false);
         foreach (var row in page.Rows)
-            await output.WriteLineAsync(row.Json?.ToJsonString() ?? "null");
-        await error.WriteLineAsync(
-            new JsonObject
-            {
-                ["totalCount"] = page.TotalCount,
-                ["estimated"] = page.Estimated,
-                ["nextCursor"] = page.NextCursor,
-            }.ToJsonString()
-        );
+            await output.WriteLineAsync(row.Json?.ToJsonString() ?? "null").ConfigureAwait(false);
+        await error
+            .WriteLineAsync(
+                new JsonObject
+                {
+                    ["totalCount"] = page.TotalCount,
+                    ["estimated"] = page.Estimated,
+                    ["nextCursor"] = page.NextCursor,
+                }.ToJsonString()
+            )
+            .ConfigureAwait(false);
         return 0;
     }
 
@@ -60,7 +64,9 @@ internal static class HeadlessCommands
     {
         var list = Catalog.Named(name);
         var info =
-            list.ActionInfos.FirstOrDefault(a => a.Name == action)
+            list.ActionInfos.FirstOrDefault(a =>
+                string.Equals(a.Name, action, StringComparison.Ordinal)
+            )
             ?? throw new InvalidOperationException(
                 $"{list.Name} has no action '{action}'. It has {string.Join(", ", list.ActionInfos.Select(a => a.Name))}."
             );
@@ -75,15 +81,16 @@ internal static class HeadlessCommands
         if (dryRun)
         {
             line["dryRun"] = true;
-            await output.WriteLineAsync(line.ToJsonString());
+            await output.WriteLineAsync(line.ToJsonString()).ConfigureAwait(false);
             return 0;
         }
-        var outcome = await list.RunAsync(session.Client, action, ids, options, ct);
+        var outcome = await list.RunAsync(session.Client, action, ids, options, ct)
+            .ConfigureAwait(false);
         line["succeeded"] = outcome.Succeeded;
         line["message"] = outcome.Message;
         if (outcome.Code is not null)
             line["code"] = outcome.Code;
-        await output.WriteLineAsync(line.ToJsonString());
+        await output.WriteLineAsync(line.ToJsonString()).ConfigureAwait(false);
         return outcome.Succeeded ? 0 : 1;
     }
 
@@ -96,13 +103,16 @@ internal static class HeadlessCommands
         ActionOptions options,
         bool dryRun,
         TextWriter output,
+        TimeProvider clock,
         CancellationToken ct
     )
     {
         var list = Catalog.Named(name);
         RefuseUnknownFilters(list, filters);
         var bulk =
-            list.BulkActions.FirstOrDefault(b => b.Name == action)
+            list.BulkActions.FirstOrDefault(b =>
+                string.Equals(b.Name, action, StringComparison.Ordinal)
+            )
             ?? throw new InvalidOperationException(
                 list.BulkActions.Count == 0
                     ? $"{list.Name} has no bulk actions."
@@ -120,50 +130,62 @@ internal static class HeadlessCommands
         if (dryRun)
         {
             line["dryRun"] = true;
-            await output.WriteLineAsync(line.ToJsonString());
+            await output.WriteLineAsync(line.ToJsonString()).ConfigureAwait(false);
             return 0;
         }
-        var (outcome, operation) = await Catalog.StartBulkAsync(
-            session.Client,
-            bulk,
-            filters,
-            expect,
-            options,
-            ct
-        );
+        var (outcome, operation) = await Catalog
+            .StartBulkAsync(session.Client, bulk, filters, expect, options, ct)
+            .ConfigureAwait(false);
         line["succeeded"] = outcome.Succeeded;
         line["message"] = outcome.Message;
         if (outcome.Code is not null)
             line["code"] = outcome.Code;
         line["operation"] = operation?.ToString();
-        await output.WriteLineAsync(line.ToJsonString());
+        await output.WriteLineAsync(line.ToJsonString()).ConfigureAwait(false);
         if (!outcome.Succeeded || operation is not { } id)
             return outcome.Succeeded ? 0 : 1;
 
-        // Its progress until it ends: the host runs it whether this process stays or not.
+        return await FollowAsync(session, id, output, clock, ct).ConfigureAwait(false);
+    }
+
+    // Its progress until it ends: the host runs it whether this process stays or not.
+    private static async Task<int> FollowAsync(
+        ConsoleSession session,
+        Guid id,
+        TextWriter output,
+        TimeProvider clock,
+        CancellationToken ct
+    )
+    {
         for (; ; )
         {
-            await Task.Delay(BulkPollInterval, ct);
-            var progress = await session.Client.BulkOperationAsync(
-                new BulkOperationVariables { Id = id, FailuresTake = 0 },
-                ct
-            );
+            await Task.Delay(BulkPollInterval, clock, ct).ConfigureAwait(false);
+            var progress = await session
+                .Client.BulkOperationAsync(
+                    new BulkOperationVariables { Id = id, FailuresTake = 0 },
+                    ct
+                )
+                .ConfigureAwait(false);
             if (progress.Data?.Operations?.BulkOperation is not { } state)
             {
-                await output.WriteLineAsync(Error(progress.Message, progress.Code).ToJsonString());
+                await output
+                    .WriteLineAsync(Error(progress.Message, progress.Code).ToJsonString())
+                    .ConfigureAwait(false);
                 return 1;
             }
-            await output.WriteLineAsync(
-                new JsonObject
-                {
-                    ["operation"] = id.ToString(),
-                    ["status"] = Wire.Name(state.Status),
-                    ["done"] = state.Done,
-                    ["failed"] = state.Failed,
-                    ["total"] = state.Total,
-                    ["message"] = state.Message,
-                }.ToJsonString()
-            );
+            await output
+                .WriteLineAsync(
+                    new JsonObject
+                    {
+                        ["operation"] = id.ToString(),
+                        ["status"] = Wire.Name(state.Status),
+                        ["done"] = state.Done,
+                        ["failed"] = state.Failed,
+                        ["total"] = state.Total,
+                        ["message"] = state.Message,
+                    }.ToJsonString()
+                )
+                .ConfigureAwait(false);
             if (state.Status != BulkOperationStatus.Running)
                 return state.Status == BulkOperationStatus.Finished && state.Failed == 0 ? 0 : 1;
         }
@@ -181,16 +203,58 @@ internal static class HeadlessCommands
         var ended = new TaskCompletionSource<int>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var gate = new object();
-        void Write(TextWriter to, string line)
+        var lines = new WatchLines(output, error, ended);
+
+        var client = session.Client;
+        using var subscription = stream switch
         {
-            lock (gate)
+            "runs" => client.OnTrainStateChanged(e =>
+                lines.On(e, d => Wire.Json(d.OnTrainStateChanged))
+            ),
+            "changes" => client.OnDataChanged(e => lines.On(e, d => Wire.Json(d.OnDataChanged))),
+            "run" => client.OnJunctionEvent(
+                new OnJunctionEventVariables
+                {
+                    MetadataId = Wire.Long(
+                        "run",
+                        id ?? throw new InvalidOperationException("watch run needs the run's id.")
+                    ),
+                },
+                e => lines.On(e, d => Wire.Json(d.OnJunctionEvent))
+            ),
+            "machines" => client.OnMachineInstanceChanged(
+                new OnMachineInstanceChangedVariables { Machine = id },
+                e => lines.On(e, d => Wire.Json(d.OnMachineInstanceChanged))
+            ),
+            _ => throw new InvalidOperationException(
+                $"'{stream}' is not a stream. Use runs, changes, run <id> or machines [name]."
+            ),
+        };
+        var stop = ct.Register(() => ended.TrySetResult(0));
+        await using var stopDisposal = stop.ConfigureAwait(false);
+        return await ended.Task.ConfigureAwait(false);
+    }
+
+    // What a stream sends, one JSON line at a time to output or error, never two at once; the end of the stream
+    // sets the exit code.
+    private sealed class WatchLines(
+        TextWriter output,
+        TextWriter error,
+        TaskCompletionSource<int> ended
+    )
+    {
+        private readonly Lock _gate = new();
+
+        private void Write(TextWriter to, string line)
+        {
+            lock (_gate)
             {
                 to.WriteLine(line);
                 to.Flush();
             }
         }
-        void On<T>(TraxStreamEvent<T> e, Func<T, JsonNode?> data)
+
+        public void On<T>(TraxStreamEvent<T> e, Func<T, JsonNode?> data)
         {
             switch (e)
             {
@@ -222,32 +286,6 @@ internal static class HeadlessCommands
                     break;
             }
         }
-
-        var client = session.Client;
-        using var subscription = stream switch
-        {
-            "runs" => client.OnTrainStateChanged(e => On(e, d => Wire.Json(d.OnTrainStateChanged))),
-            "changes" => client.OnDataChanged(e => On(e, d => Wire.Json(d.OnDataChanged))),
-            "run" => client.OnJunctionEvent(
-                new OnJunctionEventVariables
-                {
-                    MetadataId = Wire.Long(
-                        "run",
-                        id ?? throw new InvalidOperationException("watch run needs the run's id.")
-                    ),
-                },
-                e => On(e, d => Wire.Json(d.OnJunctionEvent))
-            ),
-            "machines" => client.OnMachineInstanceChanged(
-                new OnMachineInstanceChangedVariables { Machine = id },
-                e => On(e, d => Wire.Json(d.OnMachineInstanceChanged))
-            ),
-            _ => throw new InvalidOperationException(
-                $"'{stream}' is not a stream. Use runs, changes, run <id> or machines [name]."
-            ),
-        };
-        using var stop = ct.Register(() => ended.TrySetResult(0));
-        return await ended.Task;
     }
 
     public static async Task<int> TraceAsync(
@@ -258,32 +296,36 @@ internal static class HeadlessCommands
         CancellationToken ct
     )
     {
-        var answer = await RunTrace.LoadAsync(session.Client, run, ct);
+        var answer = await RunTrace.LoadAsync(session.Client, run, ct).ConfigureAwait(false);
         if (answer.Data is not { } entries)
-            return Refused(answer, error);
+            return await RefusedAsync(answer, error).ConfigureAwait(false);
         foreach (var entry in entries)
-            await output.WriteLineAsync(
-                new JsonObject
-                {
-                    ["kind"] = entry.Kind.ToString().ToLowerInvariant(),
-                    ["at"] = entry.At?.ToString("O"),
-                    ["text"] = entry.Text,
-                    ["data"] = entry.Json?.DeepClone(),
-                }.ToJsonString()
-            );
+            await output
+                .WriteLineAsync(
+                    new JsonObject
+                    {
+                        ["kind"] = entry.Kind.ToString().ToLowerInvariant(),
+                        ["at"] = entry.At?.ToString("O"),
+                        ["text"] = entry.Text,
+                        ["data"] = entry.Json?.DeepClone(),
+                    }.ToJsonString()
+                )
+                .ConfigureAwait(false);
         // Each part is read up to RunTrace.Take; one that filled it may hold more than was printed.
         var truncated = new[] { TraceKind.Step, TraceKind.Decision, TraceKind.Log }
-            .Where(kind => entries.Count(e => e.Kind == kind) >= RunTrace.Take)
+            .Where(kind => entries.Where(e => e.Kind == kind).Skip(499).Any())
             .Select(kind => (JsonNode)kind.ToString().ToLowerInvariant())
             .ToArray();
         if (truncated.Length > 0)
-            await error.WriteLineAsync(
-                new JsonObject
-                {
-                    ["truncated"] = new JsonArray(truncated),
-                    ["limit"] = RunTrace.Take,
-                }.ToJsonString()
-            );
+            await error
+                .WriteLineAsync(
+                    new JsonObject
+                    {
+                        ["truncated"] = new JsonArray(truncated),
+                        ["limit"] = RunTrace.Take,
+                    }.ToJsonString()
+                )
+                .ConfigureAwait(false);
         return 0;
     }
 
@@ -297,12 +339,16 @@ internal static class HeadlessCommands
         CancellationToken ct
     )
     {
-        var answer = await session.Client.MachinesAsync(ct);
+        var answer = await session.Client.MachinesAsync(ct).ConfigureAwait(false);
         if (answer.Data?.Operations?.Machines is not { } machines)
-            return Refused(answer, error);
+            return await RefusedAsync(answer, error).ConfigureAwait(false);
         var shown = machines
-            .Where(m => machine is null ? !m.SystemOwned : m.Name == machine)
-            .OrderBy(m => m.Name)
+            .Where(m =>
+                machine is null
+                    ? !m.SystemOwned
+                    : string.Equals(m.Name, machine, StringComparison.Ordinal)
+            )
+            .OrderBy(m => m.Name, StringComparer.Ordinal)
             .ToList();
         if (shown.Count == 0)
             throw new InvalidOperationException(
@@ -313,11 +359,17 @@ internal static class HeadlessCommands
         // Plain text the host's names are in, so each line is cleaned as the console's screens are.
         foreach (var m in shown)
         {
-            await output.WriteLineAsync(TerminalText.Line($"{m.Name} v{m.Version}"));
-            await output.WriteLineAsync();
+            await output
+                .WriteLineAsync(
+                    TerminalText.Line(
+                        string.Create(CultureInfo.InvariantCulture, $"{m.Name} v{m.Version}")
+                    )
+                )
+                .ConfigureAwait(false);
+            await output.WriteLineAsync().ConfigureAwait(false);
             foreach (var line in Machines.MachineGraph.Lines(m, vertical: vertical))
-                await output.WriteLineAsync(TerminalText.Line(line));
-            await output.WriteLineAsync();
+                await output.WriteLineAsync(TerminalText.Line(line)).ConfigureAwait(false);
+            await output.WriteLineAsync().ConfigureAwait(false);
         }
         return 0;
     }
@@ -351,7 +403,7 @@ internal static class HeadlessCommands
                     line["code"] = failed.Code;
                 break;
         }
-        await output.WriteLineAsync(line.ToJsonString());
+        await output.WriteLineAsync(line.ToJsonString()).ConfigureAwait(false);
         return version is VersionCheck.Same ? 0 : 1;
     }
 
@@ -363,7 +415,9 @@ internal static class HeadlessCommands
         foreach (var (name, value) in filters)
         {
             var filter =
-                list.Filters.FirstOrDefault(f => f.Name == name)
+                list.Filters.FirstOrDefault(f =>
+                    string.Equals(f.Name, name, StringComparison.Ordinal)
+                )
                 ?? throw new InvalidOperationException(
                     $"{list.Name} has no filter '{name}'. It has {string.Join(", ", list.Filters.Select(f => f.Name))}."
                 );
@@ -377,11 +431,13 @@ internal static class HeadlessCommands
         }
     }
 
-    private static int Refused<T>(TraxAnswer<T> answer, TextWriter error)
+    private static async Task<int> RefusedAsync<T>(TraxAnswer<T> answer, TextWriter error)
     {
-        error.WriteLine(
-            Error(answer.Message ?? "The host refused it.", answer.Code).ToJsonString()
-        );
+        await error
+            .WriteLineAsync(
+                Error(answer.Message ?? "The host refused it.", answer.Code).ToJsonString()
+            )
+            .ConfigureAwait(false);
         return 1;
     }
 

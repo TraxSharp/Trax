@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
 using Trax.Samples.Bookworm.Catalog;
 using Trax.Samples.Bookworm.Catalog.Models.Books;
@@ -40,7 +41,7 @@ public class CrossSchemaModelTests
         var bookEntity = context.Model.FindEntityType(typeof(Book));
 
         bookEntity.Should().NotBeNull();
-        bookEntity!.GetSchema().Should().Be(CatalogSchema.Name);
+        bookEntity.NotNull().GetSchema().Should().Be(CatalogSchema.Name);
     }
 
     [Test]
@@ -48,7 +49,7 @@ public class CrossSchemaModelTests
     {
         using var context = BuildOfflineModel();
 
-        var bookEntity = context.Model.FindEntityType(typeof(Book))!;
+        var bookEntity = context.Model.FindEntityType(typeof(Book)).NotNull();
 
         bookEntity
             .GetNavigations()

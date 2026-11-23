@@ -37,42 +37,12 @@ internal static class QueueDispatch
             return false;
         if (services.GetService<IDataContextProviderFactory>() is not { } factory)
             return false;
-        using var db = await factory.CreateDbContextAsync(ct);
+        var db = await factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
         return db is DbContext context && !context.Database.IsRelational();
     }
 
     /// <summary>The refusal a queue mutation throws on such a host.</summary>
     public static GraphQLException Unavailable() =>
         new(ErrorBuilder.New().SetMessage(UnavailableMessage).SetCode(UnavailableCode).Build());
-}
-
-/// <summary>
-/// Warns once at startup, naming them, when train mutations that can queue are exposed on a host
-/// where nothing dispatches the queue. Each such request is refused
-/// (<see cref="QueueDispatch.Unavailable"/>); the host still starts, because a bare
-/// <c>[TraxMutation]</c> exposes Queue by default and most hosts like this only ever run.
-/// </summary>
-internal sealed class QueueDispatchReporter(
-    IReadOnlyList<string> queueCapableMutations,
-    IServiceProvider services,
-    ILogger<QueueDispatchReporter> logger
-) : IHostedService
-{
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        if (queueCapableMutations.Count == 0)
-            return;
-
-        await using var scope = services.CreateAsyncScope();
-        if (await QueueDispatch.NothingDispatchesAsync(scope.ServiceProvider, cancellationToken))
-            logger.LogWarning(
-                "This host's store is in memory, so nothing dispatches its work queue, and "
-                    + "mode: QUEUE on these train mutations is refused: {Trains}. Expose them as "
-                    + "[TraxMutation(GraphQLOperation.Run)] to drop the mode argument, or use a "
-                    + "database provider such as UsePostgres().",
-                string.Join(", ", queueCapableMutations)
-            );
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

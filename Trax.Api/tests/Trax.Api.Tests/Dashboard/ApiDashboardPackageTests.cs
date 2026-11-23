@@ -4,6 +4,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Dashboard;
 
@@ -18,12 +19,12 @@ namespace Trax.Api.Tests.Dashboard;
 /// </summary>
 public partial class ApiDashboardPackageTests
 {
-    private string _root = null!;
+    private string? _root;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        var node = Run("node", Path.GetTempPath(), "--version");
+        var node = await RunAsync("node", Path.GetTempPath(), "--version");
         if (node.ExitCode != 0)
             Unavailable("node is not on PATH; packing Trax.Api.Dashboard builds its app with it.");
         if (!Directory.Exists(Path.Combine(ClientApp(), "node_modules", "vite")))
@@ -32,7 +33,7 @@ public partial class ApiDashboardPackageTests
             );
 
         _root = Path.Combine(Path.GetTempPath(), $"trax-api-dashboard-pack-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(_root.NotNull());
     }
 
     // Skips on a developer's machine; fails under CI, which installs node and the app's packages
@@ -47,14 +48,14 @@ public partial class ApiDashboardPackageTests
     [TearDown]
     public void TearDown()
     {
-        if (_root is not null && Directory.Exists(_root))
-            Directory.Delete(_root, recursive: true);
+        if (_root is not null && Directory.Exists(_root.NotNull()))
+            Directory.Delete(_root.NotNull(), recursive: true);
     }
 
     [Test]
-    public void The_package_carries_the_built_app_with_content_hashed_assets()
+    public async Task The_package_carries_the_built_app_with_content_hashed_assets()
     {
-        var unpacked = PackAndUnpack();
+        var unpacked = await PackAndUnpackAsync();
 
         var assembly = Path.Combine(unpacked, "lib", "net10.0", "Trax.Api.Dashboard.dll");
         File.Exists(assembly).Should().BeTrue("the package ships the assembly");
@@ -62,15 +63,17 @@ public partial class ApiDashboardPackageTests
             .Should()
             .BeTrue("every package carries a README");
 
-        var resources = ManifestResources(assembly);
+        var resources = await ManifestResourcesAsync(assembly);
         resources.Should().Contain("TraxApiDashboard/index.html");
-        var assets = resources.Where(r => r.StartsWith("TraxApiDashboard/assets/")).ToList();
+        var assets = resources
+            .Where(r => r.StartsWith("TraxApiDashboard/assets/", StringComparison.Ordinal))
+            .ToList();
         assets
             .Should()
-            .Contain(a => HashedScript().IsMatch(a), "the app's script is named by its content");
+            .Contain(a => HashedScript.IsMatch(a), "the app's script is named by its content");
         assets
             .Should()
-            .Contain(a => HashedStyle().IsMatch(a), "the app's styles are named by their content");
+            .Contain(a => HashedStyle.IsMatch(a), "the app's styles are named by their content");
         resources
             .Should()
             .NotContain(
@@ -79,15 +82,24 @@ public partial class ApiDashboardPackageTests
             );
     }
 
-    [GeneratedRegex(@"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.js$")]
-    private static partial Regex HashedScript();
+    [GeneratedRegex(
+        @"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.js$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex HashedScript { get; }
 
-    [GeneratedRegex(@"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.css$")]
-    private static partial Regex HashedStyle();
+    [GeneratedRegex(
+        @"^TraxApiDashboard/assets/index-[A-Za-z0-9_-]{6,}\.css$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex HashedStyle { get; }
 
-    private static List<string> ManifestResources(string assemblyPath)
+    private static async Task<List<string>> ManifestResourcesAsync(string assemblyPath)
     {
-        using var stream = File.OpenRead(assemblyPath);
+        var stream = File.OpenRead(assemblyPath);
+        await using var streamDisposal = stream.ConfigureAwait(false);
         using var pe = new PEReader(stream);
         var metadata = pe.GetMetadataReader();
         return metadata
@@ -95,8 +107,13 @@ public partial class ApiDashboardPackageTests
             .ToList();
     }
 
-    // Packs the project as this test run built it, the way CI packs after its build.
-    private string PackAndUnpack()
+    // Packs the project as this test run built it, the way CI packs after its build. Package
+    // validation is off: it reads the reference assemblies of the projects this one references,
+    // and a build of Trax.Api.slnx builds the ones outside the solution (Trax.Effect and the other
+    // upstream folders) in their default configuration, not this one, so a pack of the project on
+    // its own looks for files that were never built. CI's pack of the solution validates the
+    // package; this test checks what it carries.
+    private async Task<string> PackAndUnpackAsync()
     {
         var project = Path.Combine(
             RepoFolder("Trax.Api"),
@@ -104,23 +121,31 @@ public partial class ApiDashboardPackageTests
             "Trax.Api.Dashboard",
             "Trax.Api.Dashboard.csproj"
         );
-        var packages = Path.Combine(_root, "packages");
-        var (exitCode, output) = Run(
-            "dotnet",
-            _root,
-            "pack",
-            project,
-            "--no-build",
-            "--configuration",
-            BuildConfiguration(),
-            "--output",
-            packages,
-            "-p:Version=0.0.0-packtest"
-        );
+        var packages = Path.Combine(_root.NotNull(), "packages");
+        var (exitCode, output) = await RunAsync(
+                "dotnet",
+                _root.NotNull(),
+                "pack",
+                project,
+                "--no-build",
+                "--configuration",
+                BuildConfiguration(),
+                "--output",
+                packages,
+                "-p:Version=0.0.0-packtest",
+                "-p:EnablePackageValidation=false"
+            )
+            .ConfigureAwait(false);
         exitCode.Should().Be(0, output);
 
-        var unpacked = Path.Combine(_root, "package");
-        ZipFile.ExtractToDirectory(Directory.GetFiles(packages, "*.nupkg").Single(), unpacked);
+        var unpacked = Path.Combine(_root.NotNull(), "package");
+        await ZipFile
+            .ExtractToDirectoryAsync(
+                Directory.GetFiles(packages, "*.nupkg").Single(),
+                unpacked,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
         return unpacked;
     }
 
@@ -130,7 +155,7 @@ public partial class ApiDashboardPackageTests
     // bin/<Configuration>/<tfm>/: the configuration this test run built, which pack --no-build must match.
     private static string BuildConfiguration() =>
         new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))
-            .Parent!
+            .Parent.NotNull()
             .Name;
 
     private static string RepoFolder(string name)
@@ -151,7 +176,7 @@ public partial class ApiDashboardPackageTests
         throw new InvalidOperationException($"No {name} folder above {AppContext.BaseDirectory}.");
     }
 
-    private static (int ExitCode, string Output) Run(
+    private static async Task<(int ExitCode, string Output)> RunAsync(
         string fileName,
         string workingDirectory,
         params string[] args
@@ -160,6 +185,7 @@ public partial class ApiDashboardPackageTests
         var psi = new ProcessStartInfo(fileName)
         {
             WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
@@ -174,7 +200,7 @@ public partial class ApiDashboardPackageTests
         psi.Environment.Remove("MSBUILD_EXE_PATH");
         try
         {
-            using var process = Process.Start(psi)!;
+            using var process = Process.Start(psi).NotNull();
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
             // Under the blame collector's five minutes, so a hung child fails this test with what
@@ -183,7 +209,9 @@ public partial class ApiDashboardPackageTests
             if (!exited)
                 process.Kill(entireProcessTree: true);
             Task.WaitAll([stdout, stderr], TimeSpan.FromSeconds(30));
-            var output = Drained(stdout) + Drained(stderr);
+            var output =
+                await DrainedAsync(stdout).ConfigureAwait(false)
+                + await DrainedAsync(stderr).ConfigureAwait(false);
             return exited
                 ? (process.ExitCode, output)
                 : (
@@ -197,6 +225,8 @@ public partial class ApiDashboardPackageTests
         }
     }
 
-    private static string Drained(Task<string> read) =>
-        read.IsCompletedSuccessfully ? read.Result : "(output still held open by a child process)";
+    private static async Task<string> DrainedAsync(Task<string> read) =>
+        read.IsCompletedSuccessfully
+            ? await read.ConfigureAwait(false)
+            : "(output still held open by a child process)";
 }

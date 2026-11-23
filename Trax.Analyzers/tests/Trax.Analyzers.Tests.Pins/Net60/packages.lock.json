@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.AspNetCore.App.Ref": {
+        "type": "Direct",
+        "requested": "[6.0.10, )",
+        "resolved": "6.0.10",
+        "contentHash": "qqIbiUWcxw5qS2iU1YUKFR/T5KubzUlTe9l2kG4uEg4yhcdaJ/Hzgt6jGw/toE37D68585bRgGUDN8SxA2PjKg=="
+      },
+      "Microsoft.NETCore.App.Ref": {
+        "type": "Direct",
+        "requested": "[6.0.0, )",
+        "resolved": "6.0.0",
+        "contentHash": "geIxJJ6/aVzFESep+OuIOeoOtzwLGDF+ZThRIpLvoIc+AVk3SHqW8E0x+Clr79KfcCFBI2sOinQt+2DaJXe3gw=="
+      }
+    }
+  }
+}

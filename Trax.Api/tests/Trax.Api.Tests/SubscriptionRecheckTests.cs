@@ -21,6 +21,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Tests.Auth;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
@@ -98,7 +99,7 @@ public class SubscriptionRecheckTests
         var executor = await BuildAsync(OperationsByPolicy);
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted("Some.Train"));
+        await FirstAsync(results, () => PublishCompletedAsync("Some.Train"));
 
         _opsOpen = false;
 
@@ -116,13 +117,13 @@ public class SubscriptionRecheckTests
         var executor = await BuildAsync(OperationsByPolicy);
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted("Some.Train"));
+        await FirstAsync(results, () => PublishCompletedAsync("Some.Train"));
 
         for (var i = 0; i < 3; i++)
             _time.Advance(Interval);
 
         var before = results.Received;
-        await FirstAsync(results, () => PublishCompleted("Some.Later.Train"), after: before);
+        await FirstAsync(results, () => PublishCompletedAsync("Some.Later.Train"), after: before);
         results.Ended.Should().BeFalse("a subscriber that still passes keeps receiving");
     }
 
@@ -132,7 +133,7 @@ public class SubscriptionRecheckTests
         var executor = await BuildAsync(OperationsByPolicy);
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted("Some.Train"));
+        await FirstAsync(results, () => PublishCompletedAsync("Some.Train"));
 
         _opsThrows = true;
 
@@ -147,7 +148,10 @@ public class SubscriptionRecheckTests
         var executor = await BuildAsync(g => g, MembersBroadcast());
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted(typeof(IMembersTrain).FullName!));
+        await FirstAsync(
+            results,
+            () => PublishCompletedAsync(typeof(IMembersTrain).FullName.NotNull())
+        );
 
         _membersOpen = false;
 
@@ -198,9 +202,12 @@ public class SubscriptionRecheckTests
         await FirstAsync(
             results,
             () =>
-                Send(
+                SendToTopicAsync(
                     nameof(LifecycleSubscriptions.OnDataChanged),
-                    new DataChangedEvent(ChangeDomain.WorkQueue, DateTime.UtcNow)
+                    new DataChangedEvent(
+                        ChangeDomain.WorkQueue,
+                        TimeProvider.System.GetUtcNow().UtcDateTime
+                    )
                 )
         );
 
@@ -219,7 +226,14 @@ public class SubscriptionRecheckTests
         var feed = Channel.CreateUnbounded<MachineInstanceRecord>();
         var executor = await BuildAsync(OperationsByPolicy, operations: Operations(feed));
         var results = Collect(await SubscribeAsync(executor, OperatorQuery));
-        await FirstAsync(results, () => feed.Writer.TryWrite(Record()));
+        await FirstAsync(
+            results,
+            () =>
+            {
+                feed.Writer.TryWrite(Record());
+                return Task.CompletedTask;
+            }
+        );
 
         _opsOpen = false;
 
@@ -234,13 +248,28 @@ public class SubscriptionRecheckTests
         var feed = Channel.CreateUnbounded<MachineInstanceRecord>();
         var executor = await BuildAsync(OperationsByPolicy, operations: Operations(feed));
         var results = Collect(await SubscribeAsync(executor, OperatorQuery));
-        await FirstAsync(results, () => feed.Writer.TryWrite(Record()));
+        await FirstAsync(
+            results,
+            () =>
+            {
+                feed.Writer.TryWrite(Record());
+                return Task.CompletedTask;
+            }
+        );
 
         for (var i = 0; i < 3; i++)
             _time.Advance(Interval);
 
         var before = results.Received;
-        await FirstAsync(results, () => feed.Writer.TryWrite(Record()), after: before);
+        await FirstAsync(
+            results,
+            () =>
+            {
+                feed.Writer.TryWrite(Record());
+                return Task.CompletedTask;
+            },
+            after: before
+        );
         results.Ended.Should().BeFalse();
     }
 
@@ -255,7 +284,10 @@ public class SubscriptionRecheckTests
         var executor = await BuildGatedAsync(UnmarkedBroadcast());
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted(typeof(IUnmarkedTrain).FullName!));
+        await FirstAsync(
+            results,
+            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName.NotNull())
+        );
 
         _accounts.Suspended = true;
 
@@ -276,7 +308,10 @@ public class SubscriptionRecheckTests
         var executor = await BuildGatedAsync(UnmarkedBroadcast());
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted(typeof(IUnmarkedTrain).FullName!));
+        await FirstAsync(
+            results,
+            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName.NotNull())
+        );
 
         for (var i = 0; i < 3; i++)
             _time.Advance(Interval);
@@ -284,7 +319,7 @@ public class SubscriptionRecheckTests
         var before = results.Received;
         await FirstAsync(
             results,
-            () => PublishCompleted(typeof(IUnmarkedTrain).FullName!),
+            () => PublishCompletedAsync(typeof(IUnmarkedTrain).FullName.NotNull()),
             after: before
         );
         results.Ended.Should().BeFalse("a subscriber the endpoint policy still admits goes on");
@@ -296,7 +331,7 @@ public class SubscriptionRecheckTests
         var executor = await BuildGatedAsync();
         var stream = await SubscribeAsync(executor, LifecycleQuery);
         var results = Collect(stream);
-        await FirstAsync(results, () => PublishCompleted("Some.Train"));
+        await FirstAsync(results, () => PublishCompletedAsync("Some.Train"));
 
         _accounts.Suspended = true;
 
@@ -314,7 +349,14 @@ public class SubscriptionRecheckTests
         var feed = Channel.CreateUnbounded<MachineInstanceRecord>();
         var executor = await BuildGatedAsync(operations: Operations(feed));
         var results = Collect(await SubscribeAsync(executor, OperatorQuery));
-        await FirstAsync(results, () => feed.Writer.TryWrite(Record()));
+        await FirstAsync(
+            results,
+            () =>
+            {
+                feed.Writer.TryWrite(Record());
+                return Task.CompletedTask;
+            }
+        );
 
         _accounts.Suspended = true;
 
@@ -356,21 +398,8 @@ public class SubscriptionRecheckTests
 
         _membersOpen = false;
 
-        // Events published before the first frame arrived may still be on their way, and the
-        // server may send a keep-alive. The re-check's error is the stream's last result, a
-        // `next` frame carrying only errors, and the operation then completes.
-        var frames = new List<JsonElement>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (frames.Count == 0 || frames[^1].GetProperty("type").GetString() != "complete")
-        {
-            DateTime
-                .UtcNow.Should()
-                .BeBefore(deadline, "the re-check ends the subscription within a few intervals");
-            var frame = await ReceiveAsync(socket);
-            if (frame.GetProperty("type").GetString() is not ("ping" or "pong"))
-                frames.Add(frame);
-        }
-        var raw = string.Join("\n", frames.Select(f => f.GetRawText()));
+        var frames = await ReceiveUntilCompleteAsync(socket);
+        var raw = string.Join('\n', frames.Select(f => f.GetRawText()));
         frames.Should().HaveCountGreaterThanOrEqualTo(2, raw);
         var last = frames[^2];
         last.GetProperty("type").GetString().Should().Be("next", raw);
@@ -396,6 +425,33 @@ public class SubscriptionRecheckTests
             .Be("pong", "the socket stays open");
     }
 
+    private static async Task<List<JsonElement>> ReceiveUntilCompleteAsync(WebSocket socket)
+    {
+        // Events published before the first frame arrived may still be on their way, and the
+        // server may send a keep-alive. The re-check's error is the stream's last result, a
+        // `next` frame carrying only errors, and the operation then completes.
+        var frames = new List<JsonElement>();
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
+        while (
+            frames.Count == 0
+            || !string.Equals(
+                frames[^1].GetProperty("type").GetString(),
+                "complete",
+                StringComparison.Ordinal
+            )
+        )
+        {
+            TimeProvider
+                .System.GetUtcNow()
+                .UtcDateTime.Should()
+                .BeBefore(deadline, "the re-check ends the subscription within a few intervals");
+            var frame = await ReceiveAsync(socket).ConfigureAwait(false);
+            if (frame.GetProperty("type").GetString() is not ("ping" or "pong"))
+                frames.Add(frame);
+        }
+        return frames;
+    }
+
     private const string SocketKey = "recheck-socket-key-0123456789abcdefghijk";
 
     /// <summary>
@@ -406,18 +462,20 @@ public class SubscriptionRecheckTests
     {
         var sender = host.Services.GetRequiredService<ITopicEventSender>();
         var first = ReceiveAsync(socket);
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!first.IsCompleted && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (!first.IsCompleted && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
-            await sender.SendAsync(
-                nameof(LifecycleSubscriptions.OnTrainCompleted),
-                Completed(typeof(IMembersTrain).FullName!)
-            );
+            await sender
+                .SendAsync(
+                    nameof(LifecycleSubscriptions.OnTrainCompleted),
+                    Completed(typeof(IMembersTrain).FullName.NotNull())
+                )
+                .ConfigureAwait(false);
             // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes the
             // instant the frame arrives.
-            await Task.WhenAny(first, Task.Delay(100));
+            await Task.WhenAny(first, Task.Delay(100)).ConfigureAwait(false);
         }
-        return await first;
+        return await first.ConfigureAwait(false);
     }
 
     private async Task<IHost> StartSocketHostAsync(TrainRegistration broadcast)
@@ -457,19 +515,21 @@ public class SubscriptionRecheckTests
                     })
             )
             .Build();
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
     private static async Task SendAsync(WebSocket socket, object message)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await socket.SendAsync(
-            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message)),
-            WebSocketMessageType.Text,
-            true,
-            cts.Token
-        );
+        await socket
+            .SendAsync(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message)),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cts.Token
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket socket)
@@ -479,12 +539,13 @@ public class SubscriptionRecheckTests
         using var text = new MemoryStream();
         while (true)
         {
-            var result = await socket.ReceiveAsync(buffer, cts.Token);
+            var result = await socket.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new InvalidOperationException(
                     $"The socket closed: {result.CloseStatus} {result.CloseStatusDescription}"
                 );
-            text.Write(buffer, 0, result.Count);
+            await text.WriteAsync(buffer, 0, result.Count, CancellationToken.None)
+                .ConfigureAwait(false);
             if (result.EndOfMessage)
                 break;
         }
@@ -587,7 +648,8 @@ public class SubscriptionRecheckTests
         _provider = services.BuildServiceProvider();
         return await _provider
             .GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
     }
 
     private static TrainRegistration MembersBroadcast() =>
@@ -598,8 +660,8 @@ public class SubscriptionRecheckTests
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
-            ServiceTypeName = typeof(IMembersTrain).FullName!,
-            ImplementationTypeName = typeof(IMembersTrain).FullName!,
+            ServiceTypeName = typeof(IMembersTrain).FullName.NotNull(),
+            ImplementationTypeName = typeof(IMembersTrain).FullName.NotNull(),
             InputTypeName = "Object",
             OutputTypeName = "Object",
             RequiredPolicies = [MembersPolicy],
@@ -624,8 +686,8 @@ public class SubscriptionRecheckTests
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
-            ServiceTypeName = typeof(IUnmarkedTrain).FullName!,
-            ImplementationTypeName = typeof(IUnmarkedTrain).FullName!,
+            ServiceTypeName = typeof(IUnmarkedTrain).FullName.NotNull(),
+            ImplementationTypeName = typeof(IUnmarkedTrain).FullName.NotNull(),
             InputTypeName = "Object",
             OutputTypeName = "Object",
             RequiredPolicies = [],
@@ -653,7 +715,7 @@ public class SubscriptionRecheckTests
         [EnumeratorCancellation] CancellationToken ct = default
     )
     {
-        await foreach (var record in feed.Reader.ReadAllAsync(ct))
+        await foreach (var record in feed.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return record;
     }
 
@@ -665,13 +727,13 @@ public class SubscriptionRecheckTests
             Id: Guid.NewGuid(),
             State: "Naming",
             Version: 1,
-            CreatedAt: DateTimeOffset.UtcNow,
-            UpdatedAt: DateTimeOffset.UtcNow,
+            CreatedAt: TimeProvider.System.GetUtcNow(),
+            UpdatedAt: TimeProvider.System.GetUtcNow(),
             HasLiveInvokedRun: false
         );
 
-    private void PublishCompleted(string trainName) =>
-        Send(nameof(LifecycleSubscriptions.OnTrainCompleted), Completed(trainName));
+    private Task PublishCompletedAsync(string trainName) =>
+        SendToTopicAsync(nameof(LifecycleSubscriptions.OnTrainCompleted), Completed(trainName));
 
     private static TrainLifecycleEvent Completed(string trainName) =>
         new(
@@ -679,7 +741,7 @@ public class SubscriptionRecheckTests
             ExternalId: "ext",
             TrainName: trainName,
             TrainState: TrainState.Completed,
-            Timestamp: DateTime.UtcNow,
+            Timestamp: TimeProvider.System.GetUtcNow().UtcDateTime,
             FailureJunction: null,
             FailureReason: null,
             Output: null,
@@ -687,13 +749,13 @@ public class SubscriptionRecheckTests
             HostEnvironment: "Production"
         );
 
-    private void Send<T>(string topic, T message) =>
-        _provider!
+    private async Task SendToTopicAsync<T>(string topic, T message) =>
+        await _provider
+            .NotNull()
             .GetRequiredService<ITopicEventSender>()
             .SendAsync(topic, message)
             .AsTask()
-            .GetAwaiter()
-            .GetResult();
+            .ConfigureAwait(false);
 
     private static async Task<IResponseStream> SubscribeAsync(
         IRequestExecutor executor,
@@ -703,13 +765,15 @@ public class SubscriptionRecheckTests
         var user = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim(ClaimTypes.Name, "member")], "Test")
         );
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(query)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .Build()
-        );
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder
+                    .New()
+                    .SetDocument(query)
+                    .SetGlobalState("ClaimsPrincipal", user)
+                    .Build()
+            )
+            .ConfigureAwait(false);
         return result
             .Should()
             .BeAssignableTo<IResponseStream>(
@@ -763,23 +827,27 @@ public class SubscriptionRecheckTests
         var results = new Results();
         results.Reading = Task.Run(async () =>
         {
-            await using (stream)
-                await foreach (var result in stream.ReadResultsAsync())
+            await using (stream.ConfigureAwait(false))
+                await foreach (var result in stream.ReadResultsAsync().ConfigureAwait(false))
                     results.Add(result);
         });
         return results;
     }
 
     /// <summary>Publishes with <paramref name="publish"/> until a result past <paramref name="after"/> arrives.</summary>
-    private static async Task FirstAsync(Results results, Action publish, int after = 0)
+    private static async Task FirstAsync(Results results, Func<Task> publish, int after = 0)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (results.Received <= after && !results.Ended && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (
+            results.Received <= after
+            && !results.Ended
+            && TimeProvider.System.GetUtcNow().UtcDateTime < deadline
+        )
         {
-            publish();
+            await publish().ConfigureAwait(false);
             // allowed-delay: re-publish interval, bounded by the 10s deadline; ExecuteAsync can
             // return before the topic subscription is registered.
-            await Task.WhenAny(results.Reading, Task.Delay(100));
+            await Task.WhenAny(results.Reading, Task.Delay(100)).ConfigureAwait(false);
         }
         results.Received.Should().BeGreaterThan(after, "an event should reach the subscriber");
         results.Items[after].Errors.Should().BeNullOrEmpty();
@@ -791,17 +859,17 @@ public class SubscriptionRecheckTests
     /// </summary>
     private async Task<string?> EndAsync(Results results)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!results.Ended && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(10);
+        while (!results.Ended && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
         {
             _time.Advance(Interval);
             // allowed-delay: lets the re-check run, bounded by the 10s deadline; WhenAny wakes the
             // instant the subscription ends.
-            await Task.WhenAny(results.Reading, Task.Delay(50));
+            await Task.WhenAny(results.Reading, Task.Delay(50)).ConfigureAwait(false);
         }
 
         results.Ended.Should().BeTrue("a subscriber that no longer passes is not kept");
-        await results.Reading;
+        await results.Reading.ConfigureAwait(false);
         results.Items.Should().NotBeEmpty();
         using var last = JsonDocument.Parse(results.Items[^1].ToJson());
         (

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
@@ -43,7 +44,8 @@ public class TraxLogSerializationTests
     public void WorkQueue_ToString_writes_its_input_as_omitted()
     {
         var entry = WorkQueue.Create(
-            new CreateWorkQueue { TrainName = "T", Input = $$"""{"apiKey":"{{Secret}}"}""" }
+            new CreateWorkQueue { TrainName = "T", Input = $$"""{"apiKey":"{{Secret}}"}""" },
+            TestTime.Clock
         );
 
         entry
@@ -57,7 +59,8 @@ public class TraxLogSerializationTests
     public void BackgroundJob_ToString_writes_its_input_as_omitted()
     {
         var job = BackgroundJob.Create(
-            new CreateBackgroundJob { MetadataId = 1, Input = $$"""{"apiKey":"{{Secret}}"}""" }
+            new CreateBackgroundJob { MetadataId = 1, Input = $$"""{"apiKey":"{{Secret}}"}""" },
+            TestTime.Clock
         );
 
         job.ToString()
@@ -75,7 +78,8 @@ public class TraxLogSerializationTests
                 Name = "Train",
                 ExternalId = "ext",
                 Input = null,
-            }
+            },
+            TestTime.Clock
         );
         var manifest = Manifest.Create(
             new CreateManifest
@@ -84,7 +88,10 @@ public class TraxLogSerializationTests
                 Properties = new Charge { ApiKey = Secret },
             }
         );
-        typeof(Metadata).GetProperty(nameof(Metadata.Manifest))!.SetValue(metadata, manifest);
+        typeof(Metadata)
+            .GetProperty(nameof(Metadata.Manifest))
+            .NotNull()
+            .SetValue(metadata, manifest);
 
         var text = metadata.ToString();
 
@@ -97,7 +104,10 @@ public class TraxLogSerializationTests
     [Test]
     public void A_missing_run_from_copy_is_left_out_rather_than_marked()
     {
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "T", Input = null });
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "T", Input = null },
+            TestTime.Clock
+        );
 
         entry.ToString().Should().NotContain(TraxLogSerialization.OmittedProperty);
     }
@@ -105,7 +115,11 @@ public class TraxLogSerializationTests
     [Test]
     public void ForLogging_masks_sensitive_members_and_leaves_the_given_options_alone()
     {
-        var options = new JsonSerializerOptions();
+        var options = new JsonSerializerOptions()
+        {
+            RespectNullableAnnotations = false,
+            RespectRequiredConstructorParameters = false,
+        };
         var logging = TraxLogSerialization.ForLogging(options);
 
         JsonSerializer

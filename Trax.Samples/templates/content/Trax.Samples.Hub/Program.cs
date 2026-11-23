@@ -163,11 +163,15 @@ app.UseForwardedHeaders();
 
 // -- Create the application tables (demo bootstrap) ----------------------------
 // Fine for the in-memory database. With Postgres, use EF Core migrations instead.
-using (var scope = app.Services.CreateScope())
+var scope = app.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-    using var db = factory.CreateDbContext();
-    db.Database.EnsureCreated();
+    var db = factory.CreateDbContext();
+    await using (db.ConfigureAwait(false))
+    {
+        await db.Database.EnsureCreatedAsync().ConfigureAwait(false);
+    }
 }
 
 // -- Middleware and endpoints ------------------------------------------------
@@ -190,4 +194,4 @@ if (app.Environment.IsDevelopment())
 
 // Serves, or, for a deployment step, migrates the database (--trax-migrate) or reports what the
 // host needs from its deployment (--trax-export-deploy) and exits.
-await app.RunTraxAsync(args);
+await app.RunTraxAsync(args).ConfigureAwait(false);

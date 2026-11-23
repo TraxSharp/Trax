@@ -11,27 +11,35 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// a property of the scheduler rather than a choice between alternatives.</para>
 /// </summary>
 [TestFixture]
-public class SampleDatabasesAreSeparateTests
+public partial class SampleDatabasesAreSeparateTests
 {
-    private static readonly Regex Database = new(@"Database=(?<db>[^;""]+)", RegexOptions.Compiled);
-
     /// <summary>Every database each sample folder names, keyed by database.</summary>
-    private static Dictionary<string, HashSet<string>> FoldersByDatabase()
+    private static async Task<Dictionary<string, HashSet<string>>> FoldersByDatabaseAsync()
     {
         var samples = Path.Combine(RepoRoot.Path, "samples");
         var files = Directory
             .EnumerateFiles(samples, "appsettings*.json", SearchOption.AllDirectories)
             .Concat(SourceFiles.CSharp("samples"))
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
             );
 
         var byDatabase = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var file in files)
         {
             var folder = Path.GetRelativePath(samples, file).Split(Path.DirectorySeparatorChar)[0];
-            foreach (Match match in Database.Matches(File.ReadAllText(file)))
+            foreach (
+                Match match in Database.Matches(
+                    await File.ReadAllTextAsync(file).ConfigureAwait(false)
+                )
+            )
             {
                 var db = match.Groups["db"].Value;
                 if (!byDatabase.TryGetValue(db, out var folders))
@@ -43,14 +51,14 @@ public class SampleDatabasesAreSeparateTests
     }
 
     [Test]
-    public void No_two_samples_share_a_database()
+    public async Task No_two_samples_share_a_database()
     {
-        var byDatabase = FoldersByDatabase();
+        var byDatabase = await FoldersByDatabaseAsync().ConfigureAwait(false);
         byDatabase.Should().NotBeEmpty("the Postgres samples name their databases");
 
         var shared = byDatabase
             .Where(kv => kv.Value.Count > 1)
-            .Select(kv => $"{kv.Key}: {string.Join(", ", kv.Value.OrderBy(f => f))}")
+            .Select(kv => $"{kv.Key}: {string.Join(", ", kv.Value.Order(StringComparer.Ordinal))}")
             .ToList();
 
         shared
@@ -63,17 +71,21 @@ public class SampleDatabasesAreSeparateTests
     }
 
     [Test]
-    public void Docker_compose_creates_every_sample_database()
+    public async Task Docker_compose_creates_every_sample_database()
     {
-        var compose = File.ReadAllText(Path.Combine(RepoRoot.Path, "docker-compose.yml"));
-        var created = Regex
-            .Match(compose, @"POSTGRES_MULTIPLE_DATABASES:\s*(?<dbs>\S+)")
+        var compose = await File.ReadAllTextAsync(
+            Path.Combine(RepoRoot.Path, "docker-compose.yml")
+        );
+        var created = PostgresDatabases
+            .Match(compose)
             .Groups["dbs"]
             .Value.Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Append(Regex.Match(compose, @"POSTGRES_DB:\s*(?<db>\S+)").Groups["db"].Value)
+            .Append(PostgresDb.Match(compose).Groups["db"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
-        var missing = FoldersByDatabase().Keys.Where(db => !created.Contains(db)).ToList();
+        var missing = (await FoldersByDatabaseAsync().ConfigureAwait(false))
+            .Keys.Where(db => !created.Contains(db))
+            .ToList();
 
         missing
             .Should()
@@ -83,4 +95,21 @@ public class SampleDatabasesAreSeparateTests
                     + string.Join(", ", missing)
             );
     }
+
+    [GeneratedRegex(
+        @"POSTGRES_DB:\s*(?<db>\S+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PostgresDb { get; }
+
+    [GeneratedRegex(
+        @"POSTGRES_MULTIPLE_DATABASES:\s*(?<dbs>\S+)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PostgresDatabases { get; }
+
+    [GeneratedRegex(@"Database=(?<db>[^;""]+)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Database { get; }
 }

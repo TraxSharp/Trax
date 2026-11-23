@@ -11,7 +11,7 @@ namespace Trax.Samples.CheckIn.Browser;
 /// feature that says where its booking is. No page carries a credential it was not given at sign-in.
 /// </summary>
 [TestFixture]
-public class CheckInPageTests
+public partial class CheckInPageTests
 {
     private static readonly LocatorAssertionsToContainTextOptions Soon = new() { Timeout = 15_000 };
 
@@ -46,22 +46,7 @@ public class CheckInPageTests
                 .Expect(page.Locator("[data-booking-state]"))
                 .ToContainTextAsync("Open", Soon);
 
-        // No passport yet: the server refuses, with the message the feature gives.
-        await ada.GetByRole(AriaRole.Button, new() { Name = "Check in", Exact = true })
-            .ClickAsync();
-        await Assertions
-            .Expect(ada.GetByRole(AriaRole.Alert))
-            .ToContainTextAsync("Add your passport number first.", Soon);
-        await ada.GetByLabel("Passport number").FillAsync("X1234567");
-        await ada.GetByRole(AriaRole.Button, new() { Name = "Give passport" }).ClickAsync();
-        await Assertions.Expect(ada.Locator(".context")).ToContainTextAsync("X1234567", Soon);
-        await ada.GetByLabel("Seat").FillAsync("14C");
-        await ada.GetByRole(AriaRole.Button, new() { Name = "Check in", Exact = true })
-            .ClickAsync();
-        await Assertions
-            .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your bookings" }))
-            .ToContainTextAsync(new Regex("seat 14C.*Checked in"), Soon);
-        await ExpectSourceAsync(ada, "checking-in.feature", "Ada's booking is checked in");
+        await CheckInWithAPassportAsync(ada);
 
         // A passport number ending in 0 has expired: the train turns it down.
         await bo.GetByLabel("Passport number").FillAsync("X0000000");
@@ -101,32 +86,75 @@ public class CheckInPageTests
     }
 
     // The feature-source panel shows the file whose scenario ends where the booking is now, and marks that step.
+    // Ada is refused without a passport, gives one, and checks in to a seat.
+    private static async Task CheckInWithAPassportAsync(IPage ada)
+    {
+        // No passport yet: the server refuses, with the message the feature gives.
+        await ada.GetByRole(AriaRole.Button, new() { Name = "Check in", Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await Assertions
+            .Expect(ada.GetByRole(AriaRole.Alert))
+            .ToContainTextAsync("Add your passport number first.", Soon)
+            .ConfigureAwait(false);
+        await ada.GetByLabel("Passport number").FillAsync("X1234567").ConfigureAwait(false);
+        await ada.GetByRole(AriaRole.Button, new() { Name = "Give passport" })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await Assertions
+            .Expect(ada.Locator(".context"))
+            .ToContainTextAsync("X1234567", Soon)
+            .ConfigureAwait(false);
+        await ada.GetByLabel("Seat").FillAsync("14C").ConfigureAwait(false);
+        await ada.GetByRole(AriaRole.Button, new() { Name = "Check in", Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await Assertions
+            .Expect(ada.GetByRole(AriaRole.Region, new() { Name = "Your bookings" }))
+            .ToContainTextAsync(SeatCheckedIn, Soon)
+            .ConfigureAwait(false);
+        await ExpectSourceAsync(ada, "checking-in.feature", "Ada's booking is checked in")
+            .ConfigureAwait(false);
+    }
+
     private static async Task ExpectSourceAsync(IPage page, string file, string step)
     {
         var source = page.GetByRole(AriaRole.Region, new() { Name = "Feature source" });
         await Assertions
             .Expect(source.GetByRole(AriaRole.Tab, new() { Selected = true }))
-            .ToHaveTextAsync(file, new() { Timeout = 15_000 });
-        await Assertions.Expect(source.Locator(".hit").First).ToContainTextAsync(step, Soon);
+            .ToHaveTextAsync(file, new() { Timeout = 15_000 })
+            .ConfigureAwait(false);
+        await Assertions
+            .Expect(source.Locator(".hit").First)
+            .ToContainTextAsync(step, Soon)
+            .ConfigureAwait(false);
     }
 
     private static async Task<IPage> SignInAsync(string name, string role)
     {
-        var page = await BrowserSetup.NewPageAsync();
-        await page.GetByLabel("Name").FillAsync(name);
-        await page.GetByLabel("Role").SelectOptionAsync(role);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in" }).ClickAsync();
+        var page = await BrowserSetup.NewPageAsync().ConfigureAwait(false);
+        await page.GetByLabel("Name").FillAsync(name).ConfigureAwait(false);
+        await page.GetByLabel("Role").SelectOptionAsync(role).ConfigureAwait(false);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in" })
+            .ClickAsync()
+            .ConfigureAwait(false);
         try
         {
-            await Assertions.Expect(page.GetByText($"Signed in as {name}")).ToBeVisibleAsync();
+            await Assertions
+                .Expect(page.GetByText($"Signed in as {name}"))
+                .ToBeVisibleAsync()
+                .ConfigureAwait(false);
         }
         catch (PlaywrightException ex)
         {
             throw new AssertionException(
-                $"{name} could not sign in:\n{string.Join("\n", BrowserSetup.Seen)}",
+                $"{name} could not sign in:\n{string.Join('\n', BrowserSetup.Seen)}",
                 ex
             );
         }
         return page;
     }
+
+    [GeneratedRegex("seat 14C.*Checked in", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex SeatCheckedIn { get; }
 }

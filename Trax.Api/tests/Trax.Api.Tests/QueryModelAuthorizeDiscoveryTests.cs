@@ -184,7 +184,7 @@ public class QueryModelAuthorizeDiscoveryTests
 
     [TraxQueryModel(Name = "inheritedGatedRows")]
     [Table("inherited_gated_rows", Schema = "test_disc")]
-    public class InheritedGatedRow : GatedBase { }
+    public class InheritedGatedRow : GatedBase;
 
     [TraxQueryModel(Name = "bareGatedRows")]
     [TraxAuthorize]
@@ -197,11 +197,11 @@ public class QueryModelAuthorizeDiscoveryTests
 
     public class DiscoveryContext(DbContextOptions<DiscoveryContext> options) : DbContext(options)
     {
-        public DbSet<OpenRow> OpenRows { get; set; } = null!;
-        public DbSet<GatedRow> GatedRows { get; set; } = null!;
-        public DbSet<StackedRow> StackedRows { get; set; } = null!;
-        public DbSet<InheritedGatedRow> InheritedGatedRows { get; set; } = null!;
-        public DbSet<BareGatedRow> BareGatedRows { get; set; } = null!;
+        public DbSet<OpenRow> OpenRows => Set<OpenRow>();
+        public DbSet<GatedRow> GatedRows => Set<GatedRow>();
+        public DbSet<StackedRow> StackedRows => Set<StackedRow>();
+        public DbSet<InheritedGatedRow> InheritedGatedRows => Set<InheritedGatedRow>();
+        public DbSet<BareGatedRow> BareGatedRows => Set<BareGatedRow>();
     }
 
     [TraxQueryModel(Name = "whitespacePolicy")]
@@ -216,7 +216,7 @@ public class QueryModelAuthorizeDiscoveryTests
     public class WhitespacePolicyContext(DbContextOptions<WhitespacePolicyContext> options)
         : DbContext(options)
     {
-        public DbSet<WhitespacePolicyRow> Rows { get; set; } = null!;
+        public DbSet<WhitespacePolicyRow> Rows => Set<WhitespacePolicyRow>();
     }
 
     [TraxQueryModel(Name = "emptyRolesRows")]
@@ -230,7 +230,7 @@ public class QueryModelAuthorizeDiscoveryTests
 
     public class EmptyRolesContext(DbContextOptions<EmptyRolesContext> options) : DbContext(options)
     {
-        public DbSet<EmptyRolesRow> Rows { get; set; } = null!;
+        public DbSet<EmptyRolesRow> Rows => Set<EmptyRolesRow>();
     }
 
     public interface IExposedRow
@@ -257,6 +257,6 @@ public class QueryModelAuthorizeDiscoveryTests
     public class ExposeAsAuthorizeContext(DbContextOptions<ExposeAsAuthorizeContext> options)
         : DbContext(options)
     {
-        public DbSet<ExposedRow> Rows { get; set; } = null!;
+        public DbSet<ExposedRow> Rows => Set<ExposedRow>();
     }
 }

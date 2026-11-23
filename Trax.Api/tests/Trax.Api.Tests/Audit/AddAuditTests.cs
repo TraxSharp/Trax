@@ -10,6 +10,7 @@ using Trax.Api.GraphQL.Audit;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -156,7 +157,7 @@ public class AddAuditTests
 
         var channel = provider.GetRequiredService<TraxAuditChannel>();
         channel.Reader.TryRead(out var entry).Should().BeTrue("the listener should have run");
-        entry!.Document.Should().Contain("auditWiringWidgets");
+        entry.NotNull().Document.Should().Contain("auditWiringWidgets");
     }
 
     private sealed class CapturingSink : ITraxAuditSink
@@ -190,7 +191,7 @@ public class AddAuditTests
 
         var disclaimerCount = services.Count(sd =>
             sd.ServiceType == typeof(IHostedService)
-            && sd.ImplementationType?.Name.Contains("Disclaimer") == true
+            && sd.ImplementationType?.Name.Contains("Disclaimer", StringComparison.Ordinal) == true
         );
         disclaimerCount.Should().Be(1);
     }
@@ -285,18 +286,4 @@ public class AddAuditTests
             System.Text.Json.Nodes.JsonObject? variables
         ) => null;
     }
-}
-
-public class AuditWiringDbContext(DbContextOptions<AuditWiringDbContext> options)
-    : DbContext(options)
-{
-    public DbSet<AuditWiringWidget> Widgets => Set<AuditWiringWidget>();
-}
-
-[TraxAllowAnonymous]
-[TraxQueryModel(Name = "auditWiringWidgets")]
-public class AuditWiringWidget
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
 }

@@ -17,14 +17,17 @@ internal static partial class GeneratedText
     /// control (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069), so the text cannot
     /// make the code around it display in another order than the compiler reads it.
     /// </summary>
-    internal static string SingleLine(string text) => LineBreaks().Replace(text, " ").Trim();
+    internal static string SingleLine(string text) => LineBreaks.Replace(text, " ").Trim();
 
     /// <summary>Text for a <c>//</c> comment.</summary>
     internal static string Comment(string text) => SingleLine(text);
 
     /// <summary>Text for a <c>///</c> documentation comment: one line, with XML markup escaped.</summary>
     internal static string DocComment(string text) =>
-        SingleLine(text).Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+        SingleLine(text)
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
 
     /// <summary>
     /// The inside of a regular <c>"..."</c> string literal. The backslash is escaped before the
@@ -52,6 +55,10 @@ internal static partial class GeneratedText
         return sb.ToString();
     }
 
-    [GeneratedRegex(@"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+")]
-    private static partial Regex LineBreaks();
+    [GeneratedRegex(
+        @"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex LineBreaks { get; }
 }

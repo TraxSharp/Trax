@@ -65,8 +65,9 @@ public class TypeExtensionPropertyPostureTests
                     Encoding.UTF8,
                     "application/json"
                 )
-            );
-        return await response.Content.ReadAsStringAsync();
+            )
+            .ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
 
     private static Task<IHost> StartAsync() =>

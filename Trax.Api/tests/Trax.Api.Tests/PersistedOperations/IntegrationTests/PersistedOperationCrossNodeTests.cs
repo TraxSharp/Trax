@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
@@ -32,15 +33,15 @@ public class PersistedOperationCrossNodeTests
     // invalidates their caches.
     private readonly string _exchange = RunExchange.New();
 
-    private ServiceProvider _nodeA = null!;
-    private ServiceProvider _nodeB = null!;
+    private ServiceProvider? _nodeA;
+    private ServiceProvider? _nodeB;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
         if (!PostgresFixture.IsPostgresReachable())
             Unavailable("Postgres");
-        if (!IsRabbitMqReachable())
+        if (!await IsRabbitMqReachableAsync())
             Unavailable("RabbitMQ");
 
         _nodeA = await StartNodeAsync();
@@ -50,7 +51,7 @@ public class PersistedOperationCrossNodeTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        foreach (var node in new[] { _nodeA, _nodeB })
+        foreach (var node in new[] { _nodeA.NotNull(), _nodeB.NotNull() })
         {
             if (node is null)
                 continue;
@@ -68,12 +69,22 @@ public class PersistedOperationCrossNodeTests
     public async Task ADeactivationOnOneNode_IsRefusedOnTheOther()
     {
         var id = $"cross_node_deactivate_{Guid.NewGuid():N}";
-        await Store(_nodeA).UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
-        (await ExecuteByIdAsync(_nodeB, id)).Should().Contain("\"hello\"", "B warms its caches");
+        await Store(_nodeA.NotNull())
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
+        (await ExecuteByIdAsync(_nodeB.NotNull(), id))
+            .Should()
+            .Contain("\"hello\"", "B warms its caches");
 
-        await Store(_nodeA).DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await Store(_nodeA.NotNull())
+            .DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
 
-        (await EventuallyAsync(_nodeB, id, json => !json.Contains("\"hello\"")))
+        (
+            await EventuallyAsync(
+                _nodeB.NotNull(),
+                id,
+                json => !json.Contains("\"hello\"", StringComparison.Ordinal)
+            )
+        )
             .Should()
             .NotContain("\"hello\"", AdrHint);
     }
@@ -82,10 +93,11 @@ public class PersistedOperationCrossNodeTests
     public async Task AReuploadOnOneNode_IsServedOnTheOther()
     {
         var id = $"cross_node_reupload_{Guid.NewGuid():N}";
-        await Store(_nodeA).UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
-        (await ExecuteByIdAsync(_nodeB, id)).Should().Contain("\"hello\"");
+        await Store(_nodeA.NotNull())
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
+        (await ExecuteByIdAsync(_nodeB.NotNull(), id)).Should().Contain("\"hello\"");
 
-        await Store(_nodeA)
+        await Store(_nodeA.NotNull())
             .UpsertAsync(
                 id,
                 "query Greet { version }",
@@ -93,7 +105,13 @@ public class PersistedOperationCrossNodeTests
                 CancellationToken.None
             );
 
-        (await EventuallyAsync(_nodeB, id, json => json.Contains("\"version\"")))
+        (
+            await EventuallyAsync(
+                _nodeB.NotNull(),
+                id,
+                json => json.Contains("\"version\"", StringComparison.Ordinal)
+            )
+        )
             .Should()
             .Contain("\"version\"", AdrHint);
     }
@@ -103,28 +121,37 @@ public class PersistedOperationCrossNodeTests
     {
         var id = $"cross_node_held_{Guid.NewGuid():N}";
         var held = GraphQLFixture.Hold(id);
-        await Store(_nodeA)
-            .UpsertAsync(id, GraphQLFixture.HeldDocument(id), null, CancellationToken.None);
-        var generationOnB = _nodeB.GetRequiredService<PersistedOperationCacheGeneration>();
+        await Store(_nodeA.NotNull())
+            .UpsertAsync(
+                id,
+                GraphQLFixture.HeldDocument(id),
+                options: null,
+                CancellationToken.None
+            );
+        var generationOnB = _nodeB
+            .NotNull()
+            .GetRequiredService<PersistedOperationCacheGeneration>();
 
-        var running = ExecuteByIdAsync(_nodeB, id);
+        var running = ExecuteByIdAsync(_nodeB.NotNull(), id);
         await held.Entered;
         var before = generationOnB.Current;
-        await Store(_nodeA).DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await Store(_nodeA.NotNull())
+            .DeactivateAsync(id, tenantKey: null, "retired", CancellationToken.None);
         await WaitUntilAsync(() => generationOnB.Current > before);
         held.Release();
         await running;
 
-        (await ExecuteByIdAsync(_nodeB, id)).Should().Contain("HC0020", AdrHint);
+        (await ExecuteByIdAsync(_nodeB.NotNull(), id)).Should().Contain("HC0020", AdrHint);
     }
 
     [Test]
     public async Task ANodeThatMayHaveMissedABroadcast_EmptiesItsCaches()
     {
         var id = $"cross_node_missed_{Guid.NewGuid():N}";
-        await Store(_nodeB).UpsertAsync(id, "query Greet { hello }", null, CancellationToken.None);
-        await ExecuteByIdAsync(_nodeB, id);
-        var executor = await GraphQLFixture.GetExecutorAsync(_nodeB);
+        await Store(_nodeB.NotNull())
+            .UpsertAsync(id, "query Greet { hello }", options: null, CancellationToken.None);
+        await ExecuteByIdAsync(_nodeB.NotNull(), id);
+        var executor = await GraphQLFixture.GetExecutorAsync(_nodeB.NotNull());
         executor
             .Schema.Services.GetRequiredService<IDocumentCache>()
             .Count.Should()
@@ -132,6 +159,7 @@ public class PersistedOperationCrossNodeTests
 
         // What the receiver does when its broker connection drops or recovers.
         await _nodeB
+            .NotNull()
             .GetRequiredService<PersistedOperationReceiverService>()
             .EmptyEveryCacheAsync("a test");
 
@@ -144,23 +172,24 @@ public class PersistedOperationCrossNodeTests
 
     private async Task<ServiceProvider> StartNodeAsync()
     {
-        var node = await GraphQLFixture.BuildAsync(po =>
-            po.UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
-        );
+        var node = await GraphQLFixture
+            .BuildAsync(po => po.UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign))
+            .ConfigureAwait(false);
         node.GetRequiredService<PersistedOperationsOptions>().RabbitMqExchange = _exchange;
         await node.GetRequiredService<PersistedOperationReceiverService>()
-            .StartAsync(CancellationToken.None);
+            .StartAsync(CancellationToken.None)
+            .ConfigureAwait(false);
         // Build the executor now, so the invalidator knows the schema before any broadcast.
-        await GraphQLFixture.GetExecutorAsync(node);
+        await GraphQLFixture.GetExecutorAsync(node).ConfigureAwait(false);
         return node;
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition() && DateTime.UtcNow < deadline)
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(10);
+        while (!condition() && TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
             // determinism: polling for a broker-delivered broadcast, bounded by the deadline above.
-            await Task.Delay(20);
+            await Task.Delay(20).ConfigureAwait(false);
         condition().Should().BeTrue("the broadcast should arrive within the deadline");
     }
 
@@ -173,25 +202,27 @@ public class PersistedOperationCrossNodeTests
         Func<string, bool> done
     )
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(10);
         string json;
         do
         {
-            json = await ExecuteByIdAsync(node, id);
+            json = await ExecuteByIdAsync(node, id).ConfigureAwait(false);
             if (done(json))
                 return json;
             // determinism: polling for a broker-delivered broadcast, bounded by the deadline above.
-            await Task.Delay(50);
-        } while (DateTime.UtcNow < deadline);
+            await Task.Delay(50).ConfigureAwait(false);
+        } while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline);
         return json;
     }
 
     private static async Task<string> ExecuteByIdAsync(IServiceProvider node, string id)
     {
-        var executor = await GraphQLFixture.GetExecutorAsync(node);
-        var result = await executor.ExecuteAsync(
-            OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
-        );
+        var executor = await GraphQLFixture.GetExecutorAsync(node).ConfigureAwait(false);
+        var result = await executor
+            .ExecuteAsync(
+                OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
+            )
+            .ConfigureAwait(false);
         return ((OperationResult)result).ToJson();
     }
 
@@ -209,13 +240,14 @@ public class PersistedOperationCrossNodeTests
         Assert.Ignore($"{service} not reachable.");
     }
 
-    private static bool IsRabbitMqReachable()
+    private static async Task<bool> IsRabbitMqReachableAsync()
     {
         try
         {
             var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(AmqpUri) };
-            using var conn = factory.CreateConnectionAsync().GetAwaiter().GetResult();
-            return conn.IsOpen;
+            var conn = await factory.CreateConnectionAsync().ConfigureAwait(false);
+            await using (conn.ConfigureAwait(false))
+                return conn.IsOpen;
         }
         catch
         {

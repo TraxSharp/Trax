@@ -1,8 +1,11 @@
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 using Trax.StateMachine.Tests.Stress.Fakes;
 using Trax.StateMachine.Tests.Stress.Fixtures;
@@ -46,6 +49,7 @@ public class RevisionStoreModelTests : StressFixture
         OldNodeWrite,
     }
 
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct Op(Kind Kind, int Value)
     {
         public override string ToString() => $"{Kind}({Value})";
@@ -68,7 +72,10 @@ public class RevisionStoreModelTests : StressFixture
         AnIncarnation
             .Array[1, 4]
             .SampleAsync(
-                async incarnations => await Run(incarnations).WaitAsync(Bound),
+                async incarnations =>
+                    await Run(incarnations)
+                        .WaitAsync(Bound, TimeProvider.System)
+                        .ConfigureAwait(false),
                 iter: Iterations,
                 threads: 1,
                 print: incarnations =>
@@ -76,7 +83,10 @@ public class RevisionStoreModelTests : StressFixture
                         Environment.NewLine,
                         incarnations.Select(
                             (x, i) =>
-                                $"  {i}: {x.Starters} starts, then {string.Join(", ", x.Burst)}"
+                                string.Create(
+                                    CultureInfo.InvariantCulture,
+                                    $"  {i}: {x.Starters} starts, then {string.Join(", ", x.Burst)}"
+                                )
                         )
                     )
             );
@@ -92,32 +102,19 @@ public class RevisionStoreModelTests : StressFixture
         foreach (var (starters, burst) in incarnations)
         {
             // Racing starts: one creates the row, the rest find it there.
-            var created = await Task.WhenAll(
-                Enumerable
-                    .Range(0, starters)
-                    .Select(_ =>
-                        Task.Run(async () =>
-                        {
-                            await using var ctx = StressDb.NewContext();
-                            return await ((ISnapshotStore)StressDb.NewStore(ctx)).Insert(
-                                User,
-                                id,
-                                Draft(0)
-                            );
-                        })
-                    )
-            );
+            var created = await RaceStarts(id, starters).ConfigureAwait(false);
             created.Count(c => c).Should().Be(1, "one insert creates the incarnation");
 
-            var (rowId, start, _) = await ReadRow(id);
+            var (rowId, start, _) = await ReadRow(id).ConfigureAwait(false);
             start.Should().Be(1, $"a new incarnation starts at revision 1. See {Adr}");
             rowIds.Should().NotContain(rowId, "a re-created instance is a new incarnation");
             rowIds.Add(rowId);
 
             var committed = new ConcurrentBag<Committed>();
-            await Task.WhenAll(burst.Select(op => Task.Run(() => Apply(id, op, committed))));
+            await Task.WhenAll(burst.Select(op => Task.Run(() => Apply(id, op, committed))))
+                .ConfigureAwait(false);
 
-            var (finalRowId, revision, row) = await ReadRow(id);
+            var (finalRowId, revision, row) = await ReadRow(id).ConfigureAwait(false);
             finalRowId.Should().Be(rowId, "nothing deleted the row during the burst");
             revision
                 .Should()
@@ -128,33 +125,75 @@ public class RevisionStoreModelTests : StressFixture
 
             var reported = committed.Where(c => c.Revision is not null).ToList();
             reported
-                .Select(c => c.Revision!.Value)
+                .Select(c => c.Revision.NotNull().Value)
                 .Should()
                 .OnlyHaveUniqueItems("no two writes committed the same revision")
                 .And.OnlyContain(r => r >= 2 && r <= revision, "none was skipped past the last");
 
-            // Replaying the model in revision order ends where the database does. The last write reports its
-            // revision unless it was a blind upsert, which then wrote the row as it is.
-            var last = reported.SingleOrDefault(c => c.Revision == revision);
-            if (last is not null)
-                Expected(last.Op, row)
-                    .Should()
-                    .BeTrue($"the write that took revision {revision} left the final row");
-            else if (committed.IsEmpty)
-                (row["state"]!.GetValue<string>() == "Draft" && Items(row).Length == 0)
-                    .Should()
-                    .BeTrue("with no write committed, the row is the one the insert wrote");
-            else
-                committed
-                    .Should()
-                    .Contain(
-                        c => c.Op.Kind == Kind.Upsert && IsDraftOf(row, c.Op.Value),
-                        "an unreported last write is an upsert, and the row is what it wrote"
-                    );
+            AssertFinalRow(committed, reported, revision, row);
 
-            await using (var ctx = StressDb.NewContext())
-                await StressDb.NewStore(ctx).Delete(User, id);
+            var ctx = StressDb.NewContext();
+            await using (ctx.ConfigureAwait(false))
+                await StressDb.NewStore(ctx).Delete(User, id).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<bool[]> RaceStarts(Guid id, int starters)
+    {
+        return await Task.WhenAll(
+                Enumerable
+                    .Range(0, starters)
+                    .Select(_ =>
+                        Task.Run(async () =>
+                        {
+                            var ctx = StressDb.NewContext();
+                            await using var ctxDisposal = ctx.ConfigureAwait(false);
+                            return await ((ISnapshotStore)StressDb.NewStore(ctx))
+                                .Insert(User, id, Draft(0))
+                                .ConfigureAwait(false);
+                        })
+                    )
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static void AssertFinalRow(
+        ConcurrentBag<Committed> committed,
+        List<Committed> reported,
+        long revision,
+        JsonObject row
+    )
+    {
+        // Replaying the model in revision order ends where the database does. The last write reports its
+        // revision unless it was a blind upsert, which then wrote the row as it is.
+        var last = reported.SingleOrDefault(c => c.Revision == revision);
+        if (last is not null)
+            Expected(last.Op, row)
+                .Should()
+                .BeTrue(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the write that took revision {revision} left the final row"
+                    )
+                );
+        else if (committed.IsEmpty)
+            (
+                string.Equals(
+                    row["state"].NotNull().GetValue<string>(),
+                    "Draft",
+                    StringComparison.Ordinal
+                )
+                && Items(row).Length == 0
+            )
+                .Should()
+                .BeTrue("with no write committed, the row is the one the insert wrote");
+        else
+            committed
+                .Should()
+                .Contain(
+                    c => c.Op.Kind == Kind.Upsert && IsDraftOf(row, c.Op.Value),
+                    "an unreported last write is an upsert, and the row is what it wrote"
+                );
     }
 
     private static async Task Apply(Guid id, Op op, ConcurrentBag<Committed> committed)
@@ -163,9 +202,13 @@ public class RevisionStoreModelTests : StressFixture
         {
             case Kind.Advance:
             {
-                await using var ctx = StressDb.NewContext();
+                var ctx = StressDb.NewContext();
+                await using var ctxDisposal = ctx.ConfigureAwait(false);
                 if (
-                    await StressOrder.Service(StressDb.NewStore(ctx)).Advance(User, id, "Next")
+                    await StressOrder
+                        .Service(StressDb.NewStore(ctx))
+                        .Advance(User, id, "Next")
+                        .ConfigureAwait(false)
                     is AdvanceOutcome.Advanced advanced
                 )
                     committed.Add(new Committed(op, advanced.Revision));
@@ -173,17 +216,25 @@ public class RevisionStoreModelTests : StressFixture
             }
             case Kind.Upsert:
             {
-                await using var ctx = StressDb.NewContext();
-                if (await StressDb.NewStore(ctx).Upsert(User, id, Draft(op.Value)))
-                    committed.Add(new Committed(op, null));
+                var ctx = StressDb.NewContext();
+                await using var ctxDisposal = ctx.ConfigureAwait(false);
+                if (
+                    await StressDb
+                        .NewStore(ctx)
+                        .Upsert(User, id, Draft(op.Value))
+                        .ConfigureAwait(false)
+                )
+                    committed.Add(new Committed(op, Revision: null));
                 return;
             }
             case Kind.OldNodeWrite:
             {
                 // An older node writes the context and a fresh token, and knows nothing of the revision.
-                await using var connection = new NpgsqlConnection(StressDb.ConnectionString);
-                await connection.OpenAsync();
-                await using var command = connection.CreateCommand();
+                var connection = new NpgsqlConnection(StressDb.ConnectionString);
+                await using var connectionDisposal = connection.ConfigureAwait(false);
+                await connection.OpenAsync().ConfigureAwait(false);
+                var command = connection.CreateCommand();
+                await using var commandDisposal = command.ConfigureAwait(false);
                 command.CommandText = """
                     UPDATE trax.snapshot_draft
                     SET context = jsonb_build_object('items', jsonb_build_array(@item), 'receipt', NULL),
@@ -195,7 +246,7 @@ public class RevisionStoreModelTests : StressFixture
                 command.Parameters.AddWithValue("item", op.Value);
                 command.Parameters.AddWithValue("user", User);
                 command.Parameters.AddWithValue("id", id);
-                if (await command.ExecuteScalarAsync() is long revision)
+                if (await command.ExecuteScalarAsync().ConfigureAwait(false) is long revision)
                     committed.Add(new Committed(op, revision));
                 return;
             }
@@ -206,16 +257,25 @@ public class RevisionStoreModelTests : StressFixture
     private static bool Expected(Op op, JsonObject row) =>
         op.Kind switch
         {
-            Kind.Advance => row["state"]!.GetValue<string>() == "Review",
+            Kind.Advance => string.Equals(
+                row["state"].NotNull().GetValue<string>(),
+                "Review",
+                StringComparison.Ordinal
+            ),
             Kind.OldNodeWrite => Items(row) is [var only] && only == op.Value,
             _ => IsDraftOf(row, op.Value),
         };
 
     private static bool IsDraftOf(JsonObject row, int item) =>
-        row["state"]!.GetValue<string>() == "Draft" && Items(row) is [var only] && only == item;
+        string.Equals(row["state"].NotNull().GetValue<string>(), "Draft", StringComparison.Ordinal)
+        && Items(row) is [var only]
+        && only == item;
 
     private static int[] Items(JsonObject row) =>
-        (row["context"]!["items"] as JsonArray)!.Select(n => n!.GetValue<int>()).ToArray();
+        (row["context"].NotNull()["items"] as JsonArray)
+            .NotNull()
+            .Select(n => n.NotNull().GetValue<int>())
+            .ToArray();
 
     private static Snapshot Draft(int item)
     {
@@ -234,9 +294,11 @@ public class RevisionStoreModelTests : StressFixture
     // The row's surrogate key, its revision and its state and context, read in one statement.
     private static async Task<(long RowId, long Revision, JsonObject Row)> ReadRow(Guid id)
     {
-        await using var connection = new NpgsqlConnection(StressDb.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
+        var connection = new NpgsqlConnection(StressDb.ConnectionString);
+        await using var connectionDisposal = connection.ConfigureAwait(false);
+        await connection.OpenAsync().ConfigureAwait(false);
+        var command = connection.CreateCommand();
+        await using var commandDisposal = command.ConfigureAwait(false);
         command.CommandText = """
             SELECT row_id, revision, state, context::text
             FROM trax.snapshot_draft
@@ -244,8 +306,9 @@ public class RevisionStoreModelTests : StressFixture
             """;
         command.Parameters.AddWithValue("user", User);
         command.Parameters.AddWithValue("id", id);
-        await using var reader = await command.ExecuteReaderAsync();
-        (await reader.ReadAsync()).Should().BeTrue("the instance exists");
+        var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        await using var readerDisposal = reader.ConfigureAwait(false);
+        (await reader.ReadAsync().ConfigureAwait(false)).Should().BeTrue("the instance exists");
         return (
             reader.GetInt64(0),
             reader.GetInt64(1),

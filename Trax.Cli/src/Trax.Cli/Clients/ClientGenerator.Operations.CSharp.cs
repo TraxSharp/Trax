@@ -2,18 +2,9 @@ using System.Text;
 using GraphQLParser;
 using GraphQLParser.AST;
 using Trax.Cli.Generator;
+using Trax.Core.Extensions;
 
 namespace Trax.Cli.Clients;
-
-/// <summary>The language <c>trax client --operations</c> writes its client in.</summary>
-internal enum OperationsLanguage
-{
-    /// <summary>The TypeScript client the React console sends through.</summary>
-    TypeScript,
-
-    /// <summary>A C# client over Trax.Client, for a .NET operator frontend.</summary>
-    CSharp,
-}
 
 internal sealed partial class ClientGenerator
 {
@@ -49,25 +40,14 @@ internal sealed partial class ClientGenerator
         // In Trax.Client a record named like one of its types (an input TraxClient) takes that type's full name and
         // wins over it (CS0436), global:: or not; below it, the runtime's names and the generated ones mix in every lookup.
         if (
-            @namespace == "Trax.Client"
+            string.Equals(@namespace, "Trax.Client", StringComparison.Ordinal)
             || @namespace.StartsWith("Trax.Client.", StringComparison.Ordinal)
         )
             throw new InvalidOperationException(
                 $"--namespace '{@namespace}' is Trax.Client's own namespace, which the client is written against. "
                     + "Name another, such as My.App.Operations."
             );
-        GraphQLDocument sdl;
-        try
-        {
-            sdl = Parser.Parse(options.Schema);
-        }
-        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
-        {
-            throw new InvalidOperationException(
-                $"The operations schema is not GraphQL SDL ({ex.Message.Trim()}).",
-                ex
-            );
-        }
+        var sdl = ParseOperationsSchema(options.Schema);
         var types = new SdlTypes(sdl);
         var roots = OperationsRoots.Of(sdl);
         var documents = ClientDocumentSet.ReadOperations(options.Documents, types, roots);
@@ -110,18 +90,18 @@ internal sealed partial class ClientGenerator
     }
 
     /// <summary>Writes the C# operations client under <paramref name="outDir"/>.</summary>
-    public static IReadOnlyList<ClientFile> WriteCSharp(
+    public static Task<IReadOnlyList<ClientFile>> WriteCSharpAsync(
         OperationsGenerateOptions options,
         string @namespace,
         string outDir
-    ) => Write(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
+    ) => WriteAsync(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
 
     /// <summary>What differs between the C# operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
-    public static IReadOnlyList<ClientDrift> CheckCSharp(
+    public static Task<IReadOnlyList<ClientDrift>> CheckCSharpAsync(
         OperationsGenerateOptions options,
         string @namespace,
         string outDir
-    ) => Check(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
+    ) => CheckAsync(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
 
     private const string Rename = "Rename one of them.";
 
@@ -300,23 +280,61 @@ internal sealed partial class ClientGenerator
             var resultType = names.Claim($"{name}Result", $"the result of {owner}");
 
             if (variables.Count > 0)
-            {
-                sb.Append('\n');
-                sb.Append($"/// <summary>The variables {Doc(operation.Name)} takes.</summary>\n");
-                Record(
-                    sb,
-                    variablesType,
-                    variables.Select(v =>
-                        (
-                            v.Variable.Name.StringValue,
-                            v.Type,
-                            v.DefaultValue is not null,
-                            (string?)null
-                        )
-                    )
-                );
-            }
+                AppendVariablesRecord(sb, operation, variables, variablesType);
 
+            AppendResultRecords(sb, operation, root, resultType, owner);
+
+            var subscription = definition.Operation == OperationType.Subscription;
+            var required = variables.Exists(v =>
+                v.Type is GraphQLNonNullType && v.DefaultValue is null
+            );
+            var idText = operation.Id.Length == 0 ? "null" : Literal(operation.Id);
+            _fields.Claim(name, owner);
+            var method = _methods.Claim(subscription ? name : $"{name}Async", owner);
+            AppendDescriptor(sb, operation, kind, name, variablesType, resultType, idText);
+            AppendClientMethod(
+                sb,
+                operation,
+                @namespace,
+                name,
+                method,
+                variables,
+                variablesType,
+                resultType,
+                subscription,
+                required
+            );
+            return sb.ToString();
+        }
+
+        private void AppendVariablesRecord(
+            StringBuilder sb,
+            ClientOperation operation,
+            List<GraphQLVariableDefinition> variables,
+            string variablesType
+        )
+        {
+            sb.Append('\n');
+            sb.Append($"/// <summary>The variables {Doc(operation.Name)} takes.</summary>\n");
+            Record(
+                sb,
+                variablesType,
+                variables.Select(v =>
+                    (v.Variable.Name.StringValue, v.Type, v.DefaultValue is not null, (string?)null)
+                )
+            );
+        }
+
+        // The result record and every record below it, parents first.
+        private void AppendResultRecords(
+            StringBuilder sb,
+            ClientOperation operation,
+            string root,
+            string resultType,
+            string owner
+        )
+        {
+            var definition = operation.Operation;
             var records = new List<(string Name, string Summary, string Body)>();
             var rootType =
                 types.Definition(root) as GraphQLObjectTypeDefinition
@@ -337,14 +355,19 @@ internal sealed partial class ClientGenerator
                 sb.Append($"/// <summary>{summary}</summary>\n");
                 sb.Append($"internal sealed record {record}\n{{\n").Append(body).Append("}\n");
             }
+        }
 
-            var subscription = definition.Operation == OperationType.Subscription;
-            var required = variables.Any(v =>
-                v.Type is GraphQLNonNullType && v.DefaultValue is null
-            );
-            var idText = operation.Id.Length == 0 ? "null" : Literal(operation.Id);
-            _fields.Claim(name, owner);
-            var method = _methods.Claim(subscription ? name : $"{name}Async", owner);
+        // The document's descriptor, on TraxOperations.
+        private static void AppendDescriptor(
+            StringBuilder sb,
+            ClientOperation operation,
+            string kind,
+            string name,
+            string variablesType,
+            string resultType,
+            string idText
+        )
+        {
             sb.Append('\n');
             sb.Append("internal static partial class TraxOperations\n{\n");
             sb.Append(
@@ -361,7 +384,22 @@ internal sealed partial class ClientGenerator
                     + $"{Indent});\n"
             );
             sb.Append("}\n\n");
+        }
 
+        // The extension method on TraxClient that sends the document or, for a subscription, follows it.
+        private static void AppendClientMethod(
+            StringBuilder sb,
+            ClientOperation operation,
+            string @namespace,
+            string name,
+            string method,
+            List<GraphQLVariableDefinition> variables,
+            string variablesType,
+            string resultType,
+            bool subscription,
+            bool required
+        )
+        {
             sb.Append("internal static partial class TraxOperationsClient\n{\n");
             // Variables that may all be left out may be left out together; a subscription's handler comes after
             // them, so it names them.
@@ -381,12 +419,14 @@ internal sealed partial class ClientGenerator
                     $"{Indent}/// <summary>Follows {Doc(operation.Name)} until the returned handle is disposed.</summary>\n"
                 );
                 sb.Append(
-                    $"{Indent}public static global::System.IDisposable {method}(\n"
-                        + $"{Indent}{Indent}this {Client}TraxClient client,\n"
-                        + (parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
-                        + $"{Indent}{Indent}global::System.Action<{Client}TraxStreamEvent<{resultType}>> onEvent\n"
-                        + $"{Indent}) => client.Subscribe({document}, {value}, onEvent);\n"
-                );
+                        $"{Indent}public static global::System.IDisposable {method}(\n"
+                            + $"{Indent}{Indent}this {Client}TraxClient client,\n"
+                    )
+                    .Append(parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
+                    .Append(
+                        $"{Indent}{Indent}global::System.Action<{Client}TraxStreamEvent<{resultType}>> onEvent\n"
+                    )
+                    .Append($"{Indent}) => client.Subscribe({document}, {value}, onEvent);\n");
             }
             else
             {
@@ -394,15 +434,18 @@ internal sealed partial class ClientGenerator
                     $"{Indent}/// <summary>Sends {Doc(operation.Name)}; a refusal or a transport failure is in the answer.</summary>\n"
                 );
                 sb.Append(
-                    $"{Indent}public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<{resultType}>> {method}(\n"
-                        + $"{Indent}{Indent}this {Client}TraxClient client,\n"
-                        + (parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
-                        + $"{Indent}{Indent}global::System.Threading.CancellationToken cancellationToken = default\n"
-                        + $"{Indent}) => client.SendAsync({document}, {value}, cancellationToken);\n"
-                );
+                        $"{Indent}public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<{resultType}>> {method}(\n"
+                            + $"{Indent}{Indent}this {Client}TraxClient client,\n"
+                    )
+                    .Append(parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
+                    .Append(
+                        $"{Indent}{Indent}global::System.Threading.CancellationToken cancellationToken = default\n"
+                    )
+                    .Append(
+                        $"{Indent}) => client.SendAsync({document}, {value}, cancellationToken);\n"
+                    );
             }
             sb.Append("}\n");
-            return sb.ToString();
         }
 
         // The record a selection on one object type reads into, and every record below it, parents first. A nested
@@ -433,20 +476,14 @@ internal sealed partial class ClientGenerator
                     CSharp.Member(key, name),
                     $"the key {key} {owner} selects on {typeName}"
                 );
-                if (field.Name.StringValue == "__typename")
+                if (string.Equals(field.Name.StringValue, "__typename", StringComparison.Ordinal))
                 {
                     body.Append($"{Indent}/// <summary>The value's type, {typeName}.</summary>\n");
                     body.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(key)})]\n");
                     body.Append($"{Indent}public required string {property} {{ get; init; }}\n");
                     continue;
                 }
-                var definition =
-                    objectType.Fields?.Items.FirstOrDefault(f =>
-                        f.Name.StringValue == field.Name.StringValue
-                    )
-                    ?? throw new InvalidOperationException(
-                        $"{owner} selects {typeName}.{field.Name.StringValue}, which the operations schema does not hold."
-                    );
+                var definition = FieldDefinition(objectType, field, typeName, owner);
                 var childName = $"{name}{CSharp.TypeName(key)}";
                 var child = new GraphQLSelectionSet(nested);
                 var type = OutputType(
@@ -456,7 +493,7 @@ internal sealed partial class ClientGenerator
                         below.Add(() =>
                             ObjectRecord(
                                 (GraphQLObjectTypeDefinition)
-                                    types.Definition(Named(definition.Type))!,
+                                    types.Definition(Named(definition.Type)).NotNull(),
                                 child,
                                 names.Claim(childName, $"the key {key} of {owner}"),
                                 $"{typeName}.{Doc(field.Name.StringValue)} as {Doc(owner)} selects it.",
@@ -466,17 +503,42 @@ internal sealed partial class ClientGenerator
                         ),
                     owner
                 );
-                body.Append(Summary(definition.Description?.Value.ToString(), Indent));
-                body.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(key)})]\n");
-                body.Append(
-                    definition.Type is GraphQLNonNullType
-                        ? $"{Indent}public required {type} {property} {{ get; init; }}\n"
-                        : $"{Indent}public {type} {property} {{ get; init; }}\n"
-                );
+                AppendMember(body, definition, key, type, property);
             }
             records[at] = (name, summary, body.ToString());
             foreach (var write in below)
                 write();
+        }
+
+        // The field of `objectType` the selection names, or a refusal naming the selection.
+        private static GraphQLFieldDefinition FieldDefinition(
+            GraphQLObjectTypeDefinition objectType,
+            GraphQLField field,
+            string typeName,
+            string owner
+        ) =>
+            objectType.Fields?.Items.FirstOrDefault(f =>
+                string.Equals(f.Name.StringValue, field.Name.StringValue, StringComparison.Ordinal)
+            )
+            ?? throw new InvalidOperationException(
+                $"{owner} selects {typeName}.{field.Name.StringValue}, which the operations schema does not hold."
+            );
+
+        private static void AppendMember(
+            StringBuilder body,
+            GraphQLFieldDefinition definition,
+            string key,
+            string type,
+            string property
+        )
+        {
+            body.Append(Summary(definition.Description?.Value.ToString(), Indent));
+            body.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(key)})]\n");
+            body.Append(
+                definition.Type is GraphQLNonNullType
+                    ? $"{Indent}public required {type} {property} {{ get; init; }}\n"
+                    : $"{Indent}public {type} {property} {{ get; init; }}\n"
+            );
         }
 
         // The C# type a value of an output field arrives as: nullable where the schema says so, an object as the
@@ -734,7 +796,11 @@ internal sealed partial class ClientGenerator
         public static string Member(string key, string record)
         {
             var name = TypeName(key);
-            return name == record || RecordMembers.Contains(name) ? name + "Value" : name;
+            return
+                string.Equals(name, record, StringComparison.Ordinal)
+                || RecordMembers.Contains(name)
+                ? name + "Value"
+                : name;
         }
 
         // An enum member: SCREAMING_CASE as PascalCase (LAST24_HOURS is Last24Hours), anything else as a type name.

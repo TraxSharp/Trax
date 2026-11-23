@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -26,20 +27,20 @@ public partial class OperationsMutations
         bool askAfresh = false
     )
     {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
+        if (await NotFound(externalId, dataContextFactory, ct).ConfigureAwait(false) is { } refusal)
             return refusal;
 
         // The overload is called only when asked, so a host whose scheduler predates it keeps the
         // default path.
         if (askAfresh)
             return Triggered(
-                await scheduler.TriggerAsync(externalId, askAfresh: true, ct),
+                await scheduler.TriggerAsync(externalId, askAfresh: true, ct).ConfigureAwait(false),
                 "Manifest triggered"
             );
 
-        await scheduler.TriggerAsync(externalId, ct);
+        await scheduler.TriggerAsync(externalId, ct).ConfigureAwait(false);
         return new OperationResponse(
-            true,
+            Success: true,
             Message: "Manifest triggered: its queued run is due now (an entry it already had is "
                 + "brought forward rather than a second one queued)."
         );
@@ -61,18 +62,20 @@ public partial class OperationsMutations
         bool askAfresh = false
     )
     {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
+        if (await NotFound(externalId, dataContextFactory, ct).ConfigureAwait(false) is { } refusal)
             return refusal;
 
         if (askAfresh)
             return Triggered(
-                await scheduler.TriggerAsync(externalId, delay, askAfresh: true, ct),
+                await scheduler
+                    .TriggerAsync(externalId, delay, askAfresh: true, ct)
+                    .ConfigureAwait(false),
                 $"Manifest triggered with {delay} delay"
             );
 
-        await scheduler.TriggerAsync(externalId, delay, ct);
+        await scheduler.TriggerAsync(externalId, delay, ct).ConfigureAwait(false);
         return new OperationResponse(
-            true,
+            Success: true,
             Message: $"Manifest triggered: its queued run is due within {delay} (an entry it "
                 + "already had keeps an earlier time or is brought forward to that one)."
         );
@@ -91,8 +94,12 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        var count = await scheduler.TriggerGroupAsync(groupId, ct);
-        return new OperationResponse(true, Count: count, Message: $"{count} manifest(s) triggered");
+        var count = await scheduler.TriggerGroupAsync(groupId, ct).ConfigureAwait(false);
+        return new OperationResponse(
+            Success: true,
+            Count: count,
+            Message: string.Create(CultureInfo.InvariantCulture, $"{count} manifest(s) triggered")
+        );
     }
 
     /// <summary>
@@ -110,11 +117,17 @@ public partial class OperationsMutations
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var db = await dataContextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
-        var manifest = await db.Manifests.FirstOrDefaultAsync(m => m.Id == id, ct);
+        var manifest = await db
+            .Manifests.FirstOrDefaultAsync(m => m.Id == id, ct)
+            .ConfigureAwait(false);
         if (manifest is null)
-            return new OperationResponse(false, Message: $"Manifest {id} not found.");
+            return new OperationResponse(
+                Success: false,
+                Message: string.Create(CultureInfo.InvariantCulture, $"Manifest {id} not found.")
+            );
 
         if (
             UpdateManifestRefusal(
@@ -126,8 +139,11 @@ public partial class OperationsMutations
             { } refusal
         )
             return new OperationResponse(
-                false,
-                Message: $"Manifest {id} was not updated: {refusal}"
+                Success: false,
+                Message: string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Manifest {id} was not updated: {refusal}"
+                )
             );
 
         if (input.IsEnabled.HasValue)
@@ -147,14 +163,14 @@ public partial class OperationsMutations
         if (input.IntervalSeconds.HasValue)
             manifest.IntervalSeconds = input.IntervalSeconds.Value;
 
-        await db.SaveChanges(ct);
+        await db.SaveChanges(ct).ConfigureAwait(false);
         changeSignal.Notify(ChangeDomain.Manifest);
-        return new OperationResponse(true, Count: 1, Message: "Manifest updated");
+        return new OperationResponse(Success: true, Count: 1, Message: "Manifest updated");
     }
 
     /// <summary>
     /// Why the scheduler could not use the manifest <paramref name="input"/> would leave, or
-    /// <c>null</c> when it could. The scheduler skips a manifest whose schedule it cannot evaluate
+    /// <see langword="null"/> when it could. The scheduler skips a manifest whose schedule it cannot evaluate
     /// on every poll, and turns a zero timeout into one that cancels every run at once.
     /// </summary>
     /// <remarks>
@@ -199,8 +215,10 @@ public partial class OperationsMutations
                 return "a CRON schedule needs a cronExpression.";
             var fields = cron.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
             if (fields is not (5 or 6))
-                return $"cronExpression '{cron}' has {fields} field(s); a cron expression has 5 "
-                    + "or 6 (with seconds).";
+                return string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"cronExpression '{cron}' has {fields} field(s); a cron expression has 5 "
+                    ) + "or 6 (with seconds).";
         }
 
         if (type == ScheduleType.Interval && (input.IntervalSeconds ?? currentInterval) is null)
@@ -216,10 +234,13 @@ public partial class OperationsMutations
     private static OperationResponse Triggered(ManifestTriggerResult result, string triggered) =>
         result.ReplayDecisionsOf is { } replayed
             ? new OperationResponse(
-                true,
+                Success: true,
                 Message: $"{triggered}, but the dispatcher had already claimed its queued retry, "
-                    + $"so that run replays the decisions of execution {replayed} rather than "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"so that run replays the decisions of execution {replayed} rather than "
+                    )
                     + "asking its deciders afresh"
             )
-            : new OperationResponse(true, Message: triggered);
+            : new OperationResponse(Success: true, Message: triggered);
 }

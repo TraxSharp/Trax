@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence.Integration.Fakes;
 using Trax.StateMachine.Persistence.Integration.Fixtures;
 using Trax.StateMachine.Persistence.Mutations;
@@ -63,7 +64,7 @@ public class RegistryCorruptDataTests
             }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -76,7 +77,7 @@ public class RegistryCorruptDataTests
             new LoadSnapshotInput { Machine = "turnstile", Id = id }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -107,7 +108,7 @@ public class RegistryCorruptDataTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
+        output.Problem.NotNull().Code.Should().Be(RefusalCode.InvalidContext);
         output.Snapshot.Should().BeNull();
         effect.Calls.Should().Be(0, "a draft that cannot be loaded is never sent");
     }

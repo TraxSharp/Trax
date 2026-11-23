@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Trax.Effect.Models.Host;
 
@@ -24,7 +25,7 @@ public class TraxHostInfoTests
     {
         TraxHostInfo.Current = null;
         foreach (var envVar in _envVarsToClean)
-            Environment.SetEnvironmentVariable(envVar, null);
+            Environment.SetEnvironmentVariable(envVar, value: null);
     }
 
     #region AutoDetect Environment
@@ -130,7 +131,13 @@ public class TraxHostInfoTests
     {
         var info = TraxHostInfo.AutoDetect();
 
-        info.HostInstanceId.Should().Be($"{Environment.MachineName}-{Environment.ProcessId}");
+        info.HostInstanceId.Should()
+            .Be(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Environment.MachineName}-{Environment.ProcessId}"
+                )
+            );
     }
 
     #endregion

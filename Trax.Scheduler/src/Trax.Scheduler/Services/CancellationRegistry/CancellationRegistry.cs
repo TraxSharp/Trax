@@ -2,8 +2,11 @@ using System.Collections.Concurrent;
 
 namespace Trax.Scheduler.Services.CancellationRegistry;
 
-/// <inheritdoc />
-internal class CancellationRegistry : ICancellationRegistry
+/// <summary>
+/// The cancellation sources of the runs executing on this host, by metadata id, so a cancel
+/// request can reach a run that is already going.
+/// </summary>
+internal sealed class CancellationRegistry : ICancellationRegistry
 {
     private readonly ConcurrentDictionary<long, CancellationTokenSource> _registry = new();
 

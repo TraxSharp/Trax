@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 
@@ -166,7 +167,9 @@ public class ManifestTests
         static bool IsLoaded() =>
             AppDomain
                 .CurrentDomain.GetAssemblies()
-                .Any(a => a.GetName().Name == "System.Formats.Tar");
+                .Any(a =>
+                    string.Equals(a.GetName().Name, "System.Formats.Tar", StringComparison.Ordinal)
+                );
         IsLoaded().Should().BeFalse("the test needs an assembly not yet loaded");
         var m = NewManifest();
         m.PropertyTypeName =
@@ -181,7 +184,10 @@ public class ManifestTests
     [Test]
     public void NameType_AGenericFullNameOfLoadedTypes_Resolves()
     {
-        var m = new Manifest { Name = typeof(Dictionary<string, SomeFakeTrain>).FullName! };
+        var m = new Manifest
+        {
+            Name = typeof(Dictionary<string, SomeFakeTrain>).FullName.NotNull(),
+        };
 
         m.NameType.Should().Be(typeof(Dictionary<string, SomeFakeTrain>));
     }
@@ -223,7 +229,7 @@ public class ManifestTests
     [Test]
     public void NameType_NullName_ReturnsUnit()
     {
-        var m = new Manifest { Name = null! };
+        var m = new Manifest { Name = Null.Of<string>() };
 
         m.NameType.Should().Be(typeof(Trax.Core.Functional.Unit));
     }
@@ -231,7 +237,11 @@ public class ManifestTests
     [Test]
     public void PropertyType_NoStoredName_ReturnsUnit()
     {
-        var m = new Manifest { Name = typeof(SomeFakeTrain).FullName!, PropertyTypeName = null };
+        var m = new Manifest
+        {
+            Name = typeof(SomeFakeTrain).FullName.NotNull(),
+            PropertyTypeName = null,
+        };
 
         m.PropertyType.Should().Be(typeof(Trax.Core.Functional.Unit));
     }
@@ -352,15 +362,15 @@ public class ManifestTests
 
     #endregion
 
-    private class SomeFakeTrain { }
+    private sealed class SomeFakeTrain;
 
-    private record TestProperties : IManifestProperties
+    private sealed record TestProperties : IManifestProperties
     {
         public string Greeting { get; init; } = "";
         public int Count { get; init; }
     }
 
-    private record OtherProperties : IManifestProperties
+    private sealed record OtherProperties : IManifestProperties
     {
         public string Other { get; init; } = "";
     }

@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -45,8 +47,10 @@ public class RedirectTests
     [Test]
     public async Task A_default_client_is_refused_and_never_reaches_the_other_host()
     {
-        await using var other = LoopbackHttpHost.Answering(Answer);
-        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        var other = LoopbackHttpHost.Answering(Answer);
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        await using var endpointDisposal = endpoint.ConfigureAwait(false);
 
         var build = () => Transport(new HttpClient(), endpoint.Endpoint);
 
@@ -151,8 +155,10 @@ public class RedirectTests
     [Test]
     public async Task An_answer_from_another_host_through_a_handler_that_followed_a_redirect_is_a_failure()
     {
-        await using var other = LoopbackHttpHost.Answering(Answer);
-        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        var other = LoopbackHttpHost.Answering(Answer);
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        await using var endpointDisposal = endpoint.ConfigureAwait(false);
         // The caller said it follows none, and it did.
         using var http = new HttpClient(new FollowsItself());
 
@@ -160,43 +166,48 @@ public class RedirectTests
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().NotBeNull();
-        answer.Failure!.Message.Should().Contain("redirected");
+        answer.Failure.NotNull().Message.Should().Contain("redirected");
         answer.Data.Should().BeNull();
     }
 
     [Test]
     public async Task A_client_with_redirects_off_never_reaches_the_other_host()
     {
-        await using var other = LoopbackHttpHost.Answering(Answer);
-        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        var other = LoopbackHttpHost.Answering(Answer);
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        await using var endpointDisposal = endpoint.ConfigureAwait(false);
         using var http = NoRedirects();
 
         var answer = await Transport(http, endpoint.Endpoint)
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().NotBeNull();
-        answer.Failure!.Status.Should().Be(307);
+        answer.Failure.NotNull().Status.Should().Be(307);
         other.Received.Should().Be(0);
     }
 
     [Test]
     public async Task An_answer_from_the_endpoints_own_host_is_read()
     {
-        await using var endpoint = LoopbackHttpHost.Answering(Answer);
+        var endpoint = LoopbackHttpHost.Answering(Answer);
+        await using var endpointDisposal = endpoint.ConfigureAwait(false);
         using var http = NoRedirects();
 
         var answer = await Transport(http, endpoint.Endpoint)
             .ExecuteAsync(new TraxRequest(Query, new JsonObject()));
 
         answer.Failure.Should().BeNull();
-        answer.Data!["x"]!.GetValue<int>().Should().Be(1);
+        answer.Data.NotNull()["x"].NotNull().GetValue<int>().Should().Be(1);
     }
 
     [Test]
     public async Task The_machine_server_refuses_a_default_client_and_never_reaches_the_other_host()
     {
-        await using var other = LoopbackHttpHost.Answering(Answer);
-        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        var other = LoopbackHttpHost.Answering(Answer);
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        await using var endpointDisposal = endpoint.ConfigureAwait(false);
 
         var build = () => MachineServer(new HttpClient(), endpoint.Endpoint);
 
@@ -208,10 +219,12 @@ public class RedirectTests
     [Test]
     public async Task The_machine_server_fails_a_request_answered_after_a_redirect()
     {
-        await using var other = LoopbackHttpHost.Answering(
+        var other = LoopbackHttpHost.Answering(
             """{"data":{"machines":{"turnstile":{"get":{"problem":{"code":"NOT_FOUND","message":"m"}}}}}}"""
         );
-        await using var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        await using var otherDisposal = other.ConfigureAwait(false);
+        var endpoint = LoopbackHttpHost.RedirectingTo(other.Endpoint);
+        await using var endpointDisposal = endpoint.ConfigureAwait(false);
         using var http = new HttpClient(new FollowsItself());
         var server = MachineServer(http, endpoint.Endpoint, handlerFollowsNoRedirects: true);
 
@@ -235,7 +248,8 @@ public class RedirectTests
                 {
                     Id = "turnstile",
                     IrHash = MachinePredictor.For(DeclarativeTurnstile.Built).IrHash,
-                    Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
+                    Ir = (JsonObject)
+                        JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built)).NotNull(),
                     Documents =
                     [
                         new ClientManifestDocument
@@ -256,7 +270,7 @@ public class RedirectTests
             }
         );
 
-    private sealed class PassThrough : DelegatingHandler { }
+    private sealed class PassThrough : DelegatingHandler;
 
     // Follows a 307 itself, as a platform's own handler might: the check cannot tell whether it does.
     private sealed class FollowsItself : HttpMessageHandler
@@ -270,19 +284,22 @@ public class RedirectTests
             CancellationToken cancellationToken
         )
         {
-            var response = await _inner.SendAsync(request, cancellationToken);
+            var response = await _inner.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (
                 response.StatusCode != HttpStatusCode.TemporaryRedirect
                 || response.Headers.Location is not { } location
             )
                 return response;
             response.Dispose();
-            var body = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            var body = await request
+                .Content.NotNull()
+                .ReadAsByteArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
             var again = new HttpRequestMessage(request.Method, location)
             {
                 Content = new ByteArrayContent(body),
             };
-            return await _inner.SendAsync(again, cancellationToken);
+            return await _inner.SendAsync(again, cancellationToken).ConfigureAwait(false);
         }
 
         protected override void Dispose(bool disposing)
@@ -312,18 +329,26 @@ public class RedirectTests
         {
             _response = Encoding.UTF8.GetBytes(response);
             _listener.Start();
-            _serving = Task.Run(ServeAsync);
+            _serving = Task.Run(ServeAsync, CancellationToken.None);
         }
 
         public Uri Endpoint =>
-            new($"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/graphql");
+            new(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/graphql"
+                )
+            );
 
         public int Received => Volatile.Read(ref _received);
 
         public static LoopbackHttpHost Answering(string json) =>
             new(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                    + $"Content-Length: {Encoding.UTF8.GetByteCount(json)}\r\nConnection: close\r\n\r\n{json}"
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Content-Length: {Encoding.UTF8.GetByteCount(json)}\r\nConnection: close\r\n\r\n{json}"
+                    )
             );
 
         public static LoopbackHttpHost RedirectingTo(Uri target) =>
@@ -339,7 +364,9 @@ public class RedirectTests
                 TcpClient client;
                 try
                 {
-                    client = await _listener.AcceptTcpClientAsync(_stop.Token);
+                    client = await _listener
+                        .AcceptTcpClientAsync(_stop.Token)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                     when (ex
@@ -353,9 +380,9 @@ public class RedirectTests
                 using (client)
                 {
                     var stream = client.GetStream();
-                    await ReadRequestAsync(stream, _stop.Token);
+                    await ReadRequestAsync(stream, _stop.Token).ConfigureAwait(false);
                     Interlocked.Increment(ref _received);
-                    await stream.WriteAsync(_response, _stop.Token);
+                    await stream.WriteAsync(_response, _stop.Token).ConfigureAwait(false);
                 }
             }
         }
@@ -368,7 +395,7 @@ public class RedirectTests
             int end;
             while ((end = HeadEnd(read)) < 0)
             {
-                var n = await stream.ReadAsync(buffer, token);
+                var n = await stream.ReadAsync(buffer, token).ConfigureAwait(false);
                 if (n == 0)
                     return;
                 read.AddRange(buffer.AsSpan(0, n));
@@ -380,12 +407,14 @@ public class RedirectTests
                     parts.Length == 2
                     && parts[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase)
                 )
-                .Select(parts => int.Parse(parts[1].Trim()))
+                .Select(parts =>
+                    int.Parse(parts[1].Trim(), System.Globalization.CultureInfo.InvariantCulture)
+                )
                 .FirstOrDefault();
             var body = read.Count - (end + 4);
             while (body < length)
             {
-                var n = await stream.ReadAsync(buffer, token);
+                var n = await stream.ReadAsync(buffer, token).ConfigureAwait(false);
                 if (n == 0)
                     return;
                 body += n;
@@ -407,11 +436,11 @@ public class RedirectTests
 
         public async ValueTask DisposeAsync()
         {
-            await _stop.CancelAsync();
+            await _stop.CancelAsync().ConfigureAwait(false);
             _listener.Stop();
             try
             {
-                await _serving;
+                await _serving.ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is OperationCanceledException or IOException)
             {

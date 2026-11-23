@@ -41,7 +41,8 @@ public class HostHeartbeatIntegrationTests : TestSetup
     [SetUp]
     public async Task ClearHostRows()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
         await context.HostHeartbeats.ExecuteDeleteAsync();
     }
 
@@ -53,8 +54,13 @@ public class HostHeartbeatIntegrationTests : TestSetup
 
     private async Task<List<HostRow>> Rows()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
-        return await context.HostHeartbeats.AsNoTracking().OrderBy(h => h.InstanceId).ToListAsync();
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        return await context
+            .HostHeartbeats.AsNoTracking()
+            .OrderBy(h => h.InstanceId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -82,7 +88,7 @@ public class HostHeartbeatIntegrationTests : TestSetup
                 "each process writes one row, keyed by its instance id"
             );
 
-        var rowA = rows.Single(r => r.InstanceId == "pod-a");
+        var rowA = rows.Single(r => string.Equals(r.InstanceId, "pod-a", StringComparison.Ordinal));
         rowA.HostName.Should().Be("host-a");
         rowA.HostEnvironment.Should().Be("kubernetes");
         rowA.TraxVersion.Should().NotBeNullOrWhiteSpace();
@@ -100,7 +106,8 @@ public class HostHeartbeatIntegrationTests : TestSetup
     [Test]
     public async Task Beat_DeletesRowsWhoseLastBeatIsADayOld_AndKeepsTheRest()
     {
-        await using (var context = (IDataContext)DataContextFactory.Create())
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
         {
             context.HostHeartbeats.Add(
                 Row("gone", Start - HostRow.Retention - TimeSpan.FromSeconds(1))

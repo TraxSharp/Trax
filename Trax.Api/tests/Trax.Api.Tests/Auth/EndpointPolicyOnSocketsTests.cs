@@ -18,7 +18,9 @@ using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -61,7 +63,7 @@ public class EndpointPolicyOnSocketsTests
         (await ReceiveTypeAsync(ws))
             .Should()
             .Be("(closed)", "the endpoint policy is evaluated over a socket too, per " + Adr);
-        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(default!, default);
+        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(Null.Of<string>(), default);
     }
 
     [Test]
@@ -126,7 +128,7 @@ public class EndpointPolicyOnSocketsTests
                 new[] { "TRAX_AUTHORIZATION" },
                 "the pipeline evaluates the endpoint policy for every operation, per " + Adr
             );
-        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(default!, default);
+        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(Null.Of<string>(), default);
     }
 
     [Test]
@@ -164,16 +166,22 @@ public class EndpointPolicyOnSocketsTests
     {
         var executor = await host
             .Services.GetRequiredService<IRequestExecutorProvider>()
-            .GetExecutorAsync("trax");
-        await using var scope = host.Services.CreateAsyncScope();
-        return await executor.ExecuteAsync(
-            OperationRequestBuilder
-                .New()
-                .SetDocument(TriggerMutation)
-                .SetGlobalState("ClaimsPrincipal", user)
-                .SetServices(scope.ServiceProvider)
-                .Build()
-        );
+            .GetExecutorAsync("trax")
+            .ConfigureAwait(false);
+        var scope = host.Services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            return await executor
+                .ExecuteAsync(
+                    OperationRequestBuilder
+                        .New()
+                        .SetDocument(TriggerMutation)
+                        .SetGlobalState("ClaimsPrincipal", user)
+                        .SetServices(scope.ServiceProvider)
+                        .Build()
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     private static IReadOnlyList<string?> ErrorCodes(IExecutionResult result) =>
@@ -182,6 +190,9 @@ public class EndpointPolicyOnSocketsTests
 
     private static async Task<IHost> StartApiKeyHostAsync(ITraxScheduler scheduler)
     {
+        var seeded = await Trax
+            .Api.Tests.Fakes.SeededManifests.WithAsync("m-1")
+            .ConfigureAwait(false);
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
@@ -204,18 +215,21 @@ public class EndpointPolicyOnSocketsTests
                                 .RequireAuthorization(AdminPolicy)
                                 .GateOperations(policy: AdminPolicy)
                         );
-                        AddOperationStubs(services, scheduler);
+                        AddOperationStubs(services, scheduler, seeded);
                     })
                     .Configure(Pipeline)
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
     private static async Task<IHost> StartOidcHostAsync()
     {
+        var seeded = await Trax
+            .Api.Tests.Fakes.SeededManifests.WithAsync("m-1")
+            .ConfigureAwait(false);
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
@@ -232,13 +246,13 @@ public class EndpointPolicyOnSocketsTests
                                 .RequireAuthorization()
                                 .GateOperationsToAuthenticatedUsers()
                         );
-                        AddOperationStubs(services, Substitute.For<ITraxScheduler>());
+                        AddOperationStubs(services, Substitute.For<ITraxScheduler>(), seeded);
                     })
                     .Configure(Pipeline)
             )
             .Build();
 
-        await host.StartAsync();
+        await host.StartAsync().ConfigureAwait(false);
         return host;
     }
 
@@ -251,7 +265,11 @@ public class EndpointPolicyOnSocketsTests
         services.AddSingleton(Substitute.For<IEffectRegistry>());
     }
 
-    private static void AddOperationStubs(IServiceCollection services, ITraxScheduler scheduler)
+    private static void AddOperationStubs(
+        IServiceCollection services,
+        ITraxScheduler scheduler,
+        IDataContextProviderFactory seeded
+    )
     {
         // Registered after AddTraxGraphQL so they win over the real services, which would need a
         // database.
@@ -262,7 +280,7 @@ public class EndpointPolicyOnSocketsTests
         );
         services.AddScoped(_ => scheduler);
         services.AddScoped(_ => Substitute.For<IJobSubmitter>());
-        services.AddSingleton(Trax.Api.Tests.Fakes.SeededManifests.With("m-1"));
+        services.AddSingleton(seeded);
     }
 
     private static void Pipeline(IApplicationBuilder app)
@@ -277,14 +295,16 @@ public class EndpointPolicyOnSocketsTests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default);
+        return await client
+            .ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default)
+            .ConfigureAwait(false);
     }
 
     private static Task SendAsync(WebSocket ws, object message) =>
         ws.SendAsync(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message)),
             WebSocketMessageType.Text,
-            true,
+            endOfMessage: true,
             default
         );
 
@@ -297,7 +317,7 @@ public class EndpointPolicyOnSocketsTests
         {
             while (true)
             {
-                var received = await ws.ReceiveAsync(buffer, cts.Token);
+                var received = await ws.ReceiveAsync(buffer, cts.Token).ConfigureAwait(false);
                 if (received.MessageType == WebSocketMessageType.Close)
                     return "(closed)";
                 if (received.Count == 0)
@@ -305,7 +325,8 @@ public class EndpointPolicyOnSocketsTests
                 var type = JsonDocument
                     .Parse(Encoding.UTF8.GetString(buffer, 0, received.Count))
                     .RootElement.GetProperty("type")
-                    .GetString()!;
+                    .GetString()
+                    .NotNull();
                 if (type is "ping" or "pong")
                     continue;
                 return type;

@@ -39,7 +39,7 @@ public class TrainDocumentsTests
     [TestCase("trax_machine_order_get_HASH")]
     [TestCase("recovery_StartRun_v1")]
     public void An_id_that_is_not_a_train_document_names_no_slot(string id) =>
-        TrainDocuments.SlotOf(id.Replace("HASH", Hash)).Should().BeNull();
+        TrainDocuments.SlotOf(id.Replace("HASH", Hash, StringComparison.Ordinal)).Should().BeNull();
 
     [Test]
     public void The_prefix_stays_reserved_and_never_shares_a_machines_slot()

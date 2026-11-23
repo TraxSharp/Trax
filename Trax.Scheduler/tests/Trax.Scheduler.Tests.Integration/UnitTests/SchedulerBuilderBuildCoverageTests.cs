@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -189,7 +190,9 @@ public class SchedulerBuilderBuildCoverageTests
         // The [TraxRemote]-marked train must have been discovered and registered as an
         // attribute-routed train. GetSubmitterType returns the submitter for it via the
         // attribute fallback once the default has been set.
-        var attributeSubmitter = routing.GetSubmitterType(typeof(IRemoteCoverageTrain).FullName!);
+        var attributeSubmitter = routing.GetSubmitterType(
+            typeof(IRemoteCoverageTrain).FullName.NotNull()
+        );
         attributeSubmitter
             .Should()
             .NotBeNull(
@@ -234,43 +237,3 @@ public class SchedulerBuilderBuildCoverageTests
 
     #endregion
 }
-
-#region Fakes
-
-/// <summary>
-/// Train carrying [TraxRemote] so the scheduler builder's attribute-discovery loop has a hit.
-/// </summary>
-/// <remarks>
-/// Abstract so the assembly scan the other tests run does not register it: a <c>[TraxRemote]</c>
-/// train with no routed submitter fails the scheduler's build, and most of those tests configure
-/// none. A test that wants it registers it itself; discovery reads only its registration, and
-/// nothing here resolves it.
-/// </remarks>
-[TraxRemote]
-internal abstract class RemoteCoverageTrain
-    : ServiceTrain<RemoteCoverageInput, Unit>,
-        IRemoteCoverageTrain
-{
-    protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
-}
-
-internal record RemoteCoverageInput : IManifestProperties { }
-
-internal interface IRemoteCoverageTrain : IServiceTrain<RemoteCoverageInput, Unit> { }
-
-/// <summary>
-/// Train NOT carrying [TraxRemote], used only to provide a ForTrain target so a
-/// RoutedSubmitterRegistration is created and the attribute-discovery loop runs.
-/// </summary>
-internal class NonRemoteCoverageTrain
-    : ServiceTrain<NonRemoteCoverageInput, Unit>,
-        INonRemoteCoverageTrain
-{
-    protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
-}
-
-internal record NonRemoteCoverageInput : IManifestProperties { }
-
-internal interface INonRemoteCoverageTrain : IServiceTrain<NonRemoteCoverageInput, Unit> { }
-
-#endregion

@@ -7,6 +7,7 @@ nav_order: 6
 source:
   - Trax.Cli/src/Trax.Cli/Clients
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/ClientDocuments.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/ClientDocument.cs
 ---
 
 # Fetch only what a component needs

@@ -1,12 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Aws;
-
-/// <summary>The two CloudFormation templates of one environment, in the order they are created.</summary>
-internal sealed record AwsTemplates(JsonObject Foundation, JsonObject Runtime);
 
 /// <summary>
 /// The CloudFormation templates of one environment, generated from <c>trax.deploy.json</c> and what each host
@@ -103,13 +101,12 @@ internal static class AwsStack
     {
         var env = file.Environment(environmentName);
         Check(file, env, exports);
-        var production = env.Profile == DeployEnvironment.Production;
-        var api = file.Services.Keys.FirstOrDefault(s => exports[s].Roles.Contains("api"));
-        if (!production && api is not null && cloudFrontPrefixList is null)
-            throw new InvalidOperationException(
-                "The try profile admits only CloudFront to its load balancer, and the region's CloudFront prefix "
-                    + "list was not found."
-            );
+        var production = string.Equals(
+            env.Profile,
+            DeployEnvironment.Production,
+            StringComparison.Ordinal
+        );
+        var api = ApiService(file, exports, production, cloudFrontPrefixList);
         return new AwsTemplates(
             Foundation(file, environmentName, env, production),
             Runtime(file, environmentName, env, exports, api, production, cloudFrontPrefixList)
@@ -143,99 +140,18 @@ internal static class AwsStack
             };
 
         // ---- Network -------------------------------------------------------------------------------------
-        JsonNode vpc;
-        JsonNode cidr;
-        JsonArray publicSubnets;
-        JsonArray serviceSubnets;
-        if (env.Network is { } network)
-        {
-            vpc = network.VpcId;
-            cidr = network.Cidr;
-            publicSubnets = [.. network.PublicSubnets.Select(s => (JsonNode)s)];
-            serviceSubnets = [.. network.PrivateSubnets.Select(s => (JsonNode)s)];
-        }
-        else
-        {
-            AddVpc(resources, stack, production);
-            vpc = Ref("Vpc");
-            cidr = VpcCidr;
-            publicSubnets = [Ref("PublicSubnetA"), Ref("PublicSubnetB")];
-            serviceSubnets = production
-                ? [Ref("PrivateSubnetA"), Ref("PrivateSubnetB")]
-                : [Ref("PublicSubnetA"), Ref("PublicSubnetB")];
-        }
+        var (vpc, cidr, publicSubnets, serviceSubnets) = Network(resources, stack, env, production);
 
         // ---- The database, and the one group allowed to reach it ---------------------------------------------
-        // Whatever runs the app (ECS tasks, or a Kubernetes cluster's pods) wears this group to reach the database.
-        // It lives here, not in a runtime, so the database's rule never names something created after it.
-        var securityGroups = new JsonArray(Ref("DatabaseClientSecurityGroup"));
-        if (env.DatabaseSecretArn is null)
-        {
-            resources["DatabaseClientSecurityGroup"] = SecurityGroup(
-                stack,
-                vpc,
-                "Clients of the Postgres database",
-                [
-                    Rule(
-                        "-1",
-                        null,
-                        null,
-                        cidr: "127.0.0.1/32",
-                        description: "Replaced by the rule to the database"
-                    ),
-                ]
-            );
-            resources["DatabaseSecurityGroup"] = SecurityGroup(
-                stack,
-                vpc,
-                "The Postgres database",
-                [Rule("-1", null, null, cidr: "127.0.0.1/32", description: "No egress")]
-            );
-            resources["DatabaseClientToDatabase"] = Resource(
-                "AWS::EC2::SecurityGroupEgress",
-                new JsonObject
-                {
-                    ["GroupId"] = Ref("DatabaseClientSecurityGroup"),
-                    ["IpProtocol"] = "tcp",
-                    ["FromPort"] = 5432,
-                    ["ToPort"] = 5432,
-                    ["DestinationSecurityGroupId"] = Ref("DatabaseSecurityGroup"),
-                    ["Description"] = "Postgres",
-                }
-            );
-            resources["DatabaseFromClients"] = Resource(
-                "AWS::EC2::SecurityGroupIngress",
-                new JsonObject
-                {
-                    ["GroupId"] = Ref("DatabaseSecurityGroup"),
-                    ["IpProtocol"] = "tcp",
-                    ["FromPort"] = 5432,
-                    ["ToPort"] = 5432,
-                    ["SourceSecurityGroupId"] = Ref("DatabaseClientSecurityGroup"),
-                    ["Description"] = "Clients of the database",
-                }
-            );
-            securityGroups.Add(Ref("DatabaseSecurityGroup"));
-            AddDatabase(resources, stack, production, serviceSubnets);
-            outputs["DatabaseAddress"] = Output(GetAtt("Database", "Endpoint.Address"));
-            outputs["DatabasePort"] = Output(GetAtt("Database", "Endpoint.Port"));
-            outputs["DatabaseSecretArn"] = Output(Ref("DatabaseSecret"));
-        }
-        else
-            resources["DatabaseClientSecurityGroup"] = SecurityGroup(
-                stack,
-                vpc,
-                "Clients of the existing Postgres database",
-                [
-                    Rule(
-                        "tcp",
-                        5432,
-                        5432,
-                        cidr: "0.0.0.0/0",
-                        description: "The existing Postgres database"
-                    ),
-                ]
-            );
+        var securityGroups = AddDatabaseAndClients(
+            resources,
+            outputs,
+            stack,
+            env,
+            production,
+            vpc,
+            serviceSubnets
+        );
 
         // ---- Sign-in ---------------------------------------------------------------------------------------
         if (env.Auth is { Kind: DeployAuth.Cognito })
@@ -258,6 +174,49 @@ internal static class AwsStack
         );
     }
 
+    /// <summary>
+    /// The database, when the stack creates one, and the group whatever runs the app (ECS tasks, or a Kubernetes
+    /// cluster's pods) wears to reach it. The group lives in the foundation, not a runtime, so the database's rule
+    /// never names something created after it. Returns the security groups the foundation creates.
+    /// </summary>
+    private static JsonArray AddDatabaseAndClients(
+        JsonObject resources,
+        JsonObject outputs,
+        string stack,
+        DeployEnvironment env,
+        bool production,
+        JsonNode vpc,
+        JsonArray serviceSubnets
+    )
+    {
+        var securityGroups = new JsonArray(Ref("DatabaseClientSecurityGroup"));
+        if (env.DatabaseSecretArn is not null)
+        {
+            resources["DatabaseClientSecurityGroup"] = SecurityGroup(
+                stack,
+                vpc,
+                "Clients of the existing Postgres database",
+                [
+                    Rule(
+                        "tcp",
+                        5432,
+                        5432,
+                        cidr: "0.0.0.0/0",
+                        description: "The existing Postgres database"
+                    ),
+                ]
+            );
+            return securityGroups;
+        }
+        AddDatabaseSecurityGroups(resources, stack, vpc);
+        securityGroups.Add(Ref("DatabaseSecurityGroup"));
+        AddDatabase(resources, stack, production, serviceSubnets);
+        outputs["DatabaseAddress"] = Output(GetAtt("Database", "Endpoint.Address"));
+        outputs["DatabasePort"] = Output(GetAtt("Database", "Endpoint.Port"));
+        outputs["DatabaseSecretArn"] = Output(Ref("DatabaseSecret"));
+        return securityGroups;
+    }
+
     /// <summary>The ECS runtime: load balancer, cluster, roles, tasks and services, over the foundation.</summary>
     private static JsonObject Runtime(
         DeployFile file,
@@ -272,6 +231,123 @@ internal static class AwsStack
         var stack = file.StackName(environmentName);
         var resources = new JsonObject();
         var outputs = new JsonObject();
+        var parameters = RuntimeParameters(file, env, api);
+        var vpc = Ref("VpcId");
+        var serviceSubnets = Ref("ServiceSubnets");
+        // A service in a public subnet reaches ECR, Secrets Manager and the logs through its own public address;
+        // its security group admits nothing from outside the load balancer.
+        var assignPublicIp = production || env.Network is not null ? "DISABLED" : "ENABLED";
+
+        // ---- The tasks' own group: the default allow-all egress is replaced ---------------------------------
+        AddTaskSecurityGroup(resources, stack, vpc);
+        var taskGroups = new JsonArray(
+            Ref("TaskSecurityGroup"),
+            Ref("DatabaseClientSecurityGroup")
+        );
+        var securityGroups = new JsonArray(Ref("TaskSecurityGroup"));
+
+        // ---- Load balancer, TLS and the address -------------------------------------------------------------
+        if (api is not null)
+        {
+            AddLoadBalancer(
+                resources,
+                outputs,
+                stack,
+                env,
+                exports[api],
+                vpc,
+                Ref("PublicSubnets"),
+                production,
+                cloudFrontPrefixList
+            );
+            securityGroups.Add(Ref("LoadBalancerSecurityGroup"));
+        }
+
+        // ---- ECS -------------------------------------------------------------------------------------------
+        AddClusterAndExecutionRole(resources, file, env, stack);
+        var environment = TaskEnvironment(file, env);
+        var secrets = TaskSecrets(file, env, stack);
+        var migrator = Migrator(file, exports);
+        AddMigrateTask(resources, outputs, stack, environment, secrets);
+        AddServices(
+            resources,
+            outputs,
+            file,
+            stack,
+            api,
+            environment,
+            secrets,
+            new ServiceNetwork(serviceSubnets, taskGroups, assignPublicIp),
+            production
+        );
+
+        AddClusterOutputs(outputs, serviceSubnets, taskGroups, assignPublicIp, migrator);
+        outputs["SecurityGroups"] = Output(Join(",", securityGroups));
+        return Template(
+            $"Trax app {file.App}, environment {environmentName} ({env.Profile}): the ECS services. Written by "
+                + "trax deploy; changes made outside it are reverted on the next deploy.",
+            parameters,
+            resources,
+            outputs
+        );
+    }
+
+    // The service the load balancer serves: the one with the api role, if any.
+    private static string? ApiService(
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        bool production,
+        string? cloudFrontPrefixList
+    )
+    {
+        var api = file.Services.Keys.FirstOrDefault(s => exports[s].Roles.Contains("api"));
+        if (!production && api is not null && cloudFrontPrefixList is null)
+            throw new InvalidOperationException(
+                "The try profile admits only CloudFront to its load balancer, and the region's CloudFront prefix "
+                    + "list was not found."
+            );
+        return api;
+    }
+
+    private static void AddMigrateTask(
+        JsonObject resources,
+        JsonObject outputs,
+        string stack,
+        List<(string Name, JsonNode Value)> environment,
+        List<(string Name, JsonNode From)> secrets
+    )
+    {
+        AddTask(
+            resources,
+            stack,
+            MigrateContainer,
+            Ref(MigrateImageParameter),
+            environment,
+            secrets,
+            port: false,
+            command: TraxMigrate.Argument
+        );
+        outputs["MigrateTaskDefinition"] = Output(Ref("MigrateTaskDefinition"));
+        outputs["MigrateContainer"] = Output(MigrateContainer);
+    }
+
+    private static void AddClusterOutputs(
+        JsonObject outputs,
+        JsonNode serviceSubnets,
+        JsonArray taskGroups,
+        string assignPublicIp,
+        string migrator
+    )
+    {
+        outputs["ClusterName"] = Output(Ref("Cluster"));
+        outputs["ServiceSubnets"] = Output(Join(",", serviceSubnets.DeepClone()));
+        outputs["TaskSecurityGroups"] = Output(Join(",", taskGroups.DeepClone()));
+        outputs["AssignPublicIp"] = Output(assignPublicIp);
+        outputs["Migrator"] = Output(migrator);
+    }
+
+    private static JsonObject RuntimeParameters(DeployFile file, DeployEnvironment env, string? api)
+    {
         var parameters = new JsonObject
         {
             [MigrateImageParameter] = new JsonObject
@@ -298,8 +374,17 @@ internal static class AwsStack
                     + "starts on a schema older than it.",
             };
         }
+        AddFoundationParameters(parameters, env, api);
+        return parameters;
+    }
 
-        // ---- What the foundation gives, as parameters the deployer fills from its outputs -------------------
+    // What the foundation gives, as parameters the deployer fills from its outputs.
+    private static void AddFoundationParameters(
+        JsonObject parameters,
+        DeployEnvironment env,
+        string? api
+    )
+    {
         void From(string name, string type, string description) =>
             parameters[name] = new JsonObject
             {
@@ -327,13 +412,34 @@ internal static class AwsStack
             From("UserPoolId", "String", "the Cognito user pool.");
             From("UserPoolClientId", "String", "the user pool's app client.");
         }
-        var vpc = Ref("VpcId");
-        var serviceSubnets = Ref("ServiceSubnets");
-        // A service in a public subnet reaches ECR, Secrets Manager and the logs through its own public address;
-        // its security group admits nothing from outside the load balancer.
-        var assignPublicIp = production || env.Network is not null ? "DISABLED" : "ENABLED";
+    }
 
-        // ---- The tasks' own group: the default allow-all egress is replaced ---------------------------------
+    private static (
+        JsonNode Vpc,
+        JsonNode Cidr,
+        JsonArray PublicSubnets,
+        JsonArray ServiceSubnets
+    ) Network(JsonObject resources, string stack, DeployEnvironment env, bool production)
+    {
+        if (env.Network is { } network)
+            return (
+                network.VpcId,
+                network.Cidr,
+                [.. network.PublicSubnets.Select(s => (JsonNode)s)],
+                [.. network.PrivateSubnets.Select(s => (JsonNode)s)]
+            );
+        AddVpc(resources, stack, production);
+        return (
+            Ref("Vpc"),
+            VpcCidr,
+            [Ref("PublicSubnetA"), Ref("PublicSubnetB")],
+            production
+                ? [Ref("PrivateSubnetA"), Ref("PrivateSubnetB")]
+                : [Ref("PublicSubnetA"), Ref("PublicSubnetB")]
+        );
+    }
+
+    private static void AddTaskSecurityGroup(JsonObject resources, string stack, JsonNode vpc) =>
         resources["TaskSecurityGroup"] = SecurityGroup(
             stack,
             vpc,
@@ -348,30 +454,63 @@ internal static class AwsStack
                 ),
             ]
         );
-        var taskGroups = new JsonArray(
-            Ref("TaskSecurityGroup"),
-            Ref("DatabaseClientSecurityGroup")
+
+    // The database's group admits its clients alone and sends nothing out; the clients' group reaches it alone.
+    private static void AddDatabaseSecurityGroups(JsonObject resources, string stack, JsonNode vpc)
+    {
+        resources["DatabaseClientSecurityGroup"] = SecurityGroup(
+            stack,
+            vpc,
+            "Clients of the Postgres database",
+            [
+                Rule(
+                    "-1",
+                    from: null,
+                    to: null,
+                    cidr: "127.0.0.1/32",
+                    description: "Replaced by the rule to the database"
+                ),
+            ]
         );
-        var securityGroups = new JsonArray(Ref("TaskSecurityGroup"));
+        resources["DatabaseSecurityGroup"] = SecurityGroup(
+            stack,
+            vpc,
+            "The Postgres database",
+            [Rule("-1", from: null, to: null, cidr: "127.0.0.1/32", description: "No egress")]
+        );
+        resources["DatabaseClientToDatabase"] = Resource(
+            "AWS::EC2::SecurityGroupEgress",
+            new JsonObject
+            {
+                ["GroupId"] = Ref("DatabaseClientSecurityGroup"),
+                ["IpProtocol"] = "tcp",
+                ["FromPort"] = 5432,
+                ["ToPort"] = 5432,
+                ["DestinationSecurityGroupId"] = Ref("DatabaseSecurityGroup"),
+                ["Description"] = "Postgres",
+            }
+        );
+        resources["DatabaseFromClients"] = Resource(
+            "AWS::EC2::SecurityGroupIngress",
+            new JsonObject
+            {
+                ["GroupId"] = Ref("DatabaseSecurityGroup"),
+                ["IpProtocol"] = "tcp",
+                ["FromPort"] = 5432,
+                ["ToPort"] = 5432,
+                ["SourceSecurityGroupId"] = Ref("DatabaseClientSecurityGroup"),
+                ["Description"] = "Clients of the database",
+            }
+        );
+    }
 
-        // ---- Load balancer, TLS and the address -------------------------------------------------------------
-        if (api is not null)
-        {
-            AddLoadBalancer(
-                resources,
-                outputs,
-                stack,
-                env,
-                exports[api],
-                vpc,
-                Ref("PublicSubnets"),
-                production,
-                cloudFrontPrefixList
-            );
-            securityGroups.Add(Ref("LoadBalancerSecurityGroup"));
-        }
-
-        // ---- ECS -------------------------------------------------------------------------------------------
+    private static void AddClusterAndExecutionRole(
+        JsonObject resources,
+        DeployFile file,
+        DeployEnvironment env,
+        string stack
+    )
+    {
         resources["Cluster"] = Resource(
             "AWS::ECS::Cluster",
             new JsonObject { ["ClusterName"] = stack }
@@ -402,7 +541,13 @@ internal static class AwsStack
                 ),
             }
         );
+    }
 
+    private static List<(string Name, JsonNode Value)> TaskEnvironment(
+        DeployFile file,
+        DeployEnvironment env
+    )
+    {
         var environment = new List<(string Name, JsonNode Value)>
         {
             ("Trax__Proxy__KnownNetworks", Ref("VpcCidr")),
@@ -430,6 +575,15 @@ internal static class AwsStack
             );
             environment.Add((auth.AudienceKey, Ref("UserPoolClientId")));
         }
+        return environment;
+    }
+
+    private static List<(string Name, JsonNode From)> TaskSecrets(
+        DeployFile file,
+        DeployEnvironment env,
+        string stack
+    )
+    {
         var secrets = new List<(string Name, JsonNode From)>();
         if (env.DatabaseSecretArn is { } byo)
             secrets.Add(($"ConnectionStrings__{file.ConnectionStrings.Trax}", byo));
@@ -437,102 +591,117 @@ internal static class AwsStack
             secrets.Add(("PGPASSWORD", Sub("${DatabaseSecretArn}:password::")));
         foreach (var name in file.Secrets)
             secrets.Add((name, AppSecretName(stack, name)));
+        return secrets;
+    }
 
-        var migrator = Migrator(file, exports);
+    private static void AddServices(
+        JsonObject resources,
+        JsonObject outputs,
+        DeployFile file,
+        string stack,
+        string? api,
+        List<(string Name, JsonNode Value)> environment,
+        List<(string Name, JsonNode From)> secrets,
+        ServiceNetwork network,
+        bool production
+    )
+    {
+        var serving = environment.Append((TraxMigrate.Variable, TraxMigrate.SkipValue)).ToList();
+        foreach (var service in file.Services.Keys)
+            AddService(
+                resources,
+                outputs,
+                service,
+                stack,
+                api,
+                serving,
+                secrets,
+                network,
+                production
+            );
+    }
+
+    private static void AddService(
+        JsonObject resources,
+        JsonObject outputs,
+        string service,
+        string stack,
+        string? api,
+        List<(string Name, JsonNode Value)> serving,
+        List<(string Name, JsonNode From)> secrets,
+        ServiceNetwork network,
+        bool production
+    )
+    {
+        var isApi = string.Equals(service, api, StringComparison.Ordinal);
         AddTask(
             resources,
             stack,
-            MigrateContainer,
-            Ref(MigrateImageParameter),
-            environment,
+            service,
+            Ref(ImageParameter(service)),
+            serving,
             secrets,
-            port: false,
-            command: TraxMigrate.Argument
+            port: isApi,
+            command: null
         );
-        outputs["MigrateTaskDefinition"] = Output(Ref("MigrateTaskDefinition"));
-        outputs["MigrateContainer"] = Output(MigrateContainer);
-
-        var serving = environment.Append((TraxMigrate.Variable, TraxMigrate.SkipValue)).ToList();
-        foreach (var service in file.Services.Keys)
+        var id = LogicalId(service);
+        var properties = ServiceProperties(service, id, network);
+        var resource = Resource("AWS::ECS::Service", properties);
+        if (isApi)
         {
-            var isApi = service == api;
-            AddTask(
-                resources,
-                stack,
-                service,
-                Ref(ImageParameter(service)),
-                serving,
-                secrets,
-                port: isApi,
-                command: null
+            properties["LoadBalancers"] = new JsonArray(
+                new JsonObject
+                {
+                    ["ContainerName"] = service,
+                    ["ContainerPort"] = ContainerPort,
+                    ["TargetGroupArn"] = Ref("TargetGroup"),
+                }
             );
-            var id = LogicalId(service);
-            var properties = new JsonObject
-            {
-                ["ServiceName"] = service,
-                ["Cluster"] = Ref("Cluster"),
-                ["LaunchType"] = "FARGATE",
-                ["TaskDefinition"] = Ref($"{id}TaskDefinition"),
-                ["DesiredCount"] = Ref(CountParameter(service)),
-                ["DeploymentConfiguration"] = new JsonObject
-                {
-                    // The new copy is healthy before the old one stops, and a version that never gets healthy is
-                    // rolled back.
-                    ["MinimumHealthyPercent"] = 100,
-                    ["MaximumPercent"] = 200,
-                    ["DeploymentCircuitBreaker"] = new JsonObject
-                    {
-                        ["Enable"] = true,
-                        ["Rollback"] = true,
-                    },
-                },
-                ["NetworkConfiguration"] = new JsonObject
-                {
-                    ["AwsvpcConfiguration"] = new JsonObject
-                    {
-                        ["Subnets"] = serviceSubnets.DeepClone(),
-                        ["SecurityGroups"] = taskGroups.DeepClone(),
-                        ["AssignPublicIp"] = assignPublicIp,
-                    },
-                },
-                ["EnableExecuteCommand"] = false,
-                ["PropagateTags"] = "SERVICE",
-            };
-            var resource = Resource("AWS::ECS::Service", properties);
-            if (isApi)
-            {
-                properties["LoadBalancers"] = new JsonArray(
-                    new JsonObject
-                    {
-                        ["ContainerName"] = service,
-                        ["ContainerPort"] = ContainerPort,
-                        ["TargetGroupArn"] = Ref("TargetGroup"),
-                    }
-                );
-                properties["HealthCheckGracePeriodSeconds"] = 120;
-                resource["DependsOn"] = production
-                    ? new JsonArray("HttpsListener", "HttpListener")
-                    : new JsonArray("HttpListener");
-            }
-            resources[$"{id}Service"] = resource;
-            outputs[ServiceOutput(service)] = Output(GetAtt($"{id}Service", "Name"));
+            properties["HealthCheckGracePeriodSeconds"] = 120;
+            resource["DependsOn"] = production
+                ? new JsonArray("HttpsListener", "HttpListener")
+                : new JsonArray("HttpListener");
         }
-
-        outputs["ClusterName"] = Output(Ref("Cluster"));
-        outputs["ServiceSubnets"] = Output(Join(",", serviceSubnets.DeepClone()));
-        outputs["TaskSecurityGroups"] = Output(Join(",", taskGroups));
-        outputs["SecurityGroups"] = Output(Join(",", securityGroups));
-        outputs["AssignPublicIp"] = Output(assignPublicIp);
-        outputs["Migrator"] = Output(migrator);
-
-        return Template(
-            $"Trax app {file.App}, environment {environmentName} ({env.Profile}): the ECS services. Written by "
-                + "trax deploy; changes made outside it are reverted on the next deploy.",
-            parameters,
-            resources,
-            outputs
-        );
+        resources[$"{id}Service"] = resource;
+        outputs[ServiceOutput(service)] = Output(GetAtt($"{id}Service", "Name"));
     }
+
+    private static JsonObject ServiceProperties(
+        string service,
+        string id,
+        ServiceNetwork network
+    ) =>
+        new JsonObject
+        {
+            ["ServiceName"] = service,
+            ["Cluster"] = Ref("Cluster"),
+            ["LaunchType"] = "FARGATE",
+            ["TaskDefinition"] = Ref($"{id}TaskDefinition"),
+            ["DesiredCount"] = Ref(CountParameter(service)),
+            ["DeploymentConfiguration"] = new JsonObject
+            {
+                // The new copy is healthy before the old one stops, and a version that never gets healthy is
+                // rolled back.
+                ["MinimumHealthyPercent"] = 100,
+                ["MaximumPercent"] = 200,
+                ["DeploymentCircuitBreaker"] = new JsonObject
+                {
+                    ["Enable"] = true,
+                    ["Rollback"] = true,
+                },
+            },
+            ["NetworkConfiguration"] = new JsonObject
+            {
+                ["AwsvpcConfiguration"] = new JsonObject
+                {
+                    ["Subnets"] = network.Subnets.DeepClone(),
+                    ["SecurityGroups"] = network.SecurityGroups.DeepClone(),
+                    ["AssignPublicIp"] = network.AssignPublicIp,
+                },
+            },
+            ["EnableExecuteCommand"] = false,
+            ["PropagateTags"] = "SERVICE",
+        };
 
     private static JsonObject Template(
         string description,
@@ -561,7 +730,14 @@ internal static class AwsStack
 
     /// <summary>The template as <c>trax deploy plan</c> writes it, for reading and diffing.</summary>
     public static string Indented(JsonObject template) =>
-        template.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        template.ToJsonString(
+            new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
+        ) + "\n";
 
     /// <summary>Refuses what this stack cannot give the hosts.</summary>
     internal static void Check(
@@ -625,6 +801,19 @@ internal static class AwsStack
 
     private static void AddVpc(JsonObject resources, string stack, bool production)
     {
+        AddPublicNetwork(resources, stack);
+        if (!production)
+            return;
+
+        // The services and the database live in private subnets and go out through one NAT gateway.
+        AddPrivateNetwork(resources, stack);
+    }
+
+    // The two availability zones each kind of subnet is spread over: their letter, and their index in the region.
+    private static readonly (string Letter, int Index)[] Zones = [("A", 0), ("B", 1)];
+
+    private static void AddPublicNetwork(JsonObject resources, string stack)
+    {
         resources["Vpc"] = Resource(
             "AWS::EC2::VPC",
             new JsonObject
@@ -663,12 +852,11 @@ internal static class AwsStack
         publicRoute["DependsOn"] = "InternetGatewayAttachment";
         resources["PublicRoute"] = publicRoute;
 
-        var zones = new[] { ("A", 0), ("B", 1) };
-        foreach (var (letter, index) in zones)
+        foreach (var (letter, index) in Zones)
         {
             resources[$"PublicSubnet{letter}"] = Subnet(
                 stack,
-                $"10.0.{index * 16}.0/20",
+                string.Create(CultureInfo.InvariantCulture, $"10.0.{index * 16}.0/20"),
                 index,
                 "public"
             );
@@ -681,10 +869,10 @@ internal static class AwsStack
                 }
             );
         }
-        if (!production)
-            return;
+    }
 
-        // The services and the database live in private subnets and go out through one NAT gateway.
+    private static void AddPrivateNetwork(JsonObject resources, string stack)
+    {
         resources["NatAddress"] = Resource(
             "AWS::EC2::EIP",
             new JsonObject { ["Domain"] = "vpc", ["Tags"] = NameTag(stack) }
@@ -711,11 +899,11 @@ internal static class AwsStack
                 ["NatGatewayId"] = Ref("NatGateway"),
             }
         );
-        foreach (var (letter, index) in zones)
+        foreach (var (letter, index) in Zones)
         {
             resources[$"PrivateSubnet{letter}"] = Subnet(
                 stack,
-                $"10.0.{128 + index * 16}.0/20",
+                string.Create(CultureInfo.InvariantCulture, $"10.0.{128 + index * 16}.0/20"),
                 index,
                 "private"
             );
@@ -758,6 +946,33 @@ internal static class AwsStack
         string? cloudFrontPrefixList
     )
     {
+        AddLoadBalancerSecurityGroups(resources, stack, vpc, production, cloudFrontPrefixList);
+
+        AddBalancerAndTargetGroup(resources, stack, api, vpc, publicSubnets);
+
+        var forward = new JsonArray(
+            new JsonObject { ["Type"] = "forward", ["TargetGroupArn"] = Ref("TargetGroup") }
+        );
+        if (production)
+        {
+            AddCertificate(resources, stack, env);
+            AddHttpsListeners(resources, outputs, env, forward);
+        }
+        else
+            AddCloudFront(resources, outputs, stack, forward);
+        outputs["LoadBalancerDnsName"] = Output(GetAtt("LoadBalancer", "DNSName"));
+        outputs["GraphQLPath"] = Output(api.Endpoints.GraphQL ?? "");
+        outputs["HealthPath"] = Output(api.Endpoints.Health ?? "");
+    }
+
+    private static void AddLoadBalancerSecurityGroups(
+        JsonObject resources,
+        string stack,
+        JsonNode vpc,
+        bool production,
+        string? cloudFrontPrefixList
+    )
+    {
         // Production takes HTTPS from anywhere and redirects HTTP; try takes HTTP from CloudFront alone.
         JsonArray ingress = production
             ?
@@ -769,12 +984,12 @@ internal static class AwsStack
             ]
             : [Rule("tcp", 80, 80, prefixList: cloudFrontPrefixList, description: "CloudFront")];
         var albGroup = SecurityGroup(stack, vpc, "The load balancer", []);
-        ((JsonObject)albGroup["Properties"]!)["SecurityGroupIngress"] = ingress;
-        ((JsonObject)albGroup["Properties"]!)["SecurityGroupEgress"] = new JsonArray(
+        ((JsonObject)albGroup["Properties"].NotNull())["SecurityGroupIngress"] = ingress;
+        ((JsonObject)albGroup["Properties"].NotNull())["SecurityGroupEgress"] = new JsonArray(
             Rule(
                 "-1",
-                null,
-                null,
+                from: null,
+                to: null,
                 cidr: "127.0.0.1/32",
                 description: "Replaced by the rule to the services"
             )
@@ -804,7 +1019,16 @@ internal static class AwsStack
                 ["Description"] = "The load balancer",
             }
         );
+    }
 
+    private static void AddBalancerAndTargetGroup(
+        JsonObject resources,
+        string stack,
+        DeployManifest api,
+        JsonNode vpc,
+        JsonNode publicSubnets
+    )
+    {
         var balancer = Resource(
             "AWS::ElasticLoadBalancingV2::LoadBalancer",
             new JsonObject
@@ -841,141 +1065,145 @@ internal static class AwsStack
                 ["Tags"] = NameTag(stack),
             }
         );
+    }
 
-        var forward = new JsonArray(
-            new JsonObject { ["Type"] = "forward", ["TargetGroupArn"] = Ref("TargetGroup") }
-        );
-        if (production)
+    private static void AddCertificate(JsonObject resources, string stack, DeployEnvironment env)
+    {
+        var certificate = new JsonObject
         {
-            var certificate = new JsonObject
+            ["DomainName"] = env.Domain,
+            ["ValidationMethod"] = "DNS",
+            ["Tags"] = NameTag(stack),
+        };
+        if (env.HostedZoneId is not null)
+            certificate["DomainValidationOptions"] = new JsonArray(
+                new JsonObject { ["DomainName"] = env.Domain, ["HostedZoneId"] = env.HostedZoneId }
+            );
+        resources["Certificate"] = Resource("AWS::CertificateManager::Certificate", certificate);
+    }
+
+    // Production's listeners: HTTPS forwards to the API service, HTTP redirects to HTTPS; and the domain's record.
+    private static void AddHttpsListeners(
+        JsonObject resources,
+        JsonObject outputs,
+        DeployEnvironment env,
+        JsonArray forward
+    )
+    {
+        resources["HttpsListener"] = Resource(
+            "AWS::ElasticLoadBalancingV2::Listener",
+            new JsonObject
             {
-                ["DomainName"] = env.Domain,
-                ["ValidationMethod"] = "DNS",
-                ["Tags"] = NameTag(stack),
-            };
-            if (env.HostedZoneId is not null)
-                certificate["DomainValidationOptions"] = new JsonArray(
+                ["LoadBalancerArn"] = Ref("LoadBalancer"),
+                ["Port"] = 443,
+                ["Protocol"] = "HTTPS",
+                ["SslPolicy"] = "ELBSecurityPolicy-TLS13-1-2-2021-06",
+                ["Certificates"] = new JsonArray(
+                    new JsonObject { ["CertificateArn"] = Ref("Certificate") }
+                ),
+                ["DefaultActions"] = forward,
+            }
+        );
+        resources["HttpListener"] = Resource(
+            "AWS::ElasticLoadBalancingV2::Listener",
+            new JsonObject
+            {
+                ["LoadBalancerArn"] = Ref("LoadBalancer"),
+                ["Port"] = 80,
+                ["Protocol"] = "HTTP",
+                ["DefaultActions"] = new JsonArray(
                     new JsonObject
                     {
-                        ["DomainName"] = env.Domain,
-                        ["HostedZoneId"] = env.HostedZoneId,
-                    }
-                );
-            resources["Certificate"] = Resource(
-                "AWS::CertificateManager::Certificate",
-                certificate
-            );
-            resources["HttpsListener"] = Resource(
-                "AWS::ElasticLoadBalancingV2::Listener",
-                new JsonObject
-                {
-                    ["LoadBalancerArn"] = Ref("LoadBalancer"),
-                    ["Port"] = 443,
-                    ["Protocol"] = "HTTPS",
-                    ["SslPolicy"] = "ELBSecurityPolicy-TLS13-1-2-2021-06",
-                    ["Certificates"] = new JsonArray(
-                        new JsonObject { ["CertificateArn"] = Ref("Certificate") }
-                    ),
-                    ["DefaultActions"] = forward,
-                }
-            );
-            resources["HttpListener"] = Resource(
-                "AWS::ElasticLoadBalancingV2::Listener",
-                new JsonObject
-                {
-                    ["LoadBalancerArn"] = Ref("LoadBalancer"),
-                    ["Port"] = 80,
-                    ["Protocol"] = "HTTP",
-                    ["DefaultActions"] = new JsonArray(
-                        new JsonObject
+                        ["Type"] = "redirect",
+                        ["RedirectConfig"] = new JsonObject
                         {
-                            ["Type"] = "redirect",
-                            ["RedirectConfig"] = new JsonObject
-                            {
-                                ["Protocol"] = "HTTPS",
-                                ["Port"] = "443",
-                                ["StatusCode"] = "HTTP_301",
-                            },
-                        }
-                    ),
-                }
-            );
-            if (env.HostedZoneId is not null)
-                resources["DomainRecord"] = Resource(
-                    "AWS::Route53::RecordSet",
-                    new JsonObject
-                    {
-                        ["HostedZoneId"] = env.HostedZoneId,
-                        ["Name"] = env.Domain,
-                        ["Type"] = "A",
-                        ["AliasTarget"] = new JsonObject
-                        {
-                            ["DNSName"] = GetAtt("LoadBalancer", "DNSName"),
-                            ["HostedZoneId"] = GetAtt("LoadBalancer", "CanonicalHostedZoneID"),
+                            ["Protocol"] = "HTTPS",
+                            ["Port"] = "443",
+                            ["StatusCode"] = "HTTP_301",
                         },
                     }
-                );
-            outputs["Url"] = Output($"https://{env.Domain}");
-        }
-        else
-        {
-            resources["HttpListener"] = Resource(
-                "AWS::ElasticLoadBalancingV2::Listener",
+                ),
+            }
+        );
+        if (env.HostedZoneId is not null)
+            resources["DomainRecord"] = Resource(
+                "AWS::Route53::RecordSet",
                 new JsonObject
                 {
-                    ["LoadBalancerArn"] = Ref("LoadBalancer"),
-                    ["Port"] = 80,
-                    ["Protocol"] = "HTTP",
-                    ["DefaultActions"] = forward,
-                }
-            );
-            resources["Distribution"] = Resource(
-                "AWS::CloudFront::Distribution",
-                new JsonObject
-                {
-                    ["DistributionConfig"] = new JsonObject
+                    ["HostedZoneId"] = env.HostedZoneId,
+                    ["Name"] = env.Domain,
+                    ["Type"] = "A",
+                    ["AliasTarget"] = new JsonObject
                     {
-                        ["Enabled"] = true,
-                        ["Comment"] = stack,
-                        ["HttpVersion"] = "http2and3",
-                        ["PriceClass"] = "PriceClass_100",
-                        ["Origins"] = new JsonArray(
-                            new JsonObject
-                            {
-                                ["Id"] = "load-balancer",
-                                ["DomainName"] = GetAtt("LoadBalancer", "DNSName"),
-                                ["CustomOriginConfig"] = new JsonObject
-                                {
-                                    ["OriginProtocolPolicy"] = "http-only",
-                                    ["HTTPPort"] = 80,
-                                    ["OriginReadTimeout"] = 60,
-                                },
-                            }
-                        ),
-                        ["DefaultCacheBehavior"] = new JsonObject
-                        {
-                            ["TargetOriginId"] = "load-balancer",
-                            ["ViewerProtocolPolicy"] = "redirect-to-https",
-                            ["AllowedMethods"] = new JsonArray(
-                                "GET",
-                                "HEAD",
-                                "OPTIONS",
-                                "PUT",
-                                "PATCH",
-                                "POST",
-                                "DELETE"
-                            ),
-                            ["CachePolicyId"] = CachingDisabledPolicy,
-                            ["OriginRequestPolicyId"] = AllViewerOriginRequestPolicy,
-                        },
+                        ["DNSName"] = GetAtt("LoadBalancer", "DNSName"),
+                        ["HostedZoneId"] = GetAtt("LoadBalancer", "CanonicalHostedZoneID"),
                     },
                 }
             );
-            outputs["Url"] = Output(Sub("https://${Distribution.DomainName}"));
-        }
-        outputs["LoadBalancerDnsName"] = Output(GetAtt("LoadBalancer", "DNSName"));
-        outputs["GraphQLPath"] = Output(api.Endpoints.GraphQL ?? "");
-        outputs["HealthPath"] = Output(api.Endpoints.Health ?? "");
+        outputs["Url"] = Output($"https://{env.Domain}");
+    }
+
+    // Try's listener takes HTTP from CloudFront, which serves the app over HTTPS on its own address.
+    private static void AddCloudFront(
+        JsonObject resources,
+        JsonObject outputs,
+        string stack,
+        JsonArray forward
+    )
+    {
+        resources["HttpListener"] = Resource(
+            "AWS::ElasticLoadBalancingV2::Listener",
+            new JsonObject
+            {
+                ["LoadBalancerArn"] = Ref("LoadBalancer"),
+                ["Port"] = 80,
+                ["Protocol"] = "HTTP",
+                ["DefaultActions"] = forward,
+            }
+        );
+        resources["Distribution"] = Resource(
+            "AWS::CloudFront::Distribution",
+            new JsonObject
+            {
+                ["DistributionConfig"] = new JsonObject
+                {
+                    ["Enabled"] = true,
+                    ["Comment"] = stack,
+                    ["HttpVersion"] = "http2and3",
+                    ["PriceClass"] = "PriceClass_100",
+                    ["Origins"] = new JsonArray(
+                        new JsonObject
+                        {
+                            ["Id"] = "load-balancer",
+                            ["DomainName"] = GetAtt("LoadBalancer", "DNSName"),
+                            ["CustomOriginConfig"] = new JsonObject
+                            {
+                                ["OriginProtocolPolicy"] = "http-only",
+                                ["HTTPPort"] = 80,
+                                ["OriginReadTimeout"] = 60,
+                            },
+                        }
+                    ),
+                    ["DefaultCacheBehavior"] = new JsonObject
+                    {
+                        ["TargetOriginId"] = "load-balancer",
+                        ["ViewerProtocolPolicy"] = "redirect-to-https",
+                        ["AllowedMethods"] = new JsonArray(
+                            "GET",
+                            "HEAD",
+                            "OPTIONS",
+                            "PUT",
+                            "PATCH",
+                            "POST",
+                            "DELETE"
+                        ),
+                        ["CachePolicyId"] = CachingDisabledPolicy,
+                        ["OriginRequestPolicyId"] = AllViewerOriginRequestPolicy,
+                    },
+                },
+            }
+        );
+        outputs["Url"] = Output(Sub("https://${Distribution.DomainName}"));
     }
 
     private static void AddDatabase(
@@ -1033,7 +1261,7 @@ internal static class AwsStack
                 ["VPCSecurityGroups"] = new JsonArray(Ref("DatabaseSecurityGroup")),
                 ["BackupRetentionPeriod"] = production ? 7 : 1,
                 ["DeletionProtection"] = production
-                    ? If("Protected", true, false)
+                    ? If("Protected", whenTrue: true, whenFalse: false)
                     : (JsonNode)false,
                 ["AutoMinorVersionUpgrade"] = true,
                 ["CopyTagsToSnapshot"] = true,
@@ -1075,30 +1303,7 @@ internal static class AwsStack
                 ["Description"] =
                     "The id of a user pool an earlier destroy kept, to sign in against instead of creating one.",
             };
-        var pool = Resource(
-            "AWS::Cognito::UserPool",
-            new JsonObject
-            {
-                ["UserPoolName"] = stack,
-                ["UsernameAttributes"] = new JsonArray("email"),
-                ["AutoVerifiedAttributes"] = new JsonArray("email"),
-                // Users are invited by an operator, never self-registered.
-                ["AdminCreateUserConfig"] = new JsonObject { ["AllowAdminCreateUserOnly"] = true },
-                ["MfaConfiguration"] = "OPTIONAL",
-                ["EnabledMfas"] = new JsonArray("SOFTWARE_TOKEN_MFA"),
-                ["Policies"] = new JsonObject
-                {
-                    ["PasswordPolicy"] = new JsonObject
-                    {
-                        ["MinimumLength"] = 12,
-                        ["RequireLowercase"] = true,
-                        ["RequireUppercase"] = true,
-                        ["RequireNumbers"] = true,
-                        ["RequireSymbols"] = false,
-                    },
-                },
-            }
-        );
+        var pool = UserPoolResource(stack);
         resources["UserPool"] = pool;
         resources["UserPoolClient"] = Resource(
             "AWS::Cognito::UserPoolClient",
@@ -1127,7 +1332,7 @@ internal static class AwsStack
         resources["OperatorGroup"] = group;
         if (production)
         {
-            ((JsonObject)pool["Properties"]!)["DeletionProtection"] = "ACTIVE";
+            ((JsonObject)pool["Properties"].NotNull())["DeletionProtection"] = "ACTIVE";
             foreach (var kept in new[] { pool, group })
             {
                 kept["Condition"] = CreateUserPool;
@@ -1163,33 +1368,7 @@ internal static class AwsStack
                 ["Description"] = $"The {name} task's own permissions: none until it needs one.",
             }
         );
-        var container = new JsonObject
-        {
-            ["Name"] = name,
-            ["Image"] = image,
-            ["Essential"] = true,
-            ["Environment"] = new JsonArray([
-                .. environment.Select(e =>
-                    (JsonNode)new JsonObject { ["Name"] = e.Name, ["Value"] = e.Value.DeepClone() }
-                ),
-            ]),
-            ["Secrets"] = new JsonArray([
-                .. secrets.Select(s =>
-                    (JsonNode)
-                        new JsonObject { ["Name"] = s.Name, ["ValueFrom"] = s.From.DeepClone() }
-                ),
-            ]),
-            ["LogConfiguration"] = new JsonObject
-            {
-                ["LogDriver"] = "awslogs",
-                ["Options"] = new JsonObject
-                {
-                    ["awslogs-group"] = Ref($"{id}Logs"),
-                    ["awslogs-region"] = Ref("AWS::Region"),
-                    ["awslogs-stream-prefix"] = name,
-                },
-            },
-        };
+        var container = ContainerDefinition(id, name, image, environment, secrets);
         if (port)
             container["PortMappings"] = new JsonArray(
                 new JsonObject { ["ContainerPort"] = ContainerPort, ["Protocol"] = "tcp" }
@@ -1216,6 +1395,67 @@ internal static class AwsStack
             }
         );
     }
+
+    private static JsonObject UserPoolResource(string stack) =>
+        Resource(
+            "AWS::Cognito::UserPool",
+            new JsonObject
+            {
+                ["UserPoolName"] = stack,
+                ["UsernameAttributes"] = new JsonArray("email"),
+                ["AutoVerifiedAttributes"] = new JsonArray("email"),
+                // Users are invited by an operator, never self-registered.
+                ["AdminCreateUserConfig"] = new JsonObject { ["AllowAdminCreateUserOnly"] = true },
+                ["MfaConfiguration"] = "OPTIONAL",
+                ["EnabledMfas"] = new JsonArray("SOFTWARE_TOKEN_MFA"),
+                ["Policies"] = new JsonObject
+                {
+                    ["PasswordPolicy"] = new JsonObject
+                    {
+                        ["MinimumLength"] = 12,
+                        ["RequireLowercase"] = true,
+                        ["RequireUppercase"] = true,
+                        ["RequireNumbers"] = true,
+                        ["RequireSymbols"] = false,
+                    },
+                },
+            }
+        );
+
+    private static JsonObject ContainerDefinition(
+        string id,
+        string name,
+        JsonNode image,
+        IReadOnlyList<(string Name, JsonNode Value)> environment,
+        IReadOnlyList<(string Name, JsonNode From)> secrets
+    ) =>
+        new JsonObject
+        {
+            ["Name"] = name,
+            ["Image"] = image,
+            ["Essential"] = true,
+            ["Environment"] = new JsonArray([
+                .. environment.Select(e =>
+                    (JsonNode)new JsonObject { ["Name"] = e.Name, ["Value"] = e.Value.DeepClone() }
+                ),
+            ]),
+            ["Secrets"] = new JsonArray([
+                .. secrets.Select(s =>
+                    (JsonNode)
+                        new JsonObject { ["Name"] = s.Name, ["ValueFrom"] = s.From.DeepClone() }
+                ),
+            ]),
+            ["LogConfiguration"] = new JsonObject
+            {
+                ["LogDriver"] = "awslogs",
+                ["Options"] = new JsonObject
+                {
+                    ["awslogs-group"] = Ref($"{id}Logs"),
+                    ["awslogs-region"] = Ref("AWS::Region"),
+                    ["awslogs-stream-prefix"] = name,
+                },
+            },
+        };
 
     private static JsonArray SecretResources(DeployFile file, DeployEnvironment env, string stack)
     {

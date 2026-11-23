@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Amazon.SecretsManager;
@@ -6,6 +7,7 @@ using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -27,7 +29,7 @@ public class AwsDeployerTests
         return (new AwsDeployer(aws, images, _ => { }), aws, images);
     }
 
-    private static Task<string?> Deploy(AwsDeployer deployer) =>
+    private static Task<string?> DeployAsync(AwsDeployer deployer) =>
         deployer.DeployAsync(
             AwsStackTemplateTests.File_(),
             "/src/trax.deploy.json",
@@ -43,7 +45,7 @@ public class AwsDeployerTests
         var (deployer, aws, images) = Deployer();
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
 
-        var url = await Deploy(deployer);
+        var url = await DeployAsync(deployer);
 
         aws.Calls.Should().Equal("deploy-base", "deploy", "run-task", "deploy");
         aws.Stacks.Should()
@@ -54,8 +56,8 @@ public class AwsDeployerTests
         aws.Deploys[2]["HubCount"].Should().Be("1");
         aws.Deploys[2]["WorkerCount"].Should().Be("3");
         aws.Deploys[2]["WorkerImage"].Should().Be($"repo/trax/orders-production/worker:{Tag}");
-        aws.Task!.TaskDefinition.Should().Be("migrate-td");
-        aws.Task.SecurityGroups.Should().Equal("sg-task", "sg-client");
+        aws.Task.NotNull().TaskDefinition.Should().Be("migrate-td");
+        aws.Task.NotNull().SecurityGroups.Should().Equal("sg-task", "sg-client");
         images.Published.Should().Equal("hub", "worker");
         url.Should().Be("https://orders.example.com");
     }
@@ -67,7 +69,7 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running();
 
-        await Deploy(deployer);
+        await DeployAsync(deployer);
 
         aws.Deploys[1]["HubCount"].Should().BeNull("null keeps the previous value");
         aws.Deploys[1]["HubImage"].Should().BeNull("null keeps the previous value");
@@ -123,14 +125,14 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running() with
         {
-            Tags = new Dictionary<string, string>
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["trax:app"] = "orders",
                 ["trax:environment"] = "production",
             },
         };
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -145,7 +147,7 @@ public class AwsDeployerTests
         var (deployer, aws, _) = Deployer();
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
 
-        await Deploy(deployer);
+        await DeployAsync(deployer);
 
         foreach (var runtime in aws.Deploys.Skip(1))
         {
@@ -164,14 +166,14 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Foundation = FakeAws.FoundationRunning() with
         {
-            Tags = new Dictionary<string, string>
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["trax:app"] = "orders-production",
                 ["trax:part"] = "runtime",
             },
         };
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -187,14 +189,14 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = FakeAws.Running() with
         {
-            Tags = new Dictionary<string, string>
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["trax:app"] = "orders-eu",
                 ["trax:environment"] = "production",
             },
         };
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -211,7 +213,7 @@ public class AwsDeployerTests
         aws.Existing = FakeAws.Running();
         aws.ExitCode = 1;
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -224,7 +226,7 @@ public class AwsDeployerTests
     {
         var (deployer, aws, images) = Deployer();
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -240,18 +242,18 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = new AwsStackState(
             "ROLLBACK_COMPLETE",
-            new Dictionary<string, string>(),
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
         )
         {
-            Tags = new Dictionary<string, string>
+            Tags = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["trax:app"] = "orders",
                 ["trax:part"] = "runtime",
             },
         };
 
-        var act = () => Deploy(deployer);
+        var act = () => DeployAsync(deployer);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -265,11 +267,11 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Existing = new AwsStackState(
             "REVIEW_IN_PROGRESS",
-            new Dictionary<string, string>(),
-            new Dictionary<string, string>()
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
         );
 
-        await Deploy(deployer);
+        await DeployAsync(deployer);
 
         aws.Calls.Should().Equal("deploy-base", "deploy", "run-task", "deploy");
         aws.Deploys[1]["HubCount"].Should().Be("0");
@@ -286,8 +288,8 @@ public class AwsDeployerTests
                     ? null
                     : new AwsStackState(
                         status,
-                        new Dictionary<string, string>(),
-                        new Dictionary<string, string>()
+                        new Dictionary<string, string>(StringComparer.Ordinal),
+                        new Dictionary<string, string>(StringComparer.Ordinal)
                     )
             )
             .Value.Should()
@@ -442,7 +444,7 @@ public class AwsDeployerTests
 
         aws.Parameters.Should()
             .Equal(
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [AwsDeployer.UserPoolRecord("orders-production")] = "us-west-2_pool1",
                 }
@@ -459,7 +461,7 @@ public class AwsDeployerTests
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
         aws.Parameters[AwsDeployer.UserPoolRecord("orders-production")] = "us-west-2_pool1";
 
-        await Deploy(deployer);
+        await DeployAsync(deployer);
 
         aws.Stacks[0].Should().Be("orders-production-base", "the pool lives in the foundation");
         aws.Deploys[0][AwsStack.UserPoolParameter].Should().Be("us-west-2_pool1");
@@ -471,7 +473,7 @@ public class AwsDeployerTests
         var (deployer, aws, _) = Deployer();
         aws.Secrets.Add("orders-production/app/Stripe__ApiKey");
 
-        await Deploy(deployer);
+        await DeployAsync(deployer);
 
         aws.Deploys[0][AwsStack.UserPoolParameter].Should().Be("");
     }
@@ -548,10 +550,13 @@ public class AwsDeployerTests
         var dir = Path.Combine(Path.GetTempPath(), $"trax-secret-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(dir, "Orders"));
         Directory.CreateDirectory(Path.Combine(dir, "Orders.Worker"));
-        File.WriteAllText(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
-        File.WriteAllText(Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"), "<Project />");
+        await File.WriteAllTextAsync(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
+        await File.WriteAllTextAsync(
+            Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"),
+            "<Project />"
+        );
         var path = Path.Combine(dir, DeployFile.FileName);
-        File.WriteAllText(path, AwsStackTemplateTests.File_().Write());
+        await File.WriteAllTextAsync(path, AwsStackTemplateTests.File_().Write());
         var aws = new FakeAws();
         DeployAwsCommands.Client = _ => aws;
         try
@@ -561,7 +566,9 @@ public class AwsDeployerTests
                     path,
                     "production",
                     "Other__Key",
-                    () => "x",
+                    () => Task.FromResult("x"),
+                    TextWriter.Null,
+                    TextWriter.Null,
                     CancellationToken.None
                 )
             )
@@ -572,7 +579,9 @@ public class AwsDeployerTests
                     path,
                     "production",
                     "Stripe__ApiKey",
-                    () => "sk_live",
+                    () => Task.FromResult("sk_live"),
+                    TextWriter.Null,
+                    TextWriter.Null,
                     CancellationToken.None
                 )
             )
@@ -582,7 +591,10 @@ public class AwsDeployerTests
         }
         finally
         {
-            DeployAwsCommands.Client = region => new AwsDeployClient(region);
+            DeployAwsCommands.Client = region => new AwsDeployClient(
+                region,
+                DeployAwsCommands.Clock
+            );
             Directory.Delete(dir, recursive: true);
         }
     }
@@ -614,9 +626,15 @@ public class AwsDeployerTests
     }
 
     [Test]
-    public void An_image_tag_starts_with_the_time() =>
-        AwsDeployer
-            .ImageTag(Path.GetTempPath(), new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc))
+    public async Task An_image_tag_starts_with_the_time() =>
+        (
+            await AwsDeployer
+                .ImageTagAsync(
+                    Path.GetTempPath(),
+                    new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc)
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .StartWith("20261020-120000");
 
@@ -625,7 +643,7 @@ public class AwsDeployerTests
     public void The_tool_ships_what_the_AWS_SDK_signs_in_to_an_SSO_profile_with(string assembly) =>
         File.Exists(
                 Path.Combine(
-                    Path.GetDirectoryName(typeof(AwsDeployClient).Assembly.Location)!,
+                    Path.GetDirectoryName(typeof(AwsDeployClient).Assembly.Location).NotNull(),
                     assembly
                 )
             )
@@ -650,7 +668,8 @@ public class AwsDeployerTests
         DeployAwsCommands.ReadHidden(keys.Dequeue).Should().Be("abd");
     }
 
-    private static ConsoleKeyInfo Key(char c, ConsoleKey key) => new(c, key, false, false, false);
+    private static ConsoleKeyInfo Key(char c, ConsoleKey key) =>
+        new(c, key, shift: false, alt: false, control: false);
 
     [Test]
     public async Task Setting_a_secret_that_destroy_deleted_restores_it_first()
@@ -663,7 +682,7 @@ public class AwsDeployerTests
             secrets,
             "orders-staging/app/Stripe__ApiKey",
             "sk_test",
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             CancellationToken.None
         );
 
@@ -682,7 +701,7 @@ public class AwsDeployerTests
             secrets,
             "orders-staging/app/Stripe__ApiKey",
             "sk_test",
-            new Dictionary<string, string>(),
+            new Dictionary<string, string>(StringComparer.Ordinal),
             CancellationToken.None
         );
 
@@ -696,7 +715,9 @@ public class AwsDeployerTests
         var seen = new SeenLogEvents();
 
         for (var i = 0; i < 10_000; i++)
-            seen.Add($"e{i}", 1_000 + i).Should().BeTrue();
+            seen.Add(string.Create(CultureInfo.InvariantCulture, $"e{i}"), 1_000 + i)
+                .Should()
+                .BeTrue();
 
         seen.Count.Should().Be(1, "only an event at the newest time can be read again");
         seen.Add("e9999", 10_999).Should().BeFalse("it was printed already");
@@ -714,19 +735,31 @@ public class AwsDeployerTests
         var dir = Path.Combine(Path.GetTempPath(), $"trax-deploy-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(dir, "Orders"));
         Directory.CreateDirectory(Path.Combine(dir, "Orders.Worker"));
-        File.WriteAllText(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />");
-        File.WriteAllText(Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"), "<Project />");
+        await File.WriteAllTextAsync(Path.Combine(dir, "Orders/Orders.csproj"), "<Project />")
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(dir, "Orders.Worker/Orders.Worker.csproj"),
+                "<Project />"
+            )
+            .ConfigureAwait(false);
         var path = Path.Combine(dir, DeployFile.FileName);
-        File.WriteAllText(path, AwsStackTemplateTests.File_().Write());
+        await File.WriteAllTextAsync(path, AwsStackTemplateTests.File_().Write())
+            .ConfigureAwait(false);
         try
         {
             (
-                await DeployAwsCommands.DeployAsync(
-                    path,
-                    "production",
-                    new ThrowingExporter((Exception)Activator.CreateInstance(failure)!),
-                    CancellationToken.None
-                )
+                await DeployAwsCommands
+                    .DeployAsync(
+                        path,
+                        "production",
+                        new ThrowingExporter(
+                            (Exception)Activator.CreateInstance(failure).NotNull()
+                        ),
+                        TextWriter.Null,
+                        TextWriter.Null,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false)
             )
                 .Should()
                 .Be(1);
@@ -739,10 +772,10 @@ public class AwsDeployerTests
 
     internal sealed class ThrowingExporter(Exception failure) : IHostExporter
     {
-        public DeployManifest Export(
+        public Task<DeployManifest> ExportAsync(
             string projectPath,
             IReadOnlyDictionary<string, string> environment
-        ) => throw failure;
+        ) => Task.FromException<DeployManifest>(failure);
     }
 
     /// <summary>
@@ -750,15 +783,15 @@ public class AwsDeployerTests
     /// </summary>
     public class FakeSecretsManager : DispatchProxy
     {
-        public List<string> Calls { get; } = [];
+        public IList<string> Calls { get; } = [];
         public bool PendingDeletion { get; set; }
         public bool Missing { get; set; }
         public string? Value { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            var name = targetMethod!.Name;
-            if (name == "Dispose")
+            var name = targetMethod.NotNull().Name;
+            if (string.Equals(name, "Dispose", StringComparison.Ordinal))
                 return null;
             Calls.Add(name.Replace("Async", "", StringComparison.Ordinal));
             switch (name)
@@ -776,13 +809,13 @@ public class AwsDeployerTests
                                 "Secrets Manager can't find the specified secret."
                             )
                         );
-                    Value = ((PutSecretValueRequest)args![0]!).SecretString;
+                    Value = ((PutSecretValueRequest)args.NotNull()[0].NotNull()).SecretString;
                     return System.Threading.Tasks.Task.FromResult(new PutSecretValueResponse());
                 case "RestoreSecretAsync":
                     PendingDeletion = false;
                     return System.Threading.Tasks.Task.FromResult(new RestoreSecretResponse());
                 case "CreateSecretAsync":
-                    Value = ((CreateSecretRequest)args![0]!).SecretString;
+                    Value = ((CreateSecretRequest)args.NotNull()[0].NotNull()).SecretString;
                     return System.Threading.Tasks.Task.FromResult(new CreateSecretResponse());
                 default:
                     throw new NotSupportedException(name);
@@ -794,12 +827,16 @@ public class AwsDeployerTests
     {
         public List<string> Published { get; } = [];
 
-        public void Publish(
+        public Task PublishAsync(
             string projectPath,
             string repositoryUri,
             string tag,
             RegistryLogin login
-        ) => Published.Add(repositoryUri[(repositoryUri.LastIndexOf('/') + 1)..]);
+        )
+        {
+            Published.Add(repositoryUri[(repositoryUri.LastIndexOf('/') + 1)..]);
+            return Task.CompletedTask;
+        }
     }
 
     internal sealed class FakeAws : IAwsDeployClient
@@ -832,14 +869,14 @@ public class AwsDeployerTests
         private static bool IsFoundation(string stack) =>
             stack.EndsWith("-base", StringComparison.Ordinal);
 
-        private string Call(string name, string stack) =>
+        private static string Call(string name, string stack) =>
             IsFoundation(stack) ? $"{name}-base" : name;
 
         public static AwsStackState Running() =>
             new(
                 "UPDATE_COMPLETE",
                 RuntimeOutputs(),
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["HubCount"] = "1",
                     ["WorkerCount"] = "3",
@@ -849,7 +886,7 @@ public class AwsDeployerTests
                 }
             )
             {
-                Tags = new Dictionary<string, string>
+                Tags = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["trax:app"] = "orders",
                     ["trax:environment"] = "production",
@@ -861,14 +898,14 @@ public class AwsDeployerTests
             new(
                 "UPDATE_COMPLETE",
                 FoundationOutputs(ownsVpc),
-                new Dictionary<string, string>
+                new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [AwsStack.ProtectParameter] = "true",
                     [AwsStack.UserPoolParameter] = "",
                 }
             )
             {
-                Tags = new Dictionary<string, string>
+                Tags = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["trax:app"] = "orders",
                     ["trax:environment"] = "production",
@@ -877,7 +914,7 @@ public class AwsDeployerTests
             };
 
         private static Dictionary<string, string> RuntimeOutputs() =>
-            new()
+            new(StringComparer.Ordinal)
             {
                 ["ClusterName"] = "orders-production",
                 ["MigrateTaskDefinition"] = "migrate-td",
@@ -889,7 +926,7 @@ public class AwsDeployerTests
             };
 
         private static Dictionary<string, string> FoundationOutputs(bool ownsVpc = true) =>
-            new()
+            new(StringComparer.Ordinal)
             {
                 ["VpcId"] = "vpc-1",
                 ["VpcCidr"] = "10.0.0.0/16",
@@ -932,7 +969,7 @@ public class AwsDeployerTests
                     ? new AwsStackState(
                         "CREATE_COMPLETE",
                         foundation ? FoundationOutputs() : RuntimeOutputs(),
-                        new Dictionary<string, string>()
+                        new Dictionary<string, string>(StringComparer.Ordinal)
                     )
                     : before
             );
@@ -963,7 +1000,7 @@ public class AwsDeployerTests
             Calls.Add("run-task");
             Task = request;
             return System.Threading.Tasks.Task.FromResult(
-                new AwsTaskResult(ExitCode, null, "migrate/migrate/1")
+                new AwsTaskResult(ExitCode, StoppedReason: null, "migrate/migrate/1")
             );
         }
 
@@ -1003,7 +1040,7 @@ public class AwsDeployerTests
             System.Threading.Tasks.Task.FromResult<IReadOnlyList<AwsSecret>>([
                 .. Secrets
                     .Where(s => s.StartsWith(prefix, StringComparison.Ordinal))
-                    .Select(s => new AwsSecret(s, null)),
+                    .Select(s => new AwsSecret(s, Changed: null)),
             ]);
 
         public Task<string?> GetParameterAsync(string name, CancellationToken ct) =>
@@ -1061,7 +1098,7 @@ public class AwsDeployerTests
             [EnumeratorCancellation] CancellationToken ct
         )
         {
-            await System.Threading.Tasks.Task.CompletedTask;
+            await System.Threading.Tasks.Task.CompletedTask.ConfigureAwait(false);
             yield break;
         }
     }

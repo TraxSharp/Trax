@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.Validation;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
@@ -51,8 +52,8 @@ public class MachineTypeModuleTests
         shop.Should().NotBeNull("a marked machine has its own field under machines, per " + Adr);
         parts.Should().NotBeNull("a marked machine has its own field under machines, per " + Adr);
 
-        var shopInput = shop!.Fields["ship"].Arguments["input"].Type.NamedType();
-        var partsInput = parts!.Fields["ship"].Arguments["input"].Type.NamedType();
+        var shopInput = shop.NotNull().Fields["ship"].Arguments["input"].Type.NamedType();
+        var partsInput = parts.NotNull().Fields["ship"].Arguments["input"].Type.NamedType();
         shopInput
             .Should()
             .BeSameAs(
@@ -88,7 +89,7 @@ public class MachineTypeModuleTests
             "parts"
         );
         parts.Should().NotBeNull("a marked machine has its own field under machines, per " + Adr);
-        var eventInput = parts!.Fields["lookup"].Arguments["input"].Type.NamedType();
+        var eventInput = parts.NotNull().Fields["lookup"].Arguments["input"].Type.NamedType();
 
         executor
             .Schema.Types.OfType<InputObjectType>()
@@ -122,7 +123,8 @@ public class MachineTypeModuleTests
                     + "startup, per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain("'map-2d'")
@@ -146,7 +148,7 @@ public class MachineTypeModuleTests
                 "an event named like an operation every machine has would collide with it, per "
                     + Adr
             );
-        refusal!.ToString().Should().Contain($"'{id}'").And.Contain(trigger);
+        refusal.NotNull().ToString().Should().Contain($"'{id}'").And.Contain(trigger);
     }
 
     [Test]
@@ -167,7 +169,7 @@ public class MachineTypeModuleTests
 
         var get = MachineSchemaHost.MachineType(executor, MachineSchemaHost.RootQuery, "ledger");
         get.Should().NotBeNull("a marked machine has its own field under machines, per " + Adr);
-        var snapshot = (ObjectType)get!.Fields["get"].Type.NamedType();
+        var snapshot = (ObjectType)get.NotNull().Fields["get"].Type.NamedType();
         var machineState = (EnumType)snapshot.Fields["state"].Type.NamedType();
 
         var clrState = executor
@@ -203,11 +205,12 @@ public class MachineTypeModuleTests
                     + "per "
                     + Adr
             );
-        refusal!
+        refusal
+            .NotNull()
             .ToString()
             .Should()
             .Contain("RootMutation.machines")
-            .And.Contain(typeof(HostMachinesResolvers).FullName!);
+            .And.Contain(typeof(HostMachinesResolvers).FullName.NotNull());
     }
 
     #endregion
@@ -222,17 +225,17 @@ public class MachineTypeModuleTests
 
         foreach (var root in new[] { MachineSchemaHost.RootQuery, MachineSchemaHost.RootMutation })
         {
-            var rootType = MachineSchemaHost.ObjectTypeNamed(executor, root)!;
+            var rootType = MachineSchemaHost.ObjectTypeNamed(executor, root).NotNull();
             rootType
                 .Fields.TryGetField("machines", out var machines)
                 .Should()
                 .BeTrue($"{root} has the machines root, per {Adr}");
             NamespaceField
-                .IsNamespace(machines!)
+                .IsNamespace(machines.NotNull())
                 .Should()
                 .BeTrue("machines groups fields and does no work of its own");
 
-            var namespaceType = (ObjectType)machines!.Type.NamedType();
+            var namespaceType = (ObjectType)machines.NotNull().Type.NamedType();
             var shop = namespaceType.Fields["shop"];
             NamespaceField
                 .IsNamespace(shop)
@@ -244,7 +247,9 @@ public class MachineTypeModuleTests
                 if (field.IsIntrospectionField)
                     continue;
                 field
-                    .Directives.Any(d => d.Type.Name == "authorize")
+                    .Directives.Any(d =>
+                        string.Equals(d.Type.Name, "authorize", StringComparison.Ordinal)
+                    )
                     .Should()
                     .BeTrue(
                         $"{root}.machines.shop.{field.Name} declares its rule as a directive, per "
@@ -261,7 +266,13 @@ public class MachineTypeModuleTests
         var entries = MachineCensus.Describe([new ShopMachine()]);
 
         entries
-            .Where(e => e.Kind == nameof(Trax.StateMachine.TriggerKind.Client))
+            .Where(e =>
+                string.Equals(
+                    e.Kind,
+                    nameof(Trax.StateMachine.TriggerKind.Client),
+                    StringComparison.Ordinal
+                )
+            )
             .Select(e => e.Name)
             .Should()
             .BeEquivalentTo(
@@ -269,12 +280,14 @@ public class MachineTypeModuleTests
                 "every client event is listed, per " + Adr
             );
         entries
-            .Where(e => e.Kind == "Read")
+            .Where(e => string.Equals(e.Kind, "Read", StringComparison.Ordinal))
             .Select(e => e.Name)
             .Should()
             .BeEquivalentTo(["start", "get", "changed"], "every read is listed with its rule");
 
-        var approve = entries.Single(e => e.Name == "Approve");
+        var approve = entries.Single(e =>
+            string.Equals(e.Name, "Approve", StringComparison.Ordinal)
+        );
         approve.Rule.Should().Contain("Approver");
         approve
             .Surfaces.Should()
@@ -300,7 +313,7 @@ public class MachineTypeModuleTests
 
         var shop = MachineSchemaHost.MachineType(executor, MachineSchemaHost.RootMutation, "shop");
         shop.Should().NotBeNull("a marked machine has its own field under machines, per " + Adr);
-        shop!
+        shop.NotNull()
             .Fields.Where(f => !f.IsIntrospectionField)
             .Select(f => f.Name)
             .Should()

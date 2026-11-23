@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -34,11 +35,11 @@ public class SchemaStrictnessTests
         public int Count { get; init; }
     }
 
-    public sealed record Maps
+    internal sealed record Maps
     {
         public Dictionary<string, int> Counts { get; init; } = [];
         public IReadOnlyDictionary<string, string?> Notes { get; init; } =
-            new Dictionary<string, string?>();
+            new Dictionary<string, string?>(StringComparer.Ordinal);
         public Dictionary<string, Inner> Inners { get; init; } = [];
         public Dictionary<string, List<byte>> Bytes { get; init; } = [];
         public List<long> Longs { get; init; } = [];
@@ -53,7 +54,7 @@ public class SchemaStrictnessTests
     }
 
     private static FieldSchema Field(ContextSchema schema, string name) =>
-        schema.Fields.Single(f => f.Name == name);
+        schema.Fields.Single(f => string.Equals(f.Name, name, StringComparison.Ordinal));
 
     private static string? Validate<T>(JsonObject input) =>
         SchemaValidator.ValidateInput(SchemaReflection.ForInput(typeof(T)), input);
@@ -109,15 +110,31 @@ public class SchemaStrictnessTests
             .WithInput<Widths>()
             .To(RangeState.Ranged);
         m.In(RangeState.Ranged).Context();
-        var ir = JsonNode.Parse(IrExporter.Export(m.Build()))!;
+        var ir = JsonNode.Parse(IrExporter.Export(m.Build())).NotNull();
 
-        var fields = ir["inputs"]!["Build"]!["fields"]!.AsArray();
-        var @long = fields.Single(f => f!["name"]!.GetValue<string>() == "long")!;
-        @long["minimum"]!.GetValue<double>().Should().Be(-9223372036854774784d);
-        @long["maximum"]!.GetValue<double>().Should().Be(9223372036854774784d);
-        var @byte = fields.Single(f => f!["name"]!.GetValue<string>() == "byte")!;
-        @byte["minimum"]!.GetValue<double>().Should().Be(0);
-        @byte["maximum"]!.GetValue<double>().Should().Be(255);
+        var fields = ir["inputs"].NotNull()["Build"].NotNull()["fields"].NotNull().AsArray();
+        var @long = fields
+            .Single(f =>
+                string.Equals(
+                    f.NotNull()["name"].NotNull().GetValue<string>(),
+                    "long",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull();
+        @long["minimum"].NotNull().GetValue<double>().Should().Be(-9223372036854774784d);
+        @long["maximum"].NotNull().GetValue<double>().Should().Be(9223372036854774784d);
+        var @byte = fields
+            .Single(f =>
+                string.Equals(
+                    f.NotNull()["name"].NotNull().GetValue<string>(),
+                    "byte",
+                    StringComparison.Ordinal
+                )
+            )
+            .NotNull();
+        @byte["minimum"].NotNull().GetValue<double>().Should().Be(0);
+        @byte["maximum"].NotNull().GetValue<double>().Should().Be(255);
     }
 
     [TestCase("int", "1e10")]
@@ -212,14 +229,22 @@ public class SchemaStrictnessTests
     {
         var schema = SchemaReflection.ForInput(typeof(Maps));
 
-        var counts = Field(schema, "counts").Values!;
+        var counts = Field(schema, "counts").Values.NotNull();
         counts.Type.Should().Be(JsonFieldType.Integer);
         counts.Nullable.Should().BeFalse();
         counts.Maximum.Should().Be(int.MaxValue);
-        Field(schema, "notes").Values!.Nullable.Should().BeTrue("the value type is string?");
-        Field(schema, "inners").Values!.Fields!.Single().Name.Should().Be("count");
-        Field(schema, "bytes").Values!.Values!.Maximum.Should().Be(255);
-        Field(schema, "longs").Values!.Type.Should().Be(JsonFieldType.Integer);
+        Field(schema, "notes")
+            .Values.NotNull()
+            .Nullable.Should()
+            .BeTrue("the value type is string?");
+        Field(schema, "inners")
+            .Values.NotNull()
+            .Fields.NotNull()
+            .Single()
+            .Name.Should()
+            .Be("count");
+        Field(schema, "bytes").Values.NotNull().Values.NotNull().Maximum.Should().Be(255);
+        Field(schema, "longs").Values.NotNull().Type.Should().Be(JsonFieldType.Integer);
         Field(schema, "anything")
             .Values.Should()
             .BeNull("an object value has no fixed JSON type, like a JsonObject field's");
@@ -228,7 +253,7 @@ public class SchemaStrictnessTests
     [Test]
     public void A_dictionary_value_of_the_wrong_type_is_refused()
     {
-        Validate<Maps>(MapsWith(i => i["counts"]!["a"] = "one"))
+        Validate<Maps>(MapsWith(i => i["counts"].NotNull()["a"] = "one"))
             .Should()
             .NotBeNull($"a Dictionary<string, int> value must be an int ({Adr})");
     }
@@ -236,7 +261,7 @@ public class SchemaStrictnessTests
     [Test]
     public void A_dictionary_value_out_of_its_range_is_refused()
     {
-        Validate<Maps>(MapsWith(i => i["counts"]!["a"] = JsonNode.Parse("1e10")))
+        Validate<Maps>(MapsWith(i => i["counts"].NotNull()["a"] = JsonNode.Parse("1e10")))
             .Should()
             .NotBeNull();
     }
@@ -244,15 +269,17 @@ public class SchemaStrictnessTests
     [Test]
     public void A_null_dictionary_value_is_refused_unless_the_value_type_is_nullable()
     {
-        Validate<Maps>(MapsWith(i => i["counts"]!["a"] = null)).Should().NotBeNull();
-        Validate<Maps>(MapsWith(i => i["notes"]!["a"] = null)).Should().BeNull();
+        Validate<Maps>(MapsWith(i => i["counts"].NotNull()["a"] = null)).Should().NotBeNull();
+        Validate<Maps>(MapsWith(i => i["notes"].NotNull()["a"] = null)).Should().BeNull();
     }
 
     [Test]
     public void A_dictionary_of_records_checks_each_record()
     {
-        Validate<Maps>(MapsWith(i => i["inners"]!["a"]!["count"] = "one")).Should().NotBeNull();
-        Validate<Maps>(MapsWith(i => i["inners"]!["a"]!["extra"] = 1))
+        Validate<Maps>(MapsWith(i => i["inners"].NotNull()["a"].NotNull()["count"] = "one"))
+            .Should()
+            .NotBeNull();
+        Validate<Maps>(MapsWith(i => i["inners"].NotNull()["a"].NotNull()["extra"] = 1))
             .Should()
             .NotBeNull("a record value refuses a field its type does not declare");
     }
@@ -260,7 +287,7 @@ public class SchemaStrictnessTests
     [Test]
     public void A_dictionary_of_lists_checks_each_element()
     {
-        Validate<Maps>(MapsWith(i => i["bytes"]!["a"] = new JsonArray(1, 256)))
+        Validate<Maps>(MapsWith(i => i["bytes"].NotNull()["a"] = new JsonArray(1, 256)))
             .Should()
             .NotBeNull();
     }
@@ -279,7 +306,7 @@ public class SchemaStrictnessTests
         var schema = SchemaReflection.For<Maps>();
 
         SchemaValidator
-            .Validate(schema, MapsWith(i => i["counts"]!["a"] = "one"))
+            .Validate(schema, MapsWith(i => i["counts"].NotNull()["a"] = "one"))
             .Should()
             .NotBeNull("a context's dictionary values are typed like an input's");
     }
@@ -293,13 +320,17 @@ public class SchemaStrictnessTests
     {
         var schema = SchemaReflection.ForInput(typeof(Acronyms));
         // The naming the server stores a train's output with and the engine serializes an outcome with.
-        var serialized = System.Text.Json.JsonSerializer.SerializeToNode(
-            new Acronyms(),
-            new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-            }
-        )!;
+        var serialized = System
+            .Text.Json.JsonSerializer.SerializeToNode(
+                new Acronyms(),
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    RespectNullableAnnotations = false,
+                    RespectRequiredConstructorParameters = false,
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                }
+            )
+            .NotNull();
 
         schema
             .Fields.Select(f => f.Name)

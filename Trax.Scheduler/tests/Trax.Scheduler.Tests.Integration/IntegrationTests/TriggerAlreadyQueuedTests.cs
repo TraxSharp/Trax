@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
@@ -58,8 +60,9 @@ public class TriggerAlreadyQueuedTests
         return await fx
             .DataContext.WorkQueues.AsNoTracking()
             .Where(w => w.Status == WorkQueueStatus.Queued && w.Manifest != null)
-            .GroupBy(w => w.Manifest!.ExternalId)
-            .ToDictionaryAsync(g => g.Key, g => g.Count());
+            .GroupBy(w => w.Manifest != null ? w.Manifest.ExternalId : null)
+            .ToDictionaryAsync(g => g.Key.NotNull(), g => g.Count(), StringComparer.Ordinal)
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -77,7 +80,11 @@ public class TriggerAlreadyQueuedTests
 
         queued.Should().Be(1, "only aq-b was not already queued");
         var perManifest = await QueuedPerManifest(fx);
-        perManifest.Should().Equal(new Dictionary<string, int> { ["aq-a"] = 1, ["aq-b"] = 1 });
+        perManifest
+            .Should()
+            .Equal(
+                new Dictionary<string, int>(StringComparer.Ordinal) { ["aq-a"] = 1, ["aq-b"] = 1 }
+            );
         logs.Messages.Should()
             .Contain(m => m.Contains("1 already queued"), "the skipped manifest is reported");
     }
@@ -92,7 +99,9 @@ public class TriggerAlreadyQueuedTests
         var act = () => fx.Scheduler.TriggerAsync("aq-a");
 
         await act.Should().NotThrowAsync();
-        (await QueuedPerManifest(fx)).Should().Equal(new Dictionary<string, int> { ["aq-a"] = 1 });
+        (await QueuedPerManifest(fx))
+            .Should()
+            .Equal(new Dictionary<string, int>(StringComparer.Ordinal) { ["aq-a"] = 1 });
     }
 
     [Test]
@@ -105,7 +114,9 @@ public class TriggerAlreadyQueuedTests
         var act = () => fx.Scheduler.TriggerAsync("aq-a", TimeSpan.FromMinutes(5));
 
         await act.Should().NotThrowAsync();
-        (await QueuedPerManifest(fx)).Should().Equal(new Dictionary<string, int> { ["aq-a"] = 1 });
+        (await QueuedPerManifest(fx))
+            .Should()
+            .Equal(new Dictionary<string, int>(StringComparer.Ordinal) { ["aq-a"] = 1 });
     }
 
     [Test]
@@ -125,18 +136,7 @@ public class TriggerAlreadyQueuedTests
         await fx.Scheduler.TriggerAsync("aq-a");
         fx.DataContext.Reset();
 
-        var views = manifests
-            .Select(m => new ManifestDispatchView
-            {
-                Manifest = m,
-                ManifestGroup = m.ManifestGroup,
-                FailedCount = 0,
-                HasAwaitingDeadLetter = false,
-                HasQueuedWork = false,
-                HasActiveExecution = false,
-                HasSuccessfulMetadata = false,
-            })
-            .ToList();
+        var views = DueViewsOf(manifests);
 
         var context = fx.Services.GetRequiredService<IDataContext>();
         using (var transaction = await context.BeginTransaction())
@@ -145,7 +145,8 @@ public class TriggerAlreadyQueuedTests
                 context,
                 fx.Configuration,
                 NullLogger<CreateWorkQueueEntriesJunction>.Instance,
-                fx.Services.GetRequiredService<RetryDecisionReplay>()
+                fx.Services.GetRequiredService<RetryDecisionReplay>(),
+                TimeProvider.System
             );
             await junction.Run(views);
 
@@ -155,10 +156,11 @@ public class TriggerAlreadyQueuedTests
                 WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        TrainName = typeof(ISchedulerTestTrain).FullName!,
+                        TrainName = typeof(ISchedulerTestTrain).FullName.NotNull(),
                         Input = "{}",
-                        InputTypeName = typeof(SchedulerTestInput).FullName!,
-                    }
+                        InputTypeName = typeof(SchedulerTestInput).FullName.NotNull(),
+                    },
+                    TimeProvider.System
                 )
             );
             await context.SaveChanges(CancellationToken.None);
@@ -167,7 +169,9 @@ public class TriggerAlreadyQueuedTests
 
         (await QueuedPerManifest(fx))
             .Should()
-            .Equal(new Dictionary<string, int> { ["aq-a"] = 1, ["aq-b"] = 1 });
+            .Equal(
+                new Dictionary<string, int>(StringComparer.Ordinal) { ["aq-a"] = 1, ["aq-b"] = 1 }
+            );
     }
 
     [Test]
@@ -203,7 +207,9 @@ public class TriggerAlreadyQueuedTests
         queued.Should().Be(0, "both manifests already have their queued entry");
         (await QueuedPerManifest(fx))
             .Should()
-            .Equal(new Dictionary<string, int> { ["aq-a"] = 1, ["aq-b"] = 1 });
+            .Equal(
+                new Dictionary<string, int>(StringComparer.Ordinal) { ["aq-a"] = 1, ["aq-b"] = 1 }
+            );
         recording
             .Domains.Should()
             .BeEmpty("nothing was written, so no dashboard or subscriber needs to refresh");
@@ -225,7 +231,10 @@ public class TriggerAlreadyQueuedTests
         await ExecuteAsync(
             other,
             "INSERT INTO trax.work_queue (external_id, train_name, manifest_id) "
-                + $"VALUES ('other-writer', 'other', {manifestId})"
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"VALUES ('other-writer', 'other', {manifestId})"
+                )
         );
 
         var trigger = fx.Scheduler.TriggerAsync("aq-a");
@@ -261,7 +270,13 @@ public class TriggerAlreadyQueuedTests
         // the foreign key, which is not an entry already queued.
         await using var other = await OpenConnectionAsync();
         await using var otherTransaction = await other.BeginTransactionAsync();
-        await ExecuteAsync(other, $"DELETE FROM trax.manifest WHERE id = {manifestId}");
+        await ExecuteAsync(
+            other,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"DELETE FROM trax.manifest WHERE id = {manifestId}"
+            )
+        );
 
         var trigger = fx.Scheduler.TriggerAsync("aq-a");
         (await WaitUntilBlockedOnLockAsync())
@@ -277,24 +292,44 @@ public class TriggerAlreadyQueuedTests
             );
     }
 
+    private static List<ManifestDispatchView> DueViewsOf(
+        List<Trax.Effect.Models.Manifest.Manifest> manifests
+    ) =>
+        manifests
+            .Select(m => new ManifestDispatchView
+            {
+                Manifest = m,
+                ManifestGroup = m.ManifestGroup.NotNull(),
+                FailedCount = 0,
+                HasAwaitingDeadLetter = false,
+                HasQueuedWork = false,
+                HasActiveExecution = false,
+                HasSuccessfulMetadata = false,
+            })
+            .ToList();
+
     private static async Task<long> ManifestId(SchedulerE2EFixture fx, string externalId) =>
         await fx
             .DataContext.Manifests.AsNoTracking()
             .Where(m => m.ExternalId == externalId)
             .Select(m => m.Id)
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
 
     private static async Task<NpgsqlConnection> OpenConnectionAsync()
     {
         var connection = new NpgsqlConnection(TestPostgres.ConnectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync().ConfigureAwait(false);
         return connection;
     }
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
     {
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        var command = new NpgsqlCommand(sql, connection);
+        await using (command.ConfigureAwait(false))
+        {
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -303,22 +338,31 @@ public class TriggerAlreadyQueuedTests
     /// </summary>
     private static async Task<bool> WaitUntilBlockedOnLockAsync()
     {
-        await using var probe = await OpenConnectionAsync();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline)
+        var probe = await OpenConnectionAsync().ConfigureAwait(false);
+        await using (probe.ConfigureAwait(false))
         {
-            await using var command = new NpgsqlCommand(
-                "SELECT count(*) FROM pg_stat_activity "
-                    + "WHERE datname = current_database() AND wait_event_type = 'Lock'",
-                probe
-            );
-            if ((long)(await command.ExecuteScalarAsync())! > 0)
-                return true;
+            var deadline = TimeProvider.System.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(15);
+            while (TimeProvider.System.GetUtcNow().UtcDateTime < deadline)
+            {
+                var command = new NpgsqlCommand(
+                    "SELECT count(*) FROM pg_stat_activity "
+                        + "WHERE datname = current_database() AND wait_event_type = 'Lock'",
+                    probe
+                );
+                await using (command.ConfigureAwait(false))
+                {
+                    if (
+                        (long)(await command.ExecuteScalarAsync().ConfigureAwait(false)).NotNull()
+                        > 0
+                    )
+                        return true;
 
-            // determinism: polls the condition, bounded by the deadline above.
-            await Task.Delay(25);
+                    // determinism: polls the condition, bounded by the deadline above.
+                    await Task.Delay(25).ConfigureAwait(false);
+                }
+            }
+            return false;
         }
-        return false;
     }
 
     #endregion
@@ -354,7 +398,11 @@ public class TriggerAlreadyQueuedTests
         var logs = new CapturingLoggerProvider();
         await using var fx = await CreateAsync(logs);
         await fx.MaterializePendingManifestsAsync();
-        var retryId = await QueueRetryAsync(fx, "aq-a", DateTime.UtcNow.AddMinutes(30));
+        var retryId = await QueueRetryAsync(
+            fx,
+            "aq-a",
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(30)
+        );
 
         await fx.Scheduler.TriggerAsync("aq-a");
 
@@ -369,7 +417,9 @@ public class TriggerAlreadyQueuedTests
                 "brought forward to now, it stores no time, as an immediate trigger's new entry "
                     + "does, so it waits on no clock"
             );
-        (await QueuedPerManifest(fx)).Should().Equal(new Dictionary<string, int> { ["aq-a"] = 1 });
+        (await QueuedPerManifest(fx))
+            .Should()
+            .Equal(new Dictionary<string, int>(StringComparer.Ordinal) { ["aq-a"] = 1 });
         logs.Messages.Should()
             .Contain(m => m.Contains("moved it forward"), "the trigger says what it did");
     }
@@ -379,7 +429,11 @@ public class TriggerAlreadyQueuedTests
     {
         await using var fx = await CreateAsync();
         await fx.MaterializePendingManifestsAsync();
-        var retryId = await QueueRetryAsync(fx, "aq-a", DateTime.UtcNow.AddMinutes(30));
+        var retryId = await QueueRetryAsync(
+            fx,
+            "aq-a",
+            TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(30)
+        );
 
         await fx.Scheduler.TriggerAsync("aq-a", TimeSpan.FromMinutes(5));
 
@@ -389,7 +443,10 @@ public class TriggerAlreadyQueuedTests
             .SingleAsync(w => w.Id == retryId);
         retry
             .ScheduledAt.Should()
-            .BeCloseTo(DateTime.UtcNow.AddMinutes(5), TimeSpan.FromMinutes(1));
+            .BeCloseTo(
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(5),
+                TimeSpan.FromMinutes(1)
+            );
     }
 
     [Test]
@@ -397,7 +454,7 @@ public class TriggerAlreadyQueuedTests
     {
         await using var fx = await CreateAsync();
         await fx.MaterializePendingManifestsAsync();
-        var dueAt = DateTime.UtcNow.AddMinutes(2);
+        var dueAt = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(2);
         var retryId = await QueueRetryAsync(fx, "aq-a", dueAt);
 
         await fx.Scheduler.TriggerAsync("aq-a", TimeSpan.FromMinutes(30));
@@ -418,7 +475,8 @@ public class TriggerAlreadyQueuedTests
     {
         var manifest = await fx
             .DataContext.Manifests.AsNoTracking()
-            .FirstAsync(m => m.ExternalId == externalId);
+            .FirstAsync(m => m.ExternalId == externalId)
+            .ConfigureAwait(false);
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
@@ -427,10 +485,11 @@ public class TriggerAlreadyQueuedTests
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
                 ScheduledAt = dueAt,
-            }
+            },
+            TimeProvider.System
         );
-        await fx.DataContext.Track(entry);
-        await fx.DataContext.SaveChanges(CancellationToken.None);
+        await fx.DataContext.Track(entry).ConfigureAwait(false);
+        await fx.DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         fx.DataContext.Reset();
         return entry.Id;
     }

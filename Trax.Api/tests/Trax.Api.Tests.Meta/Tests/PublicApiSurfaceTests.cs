@@ -1,5 +1,6 @@
 using System.Reflection;
 using PublicApiGenerator;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.Tests.Meta.Tests;
 
@@ -10,7 +11,7 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md")]
 [TestFixture]
-public class PublicApiSurfaceTests
+public partial class PublicApiSurfaceTests
 {
     private static readonly string BaselineDir = Path.Combine(
         AppContext.BaseDirectory,
@@ -18,7 +19,7 @@ public class PublicApiSurfaceTests
     );
 
     private static readonly string BaselineSourceDir = Path.Combine(
-        Path.GetDirectoryName(typeof(PublicApiSurfaceTests).Assembly.Location)!,
+        Path.GetDirectoryName(typeof(PublicApiSurfaceTests).Assembly.Location).NotNull(),
         "..",
         "..",
         "..",
@@ -111,12 +112,9 @@ public class PublicApiSurfaceTests
                 continue;
 
             // The baseline is named after the assembly, which a tool names after its command (trax-console).
-            var assembly = System.Text.RegularExpressions.Regex.Match(
-                File.ReadAllText(csproj),
-                "<AssemblyName>([^<]+)</AssemblyName>"
-            )
+            var assembly = AssemblyNameElement.Match(File.ReadAllText(csproj))
                 is { Success: true } named
-                ? named.Groups[1].Value
+                ? named.Groups["name"].Value
                 : name;
             if (!File.Exists(Path.Combine(BaselineSourceDir, $"{assembly}.received.txt")))
                 missing.Add(name);
@@ -137,7 +135,7 @@ public class PublicApiSurfaceTests
     [TestCaseSource(nameof(Assemblies))]
     public void PublicApi_Matches_CheckedInBaseline(Assembly assembly)
     {
-        var name = assembly.GetName().Name!;
+        var name = assembly.GetName().Name.NotNull();
         var current = assembly.GeneratePublicApi(
             new ApiGeneratorOptions { IncludeAssemblyAttributes = false }
         );
@@ -166,7 +164,8 @@ public class PublicApiSurfaceTests
 
         var baseline = File.ReadAllText(baselinePath);
 
-        string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd() + "\n";
+        string Normalize(string s) =>
+            s.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd() + "\n";
 
         Normalize(current)
             .Should()
@@ -177,4 +176,11 @@ public class PublicApiSurfaceTests
                     + "Trax.Docs/contributing/releases.md > Commit types: a major version bump on NuGet is permanent."
             );
     }
+
+    [GeneratedRegex(
+        "<AssemblyName>(?<name>[^<]+)</AssemblyName>",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex AssemblyNameElement { get; }
 }

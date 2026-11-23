@@ -22,27 +22,28 @@ public class QueryModelAuthorizeBuildTests
 {
     [TraxQueryModel]
     [TraxAuthorize(Policy = "AdminPolicy")]
-    private class PolicyGatedEntity
+    private sealed class PolicyGatedEntity
     {
         public int Id { get; set; }
     }
 
     [TraxQueryModel]
     [TraxAuthorize(Roles = "Admin")]
-    private class RoleOnlyEntity
+    private sealed class RoleOnlyEntity
     {
         public int Id { get; set; }
     }
 
-    private class PolicyDbContext(DbContextOptions<PolicyDbContext> options) : DbContext(options)
-    {
-        public DbSet<PolicyGatedEntity> Items { get; set; } = null!;
-    }
-
-    private class RolesOnlyDbContext(DbContextOptions<RolesOnlyDbContext> options)
+    private sealed class PolicyDbContext(DbContextOptions<PolicyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<RoleOnlyEntity> Items { get; set; } = null!;
+        public DbSet<PolicyGatedEntity> Items => Set<PolicyGatedEntity>();
+    }
+
+    private sealed class RolesOnlyDbContext(DbContextOptions<RolesOnlyDbContext> options)
+        : DbContext(options)
+    {
+        public DbSet<RoleOnlyEntity> Items => Set<RoleOnlyEntity>();
     }
 
     [Test]
@@ -79,7 +80,8 @@ public class QueryModelAuthorizeBuildTests
 
         var validator = new QueryModelAuthorizationValidator(config, provider);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () =>
+            await validator.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*AdminPolicy*")
@@ -106,23 +108,23 @@ public class QueryModelAuthorizeBuildTests
 
     [TraxQueryModel]
     [TraxAuthorize(Policy = "AdminPolicy")]
-    private class DupPolicyA
+    private sealed class DupPolicyA
     {
         public int Id { get; set; }
     }
 
     [TraxQueryModel]
     [TraxAuthorize(Policy = "AdminPolicy")]
-    private class DupPolicyB
+    private sealed class DupPolicyB
     {
         public int Id { get; set; }
     }
 
-    private class DupPolicyDbContext(DbContextOptions<DupPolicyDbContext> options)
+    private sealed class DupPolicyDbContext(DbContextOptions<DupPolicyDbContext> options)
         : DbContext(options)
     {
-        public DbSet<DupPolicyA> A { get; set; } = null!;
-        public DbSet<DupPolicyB> B { get; set; } = null!;
+        public DbSet<DupPolicyA> A => Set<DupPolicyA>();
+        public DbSet<DupPolicyB> B => Set<DupPolicyB>();
     }
 
     [Test]

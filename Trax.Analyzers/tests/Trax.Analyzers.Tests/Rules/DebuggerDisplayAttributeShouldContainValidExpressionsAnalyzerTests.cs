@@ -1,0 +1,651 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
+using AnalyzerTest = Trax.Analyzers.Tests.Harness.CSharpAnalyzerTest<
+    Trax.Analyzers.Rules.DebuggerDisplayAttributeShouldContainValidExpressionsAnalyzer>;
+
+namespace Trax.Analyzers.Tests.Rules;
+
+public sealed class DebuggerDisplayAttributeShouldContainValidExpressionsAnalyzerTests
+{
+    private static AnalyzerTest CreateTest() => new();
+
+    [Theory]
+    [InlineData("Invalid")]
+    [InlineData("Invalid,np")]
+    [InlineData("Invalid()")]
+    [InlineData("Invalid.Length")]
+    [InlineData("System.IO.Path.DirectorySeparatorChar.Unknown()")]
+    [InlineData("Invalid[0]")]
+    [InlineData("Display[Invalid]")]
+    [InlineData("Invalid!")]
+    [InlineData("(Invalid).Length")]
+    [InlineData("((Display)).Invalid")]
+    public Task UnknownMember(string memberName)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+            [{|TRX0151:DebuggerDisplay("{{{memberName}}}")|}]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Invalid")]
+    [InlineData("Invalid,np")]
+    [InlineData("Invalid()")]
+    [InlineData("Invalid.Length")]
+    public Task UnknownMember_Name(string memberName)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+            [{|TRX0151:DebuggerDisplay("", Name = "{{{memberName}}}")|}]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Invalid")]
+    [InlineData("Invalid,np")]
+    [InlineData("Invalid()")]
+    [InlineData("Invalid.Length")]
+    [InlineData("Display.UnknownProperty")]
+    public Task UnknownMember_Type(string memberName)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+            [{|TRX0151:DebuggerDisplay("", Type = "{{{memberName}}}")|}]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Display")]
+    [InlineData("System.IO.Path.DirectorySeparatorChar.ToString()")]
+    [InlineData(" ")]
+    [InlineData("Display[0]")]
+    [InlineData("Display[0].Invalid")] // Invalid is ignored because the type of the indexer is not resolved
+    [InlineData("Display!")]
+    [InlineData("(Display).Length")]
+    [InlineData("(Display + Display).Invalid")] // Invalid is ignored because the type of the expression is not resolved
+    public Task Valid(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+            [DebuggerDisplay("{{{value}}}")]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Valid_Name()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("", Name = "{Display}")]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Valid_Type()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("", Type = "{Display}")]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ValidWithOptions()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{Display,nq}")]
+            public class Dummy
+            {
+                public string Display { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Valid_Field()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{display}")]
+            public class Dummy
+            {
+                private string display;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Valid_SubProperty()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{display.Length}")]
+            public class Dummy
+            {
+                private string display;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Display()")]
+    [InlineData("Display().Length")]
+    [InlineData("Display().Invalid")] // Invalid is ignored because we cannot determine the return type of Display()
+    public Task Valid_Method(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+            [DebuggerDisplay("{{{value}}}")]
+            public class Dummy
+            {
+                private string Display() => "";
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Valid_FromBaseClass()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            public class Base
+            {
+                private string Display => "";
+            }
+
+            [DebuggerDisplay("{Display}")]
+            public class Dummy : Base
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SkipEscapedBraces1()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"Person \{ Name = {Name} \}")]
+            public record Person(string Name);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SkipEscapedBraces2()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [{|TRX0151:DebuggerDisplay(@"Person \\{NameInvalid}")|}]
+            public record Person(string Name);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task SkipEscapedBraces3()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"Person \\\{NameInvalid}")]
+            public record Person(string Name);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task EscapeSingleChar()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"\")]
+            public record Person(int Value);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task Escape_IncompleteExpression()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"{\")]
+            public record Person(int Value);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Value + 1")]
+    [InlineData("Value - 1")]
+    [InlineData("Value < 10")]
+    [InlineData("Value <= 10")]
+    [InlineData("Value > 10")]
+    [InlineData("Value >= 10")]
+    [InlineData("Value == 10")]
+    [InlineData("Value != 10")]
+    [InlineData("Demo.Display(Value > 1)")]
+    [InlineData("Demo.Display(Value > 1, Value)")]
+    public Task Valid_BinaryOperator(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"{{{value}}}")]
+            public record Person(int Value);
+
+            public class Demo
+            {
+                public static string Display(bool a) => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("(Unknown + 1)")]
+    [InlineData("(Unknown + (1))")]
+    [InlineData("((Unknown) + (1))")]
+    [InlineData("Unknown + 1")]
+    [InlineData("Unknown - 1")]
+    [InlineData("Unknown < 10")]
+    [InlineData("Unknown <= 10")]
+    [InlineData("Unknown > 10")]
+    [InlineData("Unknown >= 10")]
+    [InlineData("Unknown == 10")]
+    [InlineData("Unknown != 10")]
+    [InlineData("Unknown != \\\"abc\\\"")]
+    [InlineData("Unknown != 'a'")]
+    [InlineData("Demo.Display(Unknown > 1)")]
+    [InlineData("Demo.Display(Unknown > 1.0)")]
+    [InlineData("Demo.Display(Unknown > 1u)")]
+    [InlineData("Demo.Display(Unknown > 1uL)")]
+    [InlineData("Demo.Display(Unknown > 1L)")]
+    [InlineData("Demo.Display(Unknown > 1.0f)")]
+    [InlineData("Demo.Display(Unknown > 1.0d)")]
+    [InlineData("Demo.Display(Unknown > 1.0m)")]
+    [InlineData("Demo.Display(Unknown > 1e+3)")]
+    [InlineData("Demo.Display(Value > 1, Unknown)")]
+    public Task Invalid_BinaryOperator(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+
+            [{|TRX0151:DebuggerDisplay("{{{value}}}")|}]
+            public record Person(int Value);
+
+            public class Demo
+            {
+                public static string Display(bool a) => throw null;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("!Value")]
+    public Task Valid_UnaryOperator(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"{{{value}}}")]
+            public record Person(bool Value);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("!Unknown")]
+    public Task Invalid_UnaryOperator(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+
+            [{|TRX0151:DebuggerDisplay(@"{{{value}}}")|}]
+            public record Person(bool Value);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CallStaticMethodOnAnotherType()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"{System.Linq.Enumerable.Count(Test)}")]
+            public record Person(string[] Test);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CallStaticMethodOnAnotherUsingKeyword()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [DebuggerDisplay(@"{char.IsAscii(Test)}")]
+            public record Person(char Test);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CallStaticMethodOnAnotherType_InvalidMethodName()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+
+            [{|TRX0151:DebuggerDisplay(@"{System.Linq.Enumerable.InvalidMethod(Test)}")|}]
+            public record Person(string[] Test);
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task IListOfT_Count()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{referenceString} ({allStrings.Count})")]
+            public struct ContainedStrings
+            {
+                private readonly System.Collections.Generic.IList<string> allStrings;
+                private readonly string referenceString;
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task GenericTypes()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{Condition.ToString(),nq}")]
+            public class ValueConditionNode<TCondition> : IValueConditionNode<TCondition>
+            {
+                public TCondition Condition => throw null;
+            }
+
+            public interface IValueConditionNode<TCondition>
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Theory]
+    [InlineData("Foo.ToString()")]
+    [InlineData("Foo.GetHashCode()")]
+    [InlineData("Foo.GetType()")]
+    [InlineData("Foo.Equals(null)")]
+    [InlineData("Foo.ToString().Length")]
+    public Task ObjectMembersOnInterfaceTypedMember(string value)
+    {
+        var test = CreateTest();
+        test.TestCode = $$"""
+            using System.Diagnostics;
+            [DebuggerDisplay("{{{value}}}")]
+            public class Dummy
+            {
+                public IFoo Foo { get; }
+            }
+
+            public interface IFoo
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task BaseInterfaceMemberOnInterfaceTypedMember()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{Foo.Value}")]
+            public class Dummy
+            {
+                public IFoo Foo { get; }
+            }
+
+            public interface IFoo : IBar
+            {
+            }
+
+            public interface IBar
+            {
+                string Value { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ImplicitlyImplementedInterfaceMember()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [DebuggerDisplay("{Value}")]
+            public class Dummy : IFoo
+            {
+                public string Value => throw null;
+            }
+
+            public interface IFoo
+            {
+                string Value { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task ExplicitlyImplementedInterfaceMemberIsNotAccessible()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [{|TRX0151:DebuggerDisplay("{Value}")|}]
+            public class Dummy : IFoo
+            {
+                string IFoo.Value => throw null;
+            }
+
+            public interface IFoo
+            {
+                string Value { get; }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task UnknownMemberOnInterfaceTypedMember()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            [{|TRX0151:DebuggerDisplay("{Foo.Unknown()}")|}]
+            public class Dummy
+            {
+                public IFoo Foo { get; }
+            }
+
+            public interface IFoo
+            {
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task CallStaticMethodOnTypeOfContainingNamespace()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            namespace N
+            {
+                [DebuggerDisplay("{Helper.Format(Value)}")]
+                public class Dummy
+                {
+                    public int Value { get; set; }
+                }
+
+                public static class Helper
+                {
+                    public static string Format(int value) => value.ToString();
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task StaticMemberOfContainingType()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            public class Outer
+            {
+                private static string Prefix => "";
+
+                [DebuggerDisplay("{Prefix.Length}")]
+                public class Dummy
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+
+    [Fact]
+    public Task UnknownMemberOfContainingNamespace()
+    {
+        var test = CreateTest();
+        test.TestCode = """
+            using System.Diagnostics;
+            namespace N
+            {
+                [{|TRX0151:DebuggerDisplay("{Helper.Unknown()}")|}]
+                public class Dummy
+                {
+                }
+
+                public static class Helper
+                {
+                }
+            }
+            """;
+
+        return test.RunAsync();
+    }
+}

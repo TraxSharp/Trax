@@ -20,7 +20,7 @@ public interface ITrainLifecycleHook
 
     /// <summary>
     /// Called after a run's <c>Completed</c> outcome is saved. <c>metadata.Output</c> holds the serialized output
-    /// when the parameter effect stored it or the output policy allowed a bounded copy, otherwise <c>null</c>.
+    /// when the parameter effect stored it or the output policy allowed a bounded copy, otherwise <see langword="null"/>.
     /// Exceptions are logged and swallowed.
     /// </summary>
     /// <param name="metadata">The run's metadata row.</param>

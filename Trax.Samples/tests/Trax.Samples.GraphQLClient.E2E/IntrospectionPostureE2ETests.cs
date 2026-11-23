@@ -63,7 +63,7 @@ public class IntrospectionPostureE2ETests
             System.Text.Encoding.UTF8,
             "application/json"
         );
-        using var response = await client.PostAsync("/trax/graphql", content);
-        return await response.Content.ReadAsStringAsync();
+        using var response = await client.PostAsync("/trax/graphql", content).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
 }

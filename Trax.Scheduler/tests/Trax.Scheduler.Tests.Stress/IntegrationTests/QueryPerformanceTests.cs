@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -49,41 +51,46 @@ public class QueryPerformanceTests : TestSetup
     /// </summary>
     private const int MetadataPerManifest = 100;
 
-    private List<Manifest> _manifests = null!;
-    private ManifestGroup _group = null!;
+    private IList<Manifest>? _manifests;
+    private ManifestGroup? _group;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
 
         // Seed baseline data: 500 manifests × 100 metadata = 50K metadata rows
-        _group = await SeedManifestGroup("stress-baseline");
-        _manifests = await SeedManifests(ManifestCount, _group.Id);
+        _group = await SeedManifestGroup("stress-baseline").ConfigureAwait(false);
+        _manifests = await SeedManifests(ManifestCount, _group.NotNull().Id).ConfigureAwait(false);
 
         // Mix of states: 70% completed, 20% failed, 5% in-progress, 5% pending
-        var completed = _manifests.Take(350).ToList();
-        var failed = _manifests.Skip(350).Take(100).ToList();
-        var inProgress = _manifests.Skip(450).Take(25).ToList();
-        var pending = _manifests.Skip(475).Take(25).ToList();
+        var completed = _manifests.NotNull().Take(350).ToList();
+        var failed = _manifests.NotNull().Skip(350).Take(100).ToList();
+        var inProgress = _manifests.NotNull().Skip(450).Take(25).ToList();
+        var pending = _manifests.NotNull().Skip(475).Take(25).ToList();
 
-        await SeedMetadata(completed, MetadataPerManifest, TrainState.Completed);
-        await SeedMetadata(failed, MetadataPerManifest, TrainState.Failed);
+        await SeedMetadata(completed, MetadataPerManifest, TrainState.Completed)
+            .ConfigureAwait(false);
+        await SeedMetadata(failed, MetadataPerManifest, TrainState.Failed).ConfigureAwait(false);
         await SeedMetadata(
-            inProgress,
-            MetadataPerManifest,
-            TrainState.InProgress,
-            DateTime.UtcNow.AddMinutes(-30)
-        );
+                inProgress,
+                MetadataPerManifest,
+                TrainState.InProgress,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30)
+            )
+            .ConfigureAwait(false);
         await SeedMetadata(
-            pending,
-            MetadataPerManifest,
-            TrainState.Pending,
-            DateTime.UtcNow.AddMinutes(-10)
-        );
+                pending,
+                MetadataPerManifest,
+                TrainState.Pending,
+                TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-10)
+            )
+            .ConfigureAwait(false);
 
-        TestContext.Out.WriteLine(
-            $"Seeded {ManifestCount} manifests, {ManifestCount * MetadataPerManifest} metadata rows"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                $"Seeded {ManifestCount} manifests, {ManifestCount * MetadataPerManifest} metadata rows"
+            )
+            .ConfigureAwait(false);
     }
 
     #region Stale Job Detection (ReapStalePendingMetadataJunction pattern)
@@ -93,7 +100,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // This query pattern: WHERE train_state='pending' AND start_time < cutoff
         // Without ix_metadata_train_state_start_time, this is a full sequential scan.
-        var cutoff = DateTime.UtcNow - TimeSpan.FromMinutes(5);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime - TimeSpan.FromMinutes(5);
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -106,12 +113,20 @@ public class QueryPerformanceTests : TestSetup
                     m.StartTime,
                 })
                 .AsNoTracking()
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             stale.Should().NotBeEmpty("test data includes pending metadata older than cutoff");
         });
 
-        TestContext.Out.WriteLine($"FindStalePendingMetadata: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"FindStalePendingMetadata: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -123,7 +138,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // This query pattern: WHERE train_state='in_progress' AND start_time < serverStartTime
         // Without composite index, scans all 50K rows.
-        var serverStartTime = DateTime.UtcNow;
+        var serverStartTime = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -131,12 +146,20 @@ public class QueryPerformanceTests : TestSetup
                 .Metadatas.Where(m =>
                     m.TrainState == TrainState.InProgress && m.StartTime < serverStartTime
                 )
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             stuck.Should().NotBeEmpty("test data includes in-progress metadata");
         });
 
-        TestContext.Out.WriteLine($"RecoverStuckJobs: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"RecoverStuckJobs: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -167,12 +190,20 @@ public class QueryPerformanceTests : TestSetup
                 )
                 .GroupBy(x => x.GroupId)
                 .Select(g => new { GroupId = g.Key, Count = g.Count() })
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             activeCounts.Should().NotBeEmpty("test data includes active metadata");
         });
 
-        TestContext.Out.WriteLine($"LoadDispatchCapacity: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadDispatchCapacity: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -186,7 +217,7 @@ public class QueryPerformanceTests : TestSetup
         // train names. Before the HashSet fix, this generated 9+ NOT LIKE clauses which
         // prevented index usage. After the fix, it uses <> ALL(@excluded) with a single
         // parameterized array comparison.
-        var excluded = new HashSet<string>
+        var excluded = new HashSet<string>(StringComparer.Ordinal)
         {
             "Trax.Scheduler.Trains.ManifestManager.IManifestManagerTrain",
             "Trax.Scheduler.Trains.ManifestManager.ManifestManagerTrain",
@@ -219,14 +250,20 @@ public class QueryPerformanceTests : TestSetup
                 )
                 .GroupBy(x => x.GroupId)
                 .Select(g => new { GroupId = g.Key, Count = g.Count() })
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             activeCounts.Should().NotBeEmpty("test data includes active metadata");
         });
 
-        TestContext.Out.WriteLine(
-            $"LoadDispatchCapacity (with exclusion filter): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadDispatchCapacity (with exclusion filter): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -239,10 +276,10 @@ public class QueryPerformanceTests : TestSetup
         // Tests the batched deletion pattern from DeleteExpiredMetadataJunction.
         // Instead of a single massive DELETE, we load IDs in batches and delete
         // associated FK rows + metadata per batch. This limits row-level lock duration.
-        var trainName = typeof(StressTestTrain).FullName!;
-        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var trainName = typeof(StressTestTrain).FullName.NotNull();
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         var batchSize = 1000;
-        var whitelist = new HashSet<string> { trainName };
+        var whitelist = new HashSet<string>(StringComparer.Ordinal) { trainName };
 
         var elapsed = await AssertCompletesWithin(
             async () =>
@@ -251,34 +288,13 @@ public class QueryPerformanceTests : TestSetup
 
                 while (true)
                 {
-                    var batchIds = await DataContext
-                        .Metadatas.Where(m => whitelist.Contains(m.Name))
-                        .Where(m => m.StartTime < cutoff)
-                        .Where(m =>
-                            m.TrainState == TrainState.Completed
-                            || m.TrainState == TrainState.Failed
-                            || m.TrainState == TrainState.Cancelled
-                        )
-                        .Select(m => m.Id)
-                        .Take(batchSize)
-                        .ToListAsync();
+                    var batchIds = await ExpiredBatchIds(whitelist, cutoff, batchSize)
+                        .ConfigureAwait(false);
 
                     if (batchIds.Count == 0)
                         break;
 
-                    await DataContext
-                        .WorkQueues.Where(wq =>
-                            wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .Logs.Where(l => batchIds.Contains(l.MetadataId))
-                        .ExecuteDeleteAsync();
-
-                    totalDeleted += await DataContext
-                        .Metadatas.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync();
+                    totalDeleted += await DeleteExpiredBatch(batchIds).ConfigureAwait(false);
 
                     if (batchIds.Count < batchSize)
                         break;
@@ -291,9 +307,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            $"BatchedDeleteExpiredMetadata (batch={batchSize}): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchedDeleteExpiredMetadata (batch={batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -301,10 +322,10 @@ public class QueryPerformanceTests : TestSetup
     {
         // Small batch size (100) exercises the loop more frequently.
         // Verifies overhead from multiple round-trips is acceptable.
-        var trainName = typeof(StressTestTrain).FullName!;
-        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var trainName = typeof(StressTestTrain).FullName.NotNull();
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         var batchSize = 100;
-        var whitelist = new HashSet<string> { trainName };
+        var whitelist = new HashSet<string>(StringComparer.Ordinal) { trainName };
         var batchCount = 0;
 
         var elapsed = await AssertCompletesWithin(
@@ -314,36 +335,15 @@ public class QueryPerformanceTests : TestSetup
 
                 while (true)
                 {
-                    var batchIds = await DataContext
-                        .Metadatas.Where(m => whitelist.Contains(m.Name))
-                        .Where(m => m.StartTime < cutoff)
-                        .Where(m =>
-                            m.TrainState == TrainState.Completed
-                            || m.TrainState == TrainState.Failed
-                            || m.TrainState == TrainState.Cancelled
-                        )
-                        .Select(m => m.Id)
-                        .Take(batchSize)
-                        .ToListAsync();
+                    var batchIds = await ExpiredBatchIds(whitelist, cutoff, batchSize)
+                        .ConfigureAwait(false);
 
                     if (batchIds.Count == 0)
                         break;
 
                     batchCount++;
 
-                    await DataContext
-                        .WorkQueues.Where(wq =>
-                            wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .Logs.Where(l => batchIds.Contains(l.MetadataId))
-                        .ExecuteDeleteAsync();
-
-                    totalDeleted += await DataContext
-                        .Metadatas.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync();
+                    totalDeleted += await DeleteExpiredBatch(batchIds).ConfigureAwait(false);
 
                     if (batchIds.Count < batchSize)
                         break;
@@ -356,9 +356,14 @@ public class QueryPerformanceTests : TestSetup
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            $"BatchedDeleteExpiredMetadata (batch={batchSize}, {batchCount} batches): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchedDeleteExpiredMetadata (batch={batchSize}, {batchCount} batches): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -370,7 +375,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // Query: WHERE manifest_id IN (...) AND train_state='in_progress' AND !cancellation_requested
         // Needs composite index on (manifest_id, train_state) for efficient filtering.
-        var manifestIds = _manifests.Select(m => m.Id).ToList();
+        var manifestIds = _manifests.NotNull().Select(m => m.Id).ToList();
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -388,12 +393,20 @@ public class QueryPerformanceTests : TestSetup
                     m.ManifestId,
                 })
                 .AsNoTracking()
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             inProgress.Should().NotBeEmpty();
         });
 
-        TestContext.Out.WriteLine($"FindTimedOutJobs: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"FindTimedOutJobs: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -405,7 +418,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // Dashboard KPI: GROUP BY train_state WHERE start_time in last 24h
         // Without ix_metadata_start_time_desc, this does a full sequential scan + sort.
-        var cutoff = DateTime.UtcNow.AddDays(-1);
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-1);
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -413,12 +426,20 @@ public class QueryPerformanceTests : TestSetup
                 .Metadatas.Where(m => m.StartTime >= cutoff)
                 .GroupBy(m => m.TrainState)
                 .Select(g => new { State = g.Key, Count = g.Count() })
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             counts.Should().NotBeEmpty();
         });
 
-        TestContext.Out.WriteLine($"DashboardDailyCount: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"DashboardDailyCount: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -433,12 +454,20 @@ public class QueryPerformanceTests : TestSetup
                 .Skip(0)
                 .Take(50)
                 .AsNoTracking()
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             page.Should().HaveCount(50);
         });
 
-        TestContext.Out.WriteLine($"PaginatedExecutions: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PaginatedExecutions: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -450,7 +479,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // LoadManifestsJunction: SELECT manifests + COUNT/EXISTS subqueries on child tables
         // With 500 manifests and 50K metadata, subqueries run 500 times.
-        await SeedWorkQueues(_manifests.Take(50).ToList());
+        await SeedWorkQueues(_manifests.NotNull().Take(50).ToList());
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
@@ -468,12 +497,20 @@ public class QueryPerformanceTests : TestSetup
                     ),
                 })
                 .AsNoTracking()
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             views.Should().HaveCount(ManifestCount);
         });
 
-        TestContext.Out.WriteLine($"LoadManifestsWithAggregates: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadManifestsWithAggregates: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -485,8 +522,8 @@ public class QueryPerformanceTests : TestSetup
     {
         // DeleteExpiredMetadataJunction: DELETE WHERE name IN (whitelist) AND start_time < cutoff
         // AND train_state IN (completed, failed, cancelled). Uses subquery for cascade.
-        var trainName = typeof(StressTestTrain).FullName!;
-        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var trainName = typeof(StressTestTrain).FullName.NotNull();
+        var cutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
 
         var elapsed = await AssertCompletesWithin(
             async () =>
@@ -506,7 +543,8 @@ public class QueryPerformanceTests : TestSetup
                     .WorkQueues.Where(wq =>
                         wq.MetadataId.HasValue && metadataIdsToDelete.Contains(wq.MetadataId.Value)
                     )
-                    .ExecuteDeleteAsync();
+                    .ExecuteDeleteAsync()
+                    .ConfigureAwait(false);
 
                 // Delete the metadata itself
                 var deleted = await DataContext
@@ -517,14 +555,22 @@ public class QueryPerformanceTests : TestSetup
                         || m.TrainState == TrainState.Failed
                         || m.TrainState == TrainState.Cancelled
                     )
-                    .ExecuteDeleteAsync();
+                    .ExecuteDeleteAsync()
+                    .ConfigureAwait(false);
 
                 deleted.Should().BeGreaterThan(0, "expired metadata should exist in test data");
             },
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine($"DeleteExpiredMetadata: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"DeleteExpiredMetadata: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -539,11 +585,15 @@ public class QueryPerformanceTests : TestSetup
         // The original production issue: this inside a transaction caused timeouts.
 
         // Add some work queues and dead letters to make cascade realistic
-        await SeedWorkQueues(_manifests.Take(100).ToList());
-        await SeedDeadLetters(_manifests.Take(50).ToList(), 1);
+        await SeedWorkQueues(_manifests.NotNull().Take(100).ToList());
+        await SeedDeadLetters(_manifests.NotNull().Take(50).ToList(), 1);
 
         // Keep 400 manifests, prune 100
-        var keepIds = _manifests.Take(400).Select(m => m.ExternalId).ToHashSet();
+        var keepIds = _manifests
+            .NotNull()
+            .Take(400)
+            .Select(m => m.ExternalId)
+            .ToHashSet(StringComparer.Ordinal);
 
         var elapsed = await AssertCompletesWithin(
             async () =>
@@ -553,36 +603,24 @@ public class QueryPerformanceTests : TestSetup
                         m.ExternalId.StartsWith("stress-") && !keepIds.Contains(m.ExternalId)
                     )
                     .Select(m => m.Id)
-                    .ToListAsync();
+                    .ToListAsync()
+                    .ConfigureAwait(false);
 
                 staleManifestIds.Should().HaveCount(100);
 
-                await DataContext
-                    .WorkQueues.Where(w =>
-                        w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
-                    )
-                    .ExecuteDeleteAsync();
-
-                await DataContext
-                    .DeadLetters.Where(d => staleManifestIds.Contains(d.ManifestId))
-                    .ExecuteDeleteAsync();
-
-                await DataContext
-                    .Metadatas.Where(m =>
-                        m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
-                    )
-                    .ExecuteDeleteAsync();
-
-                await DataContext
-                    .Manifests.Where(m => staleManifestIds.Contains(m.Id))
-                    .ExecuteDeleteAsync();
+                await DeleteManifestsWithDependents(staleManifestIds).ConfigureAwait(false);
             },
             TimeSpan.FromSeconds(30)
         );
 
-        TestContext.Out.WriteLine(
-            $"PruneStaleManifests (100 pruned, 400 kept): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PruneStaleManifests (100 pruned, 400 kept): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -600,28 +638,49 @@ public class QueryPerformanceTests : TestSetup
         var elapsed = await AssertCompletesWithin(
             async () =>
             {
-                var results = await scheduler.ScheduleManyAsync<
-                    IStressTestTrain,
-                    StressTestInput,
-                    Trax.Core.Functional.Unit,
-                    int
-                >(
-                    Enumerable.Range(0, 5000),
-                    i => ($"bulk-{i}", new StressTestInput { Value = $"item-{i}" }),
-                    Every.Minutes(5),
-                    options => options.PrunePrefix("bulk-")
-                );
+                var results = await scheduler
+                    .ScheduleManyAsync<
+                        IStressTestTrain,
+                        StressTestInput,
+                        Core.Functional.Unit,
+                        int
+                    >(
+                        Enumerable.Range(0, 5000),
+                        i =>
+                            (
+                                string.Create(CultureInfo.InvariantCulture, $"bulk-{i}"),
+                                new StressTestInput
+                                {
+                                    Value = string.Create(
+                                        CultureInfo.InvariantCulture,
+                                        $"item-{i}"
+                                    ),
+                                }
+                            ),
+                        Every.Minutes(5),
+                        options => options.PrunePrefix("bulk-")
+                    )
+                    .ConfigureAwait(false);
 
                 results.Should().HaveCount(5000);
             },
             TimeSpan.FromSeconds(30) // Larger timeout for bulk operations
         );
 
-        TestContext.Out.WriteLine($"ScheduleMany 5K with prune: {elapsed.TotalMilliseconds:F0}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"ScheduleMany 5K with prune: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
 
         // Verify all manifests exist
         DataContext.Reset();
-        var count = await DataContext.Manifests.CountAsync(m => m.ExternalId.StartsWith("bulk-"));
+        var count = await DataContext
+            .Manifests.CountAsync(m => m.ExternalId.StartsWith("bulk-"))
+            .ConfigureAwait(false);
         count.Should().Be(5000);
     }
 
@@ -633,45 +692,27 @@ public class QueryPerformanceTests : TestSetup
         var scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
 
         // First run
-        await scheduler.ScheduleManyAsync<
-            IStressTestTrain,
-            StressTestInput,
-            Trax.Core.Functional.Unit,
-            int
-        >(
-            Enumerable.Range(0, 1000),
-            i => ($"evolve-{i}", new StressTestInput { Value = $"v1-{i}" }),
-            Every.Minutes(5),
-            options => options.PrunePrefix("evolve-")
-        );
+        await ScheduleFirstEvolveRun(scheduler);
 
         // Second run: keep 0-899, drop 900-999
         var elapsed = await AssertCompletesWithin(
-            async () =>
-            {
-                await scheduler.ScheduleManyAsync<
-                    IStressTestTrain,
-                    StressTestInput,
-                    Trax.Core.Functional.Unit,
-                    int
-                >(
-                    Enumerable.Range(0, 900),
-                    i => ($"evolve-{i}", new StressTestInput { Value = $"v2-{i}" }),
-                    Every.Minutes(5),
-                    options => options.PrunePrefix("evolve-")
-                );
-            },
+            () => ScheduleSecondEvolveRun(scheduler),
             TimeSpan.FromSeconds(15)
         );
 
-        TestContext.Out.WriteLine(
-            $"ScheduleMany re-run with prune: {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"ScheduleMany re-run with prune: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
 
         DataContext.Reset();
-        var remaining = await DataContext.Manifests.CountAsync(m =>
-            m.ExternalId.StartsWith("evolve-")
-        );
+        var remaining = await DataContext
+            .Manifests.CountAsync(m => m.ExternalId.StartsWith("evolve-"))
+            .ConfigureAwait(false);
         remaining.Should().Be(900);
     }
 
@@ -692,39 +733,7 @@ public class QueryPerformanceTests : TestSetup
 
         var tasks = Enumerable
             .Range(0, 20)
-            .Select(async workerId =>
-            {
-                for (int attempt = 0; attempt < 10; attempt++)
-                {
-                    await using var ctx = (IDataContext)factory.Create();
-                    using var tx = await ctx.BeginTransaction();
-
-                    var job = await ctx
-                        .BackgroundJobs.FromSqlRaw(
-                            """
-                            SELECT * FROM trax.background_job
-                            WHERE fetched_at IS NULL
-                            ORDER BY created_at ASC
-                            LIMIT 1
-                            FOR UPDATE SKIP LOCKED
-                            """
-                        )
-                        .FirstOrDefaultAsync();
-
-                    if (job is not null)
-                    {
-                        job.FetchedAt = DateTime.UtcNow;
-                        await ctx.SaveChanges(CancellationToken.None);
-                        await ctx.CommitTransaction();
-                        claimed.Add(job.Id);
-                    }
-                    else
-                    {
-                        await ctx.RollbackTransaction();
-                        break; // No more jobs
-                    }
-                }
-            })
+            .Select(workerId => ClaimJobsUntilNoneLeft(factory, claimed))
             .ToArray();
 
         var elapsed = await AssertCompletesWithin(
@@ -739,9 +748,14 @@ public class QueryPerformanceTests : TestSetup
             .OnlyHaveUniqueItems("FOR UPDATE SKIP LOCKED should prevent duplicates");
         claimedList.Count.Should().Be(100, "all 100 jobs should be claimed");
 
-        TestContext.Out.WriteLine(
-            $"ConcurrentDequeue (20 workers, 100 jobs): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"ConcurrentDequeue (20 workers, 100 jobs): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -762,32 +776,36 @@ public class QueryPerformanceTests : TestSetup
             {
                 for (int i = 0; i < 50; i++)
                 {
-                    await using var ctx = (IDataContext)factory.Create();
-                    using var tx = await ctx.BeginTransaction();
-
-                    var job = await ctx
-                        .BackgroundJobs.FromSqlRaw(
-                            """
-                            SELECT * FROM trax.background_job
-                            WHERE fetched_at IS NULL
-                            ORDER BY created_at ASC
-                            LIMIT 1
-                            FOR UPDATE SKIP LOCKED
-                            """
-                        )
-                        .FirstOrDefaultAsync();
-
-                    if (job is not null)
+                    var ctx = (IDataContext)factory.Create();
+                    await using (ctx.ConfigureAwait(false))
                     {
-                        job.FetchedAt = DateTime.UtcNow;
-                        await ctx.SaveChanges(CancellationToken.None);
-                        await ctx.CommitTransaction();
-                        claimed.Add(job.Id);
-                    }
-                    else
-                    {
-                        await ctx.RollbackTransaction();
-                        break;
+                        using var tx = await ctx.BeginTransaction().ConfigureAwait(false);
+
+                        var job = await ctx
+                            .BackgroundJobs.FromSqlRaw(
+                                """
+                                SELECT * FROM trax.background_job
+                                WHERE fetched_at IS NULL
+                                ORDER BY created_at ASC
+                                LIMIT 1
+                                FOR UPDATE SKIP LOCKED
+                                """
+                            )
+                            .FirstOrDefaultAsync()
+                            .ConfigureAwait(false);
+
+                        if (job is not null)
+                        {
+                            job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
+                            await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+                            await ctx.CommitTransaction().ConfigureAwait(false);
+                            claimed.Add(job.Id);
+                        }
+                        else
+                        {
+                            await ctx.RollbackTransaction().ConfigureAwait(false);
+                            break;
+                        }
                     }
                 }
             },
@@ -796,9 +814,14 @@ public class QueryPerformanceTests : TestSetup
 
         claimed.Should().HaveCount(50);
         claimed.Should().OnlyHaveUniqueItems();
-        TestContext.Out.WriteLine(
-            $"BatchClaim (LIMIT 1, 50 rounds): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchClaim (LIMIT 1, 50 rounds): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -815,33 +838,37 @@ public class QueryPerformanceTests : TestSetup
             {
                 for (int i = 0; i < 5; i++) // 5 rounds × 10 per batch = 50 jobs
                 {
-                    await using var ctx = (IDataContext)factory.Create();
-                    using var tx = await ctx.BeginTransaction();
-
-                    var jobs = await ctx
-                        .BackgroundJobs.FromSqlRaw(
-                            """
-                            SELECT * FROM trax.background_job
-                            WHERE fetched_at IS NULL
-                            ORDER BY created_at ASC
-                            LIMIT 10
-                            FOR UPDATE SKIP LOCKED
-                            """
-                        )
-                        .ToListAsync();
-
-                    if (jobs.Count > 0)
+                    var ctx = (IDataContext)factory.Create();
+                    await using (ctx.ConfigureAwait(false))
                     {
-                        foreach (var job in jobs)
-                            job.FetchedAt = DateTime.UtcNow;
-                        await ctx.SaveChanges(CancellationToken.None);
-                        await ctx.CommitTransaction();
-                        claimed.AddRange(jobs.Select(j => j.Id));
-                    }
-                    else
-                    {
-                        await ctx.RollbackTransaction();
-                        break;
+                        using var tx = await ctx.BeginTransaction().ConfigureAwait(false);
+
+                        var jobs = await ctx
+                            .BackgroundJobs.FromSqlRaw(
+                                """
+                                SELECT * FROM trax.background_job
+                                WHERE fetched_at IS NULL
+                                ORDER BY created_at ASC
+                                LIMIT 10
+                                FOR UPDATE SKIP LOCKED
+                                """
+                            )
+                            .ToListAsync()
+                            .ConfigureAwait(false);
+
+                        if (jobs.Count > 0)
+                        {
+                            foreach (var job in jobs)
+                                job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
+                            await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+                            await ctx.CommitTransaction().ConfigureAwait(false);
+                            claimed.AddRange(jobs.Select(j => j.Id));
+                        }
+                        else
+                        {
+                            await ctx.RollbackTransaction().ConfigureAwait(false);
+                            break;
+                        }
                     }
                 }
             },
@@ -850,9 +877,14 @@ public class QueryPerformanceTests : TestSetup
 
         claimed.Should().HaveCount(50);
         claimed.Should().OnlyHaveUniqueItems();
-        TestContext.Out.WriteLine(
-            $"BatchClaim (LIMIT 10, 5 rounds): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BatchClaim (LIMIT 10, 5 rounds): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -868,7 +900,11 @@ public class QueryPerformanceTests : TestSetup
         //
         // This avoids the NOT IN(...) clause with many string parameters that caused
         // command timeouts on low-resource Postgres instances.
-        var expectedIds = _manifests.Take(50).Select(m => m.ExternalId).ToHashSet();
+        var expectedIds = _manifests
+            .NotNull()
+            .Take(50)
+            .Select(m => m.ExternalId)
+            .ToHashSet(StringComparer.Ordinal);
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
@@ -877,7 +913,8 @@ public class QueryPerformanceTests : TestSetup
                 // Server compute: lightweight projection, filter in C#
                 var allManifests = await DataContext
                     .Manifests.Select(m => new { m.Id, m.ExternalId })
-                    .ToListAsync();
+                    .ToListAsync()
+                    .ConfigureAwait(false);
 
                 var orphanedIds = allManifests
                     .Where(m => !expectedIds.Contains(m.ExternalId))
@@ -887,50 +924,22 @@ public class QueryPerformanceTests : TestSetup
                 orphanedIds.Should().HaveCount(ManifestCount - 50);
 
                 // Database compute: delete in batches by integer PK
-                var totalPruned = 0;
-
-                foreach (var batch in orphanedIds.Chunk(batchSize))
-                {
-                    var batchIds = batch.ToList();
-
-                    await DataContext
-                        .Manifests.Where(m =>
-                            m.DependsOnManifestId.HasValue
-                            && batchIds.Contains(m.DependsOnManifestId.Value)
-                        )
-                        .ExecuteUpdateAsync(s =>
-                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                        );
-
-                    await DataContext
-                        .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    totalPruned += await DataContext
-                        .Manifests.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync();
-                }
+                var totalPruned = await PruneInBatches(orphanedIds, batchSize)
+                    .ConfigureAwait(false);
 
                 totalPruned.Should().Be(ManifestCount - 50);
             },
             TimeSpan.FromSeconds(60)
         );
 
-        TestContext.Out.WriteLine(
-            $"PruneOrphanedManifests server-side filter ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PruneOrphanedManifests server-side filter ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -940,7 +949,11 @@ public class QueryPerformanceTests : TestSetup
         // expected set), 50 orphans to prune. The previous NOT IN('id1', ..., 'id450')
         // approach would generate a massive SQL statement. The server-side filter loads
         // all 500 ID pairs (~15KB) and computes the diff in C# with O(n) HashSet lookups.
-        var expectedIds = _manifests.Take(ManifestCount - 50).Select(m => m.ExternalId).ToHashSet();
+        var expectedIds = _manifests
+            .NotNull()
+            .Take(ManifestCount - 50)
+            .Select(m => m.ExternalId)
+            .ToHashSet(StringComparer.Ordinal);
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
@@ -948,7 +961,8 @@ public class QueryPerformanceTests : TestSetup
             {
                 var allManifests = await DataContext
                     .Manifests.Select(m => new { m.Id, m.ExternalId })
-                    .ToListAsync();
+                    .ToListAsync()
+                    .ConfigureAwait(false);
 
                 var orphanedIds = allManifests
                     .Where(m => !expectedIds.Contains(m.ExternalId))
@@ -957,50 +971,22 @@ public class QueryPerformanceTests : TestSetup
 
                 orphanedIds.Should().HaveCount(50);
 
-                var totalPruned = 0;
-
-                foreach (var batch in orphanedIds.Chunk(batchSize))
-                {
-                    var batchIds = batch.ToList();
-
-                    await DataContext
-                        .Manifests.Where(m =>
-                            m.DependsOnManifestId.HasValue
-                            && batchIds.Contains(m.DependsOnManifestId.Value)
-                        )
-                        .ExecuteUpdateAsync(s =>
-                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                        );
-
-                    await DataContext
-                        .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    totalPruned += await DataContext
-                        .Manifests.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync();
-                }
+                var totalPruned = await PruneInBatches(orphanedIds, batchSize)
+                    .ConfigureAwait(false);
 
                 totalPruned.Should().Be(50);
             },
             TimeSpan.FromSeconds(60)
         );
 
-        TestContext.Out.WriteLine(
-            $"PruneOrphanedManifests large expected set ({ManifestCount - 50} expected, 50 pruned): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"PruneOrphanedManifests large expected set ({ManifestCount - 50} expected, 50 pruned): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -1016,104 +1002,40 @@ public class QueryPerformanceTests : TestSetup
 
         // Seed 5000 additional orphan manifests (baseline 500 are the "expected" set)
         var orphanGroup = await SeedManifestGroup("orphan-5k-group");
-        var orphans = new List<Manifest>(orphanCount);
-        for (var i = 0; i < orphanCount; i++)
-        {
-            var manifest = Manifest.Create(
-                new CreateManifest
-                {
-                    Name = typeof(StressTestTrain),
-                    IsEnabled = true,
-                    ScheduleType = ScheduleType.Interval,
-                    IntervalSeconds = 60,
-                    MaxRetries = 3,
-                    Properties = new StressTestInput { Value = $"orphan-{i}" },
-                }
-            );
-            manifest.ExternalId = $"orphan-{i}";
-            manifest.ManifestGroupId = orphanGroup.Id;
-            await DataContext.Track(manifest);
-            orphans.Add(manifest);
-        }
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        await SeedOrphanManifests(orphanGroup, orphanCount);
 
-        TestContext.Out.WriteLine(
-            $"Seeded {orphanCount} orphan manifests (total: {ManifestCount + orphanCount})"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                $"Seeded {orphanCount} orphan manifests (total: {ManifestCount + orphanCount})"
+            )
+            .ConfigureAwait(false);
 
         // The 500 baseline manifests (stress-0..stress-499) are the expected set
-        var expectedIds = _manifests.Select(m => m.ExternalId).ToHashSet();
+        var expectedIds = _manifests
+            .NotNull()
+            .Select(m => m.ExternalId)
+            .ToHashSet(StringComparer.Ordinal);
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
-            async () =>
-            {
-                // Server compute: load all (id, external_id) pairs, filter in C#
-                var allManifests = await DataContext
-                    .Manifests.Select(m => new { m.Id, m.ExternalId })
-                    .ToListAsync();
+                () => PruneEveryOrphan(expectedIds, batchSize, orphanCount),
+                TimeSpan.FromSeconds(120)
+            )
+            .ConfigureAwait(false);
 
-                allManifests.Should().HaveCount(ManifestCount + orphanCount);
-
-                var orphanedIds = allManifests
-                    .Where(m => !expectedIds.Contains(m.ExternalId))
-                    .Select(m => m.Id)
-                    .ToList();
-
-                orphanedIds.Should().HaveCount(orphanCount);
-
-                // Database compute: delete in batches of 500 by integer PK
-                var totalPruned = 0;
-
-                foreach (var batch in orphanedIds.Chunk(batchSize))
-                {
-                    var batchIds = batch.ToList();
-
-                    await DataContext
-                        .Manifests.Where(m =>
-                            m.DependsOnManifestId.HasValue
-                            && batchIds.Contains(m.DependsOnManifestId.Value)
-                        )
-                        .ExecuteUpdateAsync(s =>
-                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                        );
-
-                    await DataContext
-                        .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                        .ExecuteDeleteAsync();
-
-                    await DataContext
-                        .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                        )
-                        .ExecuteDeleteAsync();
-
-                    totalPruned += await DataContext
-                        .Manifests.Where(m => batchIds.Contains(m.Id))
-                        .ExecuteDeleteAsync();
-                }
-
-                totalPruned.Should().Be(orphanCount);
-
-                // Verify expected manifests are untouched
-                var remainingCount = await DataContext.Manifests.CountAsync();
-                remainingCount.Should().Be(ManifestCount);
-            },
-            TimeSpan.FromSeconds(120)
-        );
-
-        TestContext.Out.WriteLine(
-            $"PruneOrphanedManifests 5K orphans ({orphanCount} pruned, {ManifestCount} kept, "
-                + $"batch size {batchSize}, {(orphanCount + batchSize - 1) / batchSize} batches): "
-                + $"{elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                $"PruneOrphanedManifests 5K orphans ({orphanCount} pruned, {ManifestCount} kept, "
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"batch size {batchSize}, {(orphanCount + batchSize - 1) / batchSize} batches): "
+                    )
+                    + string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{elapsed.TotalMilliseconds:F0}ms"
+                    )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1149,7 +1071,8 @@ public class QueryPerformanceTests : TestSetup
                 .OrderByDescending(m => m.Id)
                 .Skip(targetPage * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             page.Should().HaveCount(pageSize);
         });
@@ -1159,17 +1082,23 @@ public class QueryPerformanceTests : TestSetup
         {
             var page = await DataContext
                 .Metadatas.AsNoTracking()
-                .OrderByDescending(m => m.Id)
                 .Where(m => m.Id < cursorRow)
+                .OrderByDescending(m => m.Id)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             page.Should().HaveCount(pageSize);
         });
 
-        TestContext.Out.WriteLine(
-            $"Offset (page {targetPage}): {offsetElapsed.TotalMilliseconds:F0}ms, Keyset: {keysetElapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Offset (page {targetPage}): {offsetElapsed.TotalMilliseconds:F0}ms, Keyset: {keysetElapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -1184,19 +1113,29 @@ public class QueryPerformanceTests : TestSetup
                 ).Database.GetDbConnection();
 
                 if (connection.State != System.Data.ConnectionState.Open)
-                    await connection.OpenAsync();
+                    await connection.OpenAsync().ConfigureAwait(false);
 
-                await using var command = connection.CreateCommand();
-                command.CommandText =
-                    "SELECT reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'metadata' AND n.nspname = 'trax'";
+                var command = connection.CreateCommand();
+                await using (command.ConfigureAwait(false))
+                {
+                    command.CommandText =
+                        "SELECT reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'metadata' AND n.nspname = 'trax'";
 
-                var result = await command.ExecuteScalarAsync();
-                result.Should().NotBeNull();
+                    var result = await command.ExecuteScalarAsync().ConfigureAwait(false);
+                    result.Should().NotBeNull();
+                }
             },
             TimeSpan.FromMilliseconds(100)
         );
 
-        TestContext.Out.WriteLine($"EstimatedCount (reltuples): {elapsed.TotalMilliseconds:F2}ms");
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"EstimatedCount (reltuples): {elapsed.TotalMilliseconds:F2}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1207,57 +1146,99 @@ public class QueryPerformanceTests : TestSetup
     public async Task LoadQueuedJobs_WithLimit_LoadsOnlyLimitedEntries()
     {
         // Seed 500 queued work queue entries (one per manifest, unique constraint)
-        await SeedWorkQueues(_manifests);
+        await SeedWorkQueues(_manifests.NotNull());
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
             var limited = await DataContext
                 .WorkQueues.AsNoTracking()
-                .Include(q => q.Manifest)
-                    .ThenInclude(m => m!.ManifestGroup)
+                .Include(
+                    $"{nameof(Trax.Effect.Models.WorkQueue.WorkQueue.Manifest)}.{nameof(Trax.Effect.Models.Manifest.Manifest.ManifestGroup)}"
+                )
                 .Where(q => q.Status == WorkQueueStatus.Queued)
-                .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
-                .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
-                .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+                .Where(q =>
+                    q.ManifestId == null
+                    || (
+                        q.Manifest != null
+                        && q.Manifest.ManifestGroup != null
+                        && q.Manifest.ManifestGroup.IsEnabled
+                    )
+                )
+                .Where(q =>
+                    q.ScheduledAt == null
+                    || q.ScheduledAt <= TimeProvider.System.GetUtcNow().UtcDateTime
+                )
+                .OrderByDescending(q =>
+                    q.Manifest != null && q.Manifest.ManifestGroup != null
+                        ? q.Manifest.ManifestGroup.Priority
+                        : 0
+                )
                 .ThenByDescending(q => q.Priority)
                 .ThenBy(q => q.CreatedAt)
                 .Take(100)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             limited.Should().HaveCount(100);
         });
 
-        TestContext.Out.WriteLine(
-            $"LoadQueuedJobs with LIMIT 100: {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadQueuedJobs with LIMIT 100: {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
     public async Task LoadQueuedJobs_WithoutLimit_LoadsAllEntries()
     {
         // Seed 500 queued work queue entries
-        await SeedWorkQueues(_manifests);
+        await SeedWorkQueues(_manifests.NotNull());
 
         var elapsed = await AssertCompletesWithin(async () =>
         {
             var all = await DataContext
                 .WorkQueues.AsNoTracking()
-                .Include(q => q.Manifest)
-                    .ThenInclude(m => m!.ManifestGroup)
+                .Include(
+                    $"{nameof(Trax.Effect.Models.WorkQueue.WorkQueue.Manifest)}.{nameof(Trax.Effect.Models.Manifest.Manifest.ManifestGroup)}"
+                )
                 .Where(q => q.Status == WorkQueueStatus.Queued)
-                .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
-                .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
-                .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+                .Where(q =>
+                    q.ManifestId == null
+                    || (
+                        q.Manifest != null
+                        && q.Manifest.ManifestGroup != null
+                        && q.Manifest.ManifestGroup.IsEnabled
+                    )
+                )
+                .Where(q =>
+                    q.ScheduledAt == null
+                    || q.ScheduledAt <= TimeProvider.System.GetUtcNow().UtcDateTime
+                )
+                .OrderByDescending(q =>
+                    q.Manifest != null && q.Manifest.ManifestGroup != null
+                        ? q.Manifest.ManifestGroup.Priority
+                        : 0
+                )
                 .ThenByDescending(q => q.Priority)
                 .ThenBy(q => q.CreatedAt)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             all.Should().HaveCount(ManifestCount);
         });
 
-        TestContext.Out.WriteLine(
-            $"LoadQueuedJobs without LIMIT ({ManifestCount} entries): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"LoadQueuedJobs without LIMIT ({ManifestCount} entries): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     #endregion
@@ -1269,7 +1250,7 @@ public class QueryPerformanceTests : TestSetup
     {
         // ExecuteUpdateAsync on many rows — used by ReapStalePendingMetadataJunction and
         // CancelTimedOutJobsJunction to transition state in bulk.
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         var pendingIds = await DataContext
             .Metadatas.Where(m => m.TrainState == TrainState.Pending)
@@ -1287,12 +1268,263 @@ public class QueryPerformanceTests : TestSetup
                 .ExecuteUpdateAsync(s =>
                     s.SetProperty(m => m.TrainState, TrainState.Failed)
                         .SetProperty(m => m.EndTime, now)
-                );
+                )
+                .ConfigureAwait(false);
         });
 
-        TestContext.Out.WriteLine(
-            $"BulkUpdateState ({pendingIds.Count} rows): {elapsed.TotalMilliseconds:F0}ms"
-        );
+        await TestContext
+            .Out.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"BulkUpdateState ({pendingIds.Count} rows): {elapsed.TotalMilliseconds:F0}ms"
+                )
+            )
+            .ConfigureAwait(false);
+    }
+
+    #endregion
+
+    #region Extracted steps
+
+    private static async Task ClaimJobsUntilNoneLeft(
+        IDataContextProviderFactory factory,
+        System.Collections.Concurrent.ConcurrentBag<long> claimed
+    )
+    {
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            var ctx = (IDataContext)factory.Create();
+            await using (ctx.ConfigureAwait(false))
+            {
+                using var tx = await ctx.BeginTransaction().ConfigureAwait(false);
+
+                var job = await ctx
+                    .BackgroundJobs.FromSqlRaw(
+                        """
+                        SELECT * FROM trax.background_job
+                        WHERE fetched_at IS NULL
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                        """
+                    )
+                    .FirstOrDefaultAsync()
+                    .ConfigureAwait(false);
+
+                if (job is not null)
+                {
+                    job.FetchedAt = TimeProvider.System.GetUtcNow().UtcDateTime;
+                    await ctx.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+                    await ctx.CommitTransaction().ConfigureAwait(false);
+                    claimed.Add(job.Id);
+                }
+                else
+                {
+                    await ctx.RollbackTransaction().ConfigureAwait(false);
+                    break; // No more jobs
+                }
+            }
+        }
+    }
+
+    private Task<List<long>> ExpiredBatchIds(
+        HashSet<string> whitelist,
+        DateTime cutoff,
+        int batchSize
+    ) =>
+        DataContext
+            .Metadatas.Where(m => whitelist.Contains(m.Name))
+            .Where(m => m.StartTime < cutoff)
+            .Where(m =>
+                m.TrainState == TrainState.Completed
+                || m.TrainState == TrainState.Failed
+                || m.TrainState == TrainState.Cancelled
+            )
+            .Select(m => m.Id)
+            .Take(batchSize)
+            .ToListAsync();
+
+    private async Task<int> DeleteExpiredBatch(List<long> batchIds)
+    {
+        await DataContext
+            .WorkQueues.Where(wq =>
+                wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
+            )
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .Logs.Where(l => batchIds.Contains(l.MetadataId))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        return await DataContext
+            .Metadatas.Where(m => batchIds.Contains(m.Id))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+    }
+
+    private async Task DeleteManifestsWithDependents(List<long> staleManifestIds)
+    {
+        await DataContext
+            .WorkQueues.Where(w =>
+                w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
+            )
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .DeadLetters.Where(d => staleManifestIds.Contains(d.ManifestId))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .Metadatas.Where(m =>
+                m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
+            )
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+
+        await DataContext
+            .Manifests.Where(m => staleManifestIds.Contains(m.Id))
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ScheduleFirstEvolveRun(ITraxScheduler scheduler)
+    {
+        await scheduler
+            .ScheduleManyAsync<IStressTestTrain, StressTestInput, Trax.Core.Functional.Unit, int>(
+                Enumerable.Range(0, 1000),
+                i =>
+                    (
+                        string.Create(CultureInfo.InvariantCulture, $"evolve-{i}"),
+                        new StressTestInput
+                        {
+                            Value = string.Create(CultureInfo.InvariantCulture, $"v1-{i}"),
+                        }
+                    ),
+                Every.Minutes(5),
+                options => options.PrunePrefix("evolve-")
+            )
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ScheduleSecondEvolveRun(ITraxScheduler scheduler)
+    {
+        await scheduler
+            .ScheduleManyAsync<IStressTestTrain, StressTestInput, Core.Functional.Unit, int>(
+                Enumerable.Range(0, 900),
+                i =>
+                    (
+                        string.Create(CultureInfo.InvariantCulture, $"evolve-{i}"),
+                        new StressTestInput
+                        {
+                            Value = string.Create(CultureInfo.InvariantCulture, $"v2-{i}"),
+                        }
+                    ),
+                Every.Minutes(5),
+                options => options.PrunePrefix("evolve-")
+            )
+            .ConfigureAwait(false);
+    }
+
+    private async Task<int> PruneInBatches(List<long> orphanedIds, int batchSize)
+    {
+        var totalPruned = 0;
+
+        foreach (var batch in orphanedIds.Chunk(batchSize))
+        {
+            var batchIds = batch.ToList();
+
+            await DataContext
+                .Manifests.Where(m =>
+                    m.DependsOnManifestId.HasValue && batchIds.Contains(m.DependsOnManifestId.Value)
+                )
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (long?)null))
+                .ConfigureAwait(false);
+
+            await DataContext
+                .WorkQueues.Where(w =>
+                    w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
+                )
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+
+            await DataContext
+                .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+
+            await DataContext
+                .Metadatas.Where(m =>
+                    m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
+                )
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+
+            totalPruned += await DataContext
+                .Manifests.Where(m => batchIds.Contains(m.Id))
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
+        }
+
+        return totalPruned;
+    }
+
+    private async Task SeedOrphanManifests(ManifestGroup orphanGroup, int orphanCount)
+    {
+        var orphans = new List<Manifest>(orphanCount);
+        for (var i = 0; i < orphanCount; i++)
+        {
+            var manifest = Manifest.Create(
+                new CreateManifest
+                {
+                    Name = typeof(StressTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.Interval,
+                    IntervalSeconds = 60,
+                    MaxRetries = 3,
+                    Properties = new StressTestInput
+                    {
+                        Value = string.Create(CultureInfo.InvariantCulture, $"orphan-{i}"),
+                    },
+                }
+            );
+            manifest.ExternalId = string.Create(CultureInfo.InvariantCulture, $"orphan-{i}");
+            manifest.ManifestGroupId = orphanGroup.Id;
+            await DataContext.Track(manifest).ConfigureAwait(false);
+            orphans.Add(manifest);
+        }
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+    }
+
+    private async Task PruneEveryOrphan(HashSet<string> expectedIds, int batchSize, int orphanCount)
+    {
+        // Server compute: load all (id, external_id) pairs, filter in C#
+        var allManifests = await DataContext
+            .Manifests.Select(m => new { m.Id, m.ExternalId })
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        allManifests.Should().HaveCount(ManifestCount + orphanCount);
+
+        var orphanedIds = allManifests
+            .Where(m => !expectedIds.Contains(m.ExternalId))
+            .Select(m => m.Id)
+            .ToList();
+
+        orphanedIds.Should().HaveCount(orphanCount);
+
+        // Database compute: delete in batches of 500 by integer PK
+        var totalPruned = await PruneInBatches(orphanedIds, batchSize).ConfigureAwait(false);
+
+        totalPruned.Should().Be(orphanCount);
+
+        // Verify expected manifests are untouched
+        var remainingCount = await DataContext.Manifests.CountAsync().ConfigureAwait(false);
+        remainingCount.Should().Be(ManifestCount);
     }
 
     #endregion

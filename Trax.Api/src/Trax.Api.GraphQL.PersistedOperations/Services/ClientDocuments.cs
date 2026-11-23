@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -67,7 +68,9 @@ internal static class ClientDocuments
         if (!IsReserved(id) || !MachineDocuments.IsWellFormed(id))
             return null;
         var name = id[ReservedIdPrefix.Length..id.LastIndexOf('_')];
-        return name.Length == 0 || name.Contains('_') ? null : id[..id.LastIndexOf('_')];
+        return name.Length == 0 || name.Contains('_', StringComparison.Ordinal)
+            ? null
+            : id[..id.LastIndexOf('_')];
     }
 
     /// <summary>
@@ -77,12 +80,15 @@ internal static class ClientDocuments
     /// The file is missing or unreadable, is not the format this version reads, or names a document twice or with a
     /// name its text does not hold.
     /// </exception>
-    public static IReadOnlyList<ClientDocument> Load(string path)
+    public static async Task<IReadOnlyList<ClientDocument>> LoadAsync(
+        string path,
+        CancellationToken cancellationToken
+    )
     {
         string json;
         try
         {
-            json = File.ReadAllText(path);
+            json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -128,7 +134,7 @@ internal static class ClientDocuments
             var owner =
                 $"client document '{entry.Name}'"
                 + (string.IsNullOrEmpty(entry.Source) ? "" : $" ({entry.Source})");
-            if (documents.Any(d => d.Name == entry.Name))
+            if (documents.Exists(d => string.Equals(d.Name, entry.Name, StringComparison.Ordinal)))
                 throw new InvalidOperationException(
                     $"The client documents file '{path}' names the {owner} twice. Operation names are unique."
                 );
@@ -160,7 +166,7 @@ internal static class ClientDocuments
                 refusals.Add($"The {document.Owner} {reason}");
         if (refusals.Count > 0)
             throw new InvalidOperationException(
-                string.Join("\n", refusals)
+                string.Join('\n', refusals)
                     + "\nA client document holds one named query or mutation of the host's trains and query models "
                     + "under dispatch or discover."
             );
@@ -194,7 +200,7 @@ internal static class ClientDocuments
         )
             return "holds a definition that is neither an operation nor a fragment.";
         var operation = operations[0];
-        if (operation.Name?.Value != name)
+        if (!string.Equals(operation.Name?.Value, name, StringComparison.Ordinal))
             return $"is registered as '{name}' but its operation is named '{operation.Name?.Value}'.";
         if (operation.Operation is not (OperationType.Query or OperationType.Mutation))
             return $"is a {operation.Operation.ToString().ToLowerInvariant()}; a client document is a query or a mutation.";
@@ -222,10 +228,24 @@ internal static class ClientDocuments
 
         if (
             operation.SelectionSet.Selections is not [FieldNode { Alias: null } top]
-            || top.Name.Value != rootName
+            || !string.Equals(top.Name.Value, rootName, StringComparison.Ordinal)
         )
             return $"selects something other than '{rootName}' at its root.";
 
+        return SelectionRefusal(reach, top, holder, rootName, rootKind, mutation);
+    }
+
+    // Why the selection under the root field may not be a client document, or null when it may: each field a
+    // train or query model the host registered, at most in a namespace, and one train in a mutation.
+    private static string? SelectionRefusal(
+        ClientDocumentReach reach,
+        FieldNode top,
+        IObjectTypeDefinition holder,
+        string rootName,
+        string rootKind,
+        bool mutation
+    )
+    {
         var trains = 0;
         var reached = 0;
         foreach (var selection in top.SelectionSet?.Selections ?? [])
@@ -239,7 +259,7 @@ internal static class ClientDocuments
                 return $"selects '{rootName}.{field.Name.Value}', which this host does not serve.";
             if (!NamespaceField.IsNamespace(definition))
             {
-                if (Reached(reach, rootKind, null, field.Name.Value, ref trains) is { } refusal)
+                if (Reached(reach, rootKind, ns: null, field.Name.Value, ref trains) is { } refusal)
                     return $"selects '{rootName}.{field.Name.Value}', {refusal}";
                 reached++;
                 continue;
@@ -268,7 +288,10 @@ internal static class ClientDocuments
         if (reached == 0)
             return "selects no train or query model.";
         if (mutation && trains != 1)
-            return $"runs {trains} trains in one mutation; a mutation runs one.";
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"runs {trains} trains in one mutation; a mutation runs one."
+            );
         return null;
     }
 
@@ -287,9 +310,11 @@ internal static class ClientDocuments
             trains++;
             return null;
         }
-        if (root == "query" && reach.IsQueryModel(ns, field))
+        if (string.Equals(root, "query", StringComparison.Ordinal) && reach.IsQueryModel(ns, field))
             return null;
-        return root == "mutation" && reach.IsQueryModel(ns, field)
+        return
+            string.Equals(root, "mutation", StringComparison.Ordinal)
+            && reach.IsQueryModel(ns, field)
             ? "a query model, which a mutation cannot hold."
             : "which is neither a train nor a query model this host exposes.";
     }
@@ -310,6 +335,8 @@ internal static class ClientDocuments
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        RespectNullableAnnotations = false,
+        RespectRequiredConstructorParameters = false,
         PropertyNameCaseInsensitive = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
@@ -326,26 +353,4 @@ internal static class ClientDocuments
         public string? Source { get; init; }
         public string? Text { get; init; }
     }
-}
-
-/// <summary>One client document, as <see cref="ClientDocuments.Load"/> reads it.</summary>
-/// <param name="Id">The persisted id.</param>
-/// <param name="Text">The GraphQL document text, exactly as the file holds it.</param>
-/// <param name="Name">The operation's name.</param>
-/// <param name="OwnerText">What it is, for a refusal or a log line (<c>client document 'OrderCard' (src/...)</c>).</param>
-internal sealed record ClientDocument(string Id, string Text, string Name, string OwnerText)
-    : GeneratedDocument(Id, Text)
-{
-    /// <inheritdoc />
-    public override string Slot => ClientDocuments.SlotOf(Name);
-
-    /// <inheritdoc />
-    public override string Owner => OwnerText;
-
-    /// <inheritdoc />
-    public override string Description => $"Written by the frontend: the {OwnerText}.";
-
-    /// <inheritdoc />
-    public override bool Matches(string stored) =>
-        string.Equals(ClientDocuments.IdOf(Name, stored), Id, StringComparison.Ordinal);
 }

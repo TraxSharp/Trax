@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -28,7 +29,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class JobRunnerEndpointTests
 {
-    private static IHost BuildHost(
+    private static async Task<IHost> BuildHostAsync(
         ITraxRequestHandler handler,
         Action<TraxJobRunnerOptions>? runner = null,
         bool registerRunner = true,
@@ -81,8 +82,7 @@ public class JobRunnerEndpointTests
                 })
         );
 
-        var host = hostBuilder.Start();
-        return host;
+        return await hostBuilder.StartAsync().ConfigureAwait(false);
     }
 
     #region UseTraxJobRunner — POST /trax/execute
@@ -95,17 +95,21 @@ public class JobRunnerEndpointTests
             .ExecuteJobAsync(Arg.Any<RemoteJobRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ExecuteJobResult(MetadataId: 42));
 
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/trax/execute",
-            new RemoteJobRequest(MetadataId: 1, Input: null, InputType: null)
-        );
+        var response = await client
+            .PostAsJsonAsync(
+                "/trax/execute",
+                new RemoteJobRequest(MetadataId: 1, Input: null, InputType: null)
+            )
+            .ConfigureAwait(false);
         response.IsSuccessStatusCode.Should().BeTrue();
 
-        var body = await response.Content.ReadFromJsonAsync<RemoteJobResponse>();
-        body!.MetadataId.Should().Be(42);
+        var body = await response
+            .Content.ReadFromJsonAsync<RemoteJobResponse>()
+            .ConfigureAwait(false);
+        body.NotNull().MetadataId.Should().Be(42);
         body.IsError.Should().BeFalse();
         body.ErrorMessage.Should().BeNull();
     }
@@ -120,17 +124,18 @@ public class JobRunnerEndpointTests
                 throw new InvalidOperationException("downstream sink unavailable")
             );
 
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/trax/execute",
-            new RemoteJobRequest(MetadataId: 7)
-        );
+        var response = await client
+            .PostAsJsonAsync("/trax/execute", new RemoteJobRequest(MetadataId: 7))
+            .ConfigureAwait(false);
         response.IsSuccessStatusCode.Should().BeTrue();
 
-        var body = await response.Content.ReadFromJsonAsync<RemoteJobResponse>();
-        body!.MetadataId.Should().Be(7);
+        var body = await response
+            .Content.ReadFromJsonAsync<RemoteJobResponse>()
+            .ConfigureAwait(false);
+        body.NotNull().MetadataId.Should().Be(7);
         body.IsError.Should().BeTrue();
         body.ErrorMessage.Should().NotContain("downstream sink unavailable");
         body.StackTrace.Should().BeNull();
@@ -144,18 +149,21 @@ public class JobRunnerEndpointTests
     public async Task ExecuteJob_BodyWithARepeatedProperty_IsRefused(string body)
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsync(
-            "/trax/execute",
-            new StringContent(body, System.Text.Encoding.UTF8, "application/json")
-        );
+        var response = await client
+            .PostAsync(
+                "/trax/execute",
+                new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            )
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
         await handler
             .DidNotReceive()
-            .ExecuteJobAsync(Arg.Any<RemoteJobRequest>(), Arg.Any<CancellationToken>());
+            .ExecuteJobAsync(Arg.Any<RemoteJobRequest>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     #region UseTraxRunEndpoint — POST /trax/run
@@ -174,17 +182,21 @@ public class JobRunnerEndpointTests
             .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
             .Returns(expected);
 
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/trax/run",
-            new RemoteRunRequest(TrainName: "MyTrain", InputJson: "{}", InputType: "Bar")
-        );
+        var response = await client
+            .PostAsJsonAsync(
+                "/trax/run",
+                new RemoteRunRequest(TrainName: "MyTrain", InputJson: "{}", InputType: "Bar")
+            )
+            .ConfigureAwait(false);
         response.IsSuccessStatusCode.Should().BeTrue();
 
-        var body = await response.Content.ReadFromJsonAsync<RemoteRunResponse>();
-        body!.MetadataId.Should().Be(99);
+        var body = await response
+            .Content.ReadFromJsonAsync<RemoteRunResponse>()
+            .ConfigureAwait(false);
+        body.NotNull().MetadataId.Should().Be(99);
         body.ExternalId.Should().Be("ext-99");
         body.OutputJson.Should().Be("{\"k\":1}");
         body.IsError.Should().BeFalse();
@@ -198,17 +210,21 @@ public class JobRunnerEndpointTests
             .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
             .Returns<RemoteRunResponse>(_ => throw new TimeoutException("downstream slow"));
 
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/trax/run",
-            new RemoteRunRequest(TrainName: "T", InputJson: "{}", InputType: "I")
-        );
+        var response = await client
+            .PostAsJsonAsync(
+                "/trax/run",
+                new RemoteRunRequest(TrainName: "T", InputJson: "{}", InputType: "I")
+            )
+            .ConfigureAwait(false);
         response.IsSuccessStatusCode.Should().BeTrue();
 
-        var body = await response.Content.ReadFromJsonAsync<RemoteRunResponse>();
-        body!.IsError.Should().BeTrue();
+        var body = await response
+            .Content.ReadFromJsonAsync<RemoteRunResponse>()
+            .ConfigureAwait(false);
+        body.NotNull().IsError.Should().BeTrue();
         body.ErrorMessage.Should().NotContain("downstream slow");
         body.StackTrace.Should().BeNull();
         body.ExceptionType.Should().Be(nameof(TimeoutException));
@@ -221,18 +237,21 @@ public class JobRunnerEndpointTests
     public async Task RunTrain_BodyWithARepeatedProperty_IsRefused(string body)
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsync(
-            "/trax/run",
-            new StringContent(body, System.Text.Encoding.UTF8, "application/json")
-        );
+        var response = await client
+            .PostAsync(
+                "/trax/run",
+                new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            )
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
         await handler
             .DidNotReceive()
-            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>());
+            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     #region Posture
@@ -249,6 +268,10 @@ public class JobRunnerEndpointTests
         var body = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
             envelope,
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+            {
+                RespectNullableAnnotations = false,
+                RespectRequiredConstructorParameters = false,
+            }
         );
         var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
@@ -259,38 +282,44 @@ public class JobRunnerEndpointTests
         };
         request.Headers.Add(
             RunnerRequestSignature.HeaderName,
-            signature ?? RunnerRequestSignature.Create(Key, purpose, body)
+            signature ?? RunnerRequestSignature.Create(Key, purpose, body, TimeProvider.System)
         );
         return request;
     }
 
     [Test]
-    public void Mapping_WithoutAddTraxJobRunner_FailsAtStartup()
+    public async Task Mapping_WithoutAddTraxJobRunner_FailsAtStartup()
     {
-        var act = () => BuildHost(Substitute.For<ITraxRequestHandler>(), registerRunner: false);
+        var act = () =>
+            BuildHostAsync(Substitute.For<ITraxRequestHandler>(), registerRunner: false);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*AddTraxJobRunner*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*AddTraxJobRunner*")
+            .ConfigureAwait(false);
     }
 
     [Test]
-    public void Mapping_WithoutAPosture_FailsAtStartup()
+    public async Task Mapping_WithoutAPosture_FailsAtStartup()
     {
-        var act = () => BuildHost(Substitute.For<ITraxRequestHandler>(), _ => { });
+        var act = () => BuildHostAsync(Substitute.For<ITraxRequestHandler>(), _ => { });
 
-        act.Should()
-            .Throw<InvalidOperationException>(
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>(
                 "mapping a runner endpoint with no posture fails at startup (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
             )
-            .WithMessage("*no authorization posture*");
+            .WithMessage("*no authorization posture*")
+            .ConfigureAwait(false);
     }
 
     [Test]
     public async Task AuthorizationPolicy_IsAppliedToBothEndpoints()
     {
-        using var host = BuildHost(
-            Substitute.For<ITraxRequestHandler>(),
-            o => o.AuthorizationPolicy = "scheduler"
-        );
+        using var host = await BuildHostAsync(
+                Substitute.For<ITraxRequestHandler>(),
+                o => o.AuthorizationPolicy = "scheduler"
+            )
+            .ConfigureAwait(false);
 
         var endpoints = host
             .Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>()
@@ -298,7 +327,7 @@ public class JobRunnerEndpointTests
         foreach (var route in new[] { "/trax/execute", "/trax/run" })
             endpoints
                 .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
-                .Single(e => e.RoutePattern.RawText == route)
+                .Single(e => string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal))
                 .Metadata.GetOrderedMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>()
                 .Should()
                 .Contain(a => a.Policy == "scheduler");
@@ -307,21 +336,23 @@ public class JobRunnerEndpointTests
         // handler runs.
         var client = host.GetTestServer().CreateClient();
         var act = async () =>
-            await client.PostAsJsonAsync("/trax/run", new RemoteRunRequest("T", "{}", "I"));
-        await act.Should().ThrowAsync<InvalidOperationException>();
+            await client
+                .PostAsJsonAsync("/trax/run", new RemoteRunRequest("T", "{}", "I"))
+                .ConfigureAwait(false);
+        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [Test]
     public async Task SigningKey_UnsignedRequest_Is401WithoutRunning()
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/trax/run",
-            new RemoteRunRequest("T", "{}", "I")
-        );
+        var response = await client
+            .PostAsJsonAsync("/trax/run", new RemoteRunRequest("T", "{}", "I"))
+            .ConfigureAwait(false);
 
         response
             .StatusCode.Should()
@@ -331,7 +362,8 @@ public class JobRunnerEndpointTests
             );
         await handler
             .DidNotReceive()
-            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>());
+            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -341,12 +373,15 @@ public class JobRunnerEndpointTests
         handler
             .ExecuteJobAsync(Arg.Any<RemoteJobRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ExecuteJobResult(MetadataId: 5));
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.SendAsync(
-            SignedPost("/trax/execute", new RemoteJobRequest(5), RunnerRequestPurpose.Execute)
-        );
+        var response = await client
+            .SendAsync(
+                SignedPost("/trax/execute", new RemoteJobRequest(5), RunnerRequestPurpose.Execute)
+            )
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         await handler
@@ -354,7 +389,8 @@ public class JobRunnerEndpointTests
             .ExecuteJobAsync(
                 Arg.Is<RemoteJobRequest>(r => r.MetadataId == 5),
                 Arg.Any<CancellationToken>()
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
@@ -364,7 +400,8 @@ public class JobRunnerEndpointTests
         handler
             .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
             .Returns(new RemoteRunResponse(MetadataId: 31, ExternalId: "ext-31"));
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
         var request = SignedPost(
             "/trax/run",
@@ -375,7 +412,7 @@ public class JobRunnerEndpointTests
             .Headers.GetValues(RunnerRequestSignature.HeaderName)
             .Single();
 
-        var response = await client.SendAsync(request);
+        var response = await client.SendAsync(request).ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         var responseSignature = response
@@ -387,7 +424,7 @@ public class JobRunnerEndpointTests
                 RunnerRequestPurpose.Run,
                 requestSignature,
                 responseSignature,
-                await response.Content.ReadAsByteArrayAsync()
+                await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false)
             )
             .Should()
             .BeTrue(
@@ -407,13 +444,12 @@ public class JobRunnerEndpointTests
                 SigningKey = Key,
                 Retry = new HttpRetryOptions { MaxRetries = 0 },
             },
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpRunExecutor>.Instance
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpRunExecutor>.Instance,
+            TimeProvider.System
         );
-        var result = await executor.ExecuteAsync(
-            "T",
-            new { Name = "x" },
-            typeof(Trax.Core.Functional.Unit)
-        );
+        var result = await executor
+            .ExecuteAsync("T", new { Name = "x" }, typeof(Core.Functional.Unit))
+            .ConfigureAwait(false);
         result.MetadataId.Should().Be(31);
         result.ExternalId.Should().Be("ext-31");
     }
@@ -425,13 +461,12 @@ public class JobRunnerEndpointTests
         handler
             .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
             .Returns(new RemoteRunResponse(MetadataId: 1));
-        using var host = BuildHost(handler);
+        using var host = await BuildHostAsync(handler).ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/trax/run",
-            new RemoteRunRequest("T", "{}", "I")
-        );
+        var response = await client
+            .PostAsJsonAsync("/trax/run", new RemoteRunRequest("T", "{}", "I"))
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         response
@@ -450,38 +485,43 @@ public class JobRunnerEndpointTests
         handler
             .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
             .Returns(new RemoteRunResponse(MetadataId: 1));
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
         var envelope = new RemoteRunRequest("T", "{}", "I");
         var first = SignedPost("/trax/run", envelope, RunnerRequestPurpose.Run);
         var signature = first.Headers.GetValues(RunnerRequestSignature.HeaderName).Single();
 
-        var accepted = await client.SendAsync(first);
-        var replayed = await client.SendAsync(
-            SignedPost("/trax/run", envelope, RunnerRequestPurpose.Run, signature)
-        );
+        var accepted = await client.SendAsync(first).ConfigureAwait(false);
+        var replayed = await client
+            .SendAsync(SignedPost("/trax/run", envelope, RunnerRequestPurpose.Run, signature))
+            .ConfigureAwait(false);
 
         accepted.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         replayed.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
         await handler
             .Received(1)
-            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>());
+            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
+            .ConfigureAwait(false);
     }
 
     [Test]
     public async Task SigningKey_ExecuteSignatureSentToRun_IsRefused()
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.SendAsync(
-            SignedPost(
-                "/trax/run",
-                new RemoteRunRequest("T", "{}", "I"),
-                RunnerRequestPurpose.Execute
+        var response = await client
+            .SendAsync(
+                SignedPost(
+                    "/trax/run",
+                    new RemoteRunRequest("T", "{}", "I"),
+                    RunnerRequestPurpose.Execute
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
     }
@@ -513,10 +553,13 @@ public class JobRunnerEndpointTests
     public async Task SigningKey_UnsignedRequest_Is401WithoutTheBodyBeingRead(string path)
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.SendAsync(PostWithUnreadableBody(path, signature: null));
+        var response = await client
+            .SendAsync(PostWithUnreadableBody(path, signature: null))
+            .ConfigureAwait(false);
 
         response
             .StatusCode.Should()
@@ -535,10 +578,13 @@ public class JobRunnerEndpointTests
     )
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
-        var response = await client.SendAsync(PostWithUnreadableBody(path, signature));
+        var response = await client
+            .SendAsync(PostWithUnreadableBody(path, signature))
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
         handler.ReceivedCalls().Should().BeEmpty();
@@ -548,17 +594,20 @@ public class JobRunnerEndpointTests
     public async Task SigningKey_StaleSignature_Is401WithoutTheBodyBeingRead()
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        using var host = await BuildHostAsync(handler, o => o.SigningKey = Key)
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
         var stale = RunnerRequestSignature.Create(
             Key,
             RunnerRequestPurpose.Run,
             new byte[16],
-            DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds(),
+            TimeProvider.System.GetUtcNow().AddHours(-1).ToUnixTimeSeconds(),
             "00112233445566778899aabbccddeeff"
         );
 
-        var response = await client.SendAsync(PostWithUnreadableBody("/trax/run", stale));
+        var response = await client
+            .SendAsync(PostWithUnreadableBody("/trax/run", stale))
+            .ConfigureAwait(false);
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
     }
@@ -570,14 +619,15 @@ public class JobRunnerEndpointTests
     public async Task A_body_over_the_limit_is_413_without_running(string path, bool announced)
     {
         var handler = Substitute.For<ITraxRequestHandler>();
-        using var host = BuildHost(
-            handler,
-            o =>
-            {
-                o.AllowUnsignedRequests();
-                o.MaxRequestBodyBytes = 1024;
-            }
-        );
+        using var host = await BuildHostAsync(
+                handler,
+                o =>
+                {
+                    o.AllowUnsignedRequests();
+                    o.MaxRequestBodyBytes = 1024;
+                }
+            )
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
         var body = System.Text.Encoding.UTF8.GetBytes(
             $"{{\"metadataId\":1,\"input\":\"{new string('x', 4096)}\"}}"
@@ -589,7 +639,7 @@ public class JobRunnerEndpointTests
         if (!announced)
             content.Headers.ContentLength = null;
 
-        var response = await client.PostAsync(path, content);
+        var response = await client.PostAsync(path, content).ConfigureAwait(false);
 
         response
             .StatusCode.Should()
@@ -612,50 +662,58 @@ public class JobRunnerEndpointTests
     public async Task Refusals_in_quick_succession_are_logged_as_one_warning()
     {
         var logs = new CapturingLoggerProvider();
-        using var host = BuildHost(
-            Substitute.For<ITraxRequestHandler>(),
-            o => o.SigningKey = Key,
-            logs: logs
-        );
+        using var host = await BuildHostAsync(
+                Substitute.For<ITraxRequestHandler>(),
+                o => o.SigningKey = Key,
+                logs: logs
+            )
+            .ConfigureAwait(false);
         var client = host.GetTestServer().CreateClient();
 
         for (var i = 0; i < 5; i++)
-            await client.SendAsync(PostWithUnreadableBody("/trax/run", signature: null));
+            await client
+                .SendAsync(PostWithUnreadableBody("/trax/run", signature: null))
+                .ConfigureAwait(false);
 
-        logs.Entries.Count(e => e.Level == LogLevel.Warning && e.Message.Contains("Refused"))
+        logs.Entries.Count(e =>
+                e.Level == LogLevel.Warning
+                && e.Message.Contains("Refused", StringComparison.Ordinal)
+            )
             .Should()
             .Be(1, "refusals are summarised rather than logged one warning each");
     }
 
     [Test]
-    public void Mapping_the_run_endpoint_over_a_replaced_execution_service_warns_once()
+    public async Task Mapping_the_run_endpoint_over_a_replaced_execution_service_warns_once()
     {
         var logs = new CapturingLoggerProvider();
 
-        using var host = BuildHost(
-            Substitute.For<ITraxRequestHandler>(),
-            logs: logs,
-            configureServices: s =>
-                s.AddScoped(_ =>
-                    Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
-                )
-        );
+        using var host = await BuildHostAsync(
+                Substitute.For<ITraxRequestHandler>(),
+                logs: logs,
+                configureServices: s =>
+                    s.AddScoped(_ =>
+                        Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+                    )
+            )
+            .ConfigureAwait(false);
 
         logs.Entries.Count(e =>
                 e.Level == LogLevel.Warning
-                && e.Message.Contains("/trax/run")
-                && e.Message.Contains("[TraxAuthorize]")
+                && e.Message.Contains("/trax/run", StringComparison.Ordinal)
+                && e.Message.Contains("[TraxAuthorize]", StringComparison.Ordinal)
             )
             .Should()
             .Be(1, "a runner whose execution service has no trusted scope says so when it starts");
     }
 
     [Test]
-    public void Mapping_the_run_endpoint_with_no_execution_service_registered_does_not_warn()
+    public async Task Mapping_the_run_endpoint_with_no_execution_service_registered_does_not_warn()
     {
         var logs = new CapturingLoggerProvider();
 
-        using var host = BuildHost(Substitute.For<ITraxRequestHandler>(), logs: logs);
+        using var host = await BuildHostAsync(Substitute.For<ITraxRequestHandler>(), logs: logs)
+            .ConfigureAwait(false);
 
         logs.Entries.Should()
             .NotContain(e => e.Level == LogLevel.Warning && e.Message.Contains("[TraxAuthorize]"));

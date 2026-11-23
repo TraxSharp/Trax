@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
@@ -14,36 +16,57 @@ namespace Trax.Docs.Tests.Tests;
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
-public class ImagesResolveTests
+public partial class ImagesResolveTests
 {
     private const string ImagesPath = "/docs-images/";
 
     // A markdown image: ![alt](target) or ![alt](<target> "title").
-    private static readonly Regex Image = new(
+    [GeneratedRegex(
         @"!\[(?<alt>[^\]]*)\]\(\s*<?(?<target>[^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)",
-        RegexOptions.Compiled
-    );
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Image { get; }
 
-    private static readonly Regex Fence = new(@"^\s*(```|~~~)", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*(```|~~~)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Fence { get; }
 
-    private static readonly Regex InlineCode = new(@"`[^`]*`", RegexOptions.Compiled);
+    [GeneratedRegex(@"`[^`]*`", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InlineCode { get; }
 
     [Test]
-    public void Every_Image_IsAFigure_ThatExists_WithAltText()
+    public async Task Every_Image_IsAFigure_ThatExists_WithAltText()
     {
         var offenders = new List<string>();
 
         foreach (var page in RepoRoot.PublishedPages())
         {
-            foreach (var (line, alt, target) in Images(ReadPage(page)))
+            foreach (
+                var (line, alt, target) in Images(await ReadPageAsync(page).ConfigureAwait(false))
+            )
             {
                 if (!target.StartsWith(ImagesPath, StringComparison.Ordinal))
-                    offenders.Add($"{page}:{line} -> {target} (not under {ImagesPath})");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{page}:{line} -> {target} (not under {ImagesPath})"
+                        )
+                    );
                 else if (!File.Exists(RepoRoot.Combine("images", target[ImagesPath.Length..])))
-                    offenders.Add($"{page}:{line} -> {target} (no such file in images/)");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{page}:{line} -> {target} (no such file in images/)"
+                        )
+                    );
 
                 if (string.IsNullOrWhiteSpace(alt))
-                    offenders.Add($"{page}:{line} -> {target} (no alt text)");
+                    offenders.Add(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{page}:{line} -> {target} (no alt text)"
+                        )
+                    );
             }
         }
 
@@ -57,24 +80,27 @@ public class ImagesResolveTests
     }
 
     [Test]
-    public void Every_FigureInImages_IsShownOnAPage()
+    public async Task Every_FigureInImages_IsShownOnAPage()
     {
         var dir = RepoRoot.Combine("images");
         if (!Directory.Exists(dir))
             return;
 
-        var shown = RepoRoot
-            .PublishedPages()
-            .SelectMany(page => Images(ReadPage(page)))
-            .Select(image => image.Target)
-            .Where(target => target.StartsWith(ImagesPath, StringComparison.Ordinal))
-            .Select(target => target[ImagesPath.Length..])
-            .ToHashSet(StringComparer.Ordinal);
+        var shown = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var page in RepoRoot.PublishedPages())
+        {
+            shown.UnionWith(
+                Images(await ReadPageAsync(page).ConfigureAwait(false))
+                    .Select(image => image.Target)
+                    .Where(target => target.StartsWith(ImagesPath, StringComparison.Ordinal))
+                    .Select(target => target[ImagesPath.Length..])
+            );
+        }
 
         var unused = Directory
             .EnumerateFiles(dir)
-            .Select(Path.GetFileName)
-            .Where(name => !shown.Contains(name!))
+            .Select(file => Path.GetFileName(file))
+            .Where(name => !shown.Contains(name))
             .Order(StringComparer.Ordinal);
 
         unused
@@ -86,13 +112,13 @@ public class ImagesResolveTests
             );
     }
 
-    private static string ReadPage(string page) =>
-        File.ReadAllText(RepoRoot.Combine(page.Split('/')));
+    private static Task<string> ReadPageAsync(string page) =>
+        File.ReadAllTextAsync(RepoRoot.Combine(page.Split('/')));
 
     /// <summary>The images on a page with their line numbers, skipping code.</summary>
     private static IEnumerable<(int Line, string Alt, string Target)> Images(string content)
     {
-        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var inFence = false;
         for (var i = 0; i < lines.Length; i++)
         {

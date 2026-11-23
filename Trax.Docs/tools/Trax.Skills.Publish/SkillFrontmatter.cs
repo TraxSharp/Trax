@@ -9,10 +9,21 @@ namespace Trax.Skills.Publish;
 /// contract: the skills CLI and Claude Code both read these files, and a block either of them
 /// could read differently from this one is a block nobody can check.
 /// </remarks>
-public sealed class SkillFrontmatter
+public sealed partial class SkillFrontmatter
 {
-    private static readonly Regex TopLevel = new(@"^(?<key>[a-z][a-z0-9-]*):(?: (?<value>.*))?$");
-    private static readonly Regex Nested = new(@"^  (?<key>[a-z][a-z0-9-]*): (?<value>.+)$");
+    [GeneratedRegex(
+        @"^(?<key>[a-z][a-z0-9-]*):(?: (?<value>.*))?$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex TopLevel { get; }
+
+    [GeneratedRegex(
+        @"^  (?<key>[a-z][a-z0-9-]*): (?<value>.+)$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Nested { get; }
 
     private readonly Dictionary<string, string> _scalars = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _metadata = new(StringComparer.Ordinal);
@@ -37,7 +48,7 @@ public sealed class SkillFrontmatter
 
     public static SkillFrontmatter Parse(string text)
     {
-        text = text.Replace("\r\n", "\n");
+        text = text.Replace("\r\n", "\n", StringComparison.Ordinal);
         if (!text.StartsWith("---\n", StringComparison.Ordinal))
             return new SkillFrontmatter("it does not start with a '---' frontmatter block", text);
 
@@ -45,7 +56,7 @@ public sealed class SkillFrontmatter
         if (end < 0)
             return new SkillFrontmatter("its frontmatter block is never closed", text);
 
-        var result = new SkillFrontmatter(null, text[(end + "\n---\n".Length)..]);
+        var result = new SkillFrontmatter(error: null, text[(end + "\n---\n".Length)..]);
         var inMetadata = false;
         foreach (var line in text[4..end].Split('\n'))
         {
@@ -67,7 +78,7 @@ public sealed class SkillFrontmatter
 
             var key = top.Groups["key"].Value;
             var value = top.Groups["value"].Success ? top.Groups["value"].Value.Trim() : "";
-            inMetadata = key == "metadata";
+            inMetadata = string.Equals(key, "metadata", StringComparison.Ordinal);
             if (inMetadata ? value.Length > 0 : value.Length == 0)
                 return Failed(
                     inMetadata

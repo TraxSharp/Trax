@@ -12,6 +12,7 @@ using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.StateMachine.E2E.Fakes;
 using Trax.Client;
+using Trax.Core.Extensions;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.StateMachine.E2E.TerminalConsole;
@@ -34,7 +35,7 @@ public class TraxConsoleE2ETests
     public async Task It_reads_the_hosts_release_and_finds_it_is_its_own()
     {
         await using var host = await HostAsync("trax_sm_tui_version");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var version = await session.CheckVersionAsync();
 
@@ -45,7 +46,7 @@ public class TraxConsoleE2ETests
     public async Task It_lists_runs_by_the_documents_id_with_no_text()
     {
         await using var host = await HostAsync("trax_sm_tui_runs");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var page = await Catalog.Runs.LoadAsync(
             session.Client,
@@ -55,10 +56,10 @@ public class TraxConsoleE2ETests
 
         page.Succeeded.Should().BeTrue(page.Message);
         host.Sent.Should()
-            .ContainSingle(b => b["operationName"]!.GetValue<string>() == "Executions")
+            .ContainSingle(b => b["operationName"].NotNull().GetValue<string>() == "Executions")
             .Which.Should()
             .Match<JsonObject>(b =>
-                b["id"]!.GetValue<string>().StartsWith("trax_console_Executions_")
+                b["id"].NotNull().GetValue<string>().StartsWith("trax_console_Executions_")
                 && !b.ContainsKey("query")
             );
     }
@@ -67,7 +68,7 @@ public class TraxConsoleE2ETests
     public async Task It_requeues_a_dead_letter_through_the_hosts_scheduler()
     {
         await using var host = await HostAsync("trax_sm_tui_requeue");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var outcome = await Catalog.DeadLetters.RunAsync(
             session.Client,
@@ -85,7 +86,7 @@ public class TraxConsoleE2ETests
     public async Task A_document_the_host_did_not_register_is_refused()
     {
         await using var host = await HostAsync("trax_sm_tui_unregistered");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
         var registered = TraxOperations.Executions;
 
         var byId = await session.Client.SendAsync(
@@ -100,7 +101,7 @@ public class TraxConsoleE2ETests
                 new TraxDocument<TraxNoVariables, JsonObject>(
                     "Executions",
                     TraxOperationKind.Query,
-                    null,
+                    Id: null,
                     "query Executions { operations { executions(take: 1) { totalCount } } }"
                 ),
                 new JsonObject()
@@ -124,7 +125,7 @@ public class TraxConsoleE2ETests
     public async Task The_operations_gate_still_decides()
     {
         await using var host = await HostAsync("trax_sm_tui_gate");
-        await using var session = host.Session(E2EHost.BobKey);
+        await using var session = await host.SessionAsync(E2EHost.BobKey);
 
         var page = await Catalog.Runs.LoadAsync(
             session.Client,
@@ -140,7 +141,7 @@ public class TraxConsoleE2ETests
     public async Task A_host_that_registers_the_documents_without_the_page_serves_it()
     {
         await using var host = await HostAsync("trax_sm_tui_bare", page: false);
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
 
         var version = await session.CheckVersionAsync();
         var page = await Catalog.Manifests.LoadAsync(
@@ -157,14 +158,17 @@ public class TraxConsoleE2ETests
     public async Task The_headless_list_prints_one_row_per_line_and_the_page_on_standard_error()
     {
         await using var host = await HostAsync("trax_sm_tui_headless");
-        await using var session = host.Session(E2EHost.OperatorKey);
+        await using var session = await host.SessionAsync(E2EHost.OperatorKey);
         var output = new StringWriter();
         var error = new StringWriter();
 
         var exit = await HeadlessCommands.ListAsync(
             session,
             "dead-letters",
-            new Dictionary<string, string> { ["status"] = "awaiting_intervention" },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["status"] = "awaiting_intervention",
+            },
             take: 10,
             after: null,
             output,
@@ -174,8 +178,16 @@ public class TraxConsoleE2ETests
 
         exit.Should().Be(0, error.ToString());
         output.ToString().Should().BeEmpty("the host has no dead letters");
-        JsonNode.Parse(error.ToString())!["totalCount"]!.GetValue<int>().Should().Be(0);
-        host.Sent.Single()["variables"]!["status"]!
+        JsonNode
+            .Parse(error.ToString())
+            .NotNull()["totalCount"]
+            .NotNull()
+            .GetValue<int>()
+            .Should()
+            .Be(0);
+        host.Sent.Single()["variables"]
+            .NotNull()["status"]
+            .NotNull()
             .GetValue<string>()
             .Should()
             .Be("AWAITING_INTERVENTION");
@@ -183,35 +195,37 @@ public class TraxConsoleE2ETests
 
     private static async Task<ConsoleHost> HostAsync(string database, bool page = true)
     {
-        await E2EHost.RecreateDatabaseAsync(database);
+        await E2EHost.RecreateDatabaseAsync(database).ConfigureAwait(false);
         var scheduler = DispatchProxy.Create<ITraxScheduler, RecordingScheduler>();
         try
         {
-            var host = await E2EHost.StartAsync(
-                database,
-                new CountingCharge(),
-                new E2EHostOptions
-                {
-                    ExposeOperations = true,
-                    GraphQL = graphql =>
-                        graphql.UsePersistedOperations(po =>
-                            po.SingleNode().RequirePersisted(true)
-                        ),
-                    Endpoints = endpoints =>
+            var host = await E2EHost
+                .StartAsync(
+                    database,
+                    new CountingCharge(),
+                    new E2EHostOptions
                     {
-                        if (page)
-                            endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell());
-                        else
-                            endpoints.UseTraxOperatorConsoleDocuments();
-                    },
-                    Services = services => services.AddScoped(_ => scheduler),
-                }
-            );
+                        ExposeOperations = true,
+                        GraphQL = graphql =>
+                            graphql.UsePersistedOperations(po =>
+                                po.SingleNode().RequirePersisted(require: true)
+                            ),
+                        Endpoints = endpoints =>
+                        {
+                            if (page)
+                                endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell());
+                            else
+                                endpoints.UseTraxOperatorConsoleDocuments();
+                        },
+                        Services = services => services.AddScoped(_ => scheduler),
+                    }
+                )
+                .ConfigureAwait(false);
             return new ConsoleHost(database, host, (RecordingScheduler)(object)scheduler);
         }
         catch
         {
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
             throw;
         }
     }
@@ -226,19 +240,35 @@ public class TraxConsoleE2ETests
         /// <summary>Every body the console sent, in order, but the version check.</summary>
         public IReadOnlyList<JsonObject> Sent =>
             _recording
-                .Bodies.Where(b => b["operationName"]?.GetValue<string>() != "ServerVersion")
+                .Bodies.Where(b =>
+                    !string.Equals(
+                        b["operationName"]?.GetValue<string>(),
+                        "ServerVersion",
+                        StringComparison.Ordinal
+                    )
+                )
                 .ToList();
 
-        public ConsoleSession Session(string apiKey) =>
+        public async Task<ConsoleSession> SessionAsync(string apiKey) =>
             ConsoleSession.Open(
-                ConsoleTarget.Resolve(
-                    "http://localhost",
-                    ConsoleTarget.DefaultGraphQLPath,
-                    apiKeyFile: null,
-                    tokenFile: null,
-                    sendText: false,
-                    name => name == ConsoleTarget.ApiKeyVariable ? apiKey : null
-                ),
+                await ConsoleTarget
+                    .ResolveAsync(
+                        "http://localhost",
+                        ConsoleTarget.DefaultGraphQLPath,
+                        apiKeyFile: null,
+                        tokenFile: null,
+                        sendText: false,
+                        name =>
+                            string.Equals(
+                                name,
+                                ConsoleTarget.ApiKeyVariable,
+                                StringComparison.Ordinal
+                            )
+                                ? apiKey
+                                : null,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false),
                 _recording
             );
 
@@ -246,7 +276,7 @@ public class TraxConsoleE2ETests
         {
             host.Dispose();
             _recording.Dispose();
-            await E2EHost.DropDatabaseAsync(database);
+            await E2EHost.DropDatabaseAsync(database).ConfigureAwait(false);
         }
     }
 
@@ -269,10 +299,15 @@ public class TraxConsoleE2ETests
             CancellationToken cancellationToken
         )
         {
-            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            var body = JsonNode.Parse(
+                await request
+                    .Content.NotNull()
+                    .ReadAsStringAsync(cancellationToken)
+                    .ConfigureAwait(false)
+            );
             lock (_bodies)
-                _bodies.Add((JsonObject)body!);
-            return await base.SendAsync(request, cancellationToken);
+                _bodies.Add((JsonObject)body.NotNull());
+            return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -292,9 +327,15 @@ public class TraxConsoleE2ETests
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            if (targetMethod?.Name == nameof(ITraxScheduler.RequeueDeadLettersAsync))
+            if (
+                string.Equals(
+                    targetMethod?.Name,
+                    nameof(ITraxScheduler.RequeueDeadLettersAsync),
+                    StringComparison.Ordinal
+                )
+            )
             {
-                var ids = (long[])args![0]!;
+                var ids = (long[])args.NotNull()[0].NotNull();
                 lock (_requeued)
                     _requeued.AddRange(ids);
                 return Task.FromResult(

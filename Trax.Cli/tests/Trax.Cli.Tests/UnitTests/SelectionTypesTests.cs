@@ -68,9 +68,13 @@ public class SelectionTypesTests
         """;
 
     [Test]
-    public void A_trains_function_returns_exactly_what_its_document_selects()
+    public async Task A_trains_function_returns_exactly_what_its_document_selects()
     {
-        var train = Train("Order!", "findOrder(input: $input) { title customer { name } }");
+        var train = await TrainAsync(
+                "Order!",
+                "findOrder(input: $input) { title customer { name } }"
+            )
+            .ConfigureAwait(false);
 
         train
             .Should()
@@ -90,10 +94,13 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void No_output_type_is_declared_per_model()
+    public async Task No_output_type_is_declared_per_model()
     {
-        var files = Render("Order!", "findOrder(input: $input) { title }");
-        var types = files.Single(f => f.Path == "types.g.ts").Text;
+        var files = await RenderAsync("Order!", "findOrder(input: $input) { title }")
+            .ConfigureAwait(false);
+        var types = files
+            .Single(f => string.Equals(f.Path, "types.g.ts", StringComparison.Ordinal))
+            .Text;
 
         types
             .Should()
@@ -111,12 +118,13 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void Nullability_and_lists_follow_the_sdl()
+    public async Task Nullability_and_lists_follow_the_sdl()
     {
-        var train = Train(
-            "Shapes!",
-            "findOrder(input: $input) { strict loose maybe note box { size } }"
-        );
+        var train = await TrainAsync(
+                "Shapes!",
+                "findOrder(input: $input) { strict loose maybe note box { size } }"
+            )
+            .ConfigureAwait(false);
 
         train
             .Should()
@@ -134,9 +142,9 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void A_nullable_list_answer_keeps_both_nulls()
+    public async Task A_nullable_list_answer_keeps_both_nulls()
     {
-        Train("[Box]", "findOrder(input: $input) { size }")
+        (await TrainAsync("[Box]", "findOrder(input: $input) { size }").ConfigureAwait(false))
             .Should()
             .Contain(
                 """
@@ -148,12 +156,13 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void A_union_answer_is_one_object_per_member_told_apart_by_typename()
+    public async Task A_union_answer_is_one_object_per_member_told_apart_by_typename()
     {
-        var train = Train(
-            "Found!",
-            "findOrder(input: $input) { __typename ... on Order { title } ... on Customer { name } }"
-        );
+        var train = await TrainAsync(
+                "Found!",
+                "findOrder(input: $input) { __typename ... on Order { title } ... on Customer { name } }"
+            )
+            .ConfigureAwait(false);
 
         train
             .Should()
@@ -172,9 +181,15 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void A_union_member_the_document_leaves_out_still_arrives_as_its_typename()
+    public async Task A_union_member_the_document_leaves_out_still_arrives_as_its_typename()
     {
-        Train("Found!", "findOrder(input: $input) { __typename ... on Order { title } }")
+        (
+            await TrainAsync(
+                    "Found!",
+                    "findOrder(input: $input) { __typename ... on Order { title } }"
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain(
                 """
@@ -187,9 +202,15 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void An_interface_answer_is_one_object_per_implementation()
+    public async Task An_interface_answer_is_one_object_per_implementation()
     {
-        Train("Named!", "findOrder(input: $input) { __typename name ... on Person { age } }")
+        (
+            await TrainAsync(
+                    "Named!",
+                    "findOrder(input: $input) { __typename name ... on Person { age } }"
+                )
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain(
                 """
@@ -206,9 +227,12 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void An_object_the_document_selects_only_by_typename_is_its_typename()
+    public async Task An_object_the_document_selects_only_by_typename_is_its_typename()
     {
-        Train("Empty!", "findOrder(input: $input) { __typename }")
+        (
+            await TrainAsync("Empty!", "findOrder(input: $input) { __typename }")
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain(
                 """
@@ -220,9 +244,10 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void An_enum_in_an_answer_is_imported_from_the_types_a_client_sends()
+    public async Task An_enum_in_an_answer_is_imported_from_the_types_a_client_sends()
     {
-        var train = Train("Order!", "findOrder(input: $input) { level }");
+        var train = await TrainAsync("Order!", "findOrder(input: $input) { level }")
+            .ConfigureAwait(false);
 
         train
             .Should()
@@ -231,32 +256,42 @@ public class SelectionTypesTests
     }
 
     [Test]
-    public void An_alias_names_its_key()
+    public async Task An_alias_names_its_key()
     {
-        Train("Order!", "findOrder(input: $input) { heading: title }")
+        (
+            await TrainAsync("Order!", "findOrder(input: $input) { heading: title }")
+                .ConfigureAwait(false)
+        )
             .Should()
             .Contain("  heading: string;")
             .And.NotContain("  title:");
     }
 
     [Test]
-    public void A_document_selecting_a_field_the_types_do_not_hold_is_refused()
+    public async Task A_document_selecting_a_field_the_types_do_not_hold_is_refused()
     {
-        var render = () => Render("Order!", "findOrder(input: $input) { colour }");
+        var render = async () =>
+            await RenderAsync("Order!", "findOrder(input: $input) { colour }")
+                .ConfigureAwait(false);
 
-        render
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*src/findOrder.graphql*Order has no field 'colour'*");
+        (
+            await render.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage("*src/findOrder.graphql*Order has no field 'colour'*");
     }
 
     [Test]
-    public void The_progress_module_types_runProgress_from_its_documents()
+    public async Task The_progress_module_types_runProgress_from_its_documents()
     {
-        var files = new ClientGenerator(new FakeNodeRunner()).Render(
-            new ClientGenerateOptions(ClientManifests.Sample() with { Machines = [] })
+        var files = (
+            await new ClientGenerator(new FakeNodeRunner())
+                .RenderAsync(
+                    new ClientGenerateOptions(ClientManifests.Sample() with { Machines = [] })
+                )
+                .ConfigureAwait(false)
         );
-        var progress = files.Single(f => f.Path == "progress.g.ts").Text;
+        var progress = files
+            .Single(f => string.Equals(f.Path, "progress.g.ts", StringComparison.Ordinal))
+            .Text;
 
         progress
             .Should()
@@ -266,45 +301,62 @@ public class SelectionTypesTests
             .And.Contain("export type RunProgressEvent = {")
             .And.Contain("  sequence: number;");
         files
-            .Single(f => f.Path == "index.g.ts")
+            .Single(f => string.Equals(f.Path, "index.g.ts", StringComparison.Ordinal))
             .Text.Should()
             .Contain("type RunProgress, type RunProgressEvent, type RunProgressView");
         files
-            .Single(f => f.Path == "types.g.ts")
+            .Single(f => string.Equals(f.Path, "types.g.ts", StringComparison.Ordinal))
             .Text.Should()
             .NotContain("JunctionStep", "an answer's object types are not declared per model");
     }
 
-    private static string Train(string answer, string selection) =>
-        Render(answer, selection).Single(f => f.Path == "documents/findOrder.g.ts").Text;
-
-    private static IReadOnlyList<ClientFile> Render(string answer, string selection) =>
-        new ClientGenerator(new FakeNodeRunner()).Render(
-            new ClientGenerateOptions(
-                new ClientManifest
-                {
-                    Trains =
-                    [
-                        new ClientManifestTrain
-                        {
-                            Field = "findOrder",
-                            Root = "query",
-                            Answer = answer,
-                            Arguments =
-                            [
-                                new ClientManifestArgument { Name = "input", Type = "FindInput!" },
-                            ],
-                        },
-                    ],
-                    Types = Types,
-                },
-                Documents:
-                [
-                    new ClientDocumentFile(
-                        "src/findOrder.graphql",
-                        "query FindOrder($input: FindInput!) { discover { " + selection + " } }"
-                    ),
-                ]
+    private static async Task<string> TrainAsync(string answer, string selection) =>
+        (await RenderAsync(answer, selection).ConfigureAwait(false))
+            .Single(f =>
+                string.Equals(f.Path, "documents/findOrder.g.ts", StringComparison.Ordinal)
             )
+            .Text;
+
+    private static async Task<IReadOnlyList<ClientFile>> RenderAsync(
+        string answer,
+        string selection
+    ) =>
+        (
+            await new ClientGenerator(new FakeNodeRunner())
+                .RenderAsync(
+                    new ClientGenerateOptions(
+                        new ClientManifest
+                        {
+                            Trains =
+                            [
+                                new ClientManifestTrain
+                                {
+                                    Field = "findOrder",
+                                    Root = "query",
+                                    Answer = answer,
+                                    Arguments =
+                                    [
+                                        new ClientManifestArgument
+                                        {
+                                            Name = "input",
+                                            Type = "FindInput!",
+                                        },
+                                    ],
+                                },
+                            ],
+                            Types = Types,
+                        },
+                        Documents:
+                        [
+                            new ClientDocumentFile(
+                                "src/findOrder.graphql",
+                                "query FindOrder($input: FindInput!) { discover { "
+                                    + selection
+                                    + " } }"
+                            ),
+                        ]
+                    )
+                )
+                .ConfigureAwait(false)
         );
 }

@@ -162,7 +162,7 @@ public class OperationsServiceLocalWorkerTests
     [Test]
     public async Task BootstrapHostedService_StoredRowWithoutAWorkerCount_KeepsTheConfiguredCount()
     {
-        var (hosted, cfg, workerOpts, _) = await BootstrapWithStoredWorkerCount(null);
+        var (hosted, cfg, workerOpts, _) = await BootstrapWithStoredWorkerCount(workerCount: null);
         try
         {
             cfg.DefaultMaxRetries.Should().Be(6, "the rest of the row applies");
@@ -179,7 +179,7 @@ public class OperationsServiceLocalWorkerTests
     [Test]
     public async Task BootstrapHostedService_StoppedAfterItWasDisposed_DoesNotThrow()
     {
-        var (hosted, _, _, _) = await BootstrapWithStoredWorkerCount(null);
+        var (hosted, _, _, _) = await BootstrapWithStoredWorkerCount(workerCount: null);
 
         // A host can dispose its services before or while it stops them.
         hosted.Dispose();
@@ -193,7 +193,7 @@ public class OperationsServiceLocalWorkerTests
     [Test]
     public async Task BootstrapHostedService_StoppedTwice_DoesNotThrow()
     {
-        var (hosted, _, _, _) = await BootstrapWithStoredWorkerCount(null);
+        var (hosted, _, _, _) = await BootstrapWithStoredWorkerCount(workerCount: null);
         var stop = () => hosted.StopAsync(CancellationToken.None);
 
         await stop.Should().NotThrowAsync();
@@ -222,22 +222,23 @@ public class OperationsServiceLocalWorkerTests
             .BuildServiceProvider();
 
         var factory = services.GetRequiredService<IDataContextProviderFactory>();
-        using (var db = await factory.CreateDbContextAsync(CancellationToken.None))
+        var db = await factory.CreateDbContextAsync(CancellationToken.None).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             db.SchedulerConfigs.Add(
                 new Trax.Effect.Models.SchedulerConfig.SchedulerConfig
                 {
                     DefaultMaxRetries = 6,
                     LocalWorkerCount = workerCount,
-                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 }
             );
-            await db.SaveChanges(CancellationToken.None);
+            await db.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         }
 
         var logger = new WarningLogger();
         var hosted = new SchedulerConfigBootstrapHostedService(services, logger);
-        await hosted.StartAsync(CancellationToken.None);
+        await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
         return (hosted, cfg, workerOpts, logger.Warnings);
     }
 

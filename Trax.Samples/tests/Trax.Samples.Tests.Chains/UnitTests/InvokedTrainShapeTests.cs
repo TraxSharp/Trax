@@ -1,4 +1,5 @@
 using System.Reflection;
+using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 using Trax.Effect.Attributes;
@@ -36,8 +37,8 @@ public class InvokedTrainShapeTests
         var junctions = train
             .Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false, IsNested: false })
-            .GroupBy(t => t.Name)
-            .ToDictionary(g => g.Key, g => g.Single());
+            .GroupBy(t => t.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Single(), StringComparer.Ordinal);
         var graph = GraphOf(train);
 
         graph.Refusals.Should().BeEmpty();
@@ -48,8 +49,8 @@ public class InvokedTrainShapeTests
             if (node.Kind != ChainStepKind.Chain)
                 continue;
 
-            junctions.Should().ContainKey(node.Junction!);
-            IsEffectJunction(junctions[node.Junction!])
+            junctions.Should().ContainKey(node.Junction.NotNull());
+            IsEffectJunction(junctions[node.Junction.NotNull()])
                 .Should()
                 .BeTrue($"{node.Id} must be an EffectJunction to be cancelled from another host");
         }
@@ -58,7 +59,7 @@ public class InvokedTrainShapeTests
     [TestCaseSource(nameof(EachTrain))]
     public void TheOutput_ReachesNoSensitiveMember(Type train)
     {
-        var output = train.BaseType!.GetGenericArguments()[1];
+        var output = train.BaseType.NotNull().GetGenericArguments()[1];
 
         SensitiveMembers(output, []).Should().BeEmpty();
     }
@@ -69,11 +70,13 @@ public class InvokedTrainShapeTests
 
     private static ChainGraph GraphOf(Type train)
     {
-        var arguments = train.BaseType!.GetGenericArguments();
+        var arguments = train.BaseType.NotNull().GetGenericArguments();
         var chain = (ChainRecorder)
             train
-                .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)!
-                .Invoke(Activator.CreateInstance(train), null)!;
+                .GetMethod(nameof(Train<,>.DeclaredChain), Type.EmptyTypes)
+                .NotNull()
+                .Invoke(Activator.CreateInstance(train), parameters: null)
+                .NotNull();
         return ChainGraph.From(chain, train, arguments[0], arguments[1]);
     }
 
@@ -105,7 +108,7 @@ public class InvokedTrainShapeTests
 
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.GetCustomAttribute<TraxSensitiveAttribute>() is not null)
+            if (property.IsDefined(typeof(TraxSensitiveAttribute)))
                 yield return $"{type.Name}.{property.Name}";
             foreach (var found in SensitiveMembers(property.PropertyType, seen))
                 yield return found;

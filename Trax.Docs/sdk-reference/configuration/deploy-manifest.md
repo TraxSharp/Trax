@@ -10,7 +10,13 @@ package: Trax.Effect
 namespace: Trax.Effect.Configuration.Deploy
 source:
   - Trax.Effect/src/Trax.Effect/Configuration/Deploy/DeployManifest.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/DeployDatabase.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/DeployEndpoints.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/DeployAuthenticationScheme.cs
   - Trax.Effect/src/Trax.Effect/Configuration/Deploy/TraxDeployExport.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/DeployFact.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/IDeployManifestSource.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/Deploy/DeployExportServeGate.cs
 ---
 
 # DeployManifest

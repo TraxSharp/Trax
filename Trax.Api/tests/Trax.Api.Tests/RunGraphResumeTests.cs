@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.Services.Runs;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.Checkpoints;
@@ -43,13 +45,17 @@ public class RunGraphResumeTests
         "FetchSources#0",
     ];
 
-    private ResumeHost _host = null!;
+    private ResumeHost? _host;
 
     [OneTimeSetUp]
     public async Task StartHost() => _host = await ResumeHost.StartAsync(Database);
 
     [OneTimeTearDown]
-    public async Task StopHost() => await _host.DisposeAsync();
+    public async Task StopHost()
+    {
+        if (_host is not null)
+            await _host.DisposeAsync();
+    }
 
     [SetUp]
     public void ResetProbe() => ResumeProbe.Reset();
@@ -57,7 +63,7 @@ public class RunGraphResumeTests
     [Test]
     public async Task A_failed_runs_nodes_say_where_it_can_resume_on_both_surfaces()
     {
-        var run = await _host.RunAsync<IResumableTrain>(nameof(SummarizeSources));
+        var run = await _host.NotNull().RunAsync<IResumableTrain>(nameof(SummarizeSources));
 
         var dashboard = await DashboardGraphAsync(run);
         var graphQl = await GraphQLGraphAsync(run);
@@ -75,7 +81,7 @@ public class RunGraphResumeTests
             );
         nodes.Where(n => n.Checkpointed).Select(n => n.Id).Should().Equal(Checkpoint);
         nodes
-            .Single(n => n.Id == Checkpoint)
+            .Single(n => string.Equals(n.Id, Checkpoint, StringComparison.Ordinal))
             .State.Should()
             .Be(RunNodeState.Withheld, "it comes after a sensitive route, so it stays withheld");
 
@@ -113,8 +119,8 @@ public class RunGraphResumeTests
     [Test]
     public async Task A_run_that_cannot_be_resumed_offers_no_resume()
     {
-        var completed = await _host.RunAsync<IResumableTrain>(failIn: null);
-        var early = await _host.RunAsync<IResumableTrain>(nameof(FetchSources));
+        var completed = await _host.NotNull().RunAsync<IResumableTrain>(failIn: null);
+        var early = await _host.NotNull().RunAsync<IResumableTrain>(nameof(FetchSources));
 
         foreach (var run in new[] { completed, early })
         {
@@ -127,12 +133,14 @@ public class RunGraphResumeTests
     [Test]
     public async Task A_resumed_runs_nodes_before_its_resume_point_are_restored()
     {
-        var failed = await _host.RunAsync<IResumableTrain>(nameof(SummarizeSources));
-        var queued = await _host.ResumeAsTheDashboardAsync(failed, null);
+        var failed = await _host.NotNull().RunAsync<IResumableTrain>(nameof(SummarizeSources));
+        var queued = await _host.NotNull().ResumeAsTheDashboardAsync(failed, from: null);
         queued.Success.Should().BeTrue(queued.Message);
         ResumeProbe.Reset();
 
-        var resumed = await _host.RunResumeAsync<IResumableTrain>(queued.Id!.Value);
+        var resumed = await _host
+            .NotNull()
+            .RunResumeAsync<IResumableTrain>(queued.Id.NotNull().Value);
 
         ResumeProbe
             .Ran.Should()
@@ -141,7 +149,7 @@ public class RunGraphResumeTests
                 "the resumed run skipped every step before the checkpoint"
             );
         var graph = await DashboardGraphAsync(resumed);
-        var nodes = Flatten(graph.Nodes).ToDictionary(n => n.Id);
+        var nodes = Flatten(graph.Nodes).ToDictionary(n => n.Id, StringComparer.Ordinal);
         foreach (var id in BeforeTheCheckpoint.Append(Checkpoint))
             nodes[id]
                 .State.Should()
@@ -154,14 +162,19 @@ public class RunGraphResumeTests
         graph.CanResume.Should().BeFalse("a run that completed has nothing left to resume");
 
         var graphQl = FlattenJson((await GraphQLGraphAsync(resumed)).GetProperty("nodes"))
-            .ToDictionary(n => n.GetProperty("id").GetString()!);
+            .ToDictionary(n => n.GetProperty("id").GetString().NotNull(), StringComparer.Ordinal);
         graphQl[Checkpoint].GetProperty("state").GetString().Should().Be("RESTORED");
         graphQl[Summarize].GetProperty("state").GetString().Should().Be("COMPLETED");
 
         // The run says which run it resumed, as the dashboard's "Resumes" field does.
-        var execution = await _host.GraphQLAsync(
-            $$"""{ operations { executionDetail(id: {{resumed}}) { resumeFrom resumeAt } } }"""
-        );
+        var execution = await _host
+            .NotNull()
+            .GraphQLAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""{ operations { executionDetail(id: {{resumed}}) { resumeFrom resumeAt } } }"""
+                )
+            );
         execution
             .RootElement.TryGetProperty("errors", out _)
             .Should()
@@ -180,9 +193,12 @@ public class RunGraphResumeTests
     private async Task<ResumeVerdict> Check(long run, string node)
     {
         var declared = _host
+            .NotNull()
             .Services.GetRequiredService<ITrainChainGraphs>()
-            .FindDeclared(typeof(IResumableTrain).FullName!)!;
+            .FindDeclared(typeof(IResumableTrain).FullName.NotNull())
+            .NotNull();
         return await _host
+            .NotNull()
             .Services.GetRequiredService<IRunResumes>()
             .Check(
                 declared.Train,
@@ -192,46 +208,61 @@ public class RunGraphResumeTests
                 run,
                 node,
                 CancellationToken.None
-            );
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<RunGraph> DashboardGraphAsync(long run)
     {
-        await using var db = await _host
+        var db = await _host
+            .NotNull()
             .Services.GetRequiredService<IDataContextProviderFactory>()
-            .CreateDbContextAsync(CancellationToken.None);
-        var state = await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == run)
-            .Select(m => m.TrainState)
-            .SingleAsync();
-        state.Should().NotBe(TrainState.InProgress);
-        return (
-            await RunGraphs.ReadAsync(
-                db,
-                _host.Services.GetRequiredService<ITrainChainGraphs>(),
-                _host.Services.GetRequiredService<IRunResumes>(),
-                run,
-                CancellationToken.None
-            )
-        )!;
+            .CreateDbContextAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var state = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == run)
+                .Select(m => m.TrainState)
+                .SingleAsync()
+                .ConfigureAwait(false);
+            state.Should().NotBe(TrainState.InProgress);
+            return (
+                await RunGraphs
+                    .ReadAsync(
+                        db,
+                        _host.NotNull().Services.GetRequiredService<ITrainChainGraphs>(),
+                        _host.NotNull().Services.GetRequiredService<IRunResumes>(),
+                        run,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false)
+            ).NotNull();
+        }
     }
 
     private async Task<JsonElement> GraphQLGraphAsync(long run)
     {
-        var response = await _host.GraphQLAsync(
-            $$"""
-            {
-              operations {
-                runGraph(metadataId: {{run}}) {
-                  canResume
-                  nodes { ...node tracks { nodes { ...node } } }
-                }
-              }
-            }
-            fragment node on RunGraphNode { id state canResume checkpointed }
-            """
-        );
+        var response = await _host
+            .NotNull()
+            .GraphQLAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $$"""
+                    {
+                      operations {
+                        runGraph(metadataId: {{run}}) {
+                          canResume
+                          nodes { ...node tracks { nodes { ...node } } }
+                        }
+                      }
+                    }
+                    fragment node on RunGraphNode { id state canResume checkpointed }
+                    """
+                )
+            )
+            .ConfigureAwait(false);
         response
             .RootElement.TryGetProperty("errors", out _)
             .Should()

@@ -1,0 +1,80 @@
+namespace Trax.Analyzers.Rules;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class UseIsPatternInsteadOfSequenceEqualAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor Rule = new(
+        RuleIdentifiers.UseIsPatternInsteadOfSequenceEqual,
+        title: "Use 'is' operator instead of SequenceEqual",
+        messageFormat: "Use 'is' operator instead of '{0}'",
+        RuleCategories.Usage,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "",
+        helpLinkUri: RuleIdentifiers.GetHelpUri(RuleIdentifiers.UseIsPatternInsteadOfSequenceEqual));
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.EnableConcurrentExecution();
+        context.ConfigureAnalysisOfGeneratedCode(GeneratedCodeAnalysisFlags.None);
+
+        context.RegisterCompilationStartAction(context =>
+        {
+            var compilation = context.Compilation;
+            var memoryExtensionsSymbol = compilation.GetTypeByMetadataName("System.MemoryExtensions");
+            var spanCharSymbol = compilation.GetTypeByMetadataName("System.Span`1")?.Construct(compilation.GetSpecialType(SpecialType.System_Char));
+            var readOnlySpanCharSymbol = compilation.GetTypeByMetadataName("System.ReadOnlySpan`1")?.Construct(compilation.GetSpecialType(SpecialType.System_Char));
+            var stringComparisonSymbol = compilation.GetTypeByMetadataName("System.StringComparison");
+            if (memoryExtensionsSymbol is null || spanCharSymbol is null || readOnlySpanCharSymbol is null || stringComparisonSymbol is null)
+                return;
+
+            var syntax = compilation.SyntaxTrees.FirstOrDefault();
+            if (syntax is null || !syntax.GetCSharpLanguageVersion().IsCSharp11OrGreater())
+                return;
+
+            context.RegisterOperationAction(ctx => AnalyzeInvocation(ctx, spanCharSymbol, readOnlySpanCharSymbol, memoryExtensionsSymbol, stringComparisonSymbol), OperationKind.Invocation);
+        });
+    }
+
+    private static void AnalyzeInvocation(OperationAnalysisContext context, INamedTypeSymbol spanCharSymbol, INamedTypeSymbol readOnlySpanCharSymbol, INamedTypeSymbol memoryExtensionsSymbol, INamedTypeSymbol stringComparisonSymbol)
+    {
+        var operation = (IInvocationOperation)context.Operation;
+        var method = operation.TargetMethod;
+        if (!method.ContainingType.IsEqualTo(memoryExtensionsSymbol))
+            return;
+
+        if (method.Name is "SequenceEqual" && method.Parameters.Length == 2 && method.Parameters[0].Type.IsEqualToAny(readOnlySpanCharSymbol, spanCharSymbol))
+        {
+            if (CanUseIsPattern(operation.Arguments[0].Value, operation.Arguments[1].Value))
+            {
+                context.ReportDiagnostic(Rule, operation, method.Name);
+            }
+        }
+        else if (method.Name is "Equals" && method.Parameters.Length == 3 && method.Parameters[0].Type.IsEqualTo(readOnlySpanCharSymbol))
+        {
+            if (CanUseIsPattern(operation.Arguments[0].Value, operation.Arguments[1].Value) && IsStringComparisonOrdinal(operation.Arguments[2].Value, stringComparisonSymbol))
+            {
+                context.ReportDiagnostic(Rule, operation, method.Name);
+            }
+        }
+
+        static bool CanUseIsPattern(IOperation span, IOperation value)
+        {
+            if (value.UnwrapImplicitConversions() is not { ConstantValue: { HasValue: true, Value: string constantValue } })
+                return false;
+
+            // A null string is converted to an empty span, so it is equal to "", whereas the 'is ""' pattern is false for null
+            return constantValue.Length > 0 || span.UnwrapImplicitConversions().Type is not { SpecialType: SpecialType.System_String };
+        }
+
+        static bool IsStringComparisonOrdinal(IOperation operation, INamedTypeSymbol stringComparisonSymbol)
+        {
+            if (!operation.Type.IsEqualTo(stringComparisonSymbol))
+                return false;
+
+            return operation.ConstantValue is { HasValue: true, Value: (int)StringComparison.Ordinal };
+        }
+    }
+}

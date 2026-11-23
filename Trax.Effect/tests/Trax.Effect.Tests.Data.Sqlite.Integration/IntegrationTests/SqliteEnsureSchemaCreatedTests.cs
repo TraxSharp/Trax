@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
 
 namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
@@ -13,7 +14,7 @@ namespace Trax.Effect.Tests.Data.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteEnsureSchemaCreatedTests
 {
-    private string _dbPath = null!;
+    private string? _dbPath;
 
     [SetUp]
     public void NewDatabase() =>
@@ -23,8 +24,8 @@ public class SqliteEnsureSchemaCreatedTests
     public void DeleteDatabase()
     {
         SqliteConnection.ClearAllPools();
-        if (File.Exists(_dbPath))
-            File.Delete(_dbPath);
+        if (File.Exists(_dbPath.NotNull()))
+            File.Delete(_dbPath.NotNull());
     }
 
     [Test]
@@ -32,12 +33,13 @@ public class SqliteEnsureSchemaCreatedTests
     {
         var services = new ServiceCollection();
         services.AddDomainDataContext<OneTableContext, OneTableContext>(o =>
-            o.UseSqlite($"Data Source={_dbPath}")
+            o.UseSqlite($"Data Source={_dbPath.NotNull()}")
         );
         services.AddDomainDataContext<TwoTableContext, TwoTableContext>(o =>
-            o.UseSqlite($"Data Source={_dbPath}")
+            o.UseSqlite($"Data Source={_dbPath.NotNull()}")
         );
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
 
         await provider.EnsureSchemaCreatedAsync<OneTableContext>();
         Exec("INSERT INTO gadgets (name) VALUES ('kept');");
@@ -52,7 +54,7 @@ public class SqliteEnsureSchemaCreatedTests
 
     private void Exec(string sql)
     {
-        using var connection = new SqliteConnection($"Data Source={_dbPath}");
+        using var connection = new SqliteConnection($"Data Source={_dbPath.NotNull()}");
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = sql;
@@ -61,7 +63,7 @@ public class SqliteEnsureSchemaCreatedTests
 
     private object? Scalar(string sql)
     {
-        using var connection = new SqliteConnection($"Data Source={_dbPath}");
+        using var connection = new SqliteConnection($"Data Source={_dbPath.NotNull()}");
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = sql;
@@ -71,13 +73,13 @@ public class SqliteEnsureSchemaCreatedTests
     public sealed class Row
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public required string Name { get; set; }
     }
 
     public sealed class OtherRow
     {
         public int Id { get; set; }
-        public string Name { get; set; } = null!;
+        public required string Name { get; set; }
     }
 
     public sealed class OneTableContext(DbContextOptions<OneTableContext> options)

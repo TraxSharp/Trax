@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Trax.Effect.Configuration.Deploy;
 
@@ -34,6 +35,25 @@ internal static class ComposeTarget
             ?? file.Services.Keys.First();
 
         var y = new StringBuilder();
+        AppendCommon(y, file, rabbit);
+        AppendDatabase(y, file);
+
+        if (rabbit)
+            AppendRabbitMq(y, file);
+
+        AppendMigrate(y, file, migrator);
+
+        AppendServices(y, file, exports, rabbit);
+
+        y.AppendLine();
+        y.AppendLine("volumes:");
+        y.AppendLine("  database:");
+
+        return [(ComposeFile, y.ToString()), (EnvExampleFile, EnvExample(file, rabbit))];
+    }
+
+    private static void AppendCommon(StringBuilder y, DeployFile file, bool rabbit)
+    {
         y.AppendLine(Header);
         y.AppendLine(
             "# Passwords, settings and secrets come from the environment, or from a .env file beside this one: copy"
@@ -60,7 +80,10 @@ internal static class ComposeTarget
             y.AppendLine($"  {name}: {Required(name)}");
         y.AppendLine();
         y.AppendLine("services:");
+    }
 
+    private static void AppendDatabase(StringBuilder y, DeployFile file)
+    {
         y.AppendLine("  database:");
         y.AppendLine("    image: postgres:17");
         y.AppendLine("    environment:");
@@ -75,23 +98,26 @@ internal static class ComposeTarget
         y.AppendLine("    security_opt:");
         y.AppendLine("      - no-new-privileges:true");
         y.AppendLine("    restart: unless-stopped");
+    }
 
-        if (rabbit)
-        {
-            y.AppendLine();
-            y.AppendLine("  rabbitmq:");
-            y.AppendLine("    image: rabbitmq:4");
-            y.AppendLine("    environment:");
-            y.AppendLine($"      RABBITMQ_DEFAULT_USER: {file.App}");
-            y.AppendLine($"      RABBITMQ_DEFAULT_PASS: {Required("RABBITMQ_PASSWORD")}");
-            y.AppendLine("    healthcheck:");
-            y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
-            y.AppendLine("      interval: 5s");
-            y.AppendLine("    security_opt:");
-            y.AppendLine("      - no-new-privileges:true");
-            y.AppendLine("    restart: unless-stopped");
-        }
+    private static void AppendRabbitMq(StringBuilder y, DeployFile file)
+    {
+        y.AppendLine();
+        y.AppendLine("  rabbitmq:");
+        y.AppendLine("    image: rabbitmq:4");
+        y.AppendLine("    environment:");
+        y.AppendLine($"      RABBITMQ_DEFAULT_USER: {file.App}");
+        y.AppendLine($"      RABBITMQ_DEFAULT_PASS: {Required("RABBITMQ_PASSWORD")}");
+        y.AppendLine("    healthcheck:");
+        y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
+        y.AppendLine("      interval: 5s");
+        y.AppendLine("    security_opt:");
+        y.AppendLine("      - no-new-privileges:true");
+        y.AppendLine("    restart: unless-stopped");
+    }
 
+    private static void AppendMigrate(StringBuilder y, DeployFile file, string migrator)
+    {
         y.AppendLine();
         y.AppendLine(
             "  # The new version migrates the database once, before any service of it starts."
@@ -105,7 +131,15 @@ internal static class ComposeTarget
         y.AppendLine("      database:");
         y.AppendLine("        condition: service_healthy");
         y.AppendLine("    restart: \"no\"");
+    }
 
+    private static void AppendServices(
+        StringBuilder y,
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        bool rabbit
+    )
+    {
         // A port asked for in the file is the service's; the rest take 8080 and on, skipping those.
         var taken = file.Services.Values.Select(s => s.Port).OfType<int>().ToHashSet();
         var nextPort = 8080;
@@ -130,13 +164,19 @@ internal static class ComposeTarget
                 // Loopback only: whatever puts the app in front of people (a reverse proxy, tailscale serve)
                 // decides who reaches it, not the machine's network.
                 y.AppendLine("    ports:");
-                y.AppendLine($"      - \"127.0.0.1:{service.Port ?? FreePort()}:8080\"");
+                y.AppendLine(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    $"      - \"127.0.0.1:{service.Port ?? FreePort()}:8080\""
+                );
             }
             Hardened(y);
             if (service.Count > 1)
             {
                 y.AppendLine("    deploy:");
-                y.AppendLine($"      replicas: {service.Count}");
+                y.AppendLine(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    $"      replicas: {service.Count}"
+                );
             }
             y.AppendLine("    depends_on:");
             y.AppendLine("      migrate:");
@@ -148,11 +188,10 @@ internal static class ComposeTarget
             }
             y.AppendLine("    restart: unless-stopped");
         }
+    }
 
-        y.AppendLine();
-        y.AppendLine("volumes:");
-        y.AppendLine("  database:");
-
+    private static string EnvExample(DeployFile file, bool rabbit)
+    {
         var env = new StringBuilder();
         env.AppendLine(
             "# Copy to .env beside compose.yaml and fill in every value. Never commit the .env."
@@ -165,7 +204,7 @@ internal static class ComposeTarget
         env.AppendLine("# The tag of the images to run, as trax deploy --build tagged them.");
         env.AppendLine("TRAX_IMAGE_TAG=latest");
 
-        return [(ComposeFile, y.ToString()), (EnvExampleFile, env.ToString())];
+        return env.ToString();
     }
 
     private static string Image(DeployFile file, string service) =>
@@ -191,7 +230,7 @@ internal static class ComposeTarget
     /// </summary>
     private static bool Hub(DeployManifest export) =>
         (export.Endpoints.GraphQL is not null || export.Endpoints.Health is not null)
-        && export.Roles.Intersect(SingleRoles).Any();
+        && export.Roles.Intersect(SingleRoles, StringComparer.Ordinal).Any();
 
     /// <summary>Refuses a deployment compose cannot give what the hosts said they need.</summary>
     internal static void Check(DeployFile file, IReadOnlyDictionary<string, DeployManifest> exports)
@@ -200,7 +239,7 @@ internal static class ComposeTarget
         foreach (var (name, service) in file.Services)
             if (service.Port is { } port && !Hub(exports[name]))
                 throw new InvalidOperationException(
-                    $"Service '{name}' has port {port}, but compose publishes a port only for a service that serves "
+                    $"Service '{name}' has port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)}, but compose publishes a port only for a service that serves "
                         + "HTTP and runs the api or scheduler role. Remove the port."
                 );
     }
@@ -235,11 +274,14 @@ internal static class ComposeTarget
                             + "with that connection string when it is set."
                     );
             }
-            var single = export.Roles.Intersect(SingleRoles).ToList();
+            var single = export.Roles.Intersect(SingleRoles, StringComparer.Ordinal).ToList();
             if (copies > 1 && single.Count > 0)
                 throw new InvalidOperationException(
                     $"Service '{name}' runs the {string.Join(" and ", single)} role and has count "
-                        + $"{copies}. It runs as one until hosts hold leases on their runs: a second copy "
+                        + string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{copies}. It runs as one until hosts hold leases on their runs: a second copy "
+                        )
                         + "restarting fails the runs live on the first. Scale its workers instead."
                 );
         }

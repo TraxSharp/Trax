@@ -76,5 +76,5 @@ public class RulesVocabularyTests
     }
 
     private static bool Holds(Rule rule, int rank) =>
-        RuleEvaluator.Evaluate(rule, new JsonObject { ["rank"] = rank }, null);
+        RuleEvaluator.Evaluate(rule, new JsonObject { ["rank"] = rank }, input: null);
 }

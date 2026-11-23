@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.DeadLetter;
@@ -26,7 +27,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// The returned List&lt;DeadLetter&gt; is stored in the train's Memory and made available
 /// to DetermineJobsToQueueJunction so it can exclude just-dead-lettered manifests.
 /// </remarks>
-internal class ReapFailedJobsJunction(
+internal sealed class ReapFailedJobsJunction(
     IDataContext dataContext,
     ILogger<ReapFailedJobsJunction> logger,
     ITraxChangeSignal? changeSignal = null
@@ -58,31 +59,27 @@ internal class ReapFailedJobsJunction(
             // the operator surface refused one) must not dead-letter a manifest that never failed.
             if (view.FailedCount > 0 && view.FailedCount > view.Manifest.MaxRetries)
             {
-                logger.LogWarning(
-                    "Manifest {ManifestId} (name: {ManifestName}) exceeds max retries ({FailedCount}/{MaxRetries}). Creating dead letter.",
-                    view.Manifest.Id,
-                    view.Manifest.Name,
-                    view.FailedCount,
-                    view.Manifest.MaxRetries
-                );
+                LogMaxRetriesExceeded(view);
 
                 var deadLetter = DeadLetter.Create(
                     new CreateDeadLetter
                     {
                         Manifest = view.Manifest,
-                        Reason =
-                            $"Max retries exceeded: ({view.FailedCount}) failures > ({view.Manifest.MaxRetries}) max retries",
+                        Reason = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Max retries exceeded: ({view.FailedCount}) failures > ({view.Manifest.MaxRetries}) max retries"
+                        ),
                         RetryCount = view.FailedCount,
                     }
                 );
 
-                await dataContext.Track(deadLetter);
+                await dataContext.Track(deadLetter).ConfigureAwait(false);
                 deadLettersCreated.Add(deadLetter);
             }
         }
 
         // Saved within the cycle's transaction: a later junction's failure rolls these back too.
-        await dataContext.SaveChanges(CancellationToken);
+        await dataContext.SaveChanges(CancellationToken).ConfigureAwait(false);
 
         if (deadLettersCreated.Count > 0)
             changeSignal?.Notify(ChangeDomain.DeadLetter);
@@ -94,4 +91,13 @@ internal class ReapFailedJobsJunction(
 
         return deadLettersCreated;
     }
+
+    private void LogMaxRetriesExceeded(ManifestDispatchView view) =>
+        logger.LogWarning(
+            "Manifest {ManifestId} (name: {ManifestName}) exceeds max retries ({FailedCount}/{MaxRetries}). Creating dead letter.",
+            view.Manifest.Id,
+            view.Manifest.Name,
+            view.FailedCount,
+            view.Manifest.MaxRetries
+        );
 }

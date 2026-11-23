@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Features;
 using Trax.StateMachine.Gherkin;
 using Trax.StateMachine.Gherkin.Lexical;
@@ -33,20 +34,20 @@ public partial class LexiconTests
         Directory
             .GetFiles(Valid, "*.lexicon")
             .Order(StringComparer.Ordinal)
-            .Select(Path.GetFileName)!;
+            .Select(f => Path.GetFileName(f));
 
     public static IEnumerable<string> InvalidLexicons() =>
         Directory
             .GetFiles(Invalid, "*.lexicon")
             .Order(StringComparer.Ordinal)
-            .Select(Path.GetFileName)
-            .Concat(Directory.GetDirectories(Invalid).Select(Path.GetFileName))!;
+            .Select(f => Path.GetFileName(f))
+            .Concat(Directory.GetDirectories(Invalid).Select(d => Path.GetFileName(d)));
 
     public static IEnumerable<string> ValidGlossaries() =>
         Directory
             .GetFiles(Path.Combine(Formats, "glossary", "valid"), "*.json")
             .Order(StringComparer.Ordinal)
-            .Select(Path.GetFileName)!;
+            .Select(f => Path.GetFileName(f));
 
     [TestCaseSource(nameof(ValidLexicons))]
     public void A_valid_lexicon_elaborates_to_its_glossary_byte_for_byte(string name)
@@ -60,10 +61,13 @@ public partial class LexiconTests
         reading.Json.Should().Be(expected);
         // Backed by meaning, not only bytes: the two read to the same document.
         JsonNode
-            .DeepEquals(JsonNode.Parse(reading.Json!), JsonNode.Parse(expected))
+            .DeepEquals(JsonNode.Parse(reading.Json.NotNull()), JsonNode.Parse(expected))
             .Should()
             .BeTrue();
-        Glossary.Read(expected).Machines.Keys.Should().Equal(reading.Glossary!.Inner.Machines.Keys);
+        Glossary
+            .Read(expected)
+            .Machines.Keys.Should()
+            .Equal(reading.Glossary.NotNull().Inner.Machines.Keys);
     }
 
     [TestCaseSource(nameof(ValidGlossaries))]
@@ -79,7 +83,7 @@ public partial class LexiconTests
     {
         var text = File.ReadAllText(Path.Combine(Formats, "glossary", "valid", name));
 
-        GlossaryWriter.Write(JsonNode.Parse(text)!.AsObject()).Should().Be(text);
+        GlossaryWriter.Write(JsonNode.Parse(text).NotNull().AsObject()).Should().Be(text);
     }
 
     [TestCaseSource(nameof(InvalidLexicons))]
@@ -90,18 +94,18 @@ public partial class LexiconTests
         var first = directory
             ? Directory.GetFiles(path, "*.lexicon").Order(StringComparer.Ordinal).First()
             : path;
-        var expect = Expect().Match(File.ReadLines(first).First());
+        var expect = Expect.Match(File.ReadLines(first).First());
         expect
             .Success.Should()
             .BeTrue($"{name} starts with '# expect <line>: <words of the problem>'");
         var line = long.Parse(
-            expect.Groups[1].Value,
+            expect.Groups["line"].Value,
             System.Globalization.CultureInfo.InvariantCulture
         );
-        var words = expect.Groups[2].Value.Trim();
+        var words = expect.Groups["words"].Value.Trim();
 
         var reading = directory
-            ? Lexicon.ReadDirectory(path)!
+            ? Lexicon.ReadDirectory(path).NotNull()
             : Lexicon.Read(path, File.ReadAllText(path));
 
         reading.Succeeded.Should().BeFalse();
@@ -140,7 +144,7 @@ public partial class LexiconTests
         var reading = Lexicon.Read("notes.lexicon", lexicon);
         reading.Problems.Should().BeEmpty();
         var derived = FeatureMachines.Derive(
-            reading.Glossary!,
+            reading.Glossary.NotNull(),
             [new FeatureFile("notes.feature", feature)]
         );
 
@@ -156,16 +160,20 @@ public partial class LexiconTests
         var path = Path.Combine(Valid, "battleship.lexicon");
         var text = File.ReadAllText(path);
         var flat = string.Join(
-            "\n",
-            text.Split('\n').Select(l => l.TrimStart()).Select(l => Columns().Replace(l, "\t"))
+            '\n',
+            text.Split('\n').Select(l => l.TrimStart()).Select(l => Columns.Replace(l, "\t"))
         );
 
         Lexicon.Read(path, flat).Json.Should().Be(Lexicon.Read(path, text).Json).And.NotBeNull();
     }
 
     // A run of spaces outside quotes; the fixtures hold no quote with two spaces in it.
-    [GeneratedRegex(@"  +(?=(?:[^""]*""[^""]*"")*[^""]*\z)")]
-    private static partial Regex Columns();
+    [GeneratedRegex(
+        @"  +(?=(?:[^""]*""[^""]*"")*[^""]*\z)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Columns { get; }
 
     [Test]
     public void A_lone_surrogate_in_quotes_is_a_problem_at_its_line()
@@ -189,7 +197,8 @@ public partial class LexiconTests
         Lexicon
             .Read(
                 path,
-                text.Replace("Version: 1", "Version:1").Replace("State: Open", "State:Open")
+                text.Replace("Version: 1", "Version:1", StringComparison.Ordinal)
+                    .Replace("State: Open", "State:Open", StringComparison.Ordinal)
             )
             .Json.Should()
             .Be(Lexicon.Read(path, text).Json)
@@ -206,14 +215,19 @@ public partial class LexiconTests
 
     [Test]
     [Category(Categories.CrossEngine)]
-    public void Every_elaborated_glossary_is_one_the_schema_accepts()
+    public async Task Every_elaborated_glossary_is_one_the_schema_accepts()
     {
         var names = ValidLexicons().ToList();
-        var texts = names
-            .Select(n => File.ReadAllText(GlossaryOf(Path.Combine(Valid, n))))
-            .ToList();
+        var texts = new List<string>();
+        foreach (var n in names)
+            texts.Add(
+                await File.ReadAllTextAsync(GlossaryOf(Path.Combine(Valid, n)))
+                    .ConfigureAwait(false)
+            );
 
-        var verdicts = TwinEngine.ValidateFormat("glossary", texts);
+        var verdicts = await TwinEngine
+            .ValidateFormatAsync("glossary", texts)
+            .ConfigureAwait(false);
 
         names
             .Zip(verdicts)
@@ -225,6 +239,10 @@ public partial class LexiconTests
             );
     }
 
-    [GeneratedRegex(@"\A#\s*expect\s+(\d+):(.*)\z")]
-    private static partial Regex Expect();
+    [GeneratedRegex(
+        @"\A#\s*expect\s+(?<line>\d+):(?<words>.*)\z",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex Expect { get; }
 }

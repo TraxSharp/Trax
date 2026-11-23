@@ -111,11 +111,11 @@ internal static partial class ValueFormats
     public static bool Matches(string format, string value) =>
         format switch
         {
-            Uuid => UuidPattern().IsMatch(value),
+            Uuid => UuidPattern.IsMatch(value),
             DateTime => IsDateTime(value, zoneless: true),
             DateTimeOffset => IsDateTime(value, zoneless: false),
-            Date => DatePattern().Match(value) is { Success: true } m && IsDay(m, 1),
-            Time => TimePattern().Match(value) is { Success: true } t && IsClock(t, 1),
+            Date => DatePattern.Match(value) is { Success: true } m && IsDay(m, 1),
+            Time => TimePattern.Match(value) is { Success: true } t && IsClock(t, 1),
             Duration => IsoDuration.TryParse(value, out _),
             Uri => IsPortableUri(value)
                 && System.Uri.TryCreate(value, UriKind.RelativeOrAbsolute, out _),
@@ -129,21 +129,23 @@ internal static partial class ValueFormats
     // push it out. A DateTime holds one with no offset as it is (zoneless).
     private static bool IsDateTime(string value, bool zoneless)
     {
-        var m = DateTimePattern().Match(value);
+        var m = DateTimePattern.Match(value);
         if (!m.Success || !IsDay(m, 1) || !IsClock(m, 4))
             return false;
         var local = MinuteOf(m);
-        if (m.Groups[8].Success)
+        if (m.Groups["sign"].Success)
         {
             var hours = Number(m, 9);
             var minutes = Number(m, 10);
             if (minutes >= 60 || hours * 60 + minutes > 14 * 60)
                 return false;
-            var offset = (hours * 60 + minutes) * (m.Groups[8].Value == "-" ? -1 : 1);
+            var offset =
+                (hours * 60 + minutes)
+                * (string.Equals(m.Groups["sign"].Value, "-", StringComparison.Ordinal) ? -1 : 1);
             return local - offset >= 0 && local - offset <= LastMinute;
         }
         return zoneless
-            || m.Groups[7].Success
+            || m.Groups["utc"].Success
             || (local >= 24 * 60 && local <= LastMinute - 24 * 60);
     }
 
@@ -184,6 +186,7 @@ internal static partial class ValueFormats
     private static bool IsClock(Match m, int first) =>
         Number(m, first) < 24 && Number(m, first + 1) < 60 && Number(m, first + 2) < 60;
 
+    // The patterns name every group, so a group's number is its place among them, counted from 1.
     private static int Number(Match m, int group)
     {
         var n = 0;
@@ -194,24 +197,31 @@ internal static partial class ValueFormats
 
     [GeneratedRegex(
         "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex UuidPattern();
-
-    [GeneratedRegex("^([0-9]{4})-([0-9]{2})-([0-9]{2})\\z", RegexOptions.CultureInvariant)]
-    private static partial Regex DatePattern();
+    private static partial Regex UuidPattern { get; }
 
     [GeneratedRegex(
-        "^([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]{1,7})?\\z",
-        RegexOptions.CultureInvariant
+        "^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex TimePattern();
+    private static partial Regex DatePattern { get; }
 
     [GeneratedRegex(
-        "^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.[0-9]{1,7})?(?:(Z)|([+-])([0-9]{2}):([0-9]{2}))?\\z",
-        RegexOptions.CultureInvariant
+        "^(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})(?:\\.[0-9]{1,7})?\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex DateTimePattern();
+    private static partial Regex TimePattern { get; }
+
+    [GeneratedRegex(
+        "^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})(?:\\.[0-9]{1,7})?(?:(?<utc>Z)|(?<sign>[+-])(?<offsetHours>[0-9]{2}):(?<offsetMinutes>[0-9]{2}))?\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex DateTimePattern { get; }
 
     // An absolute URI that System.Uri reads, in a form it reads the same on every platform: a scheme of two or more
     // characters (one letter would be a Windows drive), then an authority and a path, or a path alone; a query and
@@ -226,18 +236,18 @@ internal static partial class ValueFormats
     {
         if (value.Length > MaxUriLength)
             return false;
-        var match = SchemePattern().Match(value);
+        var match = SchemePattern.Match(value);
         if (!match.Success)
             return false;
-        var scheme = match.Groups[1].Value.ToLowerInvariant();
+        var scheme = match.Groups["scheme"].Value.ToLowerInvariant();
         var rest = value[match.Length..];
-        if (scheme == "mailto")
+        if (string.Equals(scheme, "mailto", StringComparison.Ordinal))
         {
-            var query = rest.IndexOf('?');
+            var query = rest.IndexOf('?', StringComparison.Ordinal);
             var address = query < 0 ? rest : rest[..query];
-            var at = address.IndexOf('@');
+            var at = address.IndexOf('@', StringComparison.Ordinal);
             return at > 0
-                && MailboxPattern().IsMatch(address[..at])
+                && MailboxPattern.IsMatch(address[..at])
                 && IsHost(address[(at + 1)..])
                 && (query < 0 || IsUriText(rest[(query + 1)..]));
         }
@@ -250,10 +260,10 @@ internal static partial class ValueFormats
                 return false;
             // A file URI's path starting "//" would be read as a UNC share, and a ':' in it as a drive.
             if (
-                scheme == "file"
+                string.Equals(scheme, "file", StringComparison.Ordinal)
                 && (
                     rest[end..].StartsWith("//", StringComparison.Ordinal)
-                    || rest[end..].Contains(':')
+                    || rest[end..].Contains(':', StringComparison.Ordinal)
                 )
             )
                 return false;
@@ -261,7 +271,7 @@ internal static partial class ValueFormats
         }
         else if (KnownSchemes.Contains(scheme))
             return false;
-        var hash = rest.IndexOf('#');
+        var hash = rest.IndexOf('#', StringComparison.Ordinal);
         return hash < 0
             ? IsUriText(rest)
             : IsUriText(rest[..hash]) && IsUriText(rest[(hash + 1)..]);
@@ -293,14 +303,14 @@ internal static partial class ValueFormats
 
     private static bool IsAuthority(string authority, string scheme)
     {
-        if (scheme == "file")
+        if (string.Equals(scheme, "file", StringComparison.Ordinal))
             return authority.Length == 0 || IsHost(authority);
-        if (scheme == "net.pipe")
+        if (string.Equals(scheme, "net.pipe", StringComparison.Ordinal))
             return IsHost(authority);
         var colon = authority.StartsWith('[')
-            ? authority.IndexOf(':', authority.IndexOf(']') + 1)
-            : authority.IndexOf(':');
-        if (authority.StartsWith('[') && authority.IndexOf(']') < 0)
+            ? authority.IndexOf(':', authority.IndexOf(']', StringComparison.Ordinal) + 1)
+            : authority.IndexOf(':', StringComparison.Ordinal);
+        if (authority.StartsWith('[') && authority.IndexOf(']', StringComparison.Ordinal) < 0)
             return false;
         var host = colon < 0 ? authority : authority[..colon];
         var port = colon < 0 ? null : authority[(colon + 1)..];
@@ -308,7 +318,7 @@ internal static partial class ValueFormats
             && (
                 port is null
                 || (
-                    PortPattern().IsMatch(port)
+                    PortPattern.IsMatch(port)
                     && int.Parse(port, CultureInfo.InvariantCulture) <= 65535
                 )
             );
@@ -318,7 +328,7 @@ internal static partial class ValueFormats
     private static bool IsHost(string host) =>
         host.StartsWith('[') && host.EndsWith(']')
             ? IsIPv6(host[1..^1])
-            : Ipv4Pattern().IsMatch(host) || HostPattern().IsMatch(host);
+            : Ipv4Pattern.IsMatch(host) || HostPattern.IsMatch(host);
 
     // An IPv6 address as RFC 4291 writes it: eight groups of one to four hex digits, or fewer around one "::",
     // the last two of which may be a dotted IPv4 address. No zone.
@@ -336,9 +346,9 @@ internal static partial class ValueFormats
             for (var i = 0; i < parts.Length; i++)
             {
                 var last = h == halves.Length - 1 && i == parts.Length - 1;
-                if (last && Ipv4Pattern().IsMatch(parts[i]))
+                if (last && Ipv4Pattern.IsMatch(parts[i]))
                     groups += 2;
-                else if (HexGroupPattern().IsMatch(parts[i]))
+                else if (HexGroupPattern.IsMatch(parts[i]))
                     groups += 1;
                 else
                     return false;
@@ -348,35 +358,54 @@ internal static partial class ValueFormats
     }
 
     // A path, query or fragment: unreserved and reserved characters but "#", and %HH escapes.
-    private static bool IsUriText(string text) => UriTextPattern().IsMatch(text);
+    private static bool IsUriText(string text) => UriTextPattern.IsMatch(text);
 
-    [GeneratedRegex("^([A-Za-z][A-Za-z0-9+.\\-]+):", RegexOptions.CultureInvariant)]
-    private static partial Regex SchemePattern();
+    [GeneratedRegex(
+        "^(?<scheme>[A-Za-z][A-Za-z0-9+.\\-]+):",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex SchemePattern { get; }
 
-    [GeneratedRegex("^[A-Za-z0-9._+\\-]+\\z", RegexOptions.CultureInvariant)]
-    private static partial Regex MailboxPattern();
+    [GeneratedRegex(
+        "^[A-Za-z0-9._+\\-]+\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex MailboxPattern { get; }
 
     [GeneratedRegex(
         "^(?:[A-Za-z0-9](?:[A-Za-z0-9\\-]{0,61}[A-Za-z0-9])?\\.)*(?=[A-Za-z0-9\\-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9\\-]{0,61}[A-Za-z0-9])?\\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex HostPattern();
+    private static partial Regex HostPattern { get; }
 
-    [GeneratedRegex("^[0-9]{1,5}\\z", RegexOptions.CultureInvariant)]
-    private static partial Regex PortPattern();
+    [GeneratedRegex(
+        "^[0-9]{1,5}\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex PortPattern { get; }
 
-    [GeneratedRegex("^[0-9A-Fa-f]{1,4}\\z", RegexOptions.CultureInvariant)]
-    private static partial Regex HexGroupPattern();
+    [GeneratedRegex(
+        "^[0-9A-Fa-f]{1,4}\\z",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex HexGroupPattern { get; }
 
     [GeneratedRegex(
         "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex Ipv4Pattern();
+    private static partial Regex Ipv4Pattern { get; }
 
     [GeneratedRegex(
         "^(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*\\z",
-        RegexOptions.CultureInvariant
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000
     )]
-    private static partial Regex UriTextPattern();
+    private static partial Regex UriTextPattern { get; }
 }

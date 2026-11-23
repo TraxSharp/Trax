@@ -11,9 +11,9 @@ namespace Trax.Cli.Tests.UnitTests;
 /// </summary>
 public class MachineGenerateOptionsTests
 {
-    private string _root = null!;
-    private string _tools = null!;
-    private string _engineSrc = null!;
+    private string _root = "";
+    private string _tools = "";
+    private string _engineSrc = "";
 
     [SetUp]
     public void SetUp()
@@ -36,56 +36,67 @@ public class MachineGenerateOptionsTests
 
     private string Twin => Path.Combine(_root, "twin");
 
-    private void ShouldRefuse(MachineGenerateOptions options, string message)
+    private async Task ShouldRefuseAsync(MachineGenerateOptions options, string message)
     {
         var node = new FakeNodeRunner();
 
-        var generate = () =>
-            new MachineGenerator(node, new PlacementFiles(), _tools).Generate(options);
+        var generate = async () =>
+            await new MachineGenerator(node, new PlacementFiles(), _tools)
+                .GenerateAsync(options)
+                .ConfigureAwait(false);
 
-        generate.Should().Throw<InvalidOperationException>().WithMessage(message);
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage(message);
         node.Calls.Should().BeEmpty("the options are refused before node runs");
         Directory.Exists(Twin).Should().BeFalse("nothing is written");
     }
 
     [Test]
-    public void Tools_dir_without_engine_src_is_refused_up_front()
+    public async Task Tools_dir_without_engine_src_is_refused_up_front()
     {
-        ShouldRefuse(
-            new(MachineIr.Of(new DeclarativeTurnstileMachine()), TwinOut: Twin, ToolsDir: _tools),
-            "--tools-dir needs --engine-src*"
-        );
+        await ShouldRefuseAsync(
+                new(
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
+                    TwinOut: Twin,
+                    ToolsDir: _tools
+                ),
+                "--tools-dir needs --engine-src*"
+            )
+            .ConfigureAwait(false);
     }
 
     [Test]
-    public void Relative_imports_without_engine_src_are_refused()
+    public async Task Relative_imports_without_engine_src_are_refused()
     {
-        ShouldRefuse(
-            new(
-                MachineIr.Of(new DeclarativeTurnstileMachine()),
-                TwinOut: Twin,
-                ImportStyle: "relative"
-            ),
-            "--import-style relative*needs --engine-src*"
-        );
+        await ShouldRefuseAsync(
+                new(
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
+                    TwinOut: Twin,
+                    ImportStyle: "relative"
+                ),
+                "--import-style relative*needs --engine-src*"
+            )
+            .ConfigureAwait(false);
     }
 
     [TestCase("relative")]
     [TestCase(null)]
-    public void A_specifier_with_relative_imports_is_refused(string? importStyle)
+    public async Task A_specifier_with_relative_imports_is_refused(string? importStyle)
     {
         // With --engine-src, relative is also the default.
-        ShouldRefuse(
-            new(
-                MachineIr.Of(new DeclarativeTurnstileMachine()),
-                TwinOut: Twin,
-                EngineSrc: _engineSrc,
-                ImportStyle: importStyle,
-                Specifier: "@acme/engine",
-                ToolsDir: _tools
-            ),
-            "--specifier applies only to --import-style specifier*"
-        );
+        await ShouldRefuseAsync(
+                new(
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
+                    TwinOut: Twin,
+                    EngineSrc: _engineSrc,
+                    ImportStyle: importStyle,
+                    Specifier: "@acme/engine",
+                    ToolsDir: _tools
+                ),
+                "--specifier applies only to --import-style specifier*"
+            )
+            .ConfigureAwait(false);
     }
 
     [TestCase("")]
@@ -102,18 +113,19 @@ public class MachineGenerateOptionsTests
     [TestCase("./engine")]
     [TestCase("engine/../../x")]
     [TestCase("engine/")]
-    public void A_specifier_that_is_not_a_package_name_is_refused(string specifier)
+    public async Task A_specifier_that_is_not_a_package_name_is_refused(string specifier)
     {
         MachineGenerator.IsModuleSpecifier(specifier).Should().BeFalse();
-        ShouldRefuse(
-            new(
-                MachineIr.Of(new DeclarativeTurnstileMachine()),
-                TwinOut: Twin,
-                ImportStyle: "specifier",
-                Specifier: specifier
-            ),
-            "--specifier must be an npm package name*"
-        );
+        await ShouldRefuseAsync(
+                new(
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
+                    TwinOut: Twin,
+                    ImportStyle: "specifier",
+                    Specifier: specifier
+                ),
+                "--specifier must be an npm package name*"
+            )
+            .ConfigureAwait(false);
     }
 
     [TestCase("@traxsharp/state-machine")]
@@ -134,17 +146,19 @@ public class MachineGenerateOptionsTests
     }
 
     [Test]
-    public void A_valid_specifier_reaches_the_bundled_generator()
+    public async Task A_valid_specifier_reaches_the_bundled_generator()
     {
         var node = new FakeNodeRunner();
 
-        new MachineGenerator(node, new PlacementFiles(), _tools).Generate(
-            new(
-                MachineIr.Of(new DeclarativeTurnstileMachine()),
-                TwinOut: Twin,
-                Specifier: "@acme/engine/twin"
+        await new MachineGenerator(node, new PlacementFiles(), _tools)
+            .GenerateAsync(
+                new(
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
+                    TwinOut: Twin,
+                    Specifier: "@acme/engine/twin"
+                )
             )
-        );
+            .ConfigureAwait(false);
 
         node.Calls.Single()
             .Args.Should()
@@ -152,57 +166,59 @@ public class MachineGenerateOptionsTests
     }
 
     [Test]
-    public void A_bundled_generator_that_writes_nothing_is_not_blamed_on_engine_src()
+    public async Task A_bundled_generator_that_writes_nothing_is_not_blamed_on_engine_src()
     {
-        var generate = () =>
-            new MachineGenerator(
+        var generate = async () =>
+            await new MachineGenerator(
                 new FakeNodeRunner { WritesOutputs = false },
                 new PlacementFiles(),
                 _tools
-            ).Generate(new(MachineIr.Of(new DeclarativeTurnstileMachine()), TwinOut: Twin));
+            )
+                .GenerateAsync(new(MachineIr.Of(new DeclarativeTurnstileMachine()), TwinOut: Twin))
+                .ConfigureAwait(false);
 
-        generate
-            .Should()
-            .Throw<InvalidOperationException>()
+        (await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false))
             .WithMessage("*did not write*generators bundled into this trax*reinstall trax*")
             .Which.Message.Should()
             .NotContain("--engine-src");
     }
 
     [Test]
-    public void An_engine_checkout_that_writes_nothing_is_named()
+    public async Task An_engine_checkout_that_writes_nothing_is_named()
     {
-        var generate = () =>
-            new MachineGenerator(new FakeNodeRunner { WritesOutputs = false }).Generate(
-                new(
-                    MachineIr.Of(new DeclarativeTurnstileMachine()),
-                    TwinOut: Twin,
-                    EngineSrc: _engineSrc
+        var generate = async () =>
+            await new MachineGenerator(new FakeNodeRunner { WritesOutputs = false })
+                .GenerateAsync(
+                    new(
+                        MachineIr.Of(new DeclarativeTurnstileMachine()),
+                        TwinOut: Twin,
+                        EngineSrc: _engineSrc
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
-        generate
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage($"*did not write*The engine at --engine-src ({_engineSrc})*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage($"*did not write*The engine at --engine-src ({_engineSrc})*");
     }
 
     [Test]
-    public void Generators_in_tools_dir_that_write_nothing_are_named()
+    public async Task Generators_in_tools_dir_that_write_nothing_are_named()
     {
-        var generate = () =>
-            new MachineGenerator(new FakeNodeRunner { WritesOutputs = false }).Generate(
-                new(
-                    MachineIr.Of(new DeclarativeTurnstileMachine()),
-                    TwinOut: Twin,
-                    EngineSrc: _engineSrc,
-                    ToolsDir: _tools
+        var generate = async () =>
+            await new MachineGenerator(new FakeNodeRunner { WritesOutputs = false })
+                .GenerateAsync(
+                    new(
+                        MachineIr.Of(new DeclarativeTurnstileMachine()),
+                        TwinOut: Twin,
+                        EngineSrc: _engineSrc,
+                        ToolsDir: _tools
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
-        generate
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage($"*did not write*The generators in --tools-dir ({_tools})*");
+        (
+            await generate.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false)
+        ).WithMessage($"*did not write*The generators in --tools-dir ({_tools})*");
     }
 }

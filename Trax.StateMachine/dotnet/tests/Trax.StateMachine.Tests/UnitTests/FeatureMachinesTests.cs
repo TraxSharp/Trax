@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.StateMachine.Gherkin;
 
 namespace Trax.StateMachine.Tests.UnitTests;
@@ -89,10 +90,10 @@ public class FeatureMachinesTests
             .Missing(glossary, Features)
             .Should()
             .Contain(g => g.Kind == "trigger" && g.What == "Cancel" && g.Stub != null);
-        var board = FeatureMachines.Board(derived.Irs, derived.Host!);
+        var board = FeatureMachines.Board(derived.Irs, derived.Host.NotNull());
         board.Stickies.Should().Contain(s => s.Kind == "command" && s.Label == "Place");
         board
-            .Stickies.Single(s => s.Kind == "command")
+            .Stickies.Single(s => string.Equals(s.Kind, "command", StringComparison.Ordinal))
             .Scenarios.Single()
             .Should()
             .Be(new FeatureScenarioRef("ordering.feature", 3, "Ada places her order"));
@@ -104,7 +105,8 @@ public class FeatureMachinesTests
         var glossary = FeatureGlossary.Read(
             Glossary.Replace(
                 "\"Placed\": \"is placed\" }",
-                "\"Placed\": \"is placed\", \"Ready\": \"is ready\" }"
+                "\"Placed\": \"is placed\", \"Ready\": \"is ready\" }",
+                StringComparison.Ordinal
             )
         );
         FeatureFile[] features =
@@ -175,7 +177,9 @@ public class FeatureMachinesTests
         derived.Succeeded.Should().BeFalse();
         derived.Irs.Should().BeEmpty();
         var loops = derived
-            .Problems.Where(p => p.Message.Contains("form a cycle no event breaks"))
+            .Problems.Where(p =>
+                p.Message.Contains("form a cycle no event breaks", StringComparison.Ordinal)
+            )
             .ToList();
         loops
             .Should()
@@ -247,7 +251,8 @@ public class FeatureMachinesTests
         var glossary = FeatureGlossary.Read(
             Glossary.Replace(
                 "\"Placed\": \"is placed\" }",
-                "\"Placed\": \"is placed\", \"Expired\": \"has expired\" }"
+                "\"Placed\": \"is placed\", \"Expired\": \"has expired\" }",
+                StringComparison.Ordinal
             )
         );
         FeatureFile[] features =
@@ -292,7 +297,7 @@ public class FeatureMachinesTests
 
         var derived = FeatureMachines.Derive(glossary, CascadeFeatures);
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         derived
             .Host.Should()
             .Contain("\"shape\":\"toSystem\"")
@@ -355,7 +360,7 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(CascadeGlossary);
         var derived = FeatureMachines.Derive(glossary, CascadeFeatures);
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         FeatureFile probe = new(
             "probe.feature",
             $"""
@@ -383,73 +388,69 @@ public class FeatureMachinesTests
         scenario.Steps.Single(s => s.Status == FeatureStatus.Failed).Text.Should().EndWith(failing);
     }
 
+    private const string SystemCascadeGlossary = """
+        {
+          "version": 1,
+          "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
+          "machines": {
+            "order": {
+              "ownedBy": "customer",
+              "noun": "order",
+              "start": "has an order",
+              "initial": "Draft",
+              "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
+              "triggers": { "Bake": { "phrase": "{subject} starts baking" } }
+            },
+            "shop": {
+              "system": "shop/main",
+              "name": "the shop",
+              "initial": "Closed",
+              "states": { "Closed": "is closed", "Open": "is open", "Busy": "is busy" },
+              "triggers": {
+                "Open": { "phrase": "the shop opens" },
+                "Rush": { "phrase": "the shop gets busy" }
+              }
+            }
+          }
+        }
+        """;
+
+    private const string CascadeShopFeature = """
+        Feature: Shop
+          Scenario: Opening bakes the waiting orders, which keeps the shop busy
+            Given Ada is a customer
+            And Ada has an order
+            And Ada's order is placed
+            And the shop is closed
+            When the shop opens
+            Then the shop is open
+            And Ada's order is baking
+            And the shop is busy
+
+          Scenario: The shop gets busy
+            Given the shop is open
+            When the shop gets busy
+            Then the shop is busy
+
+          Scenario: An order goes in the oven
+            Given Ada is a customer
+            And Ada has an order
+            And Ada's order is placed
+            When Ada's order starts baking
+            Then Ada's order is baking
+        """;
+
     [Test]
     public void A_cascade_that_comes_back_to_a_system_instance_is_caused_by_the_step_before_it()
     {
-        var glossary = FeatureGlossary.Read(
-            """
-            {
-              "version": 1,
-              "actors": { "customer": { "noun": "a customer", "roles": ["customer"] } },
-              "machines": {
-                "order": {
-                  "ownedBy": "customer",
-                  "noun": "order",
-                  "start": "has an order",
-                  "initial": "Draft",
-                  "states": { "Draft": "is a draft", "Placed": "is placed", "Baking": "is baking" },
-                  "triggers": { "Bake": { "phrase": "{subject} starts baking" } }
-                },
-                "shop": {
-                  "system": "shop/main",
-                  "name": "the shop",
-                  "initial": "Closed",
-                  "states": { "Closed": "is closed", "Open": "is open", "Busy": "is busy" },
-                  "triggers": {
-                    "Open": { "phrase": "the shop opens" },
-                    "Rush": { "phrase": "the shop gets busy" }
-                  }
-                }
-              }
-            }
-            """
-        );
-        FeatureFile[] features =
-        [
-            new(
-                "shop.feature",
-                """
-                Feature: Shop
-                  Scenario: Opening bakes the waiting orders, which keeps the shop busy
-                    Given Ada is a customer
-                    And Ada has an order
-                    And Ada's order is placed
-                    And the shop is closed
-                    When the shop opens
-                    Then the shop is open
-                    And Ada's order is baking
-                    And the shop is busy
-
-                  Scenario: The shop gets busy
-                    Given the shop is open
-                    When the shop gets busy
-                    Then the shop is busy
-
-                  Scenario: An order goes in the oven
-                    Given Ada is a customer
-                    And Ada has an order
-                    And Ada's order is placed
-                    When Ada's order starts baking
-                    Then Ada's order is baking
-                """
-            ),
-        ];
+        var glossary = FeatureGlossary.Read(SystemCascadeGlossary);
+        FeatureFile[] features = [new("shop.feature", CascadeShopFeature)];
 
         var derived = FeatureMachines.Derive(glossary, features);
 
-        derived.Succeeded.Should().BeTrue(string.Join("\n", derived.Problems));
+        derived.Succeeded.Should().BeTrue(string.Join('\n', derived.Problems));
         var policies = Trax
-            .StateMachine.Features.HostFile.Read(derived.Host!)
+            .StateMachine.Features.HostFile.Read(derived.Host.NotNull())
             .Policies.Select(p => $"{p.Shape} {p.Id}")
             .ToList();
         policies
@@ -464,15 +465,18 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(Glossary);
         var derived = FeatureMachines.Derive(glossary, Features);
-        var irs = new Dictionary<string, string> { ["order"] = "{ not json" };
+        var irs = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["order"] = "{ not json",
+        };
 
         FluentActions
-            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
+            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*'order'*");
         FluentActions
-            .Invoking(() => FeatureMachines.Board(irs, derived.Host!))
+            .Invoking(() => FeatureMachines.Board(irs, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*'order'*");
@@ -483,15 +487,15 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(Glossary);
         var derived = FeatureMachines.Derive(glossary, Features);
-        var none = new Dictionary<string, string>();
+        var none = new Dictionary<string, string>(StringComparer.Ordinal);
 
         FluentActions
-            .Invoking(() => FeatureMachines.Run(glossary, Features, none, derived.Host!))
+            .Invoking(() => FeatureMachines.Run(glossary, Features, none, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*serves 'order'*");
         FluentActions
-            .Invoking(() => FeatureMachines.Board(none, derived.Host!))
+            .Invoking(() => FeatureMachines.Board(none, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*serves 'order'*");
@@ -502,12 +506,15 @@ public class FeatureMachinesTests
     {
         var glossary = FeatureGlossary.Read(Glossary);
         var derived = FeatureMachines.Derive(glossary, Features);
-        var ir = System.Text.Json.Nodes.JsonNode.Parse(derived.Irs["order"])!.AsObject();
+        var ir = System.Text.Json.Nodes.JsonNode.Parse(derived.Irs["order"]).NotNull().AsObject();
         ir["description"] = "edited by hand";
-        var irs = new Dictionary<string, string> { ["order"] = ir.ToJsonString() };
+        var irs = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["order"] = ir.ToJsonString(),
+        };
 
         FluentActions
-            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host!))
+            .Invoking(() => FeatureMachines.Run(glossary, Features, irs, derived.Host.NotNull()))
             .Should()
             .Throw<FormatException>()
             .WithMessage("*derived from another IR of 'order'*");

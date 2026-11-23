@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -12,7 +13,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
 /// Drives the full polling cycle (materialise manifests → ManifestManager → JobDispatcher)
-/// against Postgres so the EnqueueJobsJunction / dispatcher junctions / TraxScheduler trigger
+/// against Postgres so the work queue / dispatcher junctions / TraxScheduler trigger
 /// paths actually execute. The unit-level tests can't reach these because they live inside
 /// junction async state machines that only fire when the orchestration trains run.
 /// </summary>
@@ -91,7 +92,7 @@ public class SchedulerPollingCycleTests
             .Include(w => w.Manifest)
             .ToListAsync();
         // Parent is due, but dependent waits for parent to have a LastSuccessfulRun
-        workQueue.Select(w => w.Manifest!.ExternalId).Should().NotContain("dependent");
+        workQueue.Select(w => w.Manifest.NotNull().ExternalId).Should().NotContain("dependent");
     }
 
     [Test]
@@ -154,7 +155,7 @@ public class SchedulerPollingCycleTests
             .DataContext.WorkQueues.AsNoTracking()
             .Include(w => w.Manifest)
             .ToListAsync();
-        workQueue.Should().Contain(w => w.Manifest!.ExternalId == "manual-trigger");
+        workQueue.Should().Contain(w => w.Manifest.NotNull().ExternalId == "manual-trigger");
     }
 
     [Test]
@@ -226,7 +227,7 @@ public class SchedulerPollingCycleTests
             .DataContext.WorkQueues.AsNoTracking()
             .Include(w => w.Manifest)
             .ToListAsync();
-        workQueue.Should().Contain(w => w.Manifest!.ExternalId == "g-a");
+        workQueue.Should().Contain(w => w.Manifest.NotNull().ExternalId == "g-a");
     }
 
     [Test]

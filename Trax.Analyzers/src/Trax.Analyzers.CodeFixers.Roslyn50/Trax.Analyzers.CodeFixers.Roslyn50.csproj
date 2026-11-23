@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The same code fixes as ../Trax.Analyzers.CodeFixers, built against Roslyn 5.0
+       (Analyzer.props). It compiles that folder's sources; it has none of its own. -->
+  <PropertyGroup>
+    <RoslynVersion>5.0</RoslynVersion>
+    <AssemblyName>Trax.Analyzers.CodeFixers</AssemblyName>
+    <RootNamespace>Trax.Analyzers</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <Import Project="../CodeFixers.props" />
+
+  <ItemGroup>
+    <Compile
+      Include="../Trax.Analyzers.CodeFixers/**/*.cs"
+      Exclude="../Trax.Analyzers.CodeFixers/bin/**;../Trax.Analyzers.CodeFixers/obj/**"
+    />
+  </ItemGroup>
+</Project>

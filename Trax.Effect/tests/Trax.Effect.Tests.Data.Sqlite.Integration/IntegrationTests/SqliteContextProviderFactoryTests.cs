@@ -32,7 +32,8 @@ public class SqliteContextProviderFactoryTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var before = factory.Count;
 
-        await using var ctx = await factory.CreateDbContextAsync(CancellationToken.None);
+        var ctx = await factory.CreateDbContextAsync(CancellationToken.None);
+        await using var ctxDisposal = ctx.ConfigureAwait(false);
 
         ctx.Should().NotBeNull();
         factory.Count.Should().Be(before + 1);

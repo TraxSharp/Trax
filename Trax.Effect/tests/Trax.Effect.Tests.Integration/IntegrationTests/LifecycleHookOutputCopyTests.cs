@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -31,7 +33,7 @@ public class LifecycleHookOutputCopyTests
         output
             .Should()
             .NotContain("$id", "a hook forwards the output; it carries no serializer metadata");
-        JsonDocument.Parse(output!).RootElement.GetArrayLength().Should().Be(3);
+        JsonDocument.Parse(output.NotNull()).RootElement.GetArrayLength().Should().Be(3);
     }
 
     [Test]
@@ -123,7 +125,9 @@ public class LifecycleHookOutputCopyTests
     )
         where TTrain : class, IServiceTrain<int, List<string>>
         where TImpl : class, TTrain =>
-        (await RunAndCaptureStored<TTrain, TImpl>(rows, configure, arrange)).Output;
+        (
+            await RunAndCaptureStored<TTrain, TImpl>(rows, configure, arrange).ConfigureAwait(false)
+        ).Output;
 
     private static async Task<(
         string? Output,
@@ -144,12 +148,14 @@ public class LifecycleHookOutputCopyTests
         services
             .AddSingleton<ITrainLifecycleHookFactory>(new OutputRecordingHookFactory(hook))
             .AddScopedTraxRoute<TTrain, TImpl>();
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        await using var providerDisposal = provider.ConfigureAwait(false);
         arrange?.Invoke(provider);
 
-        using var scope = provider.CreateScope();
+        var scope = provider.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var train = scope.ServiceProvider.GetRequiredService<TTrain>();
-        await train.Run(rows);
+        await train.Run(rows).ConfigureAwait(false);
 
         hook.Completed.Should().BeTrue();
         return (hook.Output, hook.OutputObject, train.Metadata?.Output);
@@ -177,24 +183,30 @@ public class LifecycleHookOutputCopyTests
         public ITrainLifecycleHook Create() => hook;
     }
 
-    private class RowsTrain : ServiceTrain<int, List<string>>, IRowsTrain
+    private sealed class RowsTrain : ServiceTrain<int, List<string>>, IRowsTrain
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
-                Enumerable.Range(0, TrainInput).Select(i => $"row-{i}").ToList()
+                Enumerable
+                    .Range(0, TrainInput)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"row-{i}"))
+                    .ToList()
             );
     }
 
-    public interface IRowsTrain : IServiceTrain<int, List<string>> { }
+    public interface IRowsTrain : IServiceTrain<int, List<string>>;
 
     [OutputWithheldFromLifecycleHooks]
-    private class WithheldRowsTrain : ServiceTrain<int, List<string>>, IWithheldRowsTrain
+    private sealed class WithheldRowsTrain : ServiceTrain<int, List<string>>, IWithheldRowsTrain
     {
         protected override Task<Either<Exception, List<string>>> Junctions() =>
             Task.FromResult<Either<Exception, List<string>>>(
-                Enumerable.Range(0, TrainInput).Select(i => $"row-{i}").ToList()
+                Enumerable
+                    .Range(0, TrainInput)
+                    .Select(i => string.Create(CultureInfo.InvariantCulture, $"row-{i}"))
+                    .ToList()
             );
     }
 
-    public interface IWithheldRowsTrain : IServiceTrain<int, List<string>> { }
+    public interface IWithheldRowsTrain : IServiceTrain<int, List<string>>;
 }

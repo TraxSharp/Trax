@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectProvider;
@@ -35,7 +36,7 @@ public sealed class CountingDataContextFactory(IDataContextProviderFactory inner
     }
 
     /// <summary>Lets the held data contexts go, and stops holding.</summary>
-    public void Release() => Interlocked.Exchange(ref _hold, null)?.TrySetResult();
+    public void Release() => Interlocked.Exchange(ref _hold, value: null)?.TrySetResult();
 
     public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
     {
@@ -43,9 +44,9 @@ public sealed class CountingDataContextFactory(IDataContextProviderFactory inner
         if (Volatile.Read(ref _hold) is { } hold)
         {
             _entered.TrySetResult();
-            await hold.Task.WaitAsync(cancellationToken);
+            await hold.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        return await inner.CreateDbContextAsync(cancellationToken);
+        return await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public IEffectProvider Create()
@@ -75,6 +76,6 @@ public sealed class CountingDataContextFactory(IDataContextProviderFactory inner
         (IDataContextProviderFactory)(
             descriptor.ImplementationInstance
             ?? descriptor.ImplementationFactory?.Invoke(sp)
-            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!)
+            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType.NotNull())
         );
 }

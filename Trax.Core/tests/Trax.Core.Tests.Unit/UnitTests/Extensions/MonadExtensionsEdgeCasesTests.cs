@@ -19,7 +19,7 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
 
         result.Should().BeNull();
         monad.Exception.Should().BeOfType<TrainException>();
-        monad.Exception!.Message.Should().Contain("must be a class");
+        monad.Exception.NotNull().Message.Should().Contain("must be a class");
     }
 
     [Test]
@@ -31,8 +31,8 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
 
         result.Should().BeNull();
         monad.Exception.Should().BeOfType<TrainException>();
-        monad.Exception!.Message.Should().Contain(nameof(MultiCtorJunction));
-        monad.Exception!.Message.Should().Contain("2 public constructors");
+        monad.Exception.NotNull().Message.Should().Contain(nameof(MultiCtorJunction));
+        monad.Exception.NotNull().Message.Should().Contain("2 public constructors");
     }
 
     [Test]
@@ -119,29 +119,29 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
         act.Should().Throw<TrainException>();
     }
 
-    private interface INotAClass { }
+    private interface INotAClass;
 
-    private interface IFoo { }
+    private interface IFoo;
 
-    private interface IBar { }
+    private interface IBar;
 
-    private class Foo : IFoo { }
+    private sealed class Foo : IFoo;
 
-    private class Bar : IBar { }
+    private sealed class Bar : IBar;
 
-    private class MultiCtorJunction
+    private sealed class MultiCtorJunction
     {
         public MultiCtorJunction() { }
 
         public MultiCtorJunction(int x) { }
     }
 
-    private class NeedsDependencyJunction
+    private sealed class NeedsDependencyJunction
     {
         public NeedsDependencyJunction(IFoo foo) { }
     }
 
-    private class TestTrain : Train<int, string>
+    private sealed class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

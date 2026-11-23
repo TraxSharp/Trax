@@ -6,10 +6,10 @@ status: accepted
 
 # The samples adopt the shipped guards the way a consumer would
 
-`BookwormArchitectureGuards` contains no test bodies. It subclasses the abstract fixtures
-published in `Trax.Effect.Data.Testing`, `Trax.Api.GraphQL.Testing` and
-`Trax.Mediator.Testing`, supplies configuration, and lets the inherited `[Test]` methods be
-discovered in this assembly. That is exactly the adoption path a consumer follows.
+The Bookworm guards (`BookwormDataLayerGuards`, `BookwormCrossSchemaGuards`,
+`BookwormTrainGuards`) contain no test bodies. They subclass the abstract fixtures published in
+`Trax.Effect.Data.Testing`, `Trax.Api.GraphQL.Testing` and `Trax.Mediator.Testing`, supply
+configuration, and let the inherited `[Test]` methods be discovered in this assembly. That is exactly the adoption path a consumer follows.
 
 ## Status
 
@@ -53,8 +53,8 @@ point, since a sample that could not satisfy them would be a poor demonstration.
 **Enforced elsewhere:** the `[Test]` methods live in the packages, not here.
 `DataLayerGuards` and `DomainDataLayerGuardFixture` ship from `Trax.Effect`,
 `CrossSchemaGuards` and `CrossSchemaGuardFixture` from `Trax.Api`, and `TrainGuards` with
-`TrainGuardFixture` from `Trax.Mediator`. `BookwormArchitectureGuards.cs` in this repo is
-three subclasses and a configuration block.
+`TrainGuardFixture` from `Trax.Mediator`. The three `Bookworm*Guards.cs` files in this repo are
+three subclasses and their configuration.
 
 Not covered: nothing checks that every shipped `*GuardFixture` has a subclass here. A new
 fixture added upstream with no Bookworm adopter is untested from the consumer side, and
@@ -63,6 +63,8 @@ source but is missing from the `.nupkg` is no longer caught by any test.
 
 ## Changelog
 
+- **2026-11-20**: `BookwormArchitectureGuards.cs` is split into one file per fixture subclass, so
+  each type has its own file. Nothing else changed.
 - **2026-10-06**: The samples moved into the one repository and reference the fixtures as
   projects, so the packaging half of the justification no longer holds; recorded as not covered.
 - **2026-09-11**: Replaced the justification. All three packages do ship a fixture-subclass

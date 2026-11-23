@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Utils;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Utils;
@@ -23,5 +24,7 @@ public class LikePatternTests
 
     [Test]
     public void Contains_refuses_a_null_term() =>
-        ((Action)(() => LikePattern.Contains(null!))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => LikePattern.Contains(Null.Of<string>())))
+            .Should()
+            .Throw<ArgumentNullException>();
 }

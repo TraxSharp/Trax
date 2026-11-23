@@ -157,5 +157,6 @@ public class RemoteExecutionTests : ApiTestFixture
                 SELECT COALESCE(pg_sequence_last_value(pg_get_serial_sequence('trax.background_job', 'id')::regclass), 0) AS "Value"
                 """
             )
-            .SingleAsync();
+            .SingleAsync()
+            .ConfigureAwait(false);
 }

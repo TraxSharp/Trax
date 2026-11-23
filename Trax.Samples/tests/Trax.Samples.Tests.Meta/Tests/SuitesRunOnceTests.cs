@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.Tests.Meta.Tests;
 
@@ -18,18 +19,33 @@ public class SuitesRunOnceTests
     [Test]
     public void Every_suite_of_this_folder_is_left_out_of_its_job()
     {
-        var config = JsonNode.Parse(
-            File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json"))
-        )!;
+        var config = JsonNode
+            .Parse(File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json")))
+            .NotNull();
         var testArgs =
             (string?)
-                config["packages"]!.AsArray().Single(p => (string?)p!["folder"] == "Trax.Samples")![
-                    "dotnet"
-                ]!["test-args"]
+                config["packages"]
+                    .NotNull()
+                    .AsArray()
+                    .Single(p =>
+                        string.Equals(
+                            (string?)p.NotNull()["folder"],
+                            "Trax.Samples",
+                            StringComparison.Ordinal
+                        )
+                    )
+                    .NotNull()["dotnet"]
+                    .NotNull()["test-args"]
             ?? "";
         var suites = (config["suites"]?.AsArray() ?? [])
-            .Where(s => (string?)s!["folder"] == "Trax.Samples")
-            .Select(s => (string)s!["project"]!)
+            .Where(s =>
+                string.Equals(
+                    (string?)s.NotNull()["folder"],
+                    "Trax.Samples",
+                    StringComparison.Ordinal
+                )
+            )
+            .Select(s => s.NotNull()["project"].NotNull().GetValue<string>())
             .ToList();
 
         suites.Should().NotBeEmpty("the console's browser tests run in a job of their own");
@@ -60,21 +76,21 @@ public class SuitesRunOnceTests
                 );
         }
 
-        problems.Should().BeEmpty(string.Join("\n", problems));
+        problems.Should().BeEmpty(string.Join('\n', problems));
     }
 
     private static List<string> SharedProjects(string solution)
     {
-        var dir = Path.GetDirectoryName(RepoRoot.Combine(solution))!;
+        var dir = Path.GetDirectoryName(RepoRoot.Combine(solution)).NotNull();
         var own = ProjectsIn(RepoRoot.Combine(solution), dir);
         var folders = ProjectsIn(RepoRoot.Combine("Trax.Samples.slnx"), RepoRoot.Path);
-        return own.Intersect(folders).Select(RepoRoot.Relative).ToList();
+        return own.Intersect(folders, StringComparer.Ordinal).Select(RepoRoot.Relative).ToList();
     }
 
     private static HashSet<string> ProjectsIn(string solution, string dir) =>
         System
             .Xml.Linq.XDocument.Load(solution)
             .Descendants("Project")
-            .Select(p => Path.GetFullPath(Path.Combine(dir, (string)p.Attribute("Path")!)))
+            .Select(p => Path.GetFullPath(Path.Combine(dir, (string)p.Attribute("Path").NotNull())))
             .ToHashSet(StringComparer.Ordinal);
 }

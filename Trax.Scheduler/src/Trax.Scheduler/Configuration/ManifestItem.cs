@@ -15,7 +15,7 @@ namespace Trax.Scheduler.Configuration;
 /// </param>
 /// <param name="DependsOn">
 /// Optional external ID of the parent manifest this item depends on.
-/// When <c>null</c>, <c>IncludeMany</c> falls back to the root scheduled manifest.
+/// When <see langword="null"/>, <c>IncludeMany</c> falls back to the root scheduled manifest.
 /// <c>ThenIncludeMany</c> requires this to be set.
 /// </param>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/schedule-many#manifestitem">SDK reference</seealso>

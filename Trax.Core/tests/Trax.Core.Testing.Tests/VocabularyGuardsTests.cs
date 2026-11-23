@@ -23,11 +23,11 @@ public class VocabularyGuardsTests
 
     private static IReadOnlyList<ForeignVocabulary> Banned => [HotChocolateAuthorization];
 
-    private static GuardResult Run(
+    private static Task<GuardResult> Run(
         TempRepo repo,
         IReadOnlyDictionary<string, string>? allowed = null
     ) =>
-        VocabularyGuards.TraxVocabularyIsUsed(
+        VocabularyGuards.TraxVocabularyIsUsedAsync(
             Banned,
             new ArchitectureGuardOptions { RepoRootOverride = repo.Root },
             allowed
@@ -36,7 +36,7 @@ public class VocabularyGuardsTests
     // ── The offence ─────────────────────────────────────────────────────
 
     [Test]
-    public void ForeignAttribute_IsAnOffender()
+    public async Task ForeignAttribute_IsAnOffender()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
@@ -51,69 +51,74 @@ public class VocabularyGuardsTests
             """
         );
 
-        var result = Run(repo);
+        var result = await Run(repo);
 
         result.Passed.Should().BeFalse(Adr);
         result.Offenders.Should().ContainSingle().Which.Should().Contain("src/Thing.cs:5");
     }
 
     [Test]
-    public void OffenderMessage_NamesTheReplacement()
+    public async Task OffenderMessage_NamesTheReplacement()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
             "using HotChocolate.Authorization;\npublic class T { [AllowAnonymous] public string R() => \"x\"; }"
         );
 
-        Run(repo).Offenders.Single().Should().Contain("[TraxAuthorize] or [TraxAllowAnonymous]");
+        (await Run(repo))
+            .Offenders.Single()
+            .Should()
+            .Contain("[TraxAuthorize] or [TraxAllowAnonymous]");
     }
 
     [Test]
-    public void TestRootsAreScannedToo()
+    public async Task TestRootsAreScannedToo()
     {
         using var repo = new TempRepo().Write(
             "tests/ThingTests.cs",
             "using HotChocolate.Authorization;\npublic class T { [Authorize] public string R() => \"x\"; }"
         );
 
-        Run(repo).Passed.Should().BeFalse("a fixture is as much a use as production code");
+        (await Run(repo)).Passed.Should().BeFalse("a fixture is as much a use as production code");
     }
 
     [Test]
-    public void AttributeWithArguments_IsMatched()
+    public async Task AttributeWithArguments_IsMatched()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
             "using HotChocolate.Authorization;\npublic class T { [Authorize(Roles = [\"a\"])] public string R() => \"x\"; }"
         );
 
-        Run(repo).Passed.Should().BeFalse();
+        (await Run(repo)).Passed.Should().BeFalse();
     }
 
     [Test]
-    public void AttributeCombinedWithOthers_IsMatched()
+    public async Task AttributeCombinedWithOthers_IsMatched()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
             "using HotChocolate.Authorization;\npublic class T { [Obsolete, Authorize] public string R() => \"x\"; }"
         );
 
-        Run(repo).Passed.Should().BeFalse("an attribute after a comma is still an attribute");
+        (await Run(repo))
+            .Passed.Should()
+            .BeFalse("an attribute after a comma is still an attribute");
     }
 
     [Test]
-    public void FullyQualifiedAttribute_IsMatched()
+    public async Task FullyQualifiedAttribute_IsMatched()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
             "public class T { [HotChocolate.Authorization.Authorize] public string R() => \"x\"; }"
         );
 
-        Run(repo).Passed.Should().BeFalse();
+        (await Run(repo)).Passed.Should().BeFalse();
     }
 
     [Test]
-    public void EveryOffenceIsReported_NotJustTheFirst()
+    public async Task EveryOffenceIsReported_NotJustTheFirst()
     {
         using var repo = new TempRepo()
             .Write(
@@ -125,7 +130,7 @@ public class VocabularyGuardsTests
                 "using HotChocolate.Authorization;\npublic class B { [AllowAnonymous] public string R() => \"x\"; }"
             );
 
-        Run(repo).Offenders.Should().HaveCount(2);
+        (await Run(repo)).Offenders.Should().HaveCount(2);
     }
 
     // ── What is deliberately not an offence ─────────────────────────────
@@ -136,7 +141,7 @@ public class VocabularyGuardsTests
     /// surface Trax does not own.
     /// </summary>
     [Test]
-    public void SameNameFromAnotherLibrary_IsNotAnOffender()
+    public async Task SameNameFromAnotherLibrary_IsNotAnOffender()
     {
         using var repo = new TempRepo().Write(
             "src/Controller.cs",
@@ -151,7 +156,7 @@ public class VocabularyGuardsTests
             """
         );
 
-        Run(repo).Passed.Should().BeTrue("the file never mentions the banned library");
+        (await Run(repo)).Passed.Should().BeTrue("the file never mentions the banned library");
     }
 
     /// <summary>
@@ -159,7 +164,7 @@ public class VocabularyGuardsTests
     /// The guard checks the list it was given, it does not go looking for third-party types.
     /// </summary>
     [Test]
-    public void AnUnlistedLibraryPrimitive_IsNotAnOffender()
+    public async Task AnUnlistedLibraryPrimitive_IsNotAnOffender()
     {
         using var repo = new TempRepo().Write(
             "src/Extension.cs",
@@ -174,14 +179,16 @@ public class VocabularyGuardsTests
             """
         );
 
-        Run(repo).Passed.Should().BeTrue("[ExtendObjectType] is HotChocolate's own concept");
+        (await Run(repo))
+            .Passed.Should()
+            .BeTrue("[ExtendObjectType] is HotChocolate's own concept");
     }
 
     /// <summary>
     /// The messages that tell a consumer to stop using these attributes have to name them.
     /// </summary>
     [Test]
-    public void MentionsInCommentsAndStrings_AreNotOffenders()
+    public async Task MentionsInCommentsAndStrings_AreNotOffenders()
     {
         using var repo = new TempRepo().Write(
             "src/Message.cs",
@@ -196,18 +203,18 @@ public class VocabularyGuardsTests
             """
         );
 
-        Run(repo).Passed.Should().BeTrue("a mention is not a use");
+        (await Run(repo)).Passed.Should().BeTrue("a mention is not a use");
     }
 
     [Test]
-    public void AllowlistedFile_IsSkipped()
+    public async Task AllowlistedFile_IsSkipped()
     {
         using var repo = new TempRepo().Write(
             "src/Translation.cs",
             "using HotChocolate.Authorization;\npublic class T { [Authorize] public string R() => \"x\"; }"
         );
 
-        var result = Run(
+        var result = await Run(
             repo,
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -219,13 +226,13 @@ public class VocabularyGuardsTests
     }
 
     [Test]
-    public void AllowlistedFile_IsNotCounted_AsInspected()
+    public async Task AllowlistedFile_IsNotCounted_AsInspected()
     {
         using var repo = new TempRepo()
             .Write("src/Translation.cs", "using HotChocolate.Authorization;\npublic class T { }")
             .Write("src/Other.cs", "public class O { }");
 
-        var result = Run(
+        var result = await Run(
             repo,
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -243,33 +250,37 @@ public class VocabularyGuardsTests
     /// this reason, so it has to be truthful.
     /// </summary>
     [Test]
-    public void Inspected_CountsEveryFileScanned()
+    public async Task Inspected_CountsEveryFileScanned()
     {
         using var repo = new TempRepo()
             .Write("src/A.cs", "public class A { }")
             .Write("tests/B.cs", "public class B { }");
 
-        Run(repo).Inspected.Should().Be(2);
+        (await Run(repo)).Inspected.Should().Be(2);
     }
 
     [Test]
-    public void EmptyRepo_InspectsNothing()
+    public async Task EmptyRepo_InspectsNothing()
     {
         using var repo = new TempRepo();
 
-        Run(repo).Inspected.Should().Be(0);
+        (await Run(repo)).Inspected.Should().Be(0);
     }
 
     [Test]
-    public void EmptyBannedList_PassesWithoutMatching()
+    public async Task EmptyBannedList_PassesWithoutMatching()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
             "using HotChocolate.Authorization;\npublic class T { [Authorize] public string R() => \"x\"; }"
         );
 
-        VocabularyGuards
-            .TraxVocabularyIsUsed([], new ArchitectureGuardOptions { RepoRootOverride = repo.Root })
+        (
+            await VocabularyGuards.TraxVocabularyIsUsedAsync(
+                [],
+                new ArchitectureGuardOptions { RepoRootOverride = repo.Root }
+            )
+        )
             .Passed.Should()
             .BeTrue("the repo decides which concepts are Trax's, and this one listed none");
     }
@@ -277,7 +288,9 @@ public class VocabularyGuardsTests
     [TestCase("[Authorize, UsePaging]")]
     [TestCase("[AllowAnonymous, GraphQLName(\"read\")]")]
     [TestCase("[property: Authorize]")]
-    public void ForeignAttribute_IsAnOffender_WhereverItSitsInTheAttributeList(string attributes)
+    public async Task ForeignAttribute_IsAnOffender_WhereverItSitsInTheAttributeList(
+        string attributes
+    )
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
@@ -286,26 +299,46 @@ public class VocabularyGuardsTests
                 + " public string R { get; } = \"x\"; }"
         );
 
-        Run(repo).Passed.Should().BeFalse($"{attributes} applies the library's attribute ({Adr})");
+        (await Run(repo))
+            .Passed.Should()
+            .BeFalse($"{attributes} applies the library's attribute ({Adr})");
     }
 
     [Test]
-    public void NullBannedList_Throws()
+    public async Task NullBannedList_Throws()
     {
-        var act = () => VocabularyGuards.TraxVocabularyIsUsed(null!);
+        var act = () =>
+            VocabularyGuards.TraxVocabularyIsUsedAsync(Null.Of<IReadOnlyList<ForeignVocabulary>>());
 
-        act.Should().Throw<ArgumentNullException>();
+        await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
     [Test]
-    public void FailureMessage_ExplainsTheRuleAndTheEscapeHatch()
+    public void TheSynchronousForm_ReportsTheSameOffence()
     {
         using var repo = new TempRepo().Write(
             "src/Thing.cs",
             "using HotChocolate.Authorization;\npublic class T { [Authorize] public string R() => \"x\"; }"
         );
 
-        var message = Run(repo).FailureMessage;
+        var result = VocabularyGuards.TraxVocabularyIsUsed(
+            Banned,
+            new ArchitectureGuardOptions { RepoRootOverride = repo.Root }
+        );
+
+        result.Inspected.Should().Be(1);
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("src/Thing.cs:2");
+    }
+
+    [Test]
+    public async Task FailureMessage_ExplainsTheRuleAndTheEscapeHatch()
+    {
+        using var repo = new TempRepo().Write(
+            "src/Thing.cs",
+            "using HotChocolate.Authorization;\npublic class T { [Authorize] public string R() => \"x\"; }"
+        );
+
+        var message = (await Run(repo)).FailureMessage;
 
         message.Should().Contain("Trax owns the vocabulary for its own concepts");
         message.Should().Contain("allowlist");

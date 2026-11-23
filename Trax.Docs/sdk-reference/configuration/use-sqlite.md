@@ -62,7 +62,8 @@ and registers a hosted service that refuses to start the host if it serves anywa
 
 | Member | Description |
 |--------|-------------|
-| `Migrate(connectionString)` | Applies every script not yet in the DbUp journal, in name order. Runs synchronously and returns a completed task. The failing script's exception is written to standard output and rethrown unchanged. |
+| `Migrate(connectionString)` | Applies every script not yet in the DbUp journal, in name order. Runs synchronously and returns a completed task. The failing script's exception is rethrown unchanged. |
+| `Migrate(connectionString, logger)` | The same, and logs the failing script's exception to `logger` at error before rethrowing it. |
 | `CreateEngineWithEmbeddedScripts(connectionString)` | The DbUp `UpgradeEngine` over the embedded scripts. |
 
 Each script runs in its own transaction together with its journal row, so a script that fails partway leaves nothing

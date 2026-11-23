@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,7 +6,9 @@ using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.DeadLetter;
@@ -40,7 +43,10 @@ public class OperationsPageBoundsTests
     private const int Rows = OperationsPageBounds.MaxPageSize + 1;
 
     private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
+        )
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -48,8 +54,8 @@ public class OperationsPageBoundsTests
 
     private static string Because(string rule) => $"{rule} (see {Adr})";
 
-    private ServiceProvider _provider = null!;
-    private IDataContextProviderFactory _factory = null!;
+    private ServiceProvider? _provider;
+    private IDataContextProviderFactory? _factory;
 
     private static IOperationsService OperationsOver(IDataContextProviderFactory factory) =>
         new OperationsService(
@@ -68,9 +74,9 @@ public class OperationsPageBoundsTests
         services.AddLogging();
         services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
         _provider = services.BuildServiceProvider();
-        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+        _factory = _provider.NotNull().GetRequiredService<IDataContextProviderFactory>();
 
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        await using (var db = await _factory.NotNull().CreateDbContextAsync(default))
         {
             await ((DbContext)db).Database.ExecuteSqlRawAsync(
                 "TRUNCATE TABLE trax.log, trax.work_queue, trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
@@ -83,42 +89,55 @@ public class OperationsPageBoundsTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _provider.DisposeAsync();
+        if (_provider is not null)
+            await _provider.DisposeAsync();
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
     private async Task Seed()
     {
+        var manifest = await SeedManifests().ConfigureAwait(false);
+        await SeedRunsAndLogs(manifest).ConfigureAwait(false);
+    }
+
+    private async Task<Manifest> SeedManifests()
+    {
         Manifest manifest;
-        await using (var db = await _factory.CreateDbContextAsync(default))
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var groups = new List<ManifestGroup>();
             for (var i = 0; i < Rows; i++)
             {
                 var grp = new ManifestGroup
                 {
-                    Name = $"group-{i}",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
+                    Name = string.Create(CultureInfo.InvariantCulture, $"group-{i}"),
+                    CreatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
+                    UpdatedAt = TimeProvider.System.GetUtcNow().UtcDateTime,
                 };
                 groups.Add(grp);
-                await db.Track(grp);
+                await db.Track(grp).ConfigureAwait(false);
             }
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
             manifest = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
             manifest.ManifestGroupId = groups[0].Id;
-            await db.Track(manifest);
+            await db.Track(manifest).ConfigureAwait(false);
             for (var i = 1; i < Rows; i++)
             {
                 var m = Manifest.Create(new CreateManifest { Name = typeof(PagedFakeTrain) });
                 m.ManifestGroupId = groups[0].Id;
-                await db.Track(m);
+                await db.Track(m).ConfigureAwait(false);
             }
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
         }
+        return manifest;
+    }
 
-        await using (var db = await _factory.CreateDbContextAsync(default))
+    private async Task SeedRunsAndLogs(Manifest manifest)
+    {
+        var db = await _factory.NotNull().CreateDbContextAsync(default).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
         {
             var parent = Metadata.Create(
                 new CreateMetadata
@@ -126,46 +145,67 @@ public class OperationsPageBoundsTests
                     Name = "Trax.X.Parent",
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
-                }
+                },
+                TimeProvider.System
             );
-            await db.Track(parent);
-            await db.SaveChanges(default);
+            await db.Track(parent).ConfigureAwait(false);
+            await db.SaveChanges(default).ConfigureAwait(false);
             _parentId = parent.Id;
 
             for (var i = 0; i < Rows; i++)
             {
-                var child = Metadata.Create(
-                    new CreateMetadata
-                    {
-                        Name = "Trax.X.Child",
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                    }
-                );
-                child.ParentId = _parentId;
-                await db.Track(child);
-
-                await db.Track(
-                    DeadLetter.Create(
-                        new CreateDeadLetter
-                        {
-                            Manifest = manifest,
-                            Reason = $"failure-{i}",
-                            RetryCount = 3,
-                        }
-                    )
-                );
-
-                await db.Track(
-                    WorkQueue.Create(new CreateWorkQueue { TrainName = $"Trax.Tests.IFake{i}" })
-                );
+                await TrackChildRow(db, manifest, i).ConfigureAwait(false);
             }
-            await db.SaveChanges(default);
+            await db.SaveChanges(default).ConfigureAwait(false);
 
-            await ((DbContext)db).Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {_parentId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {Rows}) g"
-            );
+            await ((DbContext)db)
+                .Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {_parentId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {Rows}) g"
+                )
+                .ConfigureAwait(false);
         }
+    }
+
+    private async Task TrackChildRow(IDataContext db, Manifest manifest, int i)
+    {
+        var child = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Trax.X.Child",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            },
+            TimeProvider.System
+        );
+        child.ParentId = _parentId;
+        await db.Track(child).ConfigureAwait(false);
+
+        await db.Track(
+                DeadLetter.Create(
+                    new CreateDeadLetter
+                    {
+                        Manifest = manifest,
+                        Reason = string.Create(CultureInfo.InvariantCulture, $"failure-{i}"),
+                        RetryCount = 3,
+                    },
+                    TimeProvider.System
+                )
+            )
+            .ConfigureAwait(false);
+
+        await db.Track(
+                WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName = string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Trax.Tests.IFake{i}"
+                        ),
+                    },
+                    TimeProvider.System
+                )
+            )
+            .ConfigureAwait(false);
     }
 
     private static IEnumerable<TestCaseData> Queries()
@@ -210,7 +250,7 @@ public class OperationsPageBoundsTests
             new Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>>(
                 async (f, skip, take) =>
                 {
-                    var page = await query(f, skip, take);
+                    var page = await query(f, skip, take).ConfigureAwait(false);
                     return (page.Items.Count, page.Skip, page.Take);
                 }
             )
@@ -221,7 +261,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        var page = await query(_factory, 0, 100_000);
+        var page = await query(_factory.NotNull(), 0, 100_000);
 
         page.Count.Should()
             .Be(OperationsPageBounds.MaxPageSize, Because("caps an operations page at 500 rows"));
@@ -234,10 +274,10 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        (await query(_factory, 0, 0))
+        (await query(_factory.NotNull(), 0, 0))
             .Should()
             .Be((1, 0, 1), Because("clamps take to 1..500 and skip to 0 or more"));
-        (await query(_factory, 0, -5))
+        (await query(_factory.NotNull(), 0, -5))
             .Should()
             .Be((1, 0, 1), Because("clamps take to 1..500 and skip to 0 or more"));
     }
@@ -247,7 +287,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        (await query(_factory, -10, 3))
+        (await query(_factory.NotNull(), -10, 3))
             .Should()
             .Be((3, 0, 3), Because("clamps take to 1..500 and skip to 0 or more"));
     }
@@ -257,7 +297,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        (await query(_factory, OperationsPageBounds.MaxSkip, 3))
+        (await query(_factory.NotNull(), OperationsPageBounds.MaxSkip, 3))
             .Should()
             .Be((0, OperationsPageBounds.MaxSkip, 3), Because("serves a skip up to the cap"));
     }
@@ -267,7 +307,7 @@ public class OperationsPageBoundsTests
         Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
     )
     {
-        var act = () => query(_factory, OperationsPageBounds.MaxSkip + 1, 3);
+        var act = () => query(_factory.NotNull(), OperationsPageBounds.MaxSkip + 1, 3);
 
         var refused = (await act.Should().ThrowAsync<HotChocolate.GraphQLException>()).Which;
         var error = refused.Errors.Should().ContainSingle().Which;
@@ -289,7 +329,7 @@ public class OperationsPageBoundsTests
     {
         var page = await new OperationsQueries().GetExecutionChildren(
             _parentId,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 100_000
         );
@@ -308,7 +348,7 @@ public class OperationsPageBoundsTests
     {
         var page = await new OperationsQueries().GetExecutionChildren(
             _parentId,
-            _factory,
+            _factory.NotNull(),
             default,
             take: 0
         );
@@ -317,5 +357,5 @@ public class OperationsPageBoundsTests
         page.Take.Should().Be(1);
     }
 
-    private class PagedFakeTrain { }
+    private static class PagedFakeTrain;
 }

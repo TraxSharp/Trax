@@ -59,10 +59,12 @@ public class DemoApiKeyEnvironmentTests
         services.AddSingleton<IHostEnvironment>(new Environment(environment));
         services.AddLogging();
         services.AddTraxApiKeyAuth(keys => keys.Add(key, id: "demo", "User"));
-        await using var provider = services.BuildServiceProvider();
-
-        foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(CancellationToken.None);
+        var provider = services.BuildServiceProvider();
+        await using (provider.ConfigureAwait(false))
+        {
+            foreach (var hosted in provider.GetServices<IHostedService>())
+                await hosted.StartAsync(CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     private sealed class Environment(string name) : IHostEnvironment

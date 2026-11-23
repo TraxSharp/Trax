@@ -14,7 +14,7 @@ internal static class HubOriginPolicy
     /// <summary>
     /// True when the request may proceed: it carries no <c>Origin</c>, or the origin is on the
     /// request's own host, or it is allowed. <paramref name="allowedOrigins"/> is the normalized
-    /// explicit list, or <c>null</c> to use the host's CORS default policy.
+    /// explicit list, or <see langword="null"/> to use the host's CORS default policy.
     /// </summary>
     public static bool IsAllowed(HttpContext context, IReadOnlyList<string>? allowedOrigins)
     {
@@ -55,11 +55,14 @@ internal static class HubOriginPolicy
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
             return false;
 
-        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        if (
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+        )
             return false;
 
         if (
-            uri.AbsolutePath != "/"
+            !string.Equals(uri.AbsolutePath, "/", StringComparison.Ordinal)
             || uri.Query.Length > 0
             || uri.Fragment.Length > 0
             || uri.UserInfo.Length > 0
@@ -79,7 +82,7 @@ internal static class HubOriginPolicy
         if (!requestHost.HasValue)
             return false;
 
-        var scheme = normalizedOrigin[..normalizedOrigin.IndexOf(':')];
+        var scheme = normalizedOrigin[..normalizedOrigin.IndexOf(':', StringComparison.Ordinal)];
         return TryNormalize($"{scheme}://{requestHost.Value}", out var own)
             && string.Equals(own, normalizedOrigin, StringComparison.Ordinal);
     }

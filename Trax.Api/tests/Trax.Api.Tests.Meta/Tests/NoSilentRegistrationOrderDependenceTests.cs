@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Trax.Api.Tests.Meta.Tests;
@@ -25,13 +26,8 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// </remarks>
 [Property("adr", "docs/adr/0002-reading-the-service-collection-is-order-dependent.md")]
 [TestFixture]
-public class NoSilentRegistrationOrderDependenceTests
+public partial class NoSilentRegistrationOrderDependenceTests
 {
-    private static readonly Regex CollectionIntrospection = new(
-        @"\b[Ss]ervices\.(Any|All|First|FirstOrDefault|Last|LastOrDefault|Single|SingleOrDefault|Where|Select|Count)\s*\(",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// Every site that reads the collection today, with the count it reads it at. Each is an
     /// idempotency guard, a precondition that throws, or a decision backed by a startup
@@ -85,12 +81,22 @@ public class NoSilentRegistrationOrderDependenceTests
 
             if (!ReviewedSites.TryGetValue(relative, out var reviewed))
             {
-                offenders.Add($"{relative}: {count} new (file is not in the reviewed list)");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{relative}: {count} new (file is not in the reviewed list)"
+                    )
+                );
                 continue;
             }
 
             if (count > reviewed)
-                offenders.Add($"{relative}: {count} sites, {reviewed} reviewed");
+                offenders.Add(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{relative}: {count} sites, {reviewed} reviewed"
+                    )
+                );
         }
 
         offenders
@@ -122,10 +128,14 @@ public class NoSilentRegistrationOrderDependenceTests
         Directory
             .EnumerateFiles(Path.Combine(RepoRoot(), "src"), "*.cs", SearchOption.AllDirectories)
             .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-            )
-            .Where(f =>
-                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
+                && !f.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal
+                )
             );
 
     private static string RepoRelative(string file) =>
@@ -140,4 +150,11 @@ public class NoSilentRegistrationOrderDependenceTests
         return dir?.FullName
             ?? throw new InvalidOperationException("Could not locate the repo root.");
     }
+
+    [GeneratedRegex(
+        @"\b[Ss]ervices\.(Any|All|First|FirstOrDefault|Last|LastOrDefault|Single|SingleOrDefault|Where|Select|Count)\s*\(",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+        matchTimeoutMilliseconds: 1000
+    )]
+    private static partial Regex CollectionIntrospection { get; }
 }

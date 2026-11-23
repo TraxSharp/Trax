@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -31,13 +32,13 @@ internal static class DataContextExtensions
         this IDataContext context,
         string groupName,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
-        var existing = await context.ManifestGroups.FirstOrDefaultAsync(
-            g => g.Name == groupName,
-            ct
-        );
+        var existing = await context
+            .ManifestGroups.FirstOrDefaultAsync(g => g.Name == groupName, ct)
+            .ConfigureAwait(false);
 
         if (existing != null)
         {
@@ -58,7 +59,7 @@ internal static class DataContextExtensions
                 changed = true;
             }
             if (changed)
-                existing.UpdatedAt = DateTime.UtcNow;
+                existing.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
             return existing.Id;
         }
 
@@ -68,11 +69,11 @@ internal static class DataContextExtensions
             Priority = group.Priority ?? group.PriorityIfNew,
             MaxActiveJobs = group.MaxActiveJobsStated ? group.MaxActiveJobs : null,
             IsEnabled = group.IsEnabled ?? true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
+            UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
         };
         context.ManifestGroups.Add(created);
-        await context.SaveChanges(ct);
+        await context.SaveChanges(ct).ConfigureAwait(false);
 
         return created.Id;
     }
@@ -88,6 +89,7 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -100,6 +102,7 @@ internal static class DataContextExtensions
             options,
             groupId,
             group,
+            timeProvider,
             ct
         );
 
@@ -115,33 +118,37 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
+        var manifestGroupId = await context
+            .EnsureManifestGroupAsync(groupId, group, timeProvider, ct)
+            .ConfigureAwait(false);
 
-        var existing = await context.Manifests.FirstOrDefaultAsync(
-            m => m.ExternalId == externalId,
-            ct
-        );
+        var existing = await context
+            .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
 
         if (existing != null)
         {
             // Update only scheduling-related fields, preserve runtime state
-            existing.Name = trainType.FullName!;
+            existing.Name = trainType.FullName.NotNull();
             existing.SetProperties(input);
             if (options._isEnabled is { } isEnabled)
                 existing.IsEnabled = isEnabled;
             ApplyStatedSettings(existing, options);
             existing.ManifestGroupId = manifestGroupId;
-            ApplySchedule(existing, schedule);
+            ApplySchedule(existing, schedule, timeProvider);
             ApplyVariance(existing, schedule, options);
             ApplyMisfireOptions(existing, options);
             ApplyExclusions(existing, options);
             ApplyFailureWindow(existing, options);
             ApplyReplayDecisionsOnRetry(existing, options);
             if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks.ClearQueuedAsync(context, [existing.Id], ct, save: false);
+                await RetryReplayLinks
+                    .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                    .ConfigureAwait(false);
 
             return existing;
         }
@@ -150,7 +157,7 @@ internal static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = trainType.FullName!,
+            Name = trainType.FullName.NotNull(),
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -160,7 +167,7 @@ internal static class DataContextExtensions
             Priority = options.Priority,
         };
         manifest.SetProperties(input);
-        ApplySchedule(manifest, schedule);
+        ApplySchedule(manifest, schedule, timeProvider);
         ApplyVariance(manifest, schedule, options);
         ApplyMisfireOptions(manifest, options);
         ApplyExclusions(manifest, options);
@@ -183,6 +190,7 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -195,6 +203,7 @@ internal static class DataContextExtensions
             options,
             groupId,
             group,
+            timeProvider,
             ct
         );
 
@@ -210,15 +219,17 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
+        var manifestGroupId = await context
+            .EnsureManifestGroupAsync(groupId, group, timeProvider, ct)
+            .ConfigureAwait(false);
 
-        var existing = await context.Manifests.FirstOrDefaultAsync(
-            m => m.ExternalId == externalId,
-            ct
-        );
+        var existing = await context
+            .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
 
         var scheduleType = options.IsDormant
             ? ScheduleType.DormantDependent
@@ -226,7 +237,7 @@ internal static class DataContextExtensions
 
         if (existing != null)
         {
-            existing.Name = trainType.FullName!;
+            existing.Name = trainType.FullName.NotNull();
             existing.SetProperties(input);
             if (options._isEnabled is { } isEnabled)
                 existing.IsEnabled = isEnabled;
@@ -241,7 +252,9 @@ internal static class DataContextExtensions
             ApplyFailureWindow(existing, options);
             ApplyReplayDecisionsOnRetry(existing, options);
             if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks.ClearQueuedAsync(context, [existing.Id], ct, save: false);
+                await RetryReplayLinks
+                    .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                    .ConfigureAwait(false);
 
             return existing;
         }
@@ -249,7 +262,7 @@ internal static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = trainType.FullName!,
+            Name = trainType.FullName.NotNull(),
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -282,6 +295,7 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -294,6 +308,7 @@ internal static class DataContextExtensions
             options,
             groupId,
             group,
+            timeProvider,
             ct
         );
 
@@ -309,46 +324,31 @@ internal static class DataContextExtensions
         ManifestOptions options,
         string groupId,
         ManifestGroupSeed group,
+        TimeProvider timeProvider,
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
+        var manifestGroupId = await context
+            .EnsureManifestGroupAsync(groupId, group, timeProvider, ct)
+            .ConfigureAwait(false);
 
-        var existing = await context.Manifests.FirstOrDefaultAsync(
-            m => m.ExternalId == externalId,
-            ct
-        );
+        var existing = await context
+            .Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
+            .ConfigureAwait(false);
 
         if (existing != null)
         {
-            // A one-off that has not run keeps the time it was first given while its input is the
-            // same: a host seeds it at every start with "now plus the delay", and one that restarts
-            // more often than the delay would otherwise push it back for ever. A changed input
-            // schedules it from this seed. The delay itself is not stored, so a changed delay alone
-            // does not move it.
-            var unrun =
-                existing.ScheduleType == ScheduleType.Once
-                && existing.LastSuccessfulRun is null
-                && existing.ScheduledAt is not null;
-            var previousProperties = existing.Properties;
-
-            existing.Name = trainType.FullName!;
-            existing.SetProperties(input);
-            if (options._isEnabled is { } isEnabled)
-                existing.IsEnabled = isEnabled;
-            ApplyStatedSettings(existing, options);
-            existing.ManifestGroupId = manifestGroupId;
-            existing.ScheduleType = ScheduleType.Once;
-            if (!(unrun && SameProperties(previousProperties, existing.Properties)))
-                existing.ScheduledAt = scheduledAt;
-            existing.CronExpression = null;
-            existing.IntervalSeconds = null;
-            ApplyMisfireOptions(existing, options);
-            ApplyExclusions(existing, options);
-            ApplyFailureWindow(existing, options);
-            ApplyReplayDecisionsOnRetry(existing, options);
-            if (options.ReplayDecisionsOnRetry == false)
-                await RetryReplayLinks.ClearQueuedAsync(context, [existing.Id], ct, save: false);
+            await UpdateExistingOnceManifestAsync(
+                    context,
+                    existing,
+                    trainType,
+                    input,
+                    scheduledAt,
+                    options,
+                    manifestGroupId,
+                    ct
+                )
+                .ConfigureAwait(false);
 
             return existing;
         }
@@ -356,7 +356,7 @@ internal static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = trainType.FullName!,
+            Name = trainType.FullName.NotNull(),
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -376,6 +376,49 @@ internal static class DataContextExtensions
         context.Manifests.Add(manifest);
 
         return manifest;
+    }
+
+    private static async Task UpdateExistingOnceManifestAsync(
+        IDataContext context,
+        Manifest existing,
+        Type trainType,
+        IManifestProperties input,
+        DateTime scheduledAt,
+        ManifestOptions options,
+        long manifestGroupId,
+        CancellationToken ct
+    )
+    {
+        // A one-off that has not run keeps the time it was first given while its input is the
+        // same: a host seeds it at every start with "now plus the delay", and one that restarts
+        // more often than the delay would otherwise push it back for ever. A changed input
+        // schedules it from this seed. The delay itself is not stored, so a changed delay alone
+        // does not move it.
+        var unrun =
+            existing.ScheduleType == ScheduleType.Once
+            && existing.LastSuccessfulRun is null
+            && existing.ScheduledAt is not null;
+        var previousProperties = existing.Properties;
+
+        existing.Name = trainType.FullName.NotNull();
+        existing.SetProperties(input);
+        if (options._isEnabled is { } isEnabled)
+            existing.IsEnabled = isEnabled;
+        ApplyStatedSettings(existing, options);
+        existing.ManifestGroupId = manifestGroupId;
+        existing.ScheduleType = ScheduleType.Once;
+        if (!(unrun && SameProperties(previousProperties, existing.Properties)))
+            existing.ScheduledAt = scheduledAt;
+        existing.CronExpression = null;
+        existing.IntervalSeconds = null;
+        ApplyMisfireOptions(existing, options);
+        ApplyExclusions(existing, options);
+        ApplyFailureWindow(existing, options);
+        ApplyReplayDecisionsOnRetry(existing, options);
+        if (options.ReplayDecisionsOnRetry == false)
+            await RetryReplayLinks
+                .ClearQueuedAsync(context, [existing.Id], ct, save: false)
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -398,12 +441,20 @@ internal static class DataContextExtensions
     /// <summary>
     /// Applies schedule configuration to a manifest.
     /// </summary>
-    private static void ApplySchedule(Manifest manifest, Schedule schedule)
+    private static void ApplySchedule(
+        Manifest manifest,
+        Schedule schedule,
+        TimeProvider timeProvider
+    )
     {
         var unchangedCron =
             manifest.ScheduleType == ScheduleType.Cron
             && schedule.Type == ScheduleType.Cron
-            && manifest.CronExpression == schedule.CronExpression;
+            && string.Equals(
+                manifest.CronExpression,
+                schedule.CronExpression,
+                StringComparison.Ordinal
+            );
         var firstOccurrence = manifest.NextScheduledRun;
 
         manifest.ScheduleType = schedule.Type;
@@ -424,8 +475,8 @@ internal static class DataContextExtensions
                 unchangedCron && firstOccurrence is not null
                     ? firstOccurrence
                     : CronParser
-                        .Parse(schedule.CronExpression!)
-                        .GetNextOccurrence(DateTime.UtcNow, TimeZoneInfo.Utc);
+                        .Parse(schedule.CronExpression.NotNull())
+                        .GetNextOccurrence(timeProvider.GetUtcNow().UtcDateTime, TimeZoneInfo.Utc);
     }
 
     /// <summary>
@@ -515,7 +566,7 @@ internal static class DataContextExtensions
     private static bool SameProperties(string? stored, string? written)
     {
         if (stored is null || written is null)
-            return stored == written;
+            return string.Equals(stored, written, StringComparison.Ordinal);
         try
         {
             return System.Text.Json.Nodes.JsonNode.DeepEquals(
@@ -529,20 +580,3 @@ internal static class DataContextExtensions
         }
     }
 }
-
-/// <summary>
-/// The group settings one seeding call states. A null field (or an unstated limit) leaves an
-/// existing group's value alone.
-/// </summary>
-/// <param name="Priority">The group priority the options state, or null.</param>
-/// <param name="MaxActiveJobsStated">Whether the options state the limit; its value may be null (no limit).</param>
-/// <param name="MaxActiveJobs">The stated limit, when <paramref name="MaxActiveJobsStated"/>.</param>
-/// <param name="IsEnabled">The enabled flag the options state, or null.</param>
-/// <param name="PriorityIfNew">The priority a new group takes when none is stated.</param>
-internal readonly record struct ManifestGroupSeed(
-    int? Priority = null,
-    bool MaxActiveJobsStated = false,
-    int? MaxActiveJobs = null,
-    bool? IsEnabled = null,
-    int PriorityIfNew = 0
-);

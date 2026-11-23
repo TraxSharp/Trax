@@ -63,7 +63,7 @@ public record LowStockCheckInput : IManifestProperties
 ```csharp compile=app file=Trains/LowStockCheck/LowStockCheckOutput.cs
 namespace Shopfront.Trains.LowStockCheck;
 
-public record LowStockCheckOutput(List<string> LowSkus);
+public record LowStockCheckOutput(IReadOnlyList<string> LowSkus);
 ```
 
 `Trains/LowStockCheck/ILowStockCheckTrain.cs`:
@@ -85,7 +85,7 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.LowStockCheck.Junctions;
 
-internal class FindLowStockJunction(IShopfrontDbContext db)
+internal sealed class FindLowStockJunction(IShopfrontDbContext db)
     : EffectJunction<LowStockCheckInput, LowStockCheckOutput>
 {
     public override async Task<LowStockCheckOutput> Run(LowStockCheckInput input) =>
@@ -95,6 +95,7 @@ internal class FindLowStockJunction(IShopfrontDbContext db)
                 .OrderBy(p => p.Sku)
                 .Select(p => p.Sku)
                 .ToListAsync(CancellationToken)
+                .ConfigureAwait(false)
         );
 }
 ```
@@ -108,12 +109,15 @@ using Trax.Effect.Services.EffectJunction;
 
 namespace Shopfront.Trains.LowStockCheck.Junctions;
 
-internal class NotifyStaffJunction(IStaffNotifier staff) : EffectJunction<LowStockCheckOutput, Unit>
+internal sealed class NotifyStaffJunction(IStaffNotifier staff)
+    : EffectJunction<LowStockCheckOutput, Unit>
 {
     public override async Task<Unit> Run(LowStockCheckOutput low)
     {
         if (low.LowSkus.Count > 0)
-            await staff.Notify($"Low on {string.Join(", ", low.LowSkus)}.", CancellationToken);
+            await staff
+                .Notify($"Low on {string.Join(", ", low.LowSkus)}.", CancellationToken)
+                .ConfigureAwait(false);
         return Unit.Default;
     }
 }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -34,7 +35,8 @@ public class JobRunnerTrainTests : TestSetup
         var nonExistentMetadataId = 999999;
 
         // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(nonExistentMetadataId));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(nonExistentMetadataId)).ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*not found*");
@@ -55,11 +57,12 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = null,
-            }
+            },
+            TimeProvider.System
         );
 
         await DataContext.Track(metadata);
@@ -67,7 +70,8 @@ public class JobRunnerTrainTests : TestSetup
         DataContext.Reset();
 
         // Act - Should succeed (RunScheduledTrainJunction skips the manifest update when there is none)
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, input)).ConfigureAwait(false);
         await act.Should().NotThrowAsync();
     }
 
@@ -82,37 +86,7 @@ public class JobRunnerTrainTests : TestSetup
         // a shutdown landing between the train completing and the JobRunner's bookkeeping would.
         var key = Guid.NewGuid().ToString("N");
         var input = new CancelsItsRunnerInput { Key = key };
-        var group = await CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
-        var manifest = Manifest.Create(
-            new CreateManifest
-            {
-                Name = typeof(CancelsItsRunnerTrain),
-                IsEnabled = true,
-                ScheduleType = ScheduleType.Once,
-                MaxRetries = 3,
-                Properties = input,
-            }
-        );
-        manifest.ManifestGroupId = group.Id;
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
-
-        var metadata = Metadata.Create(
-            new CreateMetadata
-            {
-                Name = typeof(CancelsItsRunnerTrain).FullName!,
-                ExternalId = Guid.NewGuid().ToString("N"),
-                Input = input,
-                ManifestId = manifest.Id,
-            }
-        );
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
-        DataContext.Reset();
+        var (manifest, metadata) = await SaveCancelsItsRunnerManifestAndRun(input);
 
         using var runner = new CancellationTokenSource();
         CancelsItsRunnerTrain.Runners[key] = runner;
@@ -135,7 +109,10 @@ public class JobRunnerTrainTests : TestSetup
         // leaves LastSuccessfulRun stale and a Once manifest enabled to run again.
         runner.IsCancellationRequested.Should().BeTrue("the scheduled train cancelled it");
         DataContext.Reset();
-        var updated = await DataContext.Manifests.SingleAsync(x => x.Id == manifest.Id);
+        var updated = await DataContext.Manifests.SingleAsync(
+            x => x.Id == manifest.Id,
+            cancellationToken: CancellationToken.None
+        );
         updated
             .LastSuccessfulRun.Should()
             .NotBeNull(
@@ -143,6 +120,44 @@ public class JobRunnerTrainTests : TestSetup
                     + "not be skipped. See docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md"
             );
         updated.IsEnabled.Should().BeFalse("a Once manifest is disabled once it has succeeded");
+    }
+
+    private async Task<(Manifest Manifest, Metadata Metadata)> SaveCancelsItsRunnerManifestAndRun(
+        CancelsItsRunnerInput input
+    )
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(CancelsItsRunnerTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Once,
+                MaxRetries = 3,
+                Properties = input,
+            }
+        );
+        manifest.ManifestGroupId = group.Id;
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(CancelsItsRunnerTrain).FullName.NotNull(),
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = input,
+                ManifestId = manifest.Id,
+            },
+            TimeProvider.System
+        );
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+
+        return (manifest, metadata);
     }
 
     #endregion
@@ -167,10 +182,10 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest
             .LastSuccessfulRun.Should()
-            .BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
+            .BeCloseTo(TimeProvider.System.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -178,13 +193,13 @@ public class JobRunnerTrainTests : TestSetup
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
-        var beforeExecution = DateTime.UtcNow;
+        var beforeExecution = TimeProvider.System.GetUtcNow().UtcDateTime;
         var metadata = await CreateAndSaveMetadata(manifest, TrainState.Pending);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
         await JobRunner.Run(new RunJobRequest(metadata.Id, input));
-        var afterExecution = DateTime.UtcNow;
+        var afterExecution = TimeProvider.System.GetUtcNow().UtcDateTime;
 
         // Assert
         DataContext.Reset();
@@ -193,7 +208,7 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
         updatedManifest.LastSuccessfulRun.Should().BeOnOrAfter(beforeExecution);
         updatedManifest.LastSuccessfulRun.Should().BeOnOrBefore(afterExecution.AddSeconds(1));
     }
@@ -217,7 +232,7 @@ public class JobRunnerTrainTests : TestSetup
         );
 
         updatedManifest.Should().NotBeNull();
-        updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+        updatedManifest.NotNull().LastSuccessfulRun.Should().NotBeNull();
     }
 
     #endregion
@@ -233,7 +248,8 @@ public class JobRunnerTrainTests : TestSetup
         var otherInput = new FailingSchedulerTestInput { FailureMessage = "should not run" };
 
         // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, otherInput));
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, otherInput)).ConfigureAwait(false);
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*belongs to train*");
@@ -258,20 +274,21 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(ISchedulerTestTrain).FullName!,
+                Name = typeof(ISchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
         var act = async () =>
-            await JobRunner.Run(
-                new RunJobRequest(metadata.Id, manifest.GetProperties<SchedulerTestInput>())
-            );
+            await JobRunner
+                .Run(new RunJobRequest(metadata.Id, manifest.GetProperties<SchedulerTestInput>()))
+                .ConfigureAwait(false);
 
         await act.Should().NotThrowAsync();
     }
@@ -283,16 +300,18 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = await CreateAndSaveMetadata(
             manifest,
             TrainState.Pending,
-            name: typeof(ISchedulerTestTrain).FullName!
+            name: typeof(ISchedulerTestTrain).FullName.NotNull()
         );
 
         var act = async () =>
-            await JobRunner.Run(
-                new RunJobRequest(
-                    metadata.Id,
-                    new FailingSchedulerTestInput { FailureMessage = "should not run" }
+            await JobRunner
+                .Run(
+                    new RunJobRequest(
+                        metadata.Id,
+                        new FailingSchedulerTestInput { FailureMessage = "should not run" }
+                    )
                 )
-            );
+                .ConfigureAwait(false);
 
         await act.Should()
             .ThrowAsync<TrainException>()
@@ -329,10 +348,8 @@ public class JobRunnerTrainTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
     {
-        var group = await TestSetup.CreateAndSaveManifestGroup(
-            DataContext,
-            name: $"group-{Guid.NewGuid():N}"
-        );
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"group-{Guid.NewGuid():N}")
+            .ConfigureAwait(false);
 
         var manifest = Manifest.Create(
             new CreateManifest
@@ -346,8 +363,8 @@ public class JobRunnerTrainTests : TestSetup
         );
         manifest.ManifestGroupId = group.Id;
 
-        await DataContext.Track(manifest);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(manifest).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return manifest;
@@ -362,17 +379,18 @@ public class JobRunnerTrainTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = name ?? typeof(SchedulerTestTrain).FullName!,
+                Name = name ?? typeof(SchedulerTestTrain).FullName.NotNull(),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
-            }
+            },
+            TimeProvider.System
         );
 
         metadata.TrainState = state;
 
-        await DataContext.Track(metadata);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
 
         return metadata;

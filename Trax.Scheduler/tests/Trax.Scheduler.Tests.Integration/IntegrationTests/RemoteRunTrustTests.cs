@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
@@ -34,9 +35,9 @@ public class RemoteRunTrustTests : TestSetup
     {
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(IGatedRemoteTrain).FullName!,
+                typeof(IGatedRemoteTrain).FullName.NotNull(),
                 "{}",
-                typeof(GatedRemoteInput).FullName!
+                typeof(GatedRemoteInput).FullName.NotNull()
             )
         );
 
@@ -54,9 +55,9 @@ public class RemoteRunTrustTests : TestSetup
     {
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(IQueuesGatedTrain).FullName!,
+                typeof(IQueuesGatedTrain).FullName.NotNull(),
                 "{}",
-                typeof(QueuesGatedInput).FullName!
+                typeof(QueuesGatedInput).FullName.NotNull()
             )
         );
 
@@ -78,28 +79,28 @@ public class RemoteRunTrustTests : TestSetup
     }
 
     [Test]
-    public void A_runner_on_the_mediators_execution_service_does_not_warn()
+    public async Task A_runner_on_the_mediators_execution_service_does_not_warn()
     {
         var logger = new WarningLogger();
 
-        TraxRequestHandler.WarnIfExecutionServiceReplaced(
-            Scope.ServiceProvider,
-            logger,
-            "/trax/run"
-        );
+        await TraxRequestHandler
+            .WarnIfExecutionServiceReplacedAsync(Scope.ServiceProvider, logger, "/trax/run")
+            .ConfigureAwait(false);
 
         logger.Warnings.Should().BeEmpty();
     }
 
     [Test]
-    public void A_runner_on_a_replaced_execution_service_warns_that_gated_runs_are_refused()
+    public async Task A_runner_on_a_replaced_execution_service_warns_that_gated_runs_are_refused()
     {
         var services = new ServiceCollection()
             .AddScoped(_ => NSubstitute.Substitute.For<ITrainExecutionService>())
             .BuildServiceProvider();
         var logger = new WarningLogger();
 
-        TraxRequestHandler.WarnIfExecutionServiceReplaced(services, logger, "/trax/run");
+        await TraxRequestHandler
+            .WarnIfExecutionServiceReplacedAsync(services, logger, "/trax/run")
+            .ConfigureAwait(false);
 
         logger
             .Warnings.Should()
@@ -138,9 +139,9 @@ public class RemoteRunTrustTests : TestSetup
 
         var response = await Handler.RunTrainAsync(
             new RemoteRunRequest(
-                typeof(IReadsTrustTrain).FullName!,
+                typeof(IReadsTrustTrain).FullName.NotNull(),
                 $$"""{"key":"{{key}}"}""",
-                typeof(ReadsTrustInput).FullName!
+                typeof(ReadsTrustInput).FullName.NotNull()
             )
         );
 
@@ -153,68 +154,5 @@ public class RemoteRunTrustTests : TestSetup
                 "the trusted scope closes before the train runs (see "
                     + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
             );
-    }
-}
-
-public record GatedRemoteInput;
-
-public interface IGatedRemoteTrain : IServiceTrain<GatedRemoteInput, Unit>;
-
-[TraxAuthorize(Roles = "Admin")]
-public class GatedRemoteTrain : ServiceTrain<GatedRemoteInput, Unit>, IGatedRemoteTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
-}
-
-public record AdminOnlyInput;
-
-public interface IAdminOnlyTrain : IServiceTrain<AdminOnlyInput, Unit>;
-
-[TraxAuthorize(Roles = "Admin")]
-public class AdminOnlyTrain : ServiceTrain<AdminOnlyInput, Unit>, IAdminOnlyTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
-}
-
-public record QueuesGatedInput;
-
-public interface IQueuesGatedTrain : IServiceTrain<QueuesGatedInput, Unit>;
-
-public class QueuesGatedTrain : ServiceTrain<QueuesGatedInput, Unit>, IQueuesGatedTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Chain<QueueAdminOnly>().Resolve();
-}
-
-public class QueueAdminOnly(ITrainExecutionService trains) : Junction<QueuesGatedInput, Unit>
-{
-    public override async Task<Unit> Run(QueuesGatedInput input)
-    {
-        await trains.QueueAsync(typeof(IAdminOnlyTrain).FullName!, "{}");
-        return Unit.Default;
-    }
-}
-
-public record ReadsTrustInput
-{
-    public string Key { get; init; } = string.Empty;
-}
-
-public interface IReadsTrustTrain : IServiceTrain<ReadsTrustInput, Unit>;
-
-public class ReadsTrustTrain : ServiceTrain<ReadsTrustInput, Unit>, IReadsTrustTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() => Chain<ReadTrust>().Resolve();
-}
-
-public class ReadTrust(ITrustedExecutionScope trust) : Junction<ReadsTrustInput, Unit>
-{
-    public static System.Collections.Concurrent.ConcurrentDictionary<string, bool> Seen { get; } =
-        new();
-
-    public override Task<Unit> Run(ReadsTrustInput input)
-    {
-        Seen[input.Key] = trust.IsTrusted;
-        return Task.FromResult(Unit.Default);
     }
 }

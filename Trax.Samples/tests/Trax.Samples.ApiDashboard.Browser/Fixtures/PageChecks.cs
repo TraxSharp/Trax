@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Playwright;
 
@@ -46,15 +47,16 @@ public sealed class PageChecks
     {
         var checks = new PageChecks(origin, documentIds, persisted);
         await page.AddInitScriptAsync(
-            """
-            window.__cspViolations = [];
-            document.addEventListener("securitypolicyviolation", (e) =>
-              window.__cspViolations.push(`${e.violatedDirective} ${e.blockedURI}`));
-            """
-        );
+                """
+                window.__cspViolations = [];
+                document.addEventListener("securitypolicyviolation", (e) =>
+                  window.__cspViolations.push(`${e.violatedDirective} ${e.blockedURI}`));
+                """
+            )
+            .ConfigureAwait(false);
         page.Console += (_, message) =>
         {
-            if (message.Type == "error")
+            if (string.Equals(message.Type, "error", StringComparison.Ordinal))
                 checks.Problem($"console error: {message.Text}", console: true);
         };
         page.PageError += (_, error) => checks.Problem($"uncaught: {error}");
@@ -103,9 +105,9 @@ public sealed class PageChecks
         return FrameAsync(
             f =>
                 f.StartsWith("sent ", StringComparison.Ordinal)
-                && f.Contains("\"subscribe\"")
-                && f.Contains(id)
-                && (alsoContaining is null || f.Contains(alsoContaining)),
+                && f.Contains("\"subscribe\"", StringComparison.Ordinal)
+                && f.Contains(id, StringComparison.Ordinal)
+                && (alsoContaining is null || f.Contains(alsoContaining, StringComparison.Ordinal)),
             $"the page subscribes to {operation} by its registered id"
         );
     }
@@ -115,8 +117,8 @@ public sealed class PageChecks
         FrameAsync(
             f =>
                 f.StartsWith("received ", StringComparison.Ordinal)
-                && f.Contains("\"next\"")
-                && f.Contains($"\"{field}\"")
+                && f.Contains("\"next\"", StringComparison.Ordinal)
+                && f.Contains($"\"{field}\"", StringComparison.Ordinal)
                 && containing.All(f.Contains),
             $"the server pushes {field} with {string.Join(", ", containing)}"
         );
@@ -132,23 +134,28 @@ public sealed class PageChecks
         var pushed = PushedAsync(field, containing);
         while (!pushed.IsCompleted)
         {
-            await probe();
+            await probe().ConfigureAwait(false);
             // allowed-delay: re-probe interval, bounded by PushedAsync's own timeout; WhenAny wakes on receipt.
-            await Task.WhenAny(pushed, Task.Delay(100));
+            await Task.WhenAny(pushed, Task.Delay(100)).ConfigureAwait(false);
         }
-        await pushed;
+        await pushed.ConfigureAwait(false);
     }
 
     private static async Task<string> Bounded(Task<string> seen, string what)
     {
         try
         {
-            return await seen.WaitAsync(BrowserTimeouts.Server);
+            return await seen.WaitAsync(BrowserTimeouts.Server, TimeProvider.System)
+                .ConfigureAwait(false);
         }
-        catch (TimeoutException)
+        catch (TimeoutException inner)
         {
             throw new TimeoutException(
-                $"Expected {what} within {BrowserTimeouts.Server.TotalSeconds:0} s."
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Expected {what} within {BrowserTimeouts.Server.TotalSeconds:0} s."
+                ),
+                inner
             );
         }
     }
@@ -174,7 +181,8 @@ public sealed class PageChecks
         string[] violations = [];
         try
         {
-            violations = await page.EvaluateAsync<string[]>("window.__cspViolations ?? []");
+            violations = await page.EvaluateAsync<string[]>("window.__cspViolations ?? []")
+                .ConfigureAwait(false);
         }
         catch (PlaywrightException)
         {
@@ -185,7 +193,7 @@ public sealed class PageChecks
 
     private void Problem(string problem, bool console = false)
     {
-        if (console && _allowed.Any(a => a(problem)))
+        if (console && _allowed.Exists(a => a(problem)))
             return;
         _problems.Enqueue(problem);
     }
@@ -205,7 +213,10 @@ public sealed class PageChecks
             Problem($"request off the console's origin: {request.Method} {request.Url}");
             return;
         }
-        if (request.Method != "POST" || !url.AbsolutePath.EndsWith("/trax/graphql"))
+        if (
+            !string.Equals(request.Method, "POST", StringComparison.Ordinal)
+            || !url.AbsolutePath.EndsWith("/trax/graphql", StringComparison.Ordinal)
+        )
             return;
 
         var body = request.PostData;
@@ -229,9 +240,9 @@ public sealed class PageChecks
         if (
             response.Status < 400
             || response.Status >= 500
-            || response.Request.Method != "POST"
+            || !string.Equals(response.Request.Method, "POST", StringComparison.Ordinal)
             || !Uri.TryCreate(response.Url, UriKind.Absolute, out var url)
-            || !url.AbsolutePath.EndsWith("/trax/graphql")
+            || !url.AbsolutePath.EndsWith("/trax/graphql", StringComparison.Ordinal)
         )
             return;
         var name = "an unnamed operation";
@@ -248,7 +259,12 @@ public sealed class PageChecks
         {
             // OnRequest reports a body that is not JSON.
         }
-        Problem($"the host answered HTTP {response.Status} to {name}");
+        Problem(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"the host answered HTTP {response.Status} to {name}"
+            )
+        );
     }
 
     private void OnFrame(string? text)
@@ -260,7 +276,7 @@ public sealed class PageChecks
             using var json = JsonDocument.Parse(text);
             if (
                 json.RootElement.TryGetProperty("type", out var type)
-                && type.GetString() == "subscribe"
+                && string.Equals(type.GetString(), "subscribe", StringComparison.Ordinal)
                 && json.RootElement.TryGetProperty("payload", out var payload)
             )
                 Record("socket", payload, text);
@@ -290,12 +306,3 @@ public sealed class PageChecks
             );
     }
 }
-
-/// <summary>One GraphQL operation the page sent: by <see cref="Id"/>, or as <see cref="Text"/>.</summary>
-public sealed record GraphQLSent(
-    string Transport,
-    string? OperationName,
-    string? Id,
-    string? Text,
-    string Raw
-);

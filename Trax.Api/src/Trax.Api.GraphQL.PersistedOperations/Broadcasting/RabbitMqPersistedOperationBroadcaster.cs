@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
+using Trax.Core.Extensions;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 
@@ -79,7 +80,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             DeliveryMode = DeliveryModes.Transient,
         };
         if (_options.RabbitMqInvalidation.SigningKey is { } key)
-            properties.Headers = new Dictionary<string, object?>
+            properties.Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [InvalidationMessageSignature.Header] = InvalidationMessageSignature.Create(
                     key,
@@ -122,7 +123,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             if (_connection is not { IsOpen: true })
             {
                 var factory = _options.RabbitMqInvalidation.CreateConnectionFactory(
-                    _options.RabbitMqConnectionString!
+                    _options.RabbitMqConnectionString.NotNull()
                 );
                 _connection = await factory.CreateConnectionAsync(ct).ConfigureAwait(false);
             }
@@ -164,14 +165,18 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
         if (_channel is not null)
         {
             if (_channel.IsOpen)
-                await _channel.CloseAsync().ConfigureAwait(false);
+                await _channel
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _channel.Dispose();
         }
 
         if (_connection is not null)
         {
             if (_connection.IsOpen)
-                await _connection.CloseAsync().ConfigureAwait(false);
+                await _connection
+                    .CloseAsync(cancellationToken: CancellationToken.None)
+                    .ConfigureAwait(false);
             _connection.Dispose();
         }
 

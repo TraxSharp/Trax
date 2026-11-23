@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -17,11 +18,11 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 [TestFixture]
 public class SqliteDashboardMetricsTests : TestSetup
 {
-    private IOperationsService _operations = null!;
+    private IOperationsService? _operations;
 
     public override async Task TestSetUp()
     {
-        await base.TestSetUp();
+        await base.TestSetUp().ConfigureAwait(false);
         _operations = Scope.ServiceProvider.GetRequiredService<IOperationsService>();
     }
 
@@ -31,7 +32,7 @@ public class SqliteDashboardMetricsTests : TestSetup
     {
         // Whole milliseconds: Sqlite reads three fractional digits, so a start with finer ticks would
         // shift a 250 ms duration by up to a millisecond and the average past its tolerance.
-        var now = DateTime.UtcNow.AddMinutes(-30);
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-30);
         var start = new DateTime(
             now.Ticks - now.Ticks % TimeSpan.TicksPerMillisecond,
             DateTimeKind.Utc
@@ -40,7 +41,7 @@ public class SqliteDashboardMetricsTests : TestSetup
         await Seed("Trax.Tests.ISlow", TrainState.Completed, start, start.AddSeconds(20));
         await Seed("Trax.Tests.IFast", TrainState.Completed, start, start.AddMilliseconds(250));
         await Seed("Trax.Tests.IFast", TrainState.Failed, start, start.AddSeconds(1));
-        await Seed("Trax.Tests.IFast", TrainState.InProgress, start, null);
+        await Seed("Trax.Tests.IFast", TrainState.InProgress, start, end: null);
         // A child run is not a root, so it takes no part in the average durations.
         await Seed(
             "Trax.Tests.IChild",
@@ -50,11 +51,9 @@ public class SqliteDashboardMetricsTests : TestSetup
             parentId: (await Seed("Trax.Tests.IParent", TrainState.Failed, start, start)).Id
         );
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            range,
-            hideAdminTrains: false,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(range, hideAdminTrains: false, CancellationToken.None);
 
         metrics.Kpis.CurrentlyRunning.Should().Be(1);
         metrics.ExecutionsOverTime.Should().HaveCount(buckets);
@@ -81,15 +80,17 @@ public class SqliteDashboardMetricsTests : TestSetup
     [Test]
     public async Task Average_durations_leave_out_admin_trains_when_asked()
     {
-        var start = DateTime.UtcNow.AddHours(-1);
+        var start = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-1);
         await Seed("Trax.Tests.IUser", TrainState.Completed, start, start.AddSeconds(2));
         await Seed(AdminTrains.FullNames[0], TrainState.Completed, start, start.AddSeconds(9));
 
-        var metrics = await _operations.GetDashboardMetricsAsync(
-            MetricsRange.Last24Hours,
-            hideAdminTrains: true,
-            CancellationToken.None
-        );
+        var metrics = await _operations
+            .NotNull()
+            .GetDashboardMetricsAsync(
+                MetricsRange.Last24Hours,
+                hideAdminTrains: true,
+                CancellationToken.None
+            );
 
         metrics.TopAverageDurations.Should().ContainSingle();
         metrics.TopAverageDurations[0].TrainName.Should().Be("Trax.Tests.IUser");
@@ -99,7 +100,7 @@ public class SqliteDashboardMetricsTests : TestSetup
     [Test]
     public async Task A_trains_metric_series_reads_on_Sqlite()
     {
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
         var start = new DateTime(
             now.Ticks - now.Ticks % TimeSpan.TicksPerHour,
             DateTimeKind.Utc
@@ -109,13 +110,15 @@ public class SqliteDashboardMetricsTests : TestSetup
         await Seed("Trax.Tests.ISeries", TrainState.Failed, start, start.AddSeconds(1));
         await Seed("Trax.Tests.IOther", TrainState.Completed, start, start.AddSeconds(9));
 
-        var series = await _operations.GetMetricSeriesAsync(
-            MetricSeriesScope.Train,
-            null,
-            "Trax.Tests.ISeries",
-            MetricSeriesRange.Last7Days,
-            CancellationToken.None
-        );
+        var series = await _operations
+            .NotNull()
+            .GetMetricSeriesAsync(
+                MetricSeriesScope.Train,
+                id: null,
+                "Trax.Tests.ISeries",
+                MetricSeriesRange.Last7Days,
+                CancellationToken.None
+            );
 
         var bucket = series.Buckets.Single(b => b.Start == start);
         bucket.Completed.Should().Be(2);
@@ -141,14 +144,15 @@ public class SqliteDashboardMetricsTests : TestSetup
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
-            }
+            },
+            TimeProvider.System
         );
         meta.TrainState = state;
         meta.StartTime = DateTime.SpecifyKind(start, DateTimeKind.Utc);
         meta.EndTime = end is { } e ? DateTime.SpecifyKind(e, DateTimeKind.Utc) : null;
         meta.ParentId = parentId;
-        await DataContext.Track(meta);
-        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext.Track(meta).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         DataContext.Reset();
         return meta;
     }

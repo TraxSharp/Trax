@@ -20,8 +20,12 @@ public class NulCharacterKeyTests : TestSetup
     [Test]
     public async Task A_NUL_in_an_identifying_column_is_refused_rather_than_rewritten()
     {
-        using var context = (IDataContext)DataContextFactory.Create();
-        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "Nul.Key.Train" });
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var contextDisposal = context.ConfigureAwait(false);
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "Nul.Key.Train" },
+            TestTime.Clock
+        );
         var externalId = "nul\0" + Guid.NewGuid().ToString("N")[..20];
         entry.ExternalId = externalId;
         await context.Track(entry);
@@ -35,7 +39,8 @@ public class NulCharacterKeyTests : TestSetup
             .Which.SqlState.Should()
             .Be(PostgresErrorCodes.CharacterNotInRepertoire);
 
-        using var readBack = (IDataContext)DataContextFactory.Create();
+        var readBack = (IDataContext)DataContextFactory.Create();
+        await using var readBackDisposal = readBack.ConfigureAwait(false);
         var rewritten = externalId.Replace('\0', '�');
         (await readBack.WorkQueues.AsNoTracking().AnyAsync(q => q.ExternalId == rewritten))
             .Should()
@@ -47,7 +52,8 @@ public class NulCharacterKeyTests : TestSetup
     {
         var create = () =>
             WorkQueue.Create(
-                new CreateWorkQueue { TrainName = "Nul.Key.Train", SubjectKey = "a\0" }
+                new CreateWorkQueue { TrainName = "Nul.Key.Train", SubjectKey = "a\0" },
+                TestTime.Clock
             );
 
         create.Should().Throw<ArgumentException>().WithMessage("*NUL*");

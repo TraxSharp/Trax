@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using Trax.Core.Extensions;
 
 namespace Trax.Samples.StateMachine.Tests.UnitTests;
 
@@ -23,7 +25,7 @@ public class PaymentTests
             Context = new JsonObject
             {
                 ["items"] = new JsonArray(
-                    items.Select(i => (JsonNode)JsonValue.Create(i)!).ToArray()
+                    items.Select(i => (JsonNode)JsonValue.Create(i).NotNull()).ToArray()
                 ),
                 ["receipt"] = null,
                 ["total"] = items.Length * CheckoutMachine.UnitPriceCents,
@@ -33,7 +35,7 @@ public class PaymentTests
     [Test]
     public async Task The_charge_takes_the_stored_total_from_the_drafts_user_and_returns_the_providers_receipt()
     {
-        var provider = new SimulatedPaymentProvider();
+        var provider = new SimulatedPaymentProvider(new FakeTimeProvider());
         var charge = new LoggingCharge(
             provider,
             new FixedPrincipal("TraxApiKey:alice"),
@@ -53,8 +55,8 @@ public class PaymentTests
     public async Task The_charge_refuses_to_run_for_no_one()
     {
         var charge = new LoggingCharge(
-            new SimulatedPaymentProvider(),
-            new FixedPrincipal(null),
+            new SimulatedPaymentProvider(new FakeTimeProvider()),
+            new FixedPrincipal(key: null),
             NullLogger<LoggingCharge>.Instance
         );
 
@@ -66,7 +68,7 @@ public class PaymentTests
     [Test]
     public async Task ListCharges_returns_only_the_callers_charges_newest_first()
     {
-        var provider = new SimulatedPaymentProvider();
+        var provider = new SimulatedPaymentProvider(new FakeTimeProvider());
         var first = provider.Charge("TraxApiKey:alice", 999, 1);
         var second = provider.Charge("TraxApiKey:alice", 1998, 2);
         provider.Charge("TraxApiKey:bob", 999, 1);
