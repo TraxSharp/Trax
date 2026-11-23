@@ -93,7 +93,8 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                         eni.NetworkInterfaceId,
                         eni.InterfaceType?.Value ?? "",
                         eni.Description ?? "",
-                        [.. (eni.Groups ?? []).Select(g => g.GroupId)]
+                        [.. (eni.Groups ?? []).Select(g => g.GroupId)],
+                        eni.RequesterId ?? ""
                     )
                 );
             next = page.NextToken;

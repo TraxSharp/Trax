@@ -468,13 +468,31 @@ public class AwsDeployerTests
         aws.Existing = FakeAws.Running();
         aws.Foundation = FakeAws.FoundationRunning();
         aws.NetworkInterfaces.Add(
-            new AwsNetworkInterface("eni-rds", "interface", "RDSNetworkInterface", ["sg-db"])
+            new AwsNetworkInterface(
+                "eni-rds",
+                "interface",
+                "RDSNetworkInterface",
+                ["sg-db"],
+                "amazon-rds"
+            )
         );
         aws.NetworkInterfaces.Add(
-            new AwsNetworkInterface("eni-task", "interface", "ecs task", ["sg-task", "sg-client"])
+            new AwsNetworkInterface(
+                "eni-task",
+                "interface",
+                "arn:aws:ecs:us-west-2:123456789012:attachment/0f1e2d3c",
+                ["sg-task", "sg-client"],
+                "578734482556"
+            )
         );
         aws.NetworkInterfaces.Add(
-            new AwsNetworkInterface("eni-alb", "interface", "ELB app/orders", ["sg-lb"])
+            new AwsNetworkInterface(
+                "eni-alb",
+                "interface",
+                "ELB app/orders-production/50dc6c495c0c9188",
+                ["sg-lb"],
+                "amazon-elb"
+            )
         );
         aws.NetworkInterfaces.Add(
             new AwsNetworkInterface("eni-nat", "nat_gateway", "Interface for NAT Gateway", [])
@@ -488,6 +506,39 @@ public class AwsDeployerTests
         );
 
         aws.Calls.Should().Contain("delete-stack-base");
+    }
+
+    [Test]
+    public async Task Destroy_refuses_an_interface_that_wears_only_trax_groups_but_is_not_trax_s()
+    {
+        // A Lambda the user put in the network with only the database client group, to reach Postgres: every
+        // group it wears is trax's, but deleting the network would still fail on it.
+        var (deployer, aws, _) = Deployer();
+        aws.Existing = FakeAws.Running();
+        aws.Foundation = FakeAws.FoundationRunning();
+        aws.NetworkInterfaces.Add(
+            new AwsNetworkInterface(
+                "eni-lambda",
+                "lambda",
+                "AWS Lambda VPC ENI-orders-report-1a2b3c",
+                ["sg-client"],
+                "AROAEXAMPLE:orders-report"
+            )
+        );
+
+        var act = () =>
+            deployer.DestroyAsync(
+                AwsStackTemplateTests.File_(),
+                "production",
+                deleteData: false,
+                CancellationToken.None
+            );
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*orders-production-base*eni-lambda*");
+        aws.Calls.Should().BeEmpty("nothing is deleted or recorded");
+        aws.Parameters.Should().BeEmpty();
     }
 
     [Test]

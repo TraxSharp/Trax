@@ -432,8 +432,9 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
 
     /// <summary>
     /// Refuses to delete a foundation whose network holds an interface trax did not create: one wearing a group
-    /// neither stack created (an EKS node given the database client group, say), or with no group at all, other than
-    /// the NAT gateway's. In a VPC the foundation created, every interface counts; in an existing VPC, only those
+    /// neither stack created (an EKS node given the database client group, say), one that wears only trax's groups but
+    /// is not a task, the database or the load balancer (a Lambda given the client group), or one with no group at
+    /// all, other than the NAT gateway's. In a VPC the foundation created, every interface counts; in an existing VPC, only those
     /// wearing one of the foundation's groups, since the rest of that network is not the foundation's to delete.
     /// </summary>
     private async Task CheckNetworkAsync(
@@ -457,7 +458,11 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             .Where(e =>
                 (ownsVpc || e.SecurityGroups.Any(mine.Contains))
                 && !(ownsVpc && string.Equals(e.Type, "nat_gateway", StringComparison.Ordinal))
-                && (e.SecurityGroups.Count == 0 || !e.SecurityGroups.All(ours.Contains))
+                && (
+                    e.SecurityGroups.Count == 0
+                    || !e.SecurityGroups.All(ours.Contains)
+                    || !MadeByTrax(e)
+                )
             )
             .ToList();
         if (foreign.Count == 0)
@@ -470,6 +475,16 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                 + ". Nothing was deleted."
         );
     }
+
+    // Wearing only trax's groups is not enough: a user's Lambda given the client group wears nothing else. What the
+    // stacks create in the network is a task (an ECS attachment), the database (RDS) or the load balancer (ELB).
+    private static bool MadeByTrax(AwsNetworkInterface e) =>
+        e.RequesterId is "amazon-rds" or "amazon-elb"
+        || (
+            e.Description.StartsWith("arn:aws", StringComparison.Ordinal)
+            && e.Description.Contains(":ecs:", StringComparison.Ordinal)
+            && e.Description.Contains(":attachment/", StringComparison.Ordinal)
+        );
 
     private static string[] Split(string? list) =>
         string.IsNullOrEmpty(list) ? [] : list.Split(',', StringSplitOptions.RemoveEmptyEntries);
