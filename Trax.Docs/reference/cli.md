@@ -721,7 +721,8 @@ compose:
 
 Every service drops every Linux capability and runs with `no-new-privileges`, `userns_mode: nomap` (the deploying
 user's own uid is not mapped into the container, so an escape does not land as them), `pids_limit: 512` and a
-`mem_limit`: the service's `memory`, 1024 MiB for Postgres and 512 MiB for RabbitMQ. Postgres gets back `CHOWN`,
+`mem_limit`: the service's `memory`, 1024 MiB for Postgres and 512 MiB for RabbitMQ. `memswap_limit` is the same
+value, so a service gets no swap on top of its memory. Postgres gets back `CHOWN`,
 `DAC_OVERRIDE`, `FOWNER`, `SETGID` and `SETUID`, and RabbitMQ the same less `FOWNER`, which their entrypoints need to
 take their data directories and drop to their own users. docker compose refuses `nomap`.
 Nothing is reachable from other machines until something in front of the stack (a reverse proxy, `tailscale serve`)

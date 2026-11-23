@@ -231,6 +231,8 @@ internal static class ComposeTarget
         y.AppendLine("    userns_mode: nomap");
         y.AppendLine(CultureInfo.InvariantCulture, $"    pids_limit: {ServiceHardening.Pids}");
         y.AppendLine(CultureInfo.InvariantCulture, $"    mem_limit: {hardening.MemoryMiB}m");
+        // Without it the runtime allows as much swap again, so a copy could hold twice its memory before the kill.
+        y.AppendLine(CultureInfo.InvariantCulture, $"    memswap_limit: {hardening.MemoryMiB}m");
     }
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";

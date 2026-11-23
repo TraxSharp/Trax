@@ -117,6 +117,7 @@ public partial class DeployComposeTests
             userns_mode: nomap
             pids_limit: 512
             mem_limit: 1024m
+            memswap_limit: 1024m
             restart: unless-stopped
 
           rabbitmq:
@@ -139,6 +140,7 @@ public partial class DeployComposeTests
             userns_mode: nomap
             pids_limit: 512
             mem_limit: 512m
+            memswap_limit: 512m
             restart: unless-stopped
 
           # The new version migrates the database once, before any service of it starts.
@@ -153,6 +155,7 @@ public partial class DeployComposeTests
             userns_mode: nomap
             pids_limit: 512
             mem_limit: 1024m
+            memswap_limit: 1024m
             depends_on:
               database:
                 condition: service_healthy
@@ -172,6 +175,7 @@ public partial class DeployComposeTests
             userns_mode: nomap
             pids_limit: 512
             mem_limit: 1024m
+            memswap_limit: 1024m
             depends_on:
               migrate:
                 condition: service_completed_successfully
@@ -191,6 +195,7 @@ public partial class DeployComposeTests
             userns_mode: nomap
             pids_limit: 512
             mem_limit: 1024m
+            memswap_limit: 1024m
             deploy:
               replicas: 2
             depends_on:
@@ -605,7 +610,7 @@ public partial class DeployComposeTests
             block.Should().Contain("    cap_drop:\n      - ALL\n", service);
             block.Should().Contain("    userns_mode: nomap\n", service);
             block.Should().Contain("    pids_limit: 512\n", service);
-            block.Should().MatchRegex(@"    mem_limit: \d+m\n", service);
+            block.Should().MatchRegex(@"    mem_limit: (\d+)m\n    memswap_limit: \1m\n", service);
         }
         Block(compose, "hub").Should().NotContain("cap_add");
         Block(compose, "worker").Should().NotContain("cap_add");
