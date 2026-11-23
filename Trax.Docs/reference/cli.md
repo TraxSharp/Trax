@@ -889,7 +889,7 @@ kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm
 
 What it applies, in this order:
 
-1. the namespace, unless it exists;
+1. the namespace, unless it exists, once the Secret check has passed;
 2. in a `try` environment, Postgres (when `inCluster`) and RabbitMQ (when a host uses it, as a Deployment of one;
    refused in `production`, since trax cannot name an existing broker yet), waiting for each to be ready;
 3. the migrate Job `<app>-migrate-<tag>`, a new one each deploy since a Job cannot be changed: the image of the
@@ -916,15 +916,20 @@ pids limit, so the node's applies.
 
 trax writes no secret value into a manifest. Each name under `secrets`, and `POSTGRES_PASSWORD` and
 `RABBITMQ_PASSWORD` when Postgres or RabbitMQ run in the cluster, is read by `secretKeyRef` from one Secret,
-`<app>-<env>`, in the namespace. Before applying anything, a deploy checks that Secret (and the database's, when
-the environment names one) holds every key it needs, and refuses naming the missing ones. Create it yourself:
+`<app>-<env>`, in the namespace. Before applying anything, even the namespace, a deploy checks that Secret (and the
+database's, when the environment names one) holds every key it needs, and refuses naming the missing ones. Create
+the namespace and the Secret yourself:
 
 ```bash
 kubectl create namespace orders-staging
-kubectl create secret generic orders-staging -n orders-staging \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 24)" \
-  --from-literal=Stripe__ApiKey=sk_test_...
+printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)" > orders-staging.env
+$EDITOR orders-staging.env                # add Stripe__ApiKey=..., one KEY=value line each
+kubectl create secret generic orders-staging -n orders-staging --from-env-file=orders-staging.env
+rm orders-staging.env
 ```
+
+The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in
+the process list.
 
 Nothing is exposed outside the cluster yet. Until it is, reach a hub with
 `kubectl port-forward -n orders-staging service/hub 8080`.

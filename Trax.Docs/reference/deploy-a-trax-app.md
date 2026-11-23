@@ -95,16 +95,18 @@ you create:
 
 ```bash
 kubectl create namespace orders-staging
-kubectl create secret generic orders-staging -n orders-staging \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 24)" \
-  --from-literal=Stripe__ApiKey=sk_test_...
+printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)" > orders-staging.env
+$EDITOR orders-staging.env                # add Stripe__ApiKey=..., one KEY=value line each
+kubectl create secret generic orders-staging -n orders-staging --from-env-file=orders-staging.env
+rm orders-staging.env
 trax deploy plan --env staging            # the manifests, under .trax/deploy/kubernetes/orders-staging/
 trax deploy --env staging
 trax deploy status --env staging
 kubectl port-forward -n orders-staging service/hub 8080
 ```
 
-A deploy refuses before it applies anything while the Secret lacks a key. It brings up Postgres (and RabbitMQ),
+The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in the
+process list. A deploy refuses before it applies anything, even the namespace, while the Secret lacks a key. It brings up Postgres (and RabbitMQ),
 runs the migration as a Job, and only when that succeeds rolls each service and waits for it to be ready. The hub
 runs one copy and stops before its next version starts; workers roll at their `count`. Nothing is exposed outside
 the cluster yet, so reach the hub with `kubectl port-forward`.
