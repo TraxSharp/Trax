@@ -678,13 +678,22 @@ trax deploy init --app orders
 
 # Write compose.yaml and .env.example beside it, and build each service's image.
 trax deploy --target compose --build
+
+# Deploy one environment, to the target it names.
+trax deploy --env staging
 ```
+
+Each environment under `environments` names its target: `compose`, `aws` or `kubernetes`, so one file can hold
+a compose stack for one machine, staging on a Kubernetes cluster and production on AWS. With `--env`, the
+environment's target decides, and a `--target` given beside it must match it or the deploy is refused naming both.
+Without `--env`, `--target compose` (the default) writes the podman stack below; `--target aws` and
+`--target kubernetes` need an environment.
 
 ### `trax.deploy.json`
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "app": "orders",
   "services": {
     "hub": { "project": "Orders/Orders.csproj" },
@@ -692,7 +701,19 @@ trax deploy --target compose --build
   },
   "connectionStrings": { "trax": "Trax", "rabbitMq": "RabbitMq" },
   "settings": ["Auth__Authority", "Auth__Audience"],
-  "secrets": ["Stripe__ApiKey"]
+  "secrets": ["Stripe__ApiKey"],
+  "environments": {
+    "local": { "target": "compose", "engine": "docker" },
+    "staging": {
+      "target": "kubernetes",
+      "profile": "try",
+      "database": { "inCluster": true },
+      "settings": {
+        "Auth__Authority": "https://issuer.example.com",
+        "Auth__Audience": "orders"
+      }
+    }
+  }
 }
 ```
 
@@ -702,9 +723,15 @@ trax deploy --target compose --build
 | `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `memory` is the memory each copy may use, in MiB, at least 128; 1024 when left out. `init` names a lone project `hub` and several by the last part of their names. |
 | `connectionStrings` | The name under `ConnectionStrings:` the hosts read Postgres from, and the name they read RabbitMQ's settings under. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
+| `environments` | Each environment by name (lower-case letters and digits), with its `target` and that target's keys below. |
+
+A version 1 file, from before environments named their target, still reads: each of its environments is `aws`. trax
+writes version 2.
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
-leaving out test projects, and refuses to replace an existing file without `--force`.
+leaving out test projects, and refuses to replace an existing file without `--force`. `init --target aws` adds a
+`production` environment to fill in, and `init --target kubernetes` a `staging` one on the `try` profile with
+Postgres in the cluster.
 
 ### `--target compose`
 
@@ -724,7 +751,11 @@ user's own uid is not mapped into the container, so an escape does not land as t
 `mem_limit`: the service's `memory`, 1024 MiB for Postgres and 512 MiB for RabbitMQ. `memswap_limit` is the same
 value, so a service gets no swap on top of its memory. Postgres gets back `CHOWN`,
 `DAC_OVERRIDE`, `FOWNER`, `SETGID` and `SETUID`, and RabbitMQ the same less `FOWNER`, which their entrypoints need to
-take their data directories and drop to their own users. docker compose refuses `nomap`.
+take their data directories and drop to their own users. docker compose refuses `nomap`: an environment with
+`"target": "compose", "engine": "docker"` writes the same stack without `userns_mode` (its header says so), and
+`trax deploy --env <name>` writes it. `engine` is `podman` when left out, and so is the stack written without
+`--env`. A compose environment takes no `settings` or `counts`: the stack reads its settings from the `.env` and
+runs each service's `count`.
 Nothing is reachable from other machines until something in front of the stack (a reverse proxy, `tailscale serve`)
 decides who may reach it.
 
@@ -759,6 +790,7 @@ needed: the stack is CloudFormation that trax generates, and the images are buil
 ```json
 "environments": {
   "production": {
+    "target": "aws",
     "profile": "production",
     "region": "us-west-2",
     "domain": "orders.example.com",
@@ -767,7 +799,7 @@ needed: the stack is CloudFormation that trax generates, and the images are buil
     "settings": { "Storefront__Origin": "https://shop.example.com" },
     "counts": { "worker": 3 }
   },
-  "staging": { "profile": "try", "region": "us-west-2" }
+  "staging": { "target": "aws", "profile": "try", "region": "us-west-2" }
 }
 ```
 
@@ -821,11 +853,106 @@ nothing, when the foundation's network holds a network interface trax did not cr
 lists them. A secret `--delete-data` deleted can be recovered for seven days, and
 `secret set` restores it with the new value, so the environment can be deployed again the same day.
 
+`secret set` and `secret list` are for aws environments; on a kubernetes environment they are refused, pointing at
+`kubectl`.
+
 A production Cognito user pool outlives `destroy`, with its users, their MFA and their groups. `destroy` records
 its id in the SSM parameter `/<app>-<name>/user-pool` and prints it with the number of users in it, and the next deploy
 of that environment signs in against that pool instead of creating one, so the `sub` claims stored with the data
 still match. With `--delete-data`, `destroy` deletes the pool, every user in it, and the record. A `try`
 environment's pool is deleted with its foundation.
+
+### `--target kubernetes`
+
+`trax deploy --env <name>` on an environment with `"target": "kubernetes"` applies it to the cluster the current
+kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm. trax never creates a cluster.
+
+```json
+"environments": {
+  "staging": {
+    "target": "kubernetes",
+    "profile": "try",
+    "namespace": "orders-staging",
+    "registry": "ghcr.io/acme",
+    "database": { "inCluster": true },
+    "settings": { "Auth__Authority": "https://issuer.example.com", "Auth__Audience": "orders" },
+    "counts": { "worker": 3 }
+  },
+  "production": {
+    "target": "kubernetes",
+    "database": { "secret": "orders-db", "key": "connection" },
+    "settings": { "Auth__Authority": "https://issuer.example.com", "Auth__Audience": "orders" }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `profile` | `production` (the default) or `try`. Only `try` may run Postgres or RabbitMQ in the cluster. The predicate is the profile, not the kind of cluster: a `try` environment on a managed cloud cluster may, a `production` one on kind may not. |
+| `namespace` | The namespace the app goes in; `<app>-<env>` when left out. trax creates it when it does not exist. |
+| `registry` | Where images are pushed and pulled from (`ghcr.io/acme`), as `<registry>/<app>-<service>:<tag>`, with the login docker or podman holds for it. Without one, images are built into the local container runtime as `<app>-<service>:<tag>` with `imagePullPolicy: IfNotPresent`, for a cluster that reads that runtime (Docker Desktop, podman). kind does not: give it a registry, such as kind's local one on `localhost:5001`. |
+| `database` | Required: every kubernetes environment names its database, and a `production` one names a Secret. `{ "secret": ..., "key": ... }`: an existing Secret in the namespace holding the whole Postgres connection string, read as `ConnectionStrings__<trax name>`. Or `{ "inCluster": true }`: Postgres 17 as a StatefulSet of one with a 1Gi volume and a headless Service, refused under `production`. |
+| `settings` | A value for each name the file lists under `settings`, written into the manifests as plain values. |
+| `counts` | Copies per service here, over the file's `count`. |
+
+What it applies, in this order:
+
+1. the namespace, unless it exists, once the Secret check has passed;
+2. in a `try` environment, Postgres (when `inCluster`) and RabbitMQ (when a host uses it, as a Deployment of one;
+   refused in `production`, since trax cannot name an existing broker yet), waiting for each to be ready;
+3. the migrate Job `<app>-migrate-<tag>`, a new one each deploy since a Job cannot be changed: the image of the
+   service that serves the API, run with `--trax-migrate`, `backoffLimit: 0`, kept a day after it finishes. If it
+   fails, trax prints the end of its log and stops; no Deployment is touched;
+4. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
+   runs one copy with `strategy: Recreate`, so the old hub stops before the new one starts: a few seconds without a
+   hub, never two. Workers roll at their count. A hub also gets a ClusterIP Service on port 8080, and every service
+   that reports a health endpoint gets readiness and liveness probes on it;
+5. waits for each Deployment to roll out: every copy updated and available, within ten minutes.
+
+Services, Deployments and the StatefulSet are applied server-side under the field manager `trax`. Every object
+carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kubernetes.io/managed-by: trax` and
+`trax/app: <app>`. A namespace labelled for another app is refused, and so is an object in it labelled for another
+app or one trax would apply over that has no `trax/app` label. A namespace with no label (one you made with
+`kubectl` to hold the Secret) is used.
+
+Every container runs under the same limits compose gives it: every capability dropped and only Postgres's and
+RabbitMQ's own added back, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault` (and the
+`container.seccomp.security.alpha.kubernetes.io/<container>: runtime/default` annotation, which `podman kube play`
+reads in its place), `runAsNonRoot` for every Trax container, the service's `memory` as both request and limit, and
+a pod with `hostUsers: false`, no service account token and no service links. Kubernetes has no per-container
+pids limit, so the node's applies.
+
+trax writes no secret value into a manifest. Each name under `secrets`, and `POSTGRES_PASSWORD` and
+`RABBITMQ_PASSWORD` when Postgres or RabbitMQ run in the cluster, is read by `secretKeyRef` from one Secret,
+`<app>-<env>`, in the namespace. Before applying anything, even the namespace, a deploy checks that Secret (and the
+database's, when the environment names one) holds every key it needs, and refuses naming the missing ones. Create
+the namespace and the Secret yourself:
+
+```bash
+kubectl create namespace orders-staging
+printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)" > orders-staging.env
+$EDITOR orders-staging.env                # add Stripe__ApiKey=..., one KEY=value line each
+kubectl create secret generic orders-staging -n orders-staging --from-env-file=orders-staging.env
+rm orders-staging.env
+```
+
+The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in
+the process list.
+
+Nothing is exposed outside the cluster yet. Until it is, reach a hub with
+`kubectl port-forward -n orders-staging service/hub 8080`.
+
+```bash
+trax deploy plan --env staging       # write the manifests under .trax/deploy/kubernetes/<app>-<env>/, without a cluster
+trax deploy --env staging
+trax deploy status --env staging
+trax deploy logs hub --env staging --follow   # or migrate, database, rabbitmq
+trax deploy destroy --env staging    # asks for the namespace's name; --delete-data also deletes the database's volume
+```
+
+`destroy` deletes the app's Deployments, StatefulSet, Jobs and Services in the namespace. It keeps the namespace,
+the Secret, and an in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
+volume and every row in it.
 
 ## SDK Reference
 

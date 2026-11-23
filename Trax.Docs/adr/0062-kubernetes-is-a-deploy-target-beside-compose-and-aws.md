@@ -59,9 +59,12 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 
 ## Exemplars
 
-**Unenforced:** the Kubernetes target and the foundation split land in the pull requests that follow this one,
-and the tests that hold them to it are named here when they do.
+**Enforced elsewhere:** `DeployKubernetesTests` and `KubernetesDeployerTests` in `Trax.Cli/tests/Trax.Cli.Tests/`
+hold the Kubernetes target to it: each environment names its target, the hub's Deployment is `Recreate` at one
+copy, the in-cluster database is refused under production, every container gets the hardening compose gives the
+same service, and the migrate Job runs before any Deployment is applied.
 
 ## Changelog
 
 - **2026-11-17**: Recorded.
+- **2026-11-17**: Named the tests that hold the Kubernetes target to it.

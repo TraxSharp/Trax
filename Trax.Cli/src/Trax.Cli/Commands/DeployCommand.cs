@@ -9,8 +9,9 @@ namespace Trax.Cli.Commands;
 
 /// <summary>
 /// <c>trax deploy</c>: turns the projects named in <c>trax.deploy.json</c>, and what each host reports it needs
-/// (<c>--trax-export-deploy</c>), into a deployment: a compose stack, or an AWS environment
-/// (<see cref="DeployAwsCommands"/>). <c>trax deploy init</c> writes a first <c>trax.deploy.json</c>.
+/// (<c>--trax-export-deploy</c>), into a deployment: a compose stack, an AWS environment
+/// (<see cref="DeployAwsCommands"/>) or a Kubernetes one (<see cref="DeployKubernetesCommands"/>).
+/// <c>trax deploy init</c> writes a first <c>trax.deploy.json</c>.
 /// </summary>
 internal static class DeployCommand
 {
@@ -19,8 +20,8 @@ internal static class DeployCommand
         var target = new Option<string?>("--target")
         {
             Description =
-                "Where to deploy: compose writes a compose stack for a rootless podman host; aws deploys the "
-                + "--env environment. Default: aws when --env is given, else compose.",
+                "Where to deploy without --env: compose (the default) writes a compose stack for a rootless podman "
+                + "host. With --env the environment's target decides, and --target, if given, must match it.",
         };
         var env = DeployAwsCommands.EnvOption(required: false);
         var file = DeployAwsCommands.FileOption();
@@ -55,7 +56,7 @@ internal static class DeployCommand
         return command;
     }
 
-    private static async Task<int> RunActionAsync(
+    private static Task<int> RunActionAsync(
         ParseResult parseResult,
         Option<string?> target,
         Option<string> env,
@@ -63,37 +64,124 @@ internal static class DeployCommand
         Option<DirectoryInfo?> output,
         Option<bool> build,
         CancellationToken ct
+    ) =>
+        DispatchAsync(
+            parseResult.GetValue(file)?.FullName
+                ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName),
+            parseResult.GetValue(target),
+            parseResult.GetValue(env),
+            parseResult.GetValue(output)?.FullName,
+            parseResult.GetValue(build),
+            new DotnetHostExporter(ct),
+            parseResult.InvocationConfiguration.Output,
+            parseResult.InvocationConfiguration.Error,
+            ct
+        );
+
+    /// <summary>
+    /// Picks the target: with <paramref name="environment"/>, the environment's own, which a <paramref name="target"/>
+    /// given beside it must match; without, <paramref name="target"/> or compose.
+    /// </summary>
+    internal static async Task<int> DispatchAsync(
+        string path,
+        string? target,
+        string? environment,
+        string? outDir,
+        bool build,
+        IHostExporter exporter,
+        TextWriter stdout,
+        TextWriter stderr,
+        CancellationToken ct
     )
     {
-        var stdout = parseResult.InvocationConfiguration.Output;
-        var stderr = parseResult.InvocationConfiguration.Error;
-        var path =
-            parseResult.GetValue(file)?.FullName
-            ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
-        var environment = parseResult.GetValue(env);
-        var chosen = parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
-        if (!string.Equals(chosen, "aws", StringComparison.Ordinal))
-            return await RunAsync(
-                    chosen,
+        if (environment is null)
+            return await DispatchWithoutEnvironmentAsync(
                     path,
-                    parseResult.GetValue(output)?.FullName,
-                    parseResult.GetValue(build),
-                    new DotnetHostExporter(ct),
-                    BuildImageAsync,
+                    target,
+                    outDir,
+                    build,
+                    exporter,
                     stdout,
                     stderr
                 )
                 .ConfigureAwait(false);
-        if (environment is null)
+        string chosen;
+        try
         {
-            await stderr
-                .WriteLineAsync("--target aws deploys one environment: name it with --env.")
-                .ConfigureAwait(false);
+            var file = await DeployFile.ReadAsync(path).ConfigureAwait(false);
+            chosen = file.Environment(environment).Target ?? "";
+            if (target is not null && !string.Equals(target, chosen, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"--target {target} does not match environment '{environment}', whose target is {chosen}. "
+                        + "Leave --target out, or change the environment's target."
+                );
+        }
+        catch (Exception ex) when (Reported(ex))
+        {
+            await stderr.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
-        return await DeployAwsCommands
-            .DeployAsync(path, environment, new DotnetHostExporter(ct), stdout, stderr, ct)
-            .ConfigureAwait(false);
+        return chosen switch
+        {
+            DeployEnvironment.Aws => await DeployAwsCommands
+                .DeployAsync(path, environment, exporter, stdout, stderr, ct)
+                .ConfigureAwait(false),
+            DeployEnvironment.Kubernetes => await DeployKubernetesCommands
+                .DeployAsync(path, environment, exporter, stdout, stderr, ct)
+                .ConfigureAwait(false),
+            _ => await RunAsync(
+                    DeployEnvironment.Compose,
+                    path,
+                    outDir,
+                    build,
+                    exporter,
+                    BuildImageAsync,
+                    stdout,
+                    stderr,
+                    environment
+                )
+                .ConfigureAwait(false),
+        };
+    }
+
+    private static async Task<int> DispatchWithoutEnvironmentAsync(
+        string path,
+        string? target,
+        string? outDir,
+        bool build,
+        IHostExporter exporter,
+        TextWriter stdout,
+        TextWriter stderr
+    )
+    {
+        switch (target ?? DeployEnvironment.Compose)
+        {
+            case DeployEnvironment.Aws:
+                await stderr
+                    .WriteLineAsync("--target aws deploys one environment: name it with --env.")
+                    .ConfigureAwait(false);
+                return 1;
+            case DeployEnvironment.Kubernetes:
+                await stderr
+                    .WriteLineAsync(
+                        "--target kubernetes deploys one environment: name it with --env. 'trax deploy init "
+                            + "--target kubernetes' writes one to start from."
+                    )
+                    .ConfigureAwait(false);
+                return 1;
+            default:
+                return await RunAsync(
+                        target ?? DeployEnvironment.Compose,
+                        path,
+                        outDir,
+                        build,
+                        exporter,
+                        BuildImageAsync,
+                        stdout,
+                        stderr
+                    )
+                    .ConfigureAwait(false);
+        }
     }
 
     private static Command CreateInit()
@@ -108,7 +196,9 @@ internal static class DeployCommand
         };
         var target = new Option<string>("--target")
         {
-            Description = "aws also writes a production environment to fill in.",
+            Description =
+                "aws also writes a production environment to fill in; kubernetes a staging one, on the try "
+                + "profile with Postgres in the cluster.",
             DefaultValueFactory = _ => "compose",
         };
         var region = new Option<string?>("--region")
@@ -159,9 +249,9 @@ internal static class DeployCommand
     {
         try
         {
-            if (target is not ("compose" or "aws"))
+            if (target is not ("compose" or "aws" or "kubernetes"))
                 throw new InvalidOperationException(
-                    $"--target '{target}' is not one trax deploys to. Use compose or aws."
+                    $"--target '{target}' is not one trax deploys to. Use compose, aws or kubernetes."
                 );
             var path = Path.Combine(directory, DeployFile.FileName);
             if (File.Exists(path) && !force)
@@ -172,10 +262,18 @@ internal static class DeployCommand
             if (string.Equals(target, "aws", StringComparison.Ordinal))
                 file.Environments["production"] = new DeployEnvironment
                 {
+                    Target = DeployEnvironment.Aws,
                     Profile = DeployEnvironment.Production,
                     Region = region ?? "us-east-1",
                     Domain = domain ?? $"{file.App}.example.com",
                     Auth = new DeployAuth(),
+                };
+            if (string.Equals(target, "kubernetes", StringComparison.Ordinal))
+                file.Environments["staging"] = new DeployEnvironment
+                {
+                    Target = DeployEnvironment.Kubernetes,
+                    Profile = DeployEnvironment.Try,
+                    Database = new DeployEnvironmentDatabase { InCluster = true },
                 };
             await File.WriteAllTextAsync(path, file.Write()).ConfigureAwait(false);
             await stdout.WriteLineAsync($"Wrote {path}:").ConfigureAwait(false);
@@ -185,10 +283,16 @@ internal static class DeployCommand
                     .ConfigureAwait(false);
             await stdout
                 .WriteLineAsync(
-                    string.Equals(target, "aws", StringComparison.Ordinal)
-                        ? "Check the production environment's region, domain and hostedZoneId, name the settings and "
-                            + "secrets the hosts read, then run 'trax deploy plan --env production'."
-                        : "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'."
+                    target switch
+                    {
+                        "aws" =>
+                            "Check the production environment's region, domain and hostedZoneId, name the settings "
+                                + "and secrets the hosts read, then run 'trax deploy plan --env production'.",
+                        "kubernetes" =>
+                            "Name the settings and secrets the hosts read, then run 'trax deploy plan --env staging'.",
+                        _ =>
+                            "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'.",
+                    }
                 )
                 .ConfigureAwait(false);
             return 0;
@@ -208,41 +312,26 @@ internal static class DeployCommand
         IHostExporter exporter,
         Func<string, string, Task> buildImage,
         TextWriter stdout,
-        TextWriter stderr
+        TextWriter stderr,
+        string? environment = null
     )
     {
         try
         {
             if (!string.Equals(target, "compose", StringComparison.Ordinal))
                 throw new InvalidOperationException(
-                    $"--target '{target}' is not one trax deploys to. Use compose, or aws with --env."
+                    $"--target '{target}' is not one trax deploys to. Use compose, or aws or kubernetes with --env."
                 );
             var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
+            // Without an environment the stack is for podman, as before environments named their target.
+            var engine = environment is null
+                ? DeployEnvironment.Podman
+                : file.Environment(environment).Engine ?? DeployEnvironment.Podman;
             var exports = await ExportAsync(file, filePath, exporter, stdout).ConfigureAwait(false);
 
             var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
-            var files = ComposeTarget.Render(file, exports);
-            var compose = Path.Combine(dir, ComposeTarget.ComposeFile);
-            if (
-                File.Exists(compose)
-                && !(await FirstLineAsync(compose).ConfigureAwait(false))?.StartsWith(
-                    ComposeTarget.Header,
-                    StringComparison.Ordinal
-                )
-                    is true
-            )
-                throw new InvalidOperationException(
-                    $"{compose} exists and trax did not write it. Move it aside, or give another --out."
-                );
-            Directory.CreateDirectory(dir);
-            foreach (var (name, content) in files)
-            {
-                await File.WriteAllTextAsync(Path.Combine(dir, name), content)
-                    .ConfigureAwait(false);
-                await stdout
-                    .WriteLineAsync($"Wrote {Path.Combine(dir, name)}")
-                    .ConfigureAwait(false);
-            }
+            await WriteStackAsync(dir, ComposeTarget.Render(file, exports, engine), stdout)
+                .ConfigureAwait(false);
 
             if (build)
                 foreach (var (name, service) in file.Services)
@@ -259,7 +348,7 @@ internal static class DeployCommand
 
             await stdout
                 .WriteLineAsync(
-                    $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run 'podman compose up -d' in {dir}."
+                    $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run '{engine} compose up -d' in {dir}."
                 )
                 .ConfigureAwait(false);
             return 0;
@@ -303,6 +392,33 @@ internal static class DeployCommand
                 .ConfigureAwait(false);
         }
         return exports;
+    }
+
+    /// <summary>Writes the stack's files into <paramref name="dir"/>, unless a compose file trax did not write is there.</summary>
+    private static async Task WriteStackAsync(
+        string dir,
+        IReadOnlyList<(string Path, string Content)> files,
+        TextWriter stdout
+    )
+    {
+        var compose = Path.Combine(dir, ComposeTarget.ComposeFile);
+        if (
+            File.Exists(compose)
+            && !(await FirstLineAsync(compose).ConfigureAwait(false))?.StartsWith(
+                ComposeTarget.Header,
+                StringComparison.Ordinal
+            )
+                is true
+        )
+            throw new InvalidOperationException(
+                $"{compose} exists and trax did not write it. Move it aside, or give another --out."
+            );
+        Directory.CreateDirectory(dir);
+        foreach (var (name, content) in files)
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, name), content).ConfigureAwait(false);
+            await stdout.WriteLineAsync($"Wrote {Path.Combine(dir, name)}").ConfigureAwait(false);
+        }
     }
 
     // The first line of a file, or null when it is empty.

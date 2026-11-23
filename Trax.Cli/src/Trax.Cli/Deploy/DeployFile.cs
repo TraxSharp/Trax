@@ -15,7 +15,12 @@ namespace Trax.Cli.Deploy;
 internal sealed partial class DeployFile
 {
     public const string FileName = "trax.deploy.json";
-    public const int CurrentVersion = 1;
+
+    /// <summary>
+    /// The version written. Version 1 had no <c>target</c> on an environment; every environment it names is
+    /// <c>aws</c>, and it is read as such.
+    /// </summary>
+    public const int CurrentVersion = 2;
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -46,12 +51,15 @@ internal sealed partial class DeployFile
     /// <summary>Configuration the deployment must set that is secret, as environment names (<c>Stripe__ApiKey</c>).</summary>
     public List<string> Secrets { get; set; } = [];
 
-    /// <summary>The cloud environments this app deploys to, by name (<c>production</c>, <c>staging</c>): one stack each.</summary>
+    /// <summary>
+    /// The environments this app deploys to, by name (<c>production</c>, <c>staging</c>), each on the target it names:
+    /// a compose stack, an AWS stack or a Kubernetes namespace.
+    /// </summary>
     public SortedDictionary<string, DeployEnvironment> Environments { get; set; } =
         new(StringComparer.Ordinal);
 
     /// <summary>
-    /// The environment <paramref name="name"/>, checked for a cloud deploy. Throws naming the first problem.
+    /// The environment <paramref name="name"/>, checked for a deploy to its target. Throws naming the first problem.
     /// </summary>
     public DeployEnvironment Environment(string name)
     {
@@ -81,57 +89,19 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem($"profile '{env.Profile}' is not production or try.")
             );
-        if (string.IsNullOrWhiteSpace(env.Region))
-            throw new InvalidOperationException(Problem("it names no region (us-west-2)."));
-        if (
-            string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
-            && string.IsNullOrWhiteSpace(env.Domain)
-        )
-            throw new InvalidOperationException(
-                Problem(
-                    "the production profile needs a domain: HTTPS needs a certificate, and a certificate needs a "
-                        + "domain. Name one, or use the try profile, which serves on a CloudFront address."
-                )
-            );
-        if (
-            string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
-            && env.Domain is not null
-        )
-            throw new InvalidOperationException(
-                Problem("the try profile serves on a CloudFront address and takes no domain.")
-            );
-        CheckNetworkAndCounts(name, env);
-        CheckSettingsAndAuth(name, env);
-        return env;
-    }
-
-    private void CheckNetworkAndCounts(string name, DeployEnvironment env)
-    {
-        string Problem(string what) => $"Environment '{name}': {what}";
-        if (env.Network is { } network)
-        {
-            if (string.IsNullOrWhiteSpace(network.VpcId) || string.IsNullOrWhiteSpace(network.Cidr))
-                throw new InvalidOperationException(
-                    Problem("network needs vpcId and cidr (the VPC's address range).")
-                );
-            if (network.PublicSubnets.Count < 2 || network.PrivateSubnets.Count < 2)
-                throw new InvalidOperationException(
-                    Problem(
-                        "network needs at least two public and two private subnets, in different availability "
-                            + "zones: a load balancer and a database each span two."
-                    )
-                );
-        }
+        CheckTarget(name, env, Problem);
         foreach (var service in env.Counts.Keys)
             if (!Services.ContainsKey(service))
                 throw new InvalidOperationException(
                     Problem($"counts names '{service}', which is not a service.")
                 );
+        if (!string.Equals(env.Target, DeployEnvironment.Compose, StringComparison.Ordinal))
+            CheckSettings(env, Problem);
+        return env;
     }
 
-    private void CheckSettingsAndAuth(string name, DeployEnvironment env)
+    private void CheckSettings(DeployEnvironment env, Func<string, string> problem)
     {
-        string Problem(string what) => $"Environment '{name}': {what}";
         var provided = env.Auth is { Kind: DeployAuth.Cognito } auth
             ? new HashSet<string>([auth.AuthorityKey, auth.AudienceKey], StringComparer.Ordinal)
             : [];
@@ -140,25 +110,15 @@ internal sealed partial class DeployFile
             .ToList();
         if (missing.Count > 0)
             throw new InvalidOperationException(
-                Problem(
+                problem(
                     $"settings has no value for {string.Join(", ", missing)}, which the app lists as settings."
                 )
             );
         var unknown = env.Settings.Keys.Where(k => !Settings.Contains(k)).ToList();
         if (unknown.Count > 0)
             throw new InvalidOperationException(
-                Problem(
+                problem(
                     $"settings gives {string.Join(", ", unknown)}, which the app does not list under \"settings\"."
-                )
-            );
-        if (
-            env.Auth is { } a
-            && !string.Equals(a.Kind, DeployAuth.Cognito, StringComparison.Ordinal)
-        )
-            throw new InvalidOperationException(
-                Problem(
-                    $"auth kind '{a.Kind}' is not one trax creates. Use cognito, or leave auth out and give an "
-                        + "existing issuer's address in settings."
                 )
             );
     }
@@ -216,15 +176,22 @@ internal sealed partial class DeployFile
     {
         string Problem(string what) => $"{path}: {what}";
 
-        if (Version != CurrentVersion)
+        if (Version is not (1 or CurrentVersion))
             throw new InvalidOperationException(
                 Problem(
                     string.Create(
                         CultureInfo.InvariantCulture,
-                        $"version {Version} is not one this trax reads ({CurrentVersion}). Update the trax tool."
+                        $"version {Version} is not one this trax reads (1 or {CurrentVersion}). Update the trax tool."
                     )
                 )
             );
+        if (Version == 1)
+        {
+            // Version 1 deployed every environment to AWS, and had no target to say so.
+            foreach (var env in Environments.Values)
+                env.Target ??= DeployEnvironment.Aws;
+            Version = CurrentVersion;
+        }
         if (!Name.IsMatch(App))
             throw new InvalidOperationException(
                 Problem(

@@ -110,6 +110,11 @@
         "resolved": "29.0.1",
         "contentHash": "R2oo/wR3mXrbdK04Yraf+KhB01f/lyBkLQZcdxYt9XKE6tV+Af45MEk+jfbsew1SVvrAO0WvkIRwGYUozKCJvQ=="
       },
+      "Fractions": {
+        "type": "Transitive",
+        "resolved": "8.3.2",
+        "contentHash": "q0Xzg9nmBd1Y0fTn/EEG84dWqd02EogojtdBh/MUmtHhwIJBMJk3jo+4MRDCdLfi6lVDXD8UZBA0QkBH3FUh8A=="
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -262,6 +267,11 @@
         "resolved": "6.0.0",
         "contentHash": "CPc6tWO1LAer3IzfZufDBRL+UZQcj5uS207NHALQzP84Vp/z6wF0Aa0YZImOQY8iStY0A2zI/e3ihKNPfUm8XA=="
       },
+      "YamlDotNet": {
+        "type": "Transitive",
+        "resolved": "18.0.0",
+        "contentHash": "ptHVgcYmLejGuWXV7RMFoEqFKYMXnieOlWLPzEslfDtzZ9ngMhjYwykfqjBN2+fMEAEyobozkj07lKEpR4dssA=="
+      },
       "trax.cli": {
         "type": "Project",
         "dependencies": {
@@ -277,6 +287,7 @@
           "AWSSDK.SecurityToken": "[4.0.101.1, )",
           "AWSSDK.SimpleSystemsManagement": "[4.0.104.1, )",
           "GraphQL-Parser": "[9.5.1, )",
+          "KubernetesClient": "[21.0.8, )",
           "Microsoft.OpenApi.Readers": "[1.6.31, )",
           "Scriban": "[7.5.0, )",
           "System.CommandLine": "[2.0.12, )",
@@ -453,6 +464,16 @@
         "requested": "[9.5.1, )",
         "resolved": "9.5.1",
         "contentHash": "pUYpupTsVyNcKemko8f0iknJa2z/oZsfzwb4crgEFN9/pKf3k35gxVXDDOkD3NVPF1ea6GUV0jgxkjCozFj7Fg=="
+      },
+      "KubernetesClient": {
+        "type": "CentralTransitive",
+        "requested": "[21.0.8, )",
+        "resolved": "21.0.8",
+        "contentHash": "oAu5gvmEktdVH6yQ3lwumP/G+4x1S7OQahn97MAfJMa+KNM/tLOrmHJPEZ3sI6yh1o0XS+U/3jYtp+6dRafJQQ==",
+        "dependencies": {
+          "Fractions": "8.3.2",
+          "YamlDotNet": "18.0.0"
+        }
       },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "CentralTransitive",

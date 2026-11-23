@@ -1,24 +1,45 @@
-using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
-
 namespace Trax.Cli.Deploy;
 
-/// <summary>One cloud environment: a stack of its own.</summary>
+/// <summary>One environment: a stack or a namespace of its own, on the target it names.</summary>
 internal sealed class DeployEnvironment
 {
     public const string Production = "production";
     public const string Try = "try";
 
+    public const string Compose = "compose";
+    public const string Aws = "aws";
+    public const string Kubernetes = "kubernetes";
+
+    public const string Podman = "podman";
+    public const string Docker = "docker";
+
+    /// <summary>Where the environment runs: <c>compose</c>, <c>aws</c> (ECS Fargate) or <c>kubernetes</c>.</summary>
+    public string? Target { get; set; }
+
+    /// <summary>The engine a compose environment's stack is written for: <c>podman</c> (the default) or <c>docker</c>.</summary>
+    public string? Engine { get; set; }
+
+    /// <summary>A kubernetes environment's namespace. Without it, <c>&lt;app&gt;-&lt;environment&gt;</c>.</summary>
+    public string? Namespace { get; set; }
+
     /// <summary>
-    /// <c>production</c>: private subnets behind a NAT gateway, a domain with its certificate, a Multi-AZ database
-    /// kept on delete. <c>try</c>: public subnets locked by security groups, a CloudFront address, a small database
-    /// deleted with the stack.
+    /// The registry a kubernetes environment's images are pushed to and pulled from (<c>ghcr.io/acme</c>). Without
+    /// it the images stay in the local container runtime, for a cluster that reads it.
+    /// </summary>
+    public string? Registry { get; set; }
+
+    /// <summary>A kubernetes environment's Postgres: an existing one named by secret, or one in the cluster.</summary>
+    public DeployEnvironmentDatabase? Database { get; set; }
+
+    /// <summary>
+    /// On aws, <c>production</c>: private subnets behind a NAT gateway, a domain with its certificate, a Multi-AZ
+    /// database kept on delete. <c>try</c>: public subnets locked by security groups, a CloudFront address, a small
+    /// database deleted with the stack. On kubernetes, only <c>try</c> may run Postgres and RabbitMQ in the cluster.
     /// </summary>
     public string Profile { get; set; } = Production;
 
-    public string Region { get; set; } = "";
+    /// <summary>An aws environment's region (<c>us-west-2</c>).</summary>
+    public string? Region { get; set; }
 
     /// <summary>The host name the app serves on (<c>orders.example.com</c>). Production only.</summary>
     public string? Domain { get; set; }

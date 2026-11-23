@@ -95,6 +95,34 @@ public class MachineGenerateFromPackedToolTests
         new TurnstileReplaying(corpus).SelfCheck().Should().BeEmpty();
     }
 
+    // The tool ships its dependencies' assemblies, so the package carries their notices at its root.
+    [Test]
+    public async Task The_package_carries_the_third_party_notices()
+    {
+        var tool = await PackAndUnpackTheToolAsync().ConfigureAwait(false);
+
+        var packed = await File.ReadAllTextAsync(
+                Path.Combine(tool, "..", "..", "..", "THIRD-PARTY-NOTICES.txt")
+            )
+            .ConfigureAwait(false);
+
+        packed
+            .Should()
+            .Be(
+                await File.ReadAllTextAsync(
+                        Path.Combine(
+                            RepoFolder("Trax.Cli"),
+                            "src",
+                            "Trax.Cli",
+                            "THIRD-PARTY-NOTICES.txt"
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )
+            .And.Contain("KubernetesClient")
+            .And.Contain("---- Apache-2.0 ----");
+    }
+
     // An outside developer installs both packages and nothing else of this repository: the engine from its npm tarball
     // and the tool from its nupkg. A break that shows only in what is published (an export-map entry, a file left out
     // of the tarball) fails here instead of in the next outside developer's build.
