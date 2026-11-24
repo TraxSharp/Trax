@@ -53,6 +53,16 @@ public partial class TraxGraphQLBuilder
         return this;
     }
 
-    private TraxPaging ResolvePaging(TraxQueryModelAttribute attribute) =>
-        attribute.Paging == TraxPaging.Default ? DefaultPagingValue : attribute.Paging;
+    private TraxPaging ResolvePaging(Type entityType, TraxQueryModelAttribute attribute)
+    {
+        if (!Enum.IsDefined(attribute.Paging))
+        {
+            throw new InvalidOperationException(
+                $"[TraxQueryModel] on {entityType.Name}: Paging = {attribute.Paging} is not a "
+                    + "TraxPaging value. Set it to Default, None, Cursor or Offset."
+            );
+        }
+
+        return attribute.Paging == TraxPaging.Default ? DefaultPagingValue : attribute.Paging;
+    }
 }
