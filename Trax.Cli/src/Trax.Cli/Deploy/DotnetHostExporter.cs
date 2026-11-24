@@ -92,6 +92,10 @@ internal sealed class DotnetHostExporter(CancellationToken ct = default) : IHost
         return psi;
     }
 
+    /// <summary>The value every secret has in the export: <c>trax-deploy-export-placeholder-secret</c>, in base64.</summary>
+    internal const string SecretPlaceholder =
+        "dHJheC1kZXBsb3ktZXhwb3J0LXBsYWNlaG9sZGVyLXNlY3JldA==";
+
     /// <summary>
     /// What the export runs with: a value for every connection string, setting and secret the deployment will
     /// supply, so a host that reads them at startup starts. None of them reaches anything: the export opens no
@@ -103,14 +107,17 @@ internal sealed class DotnetHostExporter(CancellationToken ct = default) : IHost
         {
             [$"ConnectionStrings__{file.ConnectionStrings.Trax}"] =
                 "Host=trax-deploy-export.invalid;Database=trax;Username=trax;Password=trax",
+            // amqps, since UseRabbitMq refuses cleartext to a host that is not loopback unless the host allows it,
+            // and a host that allows it only where its deployment says so would refuse the export.
             [$"ConnectionStrings__{file.ConnectionStrings.RabbitMq}"] =
-                "amqp://trax:trax@trax-deploy-export.invalid:5672",
+                "amqps://trax:trax@trax-deploy-export.invalid:5671",
         };
         // Settings are often addresses (an issuer, an origin), which a host may check are URLs when it starts.
         foreach (var name in file.Settings)
             values[name] = "https://trax-deploy-export.invalid";
+        // Secrets are often keys a host decodes and checks the length of at start: this one is base64 of 37 bytes.
         foreach (var name in file.Secrets)
-            values[name] = "trax-deploy-export";
+            values[name] = SecretPlaceholder;
         // A host with tailnet sign-in refuses to start without both. The export serves nothing, and the target
         // decides from the report whether the scheme may be deployed there at all.
         values[DeployExposure.Variable] = DeployExposure.Tailnet;

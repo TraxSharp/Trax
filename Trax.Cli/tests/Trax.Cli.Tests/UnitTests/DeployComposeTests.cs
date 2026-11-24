@@ -1027,6 +1027,29 @@ public partial class DeployComposeTests
         psi.Environment["X"].Should().Be("y");
     }
 
+    [Test]
+    public void The_export_stand_ins_pass_the_checks_a_host_makes_at_start()
+    {
+        var file = new DeployFile
+        {
+            App = "orders",
+            ConnectionStrings = new DeployConnectionStrings { RabbitMq = "Broker" },
+            Secrets = ["Broadcast__SigningKey"],
+        };
+
+        var values = DotnetHostExporter.Placeholders(file);
+
+        // UseRabbitMq refuses cleartext to a host that is not loopback unless the host allows it.
+        new Uri(values["ConnectionStrings__Broker"])
+            .Scheme.Should()
+            .Be("amqps");
+        // A signing key is decoded and refused under 32 bytes.
+        Convert
+            .FromBase64String(values["Broadcast__SigningKey"])
+            .Length.Should()
+            .BeGreaterThanOrEqualTo(32);
+    }
+
     private async Task<string> WriteAsync(DeployFile file)
     {
         var path = Path.Combine(_dir, DeployFile.FileName);
