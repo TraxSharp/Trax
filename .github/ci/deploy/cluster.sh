@@ -103,6 +103,18 @@ for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/name=hub -o name); d
     fail "$pod has a writable root"
 done
 
+say "a pod that is not the app's cannot reach its database"
+# The namespace's default-deny NetworkPolicy admits only the app's own pods. k3s enforces NetworkPolicy.
+probe_pod() {
+  kubectl -n "$NS" run "$1" --restart=Never --rm -i --quiet \
+    --image=docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec \
+    --labels="$2" --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":65534,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"'"$1"'","image":"docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec","command":["nc","-z","-w","5","database","5432"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
+}
+# The control: the same probe labelled as the app gets through, so a refusal above is the policy, not the probe.
+probe_pod insider "trax/app=traxci" >/dev/null 2>&1 || fail "the probe could not reach Postgres even as the app"
+if probe_pod outsider "role=outsider" >/dev/null 2>&1; then fail "a pod outside the app reached Postgres"; fi
+echo "an app pod reached Postgres; an outside pod was refused"
+
 say "a release that cannot start is rolled back"
 jq '.environments.cluster.settings.Trax__Proxy__KnownNetworks = "not-a-network"' "$DIR/trax.deploy.ci.json" \
   > "$DIR/trax.deploy.broken.json"

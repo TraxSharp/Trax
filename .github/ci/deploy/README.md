@@ -12,7 +12,8 @@ What `cluster.sh` proves, in order:
 
 1. a first deploy: the namespace's Secret is checked, Postgres comes up in the cluster under its `limits`, the
    migrate Job runs, the hub rolls out, `/trax/health` answers and GraphQL answers a query;
-2. every Trax pod runs with a read-only root, `hostUsers: false` and no service account token;
+2. every Trax pod runs with a read-only root, `hostUsers: false` and no service account token, and the namespace's
+   default-deny NetworkPolicy holds: a pod labelled as the app reaches Postgres, one that is not is refused;
 3. a release that cannot start (a setting the hub refuses at start) is rolled back: the deploy fails at the
    Deployment's progress deadline naming the hub, and the hub that was serving serves again on the old image.
 
