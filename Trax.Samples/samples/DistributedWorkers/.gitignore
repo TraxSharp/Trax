@@ -2,3 +2,5 @@
 # .env a podman environment reads its secret values from.
 .trax/
 .env
+# What Trax.Samples/scripts/recordings/deploy.sh writes beside trax.deploy.json while it records.
+trax.deploy.rec-*.json

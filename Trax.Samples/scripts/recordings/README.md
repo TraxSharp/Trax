@@ -1,7 +1,7 @@
 # Sample recordings
 
 traxsharp.net's landing page lets a reader try samples in the browser without running anything: follow a food
-order, watch agents work a board, crash a refund and chat over WebSockets. Each demo plays recordings of the real sample, and these scripts make them. Each one drives
+order, watch agents work a board, crash a refund, chat over WebSockets and watch a release roll out. Each demo plays recordings of the real sample, and these scripts make them. Each one drives
 its sample's running host over the same requests the sample's own page or client sends, and writes down every
 request, response and pushed event, with the time it arrived. Nothing the website shows is made up; where a sample
 takes free input, the recorder records a few presets instead. A sixth script records the operations dashboard that
@@ -24,6 +24,7 @@ script:
 | ChatService | `node chat-service.mjs` | `CHAT_HOST`, default `localhost:5210` | Alice and Bob in one room, a small tree of lines to pick from, a listener who is refused, and Charlie added at every point of the conversation |
 | SignalRBroadcaster | `node signalr-broadcaster.mjs` | `SIGNALR_HOST`, default `localhost:5270` | the refused connection, sign-in, every kind of ping and the events the hub pushes, sign-out |
 | PersistedOperations | `node persisted-operations.mjs` | `PERSISTED_OPERATIONS_HOST`, default `localhost:5240` | every call and management action in each state the store can be in; the landing page no longer shows it |
+| Deploys | `deploy.sh <shape> <target>` in a throwaway VM, then `node deploy.mjs` | k3s or podman under systemd, set up as [deploy/README.md](deploy/README.md) says | real `trax deploy` runs of each shape an app can take: a first deploy, a release while a run is busy, a broken release, and who can reach what |
 | The dashboard | `node dashboard.mjs` | starts Scheduling, Recovery, PersistedOperations and CheckIn itself | every page, filter, row and write of the operations dashboard, from all four hosts |
 
 Each script writes its raw recording under `out/` (gitignored). Add `--copy-to ../../../Trax.Website/src/data` to

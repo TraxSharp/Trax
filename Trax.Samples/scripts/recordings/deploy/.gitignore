@@ -1,0 +1,4 @@
+# What deploy.sh writes beside each file while it records.
+trax.deploy.rec-*.json
+.trax/
+.env
