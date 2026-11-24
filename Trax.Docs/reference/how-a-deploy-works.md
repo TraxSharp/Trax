@@ -77,28 +77,20 @@ systemd. It does not run ECS, EKS or any managed cluster; see
 
 ## The order of a cluster deploy
 
-```mermaid
-flowchart TD
-    A[Ask each host what it needs] --> B[Check the namespace is this app's and its Secret has every key]
-    B --> C[Create the namespace when it is missing]
-    C --> D[Build and push the images]
-    D --> E[Egress admission policy, when a service names egress]
-    E --> F[Network policies]
-    F --> G[Postgres and RabbitMQ in the cluster, on try]
-    G --> H[Migrate Job]
-    H -- fails --> X[Stop. Nothing has moved.]
-    H --> I[New tailnet proxy secret, when exposed]
-    I --> J{Did any service run before?}
-    J -- no --> L[Apply the services and wait for each to roll out]
-    J -- yes --> K[Drain Job]
-    K -- still busy at the timeout --> Y[Stop. Nothing has moved, and the drain is ended.]
-    K --> L
-    L -- a service does not roll out --> R[Put every service back as it was]
-    R --> M[Resume Job]
-    L -- after a drain --> M
-    L -- first deploy --> Z[Done]
-    M --> Z
-```
+1. Ask each host what it needs.
+2. Check the namespace is this app's and its Secret has every key. A missing key stops the deploy here, with
+   nothing made.
+3. Create the namespace when it is missing.
+4. Build and push the images.
+5. Apply the egress admission policy, when a service names egress.
+6. Apply the network policies.
+7. Bring up Postgres and RabbitMQ in the cluster, on the `try` profile.
+8. Run the migrate Job. If it fails, the deploy stops: no service has moved.
+9. Write a new tailnet proxy secret, when the environment is exposed on a tailnet.
+10. If a service ran before, run the drain Job. If something is still busy at the timeout, the deploy stops, nothing
+    has moved, and the drain is ended. A first deploy skips this step.
+11. Apply the services and wait for each to roll out. If one does not, put every service back as it was.
+12. After a drain, run the resume Job, whether the roll succeeded or was rolled back.
 
 Each step is where it is for a reason:
 

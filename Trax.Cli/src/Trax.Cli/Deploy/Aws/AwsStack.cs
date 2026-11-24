@@ -1435,6 +1435,12 @@ internal static partial class AwsStack
         container["StopTimeout"] = StopTimeoutSeconds;
         // A Trax host writes nothing outside /tmp, which is the task's own scratch volume.
         container["ReadonlyRootFilesystem"] = hardening.ReadOnlyRoot;
+        // Every Linux capability dropped, as on every other target. A Trax host needs none, and Fargate allows only
+        // dropping (and adding SYS_PTRACE), so this is the whole of ServiceHardening's capability set here.
+        container["LinuxParameters"] = new JsonObject
+        {
+            ["Capabilities"] = new JsonObject { ["Drop"] = new JsonArray("ALL") },
+        };
         if (hardening.ReadOnlyRoot)
             container["MountPoints"] = new JsonArray(
                 new JsonObject { ["SourceVolume"] = ScratchVolume, ["ContainerPath"] = "/tmp" }

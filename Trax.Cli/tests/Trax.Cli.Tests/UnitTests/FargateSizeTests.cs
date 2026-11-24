@@ -77,7 +77,7 @@ public class FargateSizeTests
     }
 
     [Test]
-    public void Every_trax_container_on_aws_has_a_read_only_root_and_a_scratch_tmp()
+    public void Every_trax_container_on_aws_drops_every_capability_and_has_a_read_only_root_and_a_scratch_tmp()
     {
         var runtime = AwsStackTemplateTests.Templates().Runtime;
         var definitions = ((JsonObject)runtime["Resources"].NotNull())
@@ -100,6 +100,14 @@ public class FargateSizeTests
                 .Single()
                 .NotNull();
             container["ReadonlyRootFilesystem"].NotNull().GetValue<bool>().Should().BeTrue(id);
+            container["LinuxParameters"]
+                .NotNull()["Capabilities"]
+                .NotNull()["Drop"]
+                .NotNull()
+                .AsArray()
+                .Select(c => c.NotNull().GetValue<string>())
+                .Should()
+                .Equal(["ALL"], id);
             container["MountPoints"]
                 .NotNull()
                 .AsArray()
