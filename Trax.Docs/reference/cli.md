@@ -1324,6 +1324,7 @@ What differs from a cluster, and why:
 |---|---|
 | A namespace per environment | A network per environment; every pod's name starts with `<app>-<env>`, since podman's pod names are global. `namespace` and `registry` are refused. |
 | A Service in front of each hub, Postgres and RabbitMQ | No Service: on the network each container answers by its own name (`database`, `rabbitmq`), the name a Service gives it, so the connection strings are the same. A hub with a `port` is published on `127.0.0.1:<port>`. |
+| Readiness and liveness probes on the health endpoint | None. `kube play` runs an `httpGet` probe as `curl` inside the container, which a Trax image does not have, so a liveness probe would restart the hub every few dozen seconds, and with it the startup recovery that fails its live runs. Nothing routes on readiness; check `/trax/health` from outside. |
 | Postgres as a StatefulSet | A Deployment of one on a claim, which podman keeps as the named volume `<app>-<env>-data`; `kube play` has no StatefulSet. |
 | A migrate Job the deploy waits on | The migration runs in the migrator's unit before its pod starts (after waiting up to two minutes for this host's Postgres), and fails the unit unless it exits 0, printing the end of its log. Every other service's unit `Requires=` the migrator's. |
 | `hostUsers: false` | `UserNS=nomap` on every unit, as compose: rootless podman cannot map a range per pod. |

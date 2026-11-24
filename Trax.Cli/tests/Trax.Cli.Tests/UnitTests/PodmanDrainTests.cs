@@ -95,6 +95,17 @@ public class PodmanDrainTests
     }
 
     [Test]
+    public void A_service_pod_carries_no_probe_podman_would_run_as_curl()
+    {
+        // podman turns an httpGet probe into curl inside the container, which the image lacks: the liveness probe
+        // would restart the hub every few dozen seconds, and with it its startup recovery, mid-drain.
+        Files(Render())["orders-home-hub.yaml"]
+            .Should()
+            .NotContain("livenessProbe")
+            .And.NotContain("readinessProbe");
+    }
+
+    [Test]
     public void A_first_release_does_not_drain()
     {
         var stack = Render();

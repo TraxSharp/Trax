@@ -399,6 +399,12 @@ internal static class PodmanTarget
                 c.Image = FullImage(c.Image);
                 // A preStop gives a cluster's Service time to stop routing; a unit's restart stops the pod outright.
                 c.Lifecycle = null;
+                // podman runs an httpGet probe as curl inside the container, which a Trax image does not have, so the
+                // probe always fails and a liveness probe restarts the container every few dozen seconds. A restarted
+                // hub runs its startup recovery, which fails the runs still live on it, and a drain could never hold
+                // one. Nothing routes on readiness under podman either; the deploy checks /trax/health from outside.
+                c.LivenessProbe = null;
+                c.ReadinessProbe = null;
             }
         }
         return o;
