@@ -14,7 +14,12 @@ What `cluster.sh` proves, in order:
    migrate Job runs, the hub rolls out, `/trax/health` answers and GraphQL answers a query;
 2. every Trax pod runs with a read-only root, `hostUsers: false` and no service account token, and the namespace's
    default-deny NetworkPolicy holds: a pod labelled as the app reaches Postgres, one that is not is refused;
-3. a release that cannot start (a setting the hub refuses at start) is rolled back: the deploy fails at the
+3. a deploy drains before it rolls: with a run InProgress on the serving hub (a finished hello-world run put back,
+   standing for a long one), the drain Job reports it busy and the hub's image does not change until the run ends;
+   then the hub rolls with the new copy beside the old (two hub pods at once), a probe inside the namespace hits
+   `/trax/health` through the Service five times a second for the whole deploy and no probe fails, the run is still
+   the way it was ended (the new hub's recovery did not touch it), and the drain row is gone;
+4. a release that cannot start (a setting the hub refuses at start) is rolled back: the deploy fails at the
    Deployment's progress deadline naming the hub, and the hub that was serving serves again on the old image.
 4. the hub held to its egress (`"egress": ["api.github.com"]`, the egress image built from the same commit and
    named by digest): it rolls out healthy and answers GraphQL, so it reached Postgres through the egress; its pod
@@ -27,7 +32,10 @@ What `podman.sh` proves:
 
 1. the first deploy builds the image into podman and writes units that, installed as printed, start Postgres, run
    the migration and serve a healthy hub on `127.0.0.1` with a read-only root;
-2. a release that changes only the image restarts only the hub, and Postgres keeps running.
+2. a release that changes only the image drains first: with a run InProgress on the hub, the drain pod reports it
+   busy and the hub is not restarted until the run ends; then only the hub restarts, Postgres keeps running, the run
+   is left as it was ended and the drain is ended. The podman runtime has no overlap, so the hub is down for its
+   restart; that is not measured here.
 
 Not kind: a kind node is a container, so a pod there cannot have a user namespace of its own, and every Trax pod asks
 for one (`hostUsers: false`). The pods never start; `trax deploy` says so at once.

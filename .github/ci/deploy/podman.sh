@@ -27,6 +27,7 @@ cleanup() {
   systemctl --user daemon-reload 2>/dev/null || true
   podman pod rm -f -a --filter "name=$STACK" >/dev/null 2>&1 || true
   podman network rm -f "$STACK" >/dev/null 2>&1 || true
+  [ -n "${install:-}" ] && kill "$install" 2>/dev/null || true
   podman volume rm -f "$STACK-data" >/dev/null 2>&1 || true
   rm -rf "$DIR/.trax" "$DIR/.env" "${XDG_CONFIG_HOME:-$HOME/.config}/trax/$STACK"
   exit "$status"
@@ -64,14 +65,44 @@ say "every Trax container is hardened under podman too"
 [ "$(podman inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$STACK-hub-pod-hub")" = true ] ||
   fail "the hub's root is writable"
 
-say "a release of new images leaves Postgres running"
-sleep 2
+say "a release of new images drains first, then leaves Postgres running"
+psql() { podman exec "$STACK-database-pod-database" psql -U traxci -d traxci -tAq -c "$1"; }
+# A run InProgress on the hub serving now, standing for a long one: the hub's own runs end in moments, so one is put
+# back to InProgress here and ended by hand once the drain has held the restart for a while.
+for _ in $(seq 30); do
+  live=$(psql "UPDATE trax.metadata SET train_state = 'in_progress', end_time = NULL
+    WHERE id = (SELECT max(id) FROM trax.metadata WHERE train_state = 'completed' AND name LIKE '%HelloWorld%')
+    RETURNING id")
+  [ -n "$live" ] && break
+  sleep 2
+done
+[ -n "$live" ] || fail "no finished hello-world run to stand in for a live one"
+hub_started=$(podman inspect --format '{{.State.StartedAt}}' "$STACK-hub-pod-hub")
 out=$("${TRAX[@]}" deploy --env home --file "$DIR/trax.deploy.json" 2>&1) || { echo "$out"; fail "the second deploy failed"; }
-echo "$out" | tail -n 6
+echo "$out" | tail -n 8
 echo "$out" | grep -q "Unchanged, left running: $STACK-database" || fail "a new image release restarts Postgres"
+echo "$out" | grep -q -- "-drain.yaml" || fail "a release that restarts the hub does not drain first"
 cp "$DIR/.trax/deploy/podman/$STACK"/*.kube "$UNITS/"
 systemctl --user daemon-reload
-eval "$(echo "$out" | grep -E '^\s+systemctl --user restart')"
+# As printed: the drain pod, the restart only once it exits 0, then the resume pod.
+( eval "$(echo "$out" | grep -E '^\s+(systemctl --user restart|\S*podman kube play)')" ) > "$DIR/.trax/install.log" 2>&1 &
+install=$!
+for _ in $(seq 120); do
+  podman logs "$STACK-drain-pod-drain" 2>/dev/null | grep -q 'still busy' && break
+  sleep 1
+done
+podman logs "$STACK-drain-pod-drain" 2>&1 | grep -q 'still busy' || fail "the drain never reported the live run"
+sleep 10
+[ "$(podman inspect --format '{{.State.StartedAt}}' "$STACK-hub-pod-hub")" = "$hub_started" ] ||
+  fail "the hub restarted while a run was still busy"
+psql "UPDATE trax.metadata SET train_state = 'completed', end_time = now() WHERE id = $live" >/dev/null
+wait "$install" || { cat "$DIR/.trax/install.log"; fail "the drained release did not install"; }
+[ "$(podman inspect --format '{{.State.StartedAt}}' "$STACK-hub-pod-hub")" != "$hub_started" ] ||
+  fail "the hub did not restart after the drain"
+[ "$(psql "SELECT train_state FROM trax.metadata WHERE id = $live")" = completed ] ||
+  fail "run $live did not end as it was ended: the restarted hub's recovery reached it"
+[ -z "$(psql "SELECT 1 FROM trax.drain")" ] || fail "the drain was not ended after the release"
+echo "the drain held the restart until run $live ended, then the hub restarted and the drain ended"
 for _ in $(seq 60); do curl -fsS "http://127.0.0.1:$port/trax/health" >/dev/null 2>&1 && break; sleep 2; done
 curl -fsS "http://127.0.0.1:$port/trax/health" | grep -q Healthy || fail "the hub is not healthy after the release"
 [ "$(podman inspect --format '{{.State.StartedAt}}' "$STACK-database-pod-database")" = "$database_started" ] ||

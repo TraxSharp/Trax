@@ -38,6 +38,8 @@ cleanup() {
     kubectl -n "$NS" logs -l app.kubernetes.io/part-of=traxci --all-containers --tail=50 2>/dev/null || true
   fi
   [ -n "${forward:-}" ] && kill "$forward" 2>/dev/null || true
+  [ -n "${watcher:-}" ] && kill "$watcher" 2>/dev/null || true
+  [ -n "${deploy:-}" ] && kill "$deploy" 2>/dev/null || true
   kubectl delete namespace "$NS" --ignore-not-found --timeout=180s >/dev/null 2>&1 || true
   # Cluster-wide, so deleting the namespace leaves them.
   kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy "trax-egress-$NS" --ignore-not-found \
@@ -124,6 +126,69 @@ probe_pod() {
 probe_pod insider "trax/app=traxci" >/dev/null 2>&1 || fail "the probe could not reach Postgres even as the app"
 if probe_pod outsider "role=outsider" >/dev/null 2>&1; then fail "a pod outside the app reached Postgres"; fi
 echo "an app pod reached Postgres; an outside pod was refused"
+
+say "a deploy drains: it waits for a run live on the hub, then rolls the hub with no downtime"
+psql() { kubectl -n "$NS" exec statefulset/database -- psql -U traxci -d traxci -tAq -c "$1"; }
+# A run that is InProgress on the hub serving now. The hub's own runs end in moments, so one of them is put back to
+# InProgress here; it stands for a long run the deploy must not cut off, and is ended by hand below.
+live=$(psql "UPDATE trax.metadata SET train_state = 'in_progress', end_time = NULL
+  WHERE id = (SELECT max(id) FROM trax.metadata WHERE train_state = 'completed' AND name LIKE '%HelloWorld%')
+  RETURNING id")
+[ -n "$live" ] || fail "no finished hello-world run to stand in for a live one"
+echo "run $live is live on the hub"
+
+# Probe the hub through its Service from inside the namespace, five times a second, for the whole deploy. The probe is
+# labelled as the app, which the namespace's NetworkPolicy admits; a port-forward would follow one pod and break.
+kubectl -n "$NS" run hub-probe --restart=Never --labels=trax/app=traxci \
+  --image=docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec \
+  --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":65534,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"hub-probe","image":"docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec","command":["sh","-c","while true; do if wget -q -T 2 -O /dev/null http://hub:8080/trax/health; then echo ok; else echo fail; fi; sleep 0.2; done"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}' \
+  >/dev/null
+kubectl -n "$NS" wait --for=condition=Ready pod/hub-probe --timeout=60s >/dev/null
+# How many hub pods run at once during the roll: two, while the new one comes up beside the old.
+( most=0; while :; do
+    n=$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=hub --field-selector=status.phase=Running -o name | wc -l)
+    [ "$n" -gt "$most" ] && most=$n && echo "$most" > "$RUNNER_TEMP_DIR/hubs"
+    sleep 0.5
+  done ) &
+watcher=$!
+
+"${TRAX[@]}" deploy --env cluster --file "$DIR/trax.deploy.ci.json" > "$RUNNER_TEMP_DIR/drain-deploy.log" 2>&1 &
+deploy=$!
+# Wait until the drain Job reports the run busy, hold it a while longer, then end the run.
+for _ in $(seq 300); do
+  kubectl -n "$NS" logs -l app.kubernetes.io/name=drain --tail=20 2>/dev/null | grep -q 'still busy' && break
+  kill -0 "$deploy" 2>/dev/null || { cat "$RUNNER_TEMP_DIR/drain-deploy.log"; fail "the deploy ended before it drained"; }
+  sleep 1
+done
+kubectl -n "$NS" logs -l app.kubernetes.io/name=drain --tail=20 | grep -q 'still busy' ||
+  fail "the drain Job never reported the live run"
+[ "$(kubectl -n "$NS" get deployment hub -o jsonpath='{.spec.template.spec.containers[0].image}')" = "$image_before" ] ||
+  fail "the hub rolled while a run was still busy"
+held=$(date +%s)
+sleep 15
+[ "$(kubectl -n "$NS" get deployment hub -o jsonpath='{.spec.template.spec.containers[0].image}')" = "$image_before" ] ||
+  fail "the hub rolled while a run was still busy"
+psql "UPDATE trax.metadata SET train_state = 'completed', end_time = now() WHERE id = $live" >/dev/null
+echo "the roll waited $(( $(date +%s) - held ))s after the drain first saw run $live busy; it has ended now"
+wait "$deploy" || { cat "$RUNNER_TEMP_DIR/drain-deploy.log"; fail "the deploy after the drain failed"; }
+tail -n 4 "$RUNNER_TEMP_DIR/drain-deploy.log"
+sleep 5
+kill "$watcher" 2>/dev/null || true; wait "$watcher" 2>/dev/null || true
+
+image_drained=$(kubectl -n "$NS" get deployment hub -o jsonpath='{.spec.template.spec.containers[0].image}')
+[ "$image_drained" != "$image_before" ] || fail "the hub did not roll after the drain"
+[ "$(psql "SELECT train_state FROM trax.metadata WHERE id = $live")" = completed ] ||
+  fail "run $live did not end as it was ended: the new hub's recovery reached it"
+[ -n "$(psql "SELECT 1 FROM trax.drain")" ] && fail "the drain was not ended after the roll"
+hubs=$(cat "$RUNNER_TEMP_DIR/hubs" 2>/dev/null || echo 0)
+[ "$hubs" -ge 2 ] || fail "the old and the new hub never ran at once (most seen: $hubs)"
+probes=$(kubectl -n "$NS" logs pod/hub-probe)
+oks=$(echo "$probes" | grep -c '^ok$' || true)
+fails=$(echo "$probes" | grep -c '^fail$' || true)
+kubectl -n "$NS" delete pod hub-probe --wait=false >/dev/null
+echo "health probes during the deploy: $oks answered, $fails failed; $hubs hubs ran at once"
+[ "$fails" -eq 0 ] || fail "the hub was unreachable during the roll ($fails of $((oks + fails)) probes failed)"
+image_before=$image_drained
 
 say "a release that cannot start is rolled back"
 jq '.environments.cluster.settings.Trax__Proxy__KnownNetworks = "not-a-network"' "$DIR/trax.deploy.ci.json" \
