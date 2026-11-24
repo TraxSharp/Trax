@@ -1147,7 +1147,7 @@ Each restarted service stops before its new version starts, so it is down for th
 A changed network or changed Secrets restart every unit, since each unit plays the Secrets before its pod. A service
 the stack no longer has (RabbitMQ after the last host stops using it, say) is stopped and its unit removed. A
 restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
-for none, deploy to a cluster, one machine included (see [one machine, no downtime](deploy-to-one-machine-with-no-downtime.md)).
+for none, deploy to a cluster, one machine included (see [one machine, no downtime](/docs/reference/deploy-to-one-machine-with-no-downtime)).
 
 With `"exposure": "tailnet"` the hub is published on no host port. Its pod gets two sidecars instead: Tailscale
 (`tailscale/tailscale:v1.104.7`) in userspace networking, so it needs no capability and no `/dev/net/tun`, which

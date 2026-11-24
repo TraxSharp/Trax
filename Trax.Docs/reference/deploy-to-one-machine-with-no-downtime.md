@@ -80,7 +80,7 @@ Point an environment at the cluster and the registry:
 ```
 
 Create the namespace and its Secret, then deploy, as for any cluster
-([`--target kubernetes`](cli.md#--target-kubernetes)):
+([`--target kubernetes`](/docs/reference/cli#--target-kubernetes)):
 
 ```bash
 kubectl create namespace orders-home
@@ -94,7 +94,7 @@ rolls every service back to the version before if one never gets ready.
 ## 4. Reach it on the tailnet
 
 Nothing on the cluster is published to the host's network. Expose the app on your tailnet with
-`"exposure": "tailnet"` (see [`--target kubernetes`](cli.md#--target-kubernetes)), which installs
+`"exposure": "tailnet"` (see [`--target kubernetes`](/docs/reference/cli#--target-kubernetes)), which installs
 nothing on the host.
 
 ## What this does not give you
@@ -102,3 +102,7 @@ nothing on the host.
 - One machine is still one machine: a host that goes down takes the app with it.
 - The in-cluster Postgres (`"inCluster": true`) is one copy with no backups, for a `try`
   environment. A `production` environment names a database you run and back up.
+
+## SDK Reference
+
+> [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate) | [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)
