@@ -183,7 +183,7 @@ jobs:
         with:
           node-version: ${{ env.BUILD_NODE_VERSION }}
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
         with:
           global-json-file: global.json
       - name: Pack the TypeScript engine
@@ -436,7 +436,7 @@ jobs:
           echo "::error::@traxsharp/state-machine@$PKG_VERSION was staged but not approved within $((NPM_APPROVAL_SECONDS / 60)) minutes. Nothing was published to NuGet. Approve it, then re-run this job."
           exit 1
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
         with:
           # This job has no checkout, so it cannot read global.json. Keep the two in step.
           dotnet-version: "10.0.301"
