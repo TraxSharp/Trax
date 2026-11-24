@@ -23,6 +23,16 @@ internal sealed class SandboxRunner(
 {
     private const string FilesPrefix = SandboxPaths.Files + "/";
 
+    /// <summary>128 + SIGKILL: what a process killed outright exits with.</summary>
+    internal const int KilledExitCode = 137;
+
+    /// <summary>
+    /// Under Kata the guest kernel's out-of-memory kill is not reported as OOMKilled; the
+    /// container only exits 137. Say so, without claiming it was memory.
+    /// </summary>
+    internal const string KilledNote =
+        " (killed outright; under Kata an out-of-memory kill inside the VM is reported only as this)";
+
     public async Task<SandboxRunResponse> RunAsync(
         SandboxRunRequest request,
         SandboxProfile profile,
@@ -71,7 +81,7 @@ internal sealed class SandboxRunner(
     }
 
     /// <summary>The answer for a sandbox that did not exit by itself; null when it did. A killed run hands nothing back.</summary>
-    private static SandboxRunResponse? Killed(SandboxRunRequest request, SandboxEnd end)
+    private SandboxRunResponse? Killed(SandboxRunRequest request, SandboxEnd end)
     {
         var limits = request.Limits;
         switch (end)
@@ -109,6 +119,15 @@ internal sealed class SandboxRunner(
                         $"it wrote more than its {limits.DiskMiB} MiB of output and was killed"
                     )
                 );
+            case SandboxEnd.TooManyEntries:
+                return new(
+                    request.RunId,
+                    SandboxOutcome.OutputRefused,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"its output has more than {options.Caps.MaxArchiveFiles} entries, and it was killed"
+                    )
+                );
         }
 
         return null;
@@ -136,7 +155,9 @@ internal sealed class SandboxRunner(
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"it exited with code {execution.ExitCode}"
-                ) + (result is null ? " and left no result" : "")
+                )
+                    + (result is null ? " and left no result" : "")
+                    + (execution.ExitCode == KilledExitCode ? KilledNote : "")
             );
 
         if (result.Content.Length > options.Caps.MaxResultBytes || !IsJson(result.Content))

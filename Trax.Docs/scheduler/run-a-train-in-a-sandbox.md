@@ -94,52 +94,71 @@ files. A run that is refused, busy, killed for its timeout or memory, or whose o
 throws `SandboxRunException` with the reason, which fails the hub's run with it. The options are on
 [AddTraxSandbox](/docs/sdk-reference/scheduler-api/add-trax-sandbox).
 
-## 4. Deploy the launcher on one host
+## 4. Deploy the launcher
 
 The launcher is its own process: a console app whose `Program.cs` is one line,
-`await TraxSandboxLauncher.RunAsync(args);`, with `Trax.Scheduler.Sandbox.Launcher` referenced.
+`await TraxSandboxLauncher.RunAsync(args);`, with `Trax.Scheduler.Sandbox.Launcher` referenced, built
+into an image of its own.
 
-1. Install Kata Containers and add it to podman's runtimes in `containers.conf`
-   (`[engine.runtimes] kata = ["/usr/bin/kata-runtime"]`). This needs `/dev/kvm`.
-2. Create a user for the launcher, enable its rootless podman socket
-   (`systemctl --user enable --now podman.socket` as that user), and pull the sandbox and holder
-   images as that user.
-3. Configure it under `Trax:SandboxLauncher`: `ListenSocketPath`, the `SigningKey`, a profile
-   with the image's digest, `Podman:SocketPath` and `Podman:HolderImage` (a pause image, by digest).
-   Every option is on the [launcher's page](/docs/sdk-reference/scheduler-api/trax-sandbox-launcher).
-4. Run it as a systemd service of that user. It refuses to start until its canary has shown a
-   sandbox on a guest kernel with nothing reachable; its log says why when it refuses.
-5. Mount the launcher's socket (not podman's) into the hub's container, with the same key in the
-   hub's configuration. Keep the socket's directory readable only by the launcher's user and a group
-   the hub runs in.
+Kata runs only through Kubernetes. Kata Containers 4 has no OCI command line, so podman cannot run
+it at all; one machine with Kata is k3s with a Kata RuntimeClass and the launcher's Kubernetes
+backend, the same as any cluster. The steps are the same on k3s, AKS, or EKS nodes set up for Kata.
 
-Never mount podman's socket into the hub or a sandbox.
+1. Give the cluster a Kata RuntimeClass. On k3s, install Kata (`kata-deploy`, or the static release
+   plus a containerd `config-v3.toml.tmpl` that registers its shim) on a machine with `/dev/kvm`.
+   Where only gVisor exists (GKE Sandbox), set `Runtime` to `GVisor` and
+   `Kubernetes:RuntimeClassName` to its class: the launcher accepts gVisor only by name.
+2. Make sure the network plugin enforces NetworkPolicy (k3s's built-in one does). The canary refuses
+   to start otherwise, since sandboxes are kept off the network by a deny-all policy.
+3. Have the launcher image write the objects the namespace needs, from the same configuration it
+   will run with:
 
-## 5. Deploy the launcher on a cluster
+   ```bash
+   docker run --rm -v "$PWD:/out" \
+     -e Trax__SandboxLauncher__Profiles__builder__Image=registry.example.com/builder@sha256:<digest> \
+     -e Trax__SandboxLauncher__CanaryProbes__0=<hub address>:<port> \
+     registry.example.com/launcher:1 \
+     --trax-sandbox-manifests /out/sandbox.yaml \
+     --launcher-image registry.example.com/launcher@sha256:<digest> \
+     --hub-namespace trax-hub
+   ```
 
-1. Give the cluster a Kata RuntimeClass (AKS offers one; EKS needs nodes set up for it). Where only
-   gVisor exists (GKE Sandbox), set `Runtime` to `GVisor` and `Kubernetes:RuntimeClassName` to its
-   class: the launcher accepts gVisor only by name.
-2. Make sure the network plugin enforces NetworkPolicy. The canary refuses to start otherwise,
-   since sandboxes are kept off the network by a deny-all policy.
-3. Render the objects with `KubernetesSandboxManifests.Render(options, launcherImage, hubNamespace)`
-   and apply them, with a Secret named `trax-sandbox-launcher-key` holding the key as `signing-key`.
-   The admission policies are cluster-scoped, so applying them needs a cluster admin.
-4. Point the hub at the launcher's Service: `LauncherUrl = "https://trax-sandbox-launcher.trax-sandbox:8080"`
-   behind TLS, or `http://` with `AllowInsecureTransport` where the cluster network is trusted.
-   Answers are signed either way; the input and output are not encrypted without TLS.
-5. On EKS, create no Pod Identity association and no IRSA annotation for anything in the sandbox
+   Every `Trax__SandboxLauncher__...` setting it is given (caps, probes, runtime class) is rendered
+   into the launcher's Deployment, so the launcher and the admission rules cannot disagree. Code
+   can call `KubernetesSandboxManifests.Render` instead.
+4. Apply it, and a Secret named `trax-sandbox-launcher-key` holding the key as `signing-key`. The
+   admission policies are cluster-scoped, so applying them needs a cluster admin; they come first in
+   the file, so the launcher's own pod is admitted under them.
+5. The launcher listens on plain HTTP on port 8080, behind a NetworkPolicy that admits only the
+   hub's namespace. Point the hub at `http://trax-sandbox-launcher.trax-sandbox:8080` with
+   `AllowInsecureTransport`, or put TLS in front of it. Answers are signed either way; the input and
+   output are not encrypted without TLS.
+6. On EKS, create no Pod Identity association and no IRSA annotation for anything in the sandbox
    namespace.
+
+The launcher does not listen until its canary has run a sandbox and seen a kernel other than the
+node's, and nothing it could reach; its log says why when it refuses.
+
+### Podman on one host
+
+The podman backend runs sandboxes through a rootless podman socket only the launcher holds. Podman
+cannot run Kata, so it is only as isolating as gVisor (`Runtime: GVisor`, with `runsc` in podman's
+runtimes); with `Kata` configured it refuses to start and says so. Set `ListenSocketPath`,
+`Podman:SocketPath` and `Podman:HolderImage` (a pause image, by digest), run it as a user of its own,
+and mount the launcher's socket (never podman's) into the hub's container.
 
 ## Proving it on your host
 
 The escape suite (`PodmanEscapeTests` in `Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests`) runs
-hostile trains against a real launcher and podman. It needs a podman socket, so it skips in CI and
-under `trax-test`. To run it, build the image with
+hostile trains against a real launcher and podman; `KubernetesEscapeTests` runs the same against a
+launcher on a cluster. They need a podman socket or a cluster, so they skip in CI and under `trax-test`. To run it, build the image with
 `Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image/build-escape-image.sh`, which prints
 `TRAX_SANDBOX_IMAGE` and `TRAX_SANDBOX_HOLDER_IMAGE`, and run the suite in a container with a podman
-socket mounted at `TRAX_SANDBOX_PODMAN_SOCKET`. With Kata installed it runs under `kata`; without it,
-`TRAX_SANDBOX_OCI_RUNTIME=crun` and `TRAX_SANDBOX_ASSUME_ISOLATED=1` prove the mechanics only.
+socket mounted at `TRAX_SANDBOX_PODMAN_SOCKET`; podman cannot run Kata, so
+`TRAX_SANDBOX_OCI_RUNTIME=crun` and `TRAX_SANDBOX_ASSUME_ISOLATED=1` prove the mechanics only. For a
+cluster, deploy as in step 4 with the escape image as the profile, port-forward the launcher's
+Service, and set `TRAX_SANDBOX_LAUNCHER_URL`, `TRAX_SANDBOX_KEY`, `TRAX_SANDBOX_FORBIDDEN` (the hub,
+the database, the API server, the launcher) and `TRAX_SANDBOX_MAX_CONCURRENT`.
 
 ## SDK Reference
 

@@ -55,8 +55,8 @@ error rather than a default left in place.
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `Runtime` | `Kata` | A `SandboxRuntime`: `Kata`, a microVM per sandbox, or `GVisor`, only by naming it, for a cluster that offers nothing else. |
-| `Backend` | `Podman` | A `SandboxBackendKind`: `Podman` on one host, `Kubernetes` on a cluster. |
+| `Runtime` | `Kata` | A `SandboxRuntime`: `Kata`, a microVM per sandbox, through a RuntimeClass only; or `GVisor`, only by naming it, for a cluster that offers nothing else or for podman. |
+| `Backend` | `Podman` | A `SandboxBackendKind`: `Podman` on one host (gVisor only), `Kubernetes` on a cluster, k3s on one machine included (the only way to Kata). |
 | `SigningKey` | | The key shared with the hub, base64 in configuration, at least 32 bytes. |
 | `ListenSocketPath` | | The Unix socket to listen on, on one host, ending in `.sock`. Set this or `ListenUrl`. An empty file left at the path by an earlier launcher is removed first; anything else is left, and the start fails. |
 | `ListenSocketMode` | `0660` | The socket's permissions, set once it listens. |
@@ -83,7 +83,7 @@ lowered.
 | `MaxDiskMiB` | 2048 |
 | `MaxTimeoutSeconds` | 3600 |
 | `MaxConcurrent` | 4; a request past it is answered `Busy` at once, not queued |
-| `MaxPids` | 512 processes and threads per sandbox, which holds a fork bomb |
+| `MaxPids` | 512 processes and threads per sandbox, which holds a fork bomb, on podman. A cluster applies its kubelet's `podPidsLimit` instead; under Kata the VM's own memory and the timeout hold one |
 | `MaxInputBytes` | 4 MiB of input JSON |
 | `MaxResultBytes` | 16 MiB of result file |
 | `MaxArchiveBytes` | 64 MiB of returned files, uncompressed |
@@ -122,6 +122,10 @@ back, in a tar the launcher writes itself.
 
 ## One host
 
+Podman cannot run Kata: Kata Containers 4 has no OCI command line for it to call. With `Kata`
+configured the podman backend's canary fails and says so. On podman the isolating runtime is
+gVisor; one machine with Kata is k3s and the Kubernetes backend below.
+
 The podman backend talks to rootless podman through its API socket. Per run it makes an input and
 an output volume, both tmpfs with a size (the output's is the declared disk), and a holder: a
 container of `HolderImage` under podman's default runtime that keeps both mounted, since a tmpfs
@@ -147,12 +151,17 @@ link or opening anything but a regular file, and checks its size every `PollInte
 sandbox runs.
 
 `KubernetesSandboxManifests.Render` writes everything the namespace needs, from the same options,
-as one multi-document YAML: the namespace at Pod Security `restricted`; the launcher's ServiceAccount
+as one multi-document YAML, and so does the launcher itself when run with
+`--trax-sandbox-manifests <file> --launcher-image <ref@sha256:...> --hub-namespace <ns>`
+(`--runs-storage` sets the claim's size): it reads its configuration as it would to run, needs no
+key, and starts nothing. The objects are, admission policies first so every later pod is admitted
+under them: the namespace at Pod Security `restricted`; the launcher's ServiceAccount
 and a Role on Jobs (create, get, list, watch, delete) and pods (get, list, watch), with no
 subresource, so no `pods/exec` or `pods/log`; the sandbox ServiceAccount, with no token and bound to
 nothing; a deny-all NetworkPolicy for sandbox pods and one admitting only the hub's namespace to the
 launcher; the runs claim; the launcher's Deployment (one replica, its key from the Secret named
-`KeySecretName`) and Service (`LauncherName`); and two ValidatingAdmissionPolicies with their
+`KeySecretName`, every cap, canary probe and runtime setting it was rendered from, and a writable
+`/tmp` on its read-only root) and Service (`LauncherName`); and two ValidatingAdmissionPolicies with their
 bindings. The policies refuse any Job, and any pod other than the launcher's own, that does not
 name the RuntimeClass, run one container from the profiles' digests, use the sandbox ServiceAccount
 with no token, carry only `HOME` and `TMPDIR`, mount only the runs claim and an emptyDir, and stay

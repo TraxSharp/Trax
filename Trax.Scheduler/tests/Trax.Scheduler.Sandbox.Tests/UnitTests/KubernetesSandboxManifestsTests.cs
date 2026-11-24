@@ -196,6 +196,54 @@ public class KubernetesSandboxManifestsTests
     }
 
     [Test]
+    public void Objects_AdmissionPoliciesComeBeforeAnythingThatMakesPods()
+    {
+        var objects = Objects();
+        var firstPolicy = objects.FindIndex(o => o is V1ValidatingAdmissionPolicy);
+        var deployment = objects.FindIndex(o => o is V1Deployment);
+
+        firstPolicy
+            .Should()
+            .BeLessThan(deployment, "the launcher's own first pod is admitted under the policies");
+    }
+
+    [Test]
+    public void Launcher_RunsWithTheCapsItWasRenderedFrom()
+    {
+        var options = LauncherOptions.Kubernetes();
+        options.Caps.MaxConcurrent = 7;
+        options.Caps.MaxArchiveFiles = 50;
+        options.CanaryProbes.Add("10.0.0.9:5432");
+        var env = KubernetesSandboxManifests
+            .Objects(options, LauncherImage, "trax-hub", "1Gi")
+            .OfType<V1Deployment>()
+            .Single()
+            .Spec.Template.Spec.Containers.Single()
+            .Env;
+
+        env.Should()
+            .Contain(e => e.Name == "Trax__SandboxLauncher__Caps__MaxConcurrent" && e.Value == "7");
+        env.Should()
+            .Contain(e =>
+                e.Name == "Trax__SandboxLauncher__Caps__MaxArchiveFiles" && e.Value == "50"
+            );
+        env.Should()
+            .Contain(e =>
+                e.Name == "Trax__SandboxLauncher__CanaryProbes__0" && e.Value == "10.0.0.9:5432"
+            );
+        env.Select(e => e.Name).Should().Contain("Trax__SandboxLauncher__Kubernetes__PollInterval");
+    }
+
+    [Test]
+    public void Launcher_HasAWritableTmpOnItsReadOnlyRoot()
+    {
+        var pod = Objects().OfType<V1Deployment>().Single().Spec.Template.Spec;
+
+        pod.Containers.Single().VolumeMounts.Should().Contain(m => m.MountPath == "/tmp");
+        pod.Volumes.Should().Contain(v => v.EmptyDir != null);
+    }
+
+    [Test]
     public void Render_UnpinnedLauncherImage_Throws() =>
         FluentActions
             .Invoking(() =>

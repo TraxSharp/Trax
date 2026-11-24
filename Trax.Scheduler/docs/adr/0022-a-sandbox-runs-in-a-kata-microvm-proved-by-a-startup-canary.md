@@ -6,9 +6,10 @@ status: accepted
 
 # A sandbox runs in a Kata microVM, proved by a startup canary
 
-Every sandbox runs under Kata Containers, a microVM with its own guest kernel, through podman on one
-host and through a RuntimeClass on a cluster. gVisor is accepted only when the launcher is
-configured with it by name. Before it takes a request, the launcher starts one sandbox as a canary:
+Every sandbox runs under Kata Containers, a microVM with its own guest kernel, through a
+RuntimeClass. One machine with Kata is k3s and the launcher's Kubernetes backend: Kata 4 has no OCI
+command line, so podman cannot run it, and the podman backend is only ever as isolating as gVisor.
+gVisor is accepted only when the launcher is configured with it by name. Before it takes a request, the launcher starts one sandbox as a canary:
 it must report a kernel other than the node's, no network interface but loopback on one host, and
 no connection to any of the metadata endpoints, addresses off the host, the cluster's API server,
 the launcher itself or any address the deploy adds. Otherwise the launcher does not start.
@@ -51,10 +52,16 @@ the person whose keys are on the machine.
 - The [sandbox threat model](/docs/security/sandbox-threat-model) says what is proven and what is
   not.
 
-Not covered: Kata itself. The host this was built on has `/dev/kvm` but no Kata, so the escape
-suite ran under crun with the canary told to accept it, and the canary was shown refusing crun and
-a missing runtime. Nested virtualisation in CI's runners is unverified.
+- `KubernetesEscapeTests.cs` is the same suite against a launcher on a cluster. Run on k3s 1.36
+  with Kata 4.4 (nested KVM): the canary passed under the `kata` RuntimeClass (guest kernel 6.18,
+  node 6.12) and refused one named `kata-runc` that maps to runc, and refused when the deny-all
+  NetworkPolicy was removed (the sandbox then reached the API server, the hub and the internet).
+
+Not covered: CI. Its runners have no podman socket, no cluster and no known nested
+virtualisation, so both suites skip there and run by hand.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
+- **2026-11-24**: Podman cannot run Kata 4, so one machine with Kata is k3s with the Kubernetes
+  backend, and the podman backend says so when told to use Kata. Proved on k3s with Kata.

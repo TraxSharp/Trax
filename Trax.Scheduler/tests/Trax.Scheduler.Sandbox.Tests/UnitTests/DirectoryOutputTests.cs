@@ -135,11 +135,11 @@ public class DirectoryOutputTests
         await File.WriteAllBytesAsync(Path.Combine(_dir, "a"), new byte[100]);
         File.CreateSymbolicLink(Path.Combine(_dir, "l"), "/etc/passwd");
 
-        DirectoryOutput.Size(_dir, 10).Should().Be(100);
+        DirectoryOutput.Size(_dir, 10).Should().Be((100L, false));
     }
 
     [Test]
-    public async Task Size_PastTheEntryCap_IsMax()
+    public async Task Size_PastTheEntryCap_SaysTooMany()
     {
         for (var i = 0; i < 5; i++)
             await File.WriteAllTextAsync(
@@ -147,6 +147,6 @@ public class DirectoryOutputTests
                 "x"
             );
 
-        DirectoryOutput.Size(_dir, 3).Should().Be(long.MaxValue);
+        DirectoryOutput.Size(_dir, 3).TooMany.Should().BeTrue();
     }
 }

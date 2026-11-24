@@ -62,7 +62,7 @@ internal sealed class RuntimeCanary(
         );
 
         var execution = await backend.RunAsync(job, ct).ConfigureAwait(false);
-        var report = Report(execution);
+        var report = Report(execution, options);
         var host = await hostKernel(ct).ConfigureAwait(false);
         Judge(report, host, backend.LoopbackOnly, options);
         logger.LogInformation(
@@ -74,7 +74,20 @@ internal sealed class RuntimeCanary(
         );
     }
 
-    private static SandboxCanaryReport Report(SandboxExecution execution)
+    /// <summary>
+    /// What to say when podman was asked for Kata: Kata Containers 4 has no OCI command line, so
+    /// podman cannot run it at all. One machine with Kata is k3s with a Kata RuntimeClass and the
+    /// Kubernetes backend.
+    /// </summary>
+    internal const string PodmanCannotRunKata =
+        " Podman cannot run Kata Containers: Kata 4 has no OCI command line for it to call. "
+        + "For Kata on one machine, run k3s with a Kata RuntimeClass and this launcher's "
+        + "Kubernetes backend; with podman, the only isolating runtime is gVisor (Runtime: GVisor).";
+
+    internal static SandboxCanaryReport Report(
+        SandboxExecution execution,
+        SandboxLauncherOptions options
+    )
     {
         if (execution.End != SandboxEnd.Exited || execution.ExitCode != 0)
             throw new SandboxRuntimeRefusedException(
@@ -84,6 +97,12 @@ internal sealed class RuntimeCanary(
                 )
                     + (execution.Detail ?? execution.OutputRefused ?? "no detail")
                     + ". The runtime may be missing or misconfigured; the launcher does not start sandboxes without it."
+                    + (
+                        options.Backend == SandboxBackendKind.Podman
+                        && options.Runtime == SandboxRuntime.Kata
+                            ? PodmanCannotRunKata
+                            : ""
+                    )
             );
 
         var file =

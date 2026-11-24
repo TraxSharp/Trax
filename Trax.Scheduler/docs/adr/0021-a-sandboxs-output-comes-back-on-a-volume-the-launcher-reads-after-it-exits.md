@@ -60,9 +60,15 @@ ceiling behind that.
   `files/` return.
 - [Run a train in a sandbox](/docs/scheduler/run-a-train-in-a-sandbox) is the rule this produces.
 
-Not covered: the cluster path's live behaviour (subPath mounts under Kata, the size polling) has
-not run against a cluster.
+- `KubernetesSandboxBackendTests` pins the cluster path against an API that refuses every
+  subresource, as the launcher's Role does.
+
+On k3s with Kata the subPath mounts, the size polling (a run filling its output was killed) and the
+entry polling (a run leaving too many files was killed and refused) worked. Not covered: polling is
+not a hard cap. Between two polls a sandbox can write as fast as the node's disk takes it; the runs
+claim's size is the hard ceiling.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
+- **2026-11-24**: Too many files is its own refusal on a cluster, not a disk overrun.

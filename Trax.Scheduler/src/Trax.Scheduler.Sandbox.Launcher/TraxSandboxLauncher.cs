@@ -4,6 +4,7 @@ using k8s;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -33,9 +34,54 @@ public static class TraxSandboxLauncher
     /// <exception cref="InvalidOperationException">The configuration is missing or unsafe.</exception>
     public static async Task RunAsync(string[] args, CancellationToken ct = default)
     {
+        var configuration = new ConfigurationBuilder()
+            .AddEnvironmentVariables()
+            .AddCommandLine(args)
+            .Build();
+        if (configuration[ManifestsArgument] is { Length: > 0 } manifests)
+        {
+            await RenderManifestsAsync(configuration, manifests, ct).ConfigureAwait(false);
+            return;
+        }
+
         var app = Build(args);
         await using (app.ConfigureAwait(false))
             await app.RunAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The argument that makes <see cref="RunAsync"/> write the cluster's objects instead of running.</summary>
+    internal const string ManifestsArgument = "trax-sandbox-manifests";
+
+    /// <summary>
+    /// Writes what <see cref="KubernetesSandboxManifests.Render"/> renders from the launcher's own
+    /// configuration to <paramref name="path"/>, for
+    /// <c>--trax-sandbox-manifests &lt;file&gt; --launcher-image &lt;ref@sha256:...&gt; --hub-namespace &lt;ns&gt;</c>.
+    /// Needs no key and starts nothing; the profiles are checked as the launcher checks them, so
+    /// the admission allowlist is never built from an unpinned image.
+    /// </summary>
+    internal static async Task RenderManifestsAsync(
+        IConfiguration configuration,
+        string path,
+        CancellationToken ct
+    )
+    {
+        var options = SandboxLauncherOptions.Read(configuration);
+        options.Backend = SandboxBackendKind.Kubernetes;
+        if (options.Profiles.Count == 0)
+            throw new InvalidOperationException("No profile is configured to render.");
+        foreach (var (name, profile) in options.Profiles)
+            if (profile.Invalid(name) is { } bad)
+                throw new InvalidOperationException($"The manifests are not rendered: {bad}.");
+
+        var yaml = KubernetesSandboxManifests.Render(
+            options,
+            configuration["launcher-image"]
+                ?? throw new InvalidOperationException("--launcher-image is required."),
+            configuration["hub-namespace"]
+                ?? throw new InvalidOperationException("--hub-namespace is required."),
+            configuration["runs-storage"] ?? "20Gi"
+        );
+        await File.WriteAllTextAsync(path, yaml, ct).ConfigureAwait(false);
     }
 
     /// <summary>Builds the launcher without running it, for a host that adds its own logging or health checks first.</summary>

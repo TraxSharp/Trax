@@ -60,19 +60,22 @@ internal static class DirectoryOutput
         return await SandboxArchive.ReadAsync(buffer, limits, "", ct).ConfigureAwait(false);
     }
 
-    /// <summary>The bytes in <paramref name="directory"/>, counting at most <paramref name="maxEntries"/> entries; never follows a link.</summary>
-    public static long Size(string directory, int maxEntries)
+    /// <summary>
+    /// The bytes in <paramref name="directory"/>, and whether it holds more than
+    /// <paramref name="maxEntries"/> entries, where counting stops; never follows a link.
+    /// </summary>
+    public static (long Bytes, bool TooMany) Size(string directory, int maxEntries)
     {
         long bytes = 0;
         var entries = 0;
         foreach (var entry in Walk(new DirectoryInfo(directory)))
         {
             if (++entries > maxEntries)
-                return long.MaxValue;
+                return (bytes, true);
             if (entry is FileInfo { LinkTarget: null } file)
                 bytes += file.Length;
         }
-        return bytes;
+        return (bytes, false);
     }
 
     /// <summary>Every entry under <paramref name="root"/>; descends only into real directories, never a link to one.</summary>

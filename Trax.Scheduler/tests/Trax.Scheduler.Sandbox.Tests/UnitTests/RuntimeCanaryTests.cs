@@ -102,6 +102,31 @@ public class RuntimeCanaryTests
     }
 
     [Test]
+    public void Report_KataOnPodmanFails_SaysPodmanCannotRunKata()
+    {
+        var failed = SandboxExecution.Failure("default OCI runtime \"kata\" not found");
+
+        FluentActions
+            .Invoking(() => RuntimeCanary.Report(failed, LauncherOptions.Podman()))
+            .Should()
+            .Throw<SandboxRuntimeRefusedException>()
+            .WithMessage("*Podman cannot run Kata*k3s*");
+    }
+
+    [Test]
+    public void Report_KataOnAClusterFails_SaysNothingOfPodman()
+    {
+        var failed = SandboxExecution.Failure("forbidden");
+
+        FluentActions
+            .Invoking(() => RuntimeCanary.Report(failed, LauncherOptions.Kubernetes()))
+            .Should()
+            .Throw<SandboxRuntimeRefusedException>()
+            .Which.Message.Should()
+            .NotContain("Podman");
+    }
+
+    [Test]
     public async Task CheckAsync_RuntimeMissing_Refuses()
     {
         var backend = new FakeBackend();

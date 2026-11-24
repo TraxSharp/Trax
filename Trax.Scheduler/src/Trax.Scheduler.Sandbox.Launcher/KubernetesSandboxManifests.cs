@@ -66,6 +66,10 @@ public static class KubernetesSandboxManifests
     {
         var ns = options.Kubernetes.Namespace;
         yield return Namespace(ns);
+        // The admission policies before anything that makes pods, so even the launcher's own
+        // first pod is admitted under them.
+        foreach (var admission in KubernetesSandboxAdmission.Objects(options, launcherImage))
+            yield return admission;
         yield return new V1ServiceAccount
         {
             ApiVersion = "v1",
@@ -86,8 +90,6 @@ public static class KubernetesSandboxManifests
         yield return RunsClaim(options, runsStorage);
         yield return LauncherDeployment(options, launcherImage);
         yield return LauncherService(ns);
-        foreach (var admission in KubernetesSandboxAdmission.Objects(options, launcherImage))
-            yield return admission;
     }
 
     private static V1RoleBinding RoleBinding(string ns) =>
@@ -280,6 +282,30 @@ public static class KubernetesSandboxManifests
                 },
             },
         };
+        env.AddRange(CapsEnv(options.Caps));
+        env.Add(
+            Value(
+                "Trax__SandboxLauncher__Kubernetes__PollInterval",
+                kube.PollInterval.ToString("c", CultureInfo.InvariantCulture)
+            )
+        );
+        for (var i = 0; i < options.CanaryProbes.Count; i++)
+            env.Add(
+                Value(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Trax__SandboxLauncher__CanaryProbes__{i}"
+                    ),
+                    options.CanaryProbes[i]
+                )
+            );
+        env.AddRange(ProfileEnv(options));
+        return env;
+    }
+
+    private static List<V1EnvVar> ProfileEnv(SandboxLauncherOptions options)
+    {
+        var env = new List<V1EnvVar>();
         foreach (
             var (name, profile) in options.Profiles.OrderBy(p => p.Key, StringComparer.Ordinal)
         )
@@ -298,6 +324,26 @@ public static class KubernetesSandboxManifests
                 );
         }
         return env;
+    }
+
+    /// <summary>
+    /// Every cap, so the launcher on the cluster runs with the caps it was rendered from and the
+    /// admission rules and the launcher cannot disagree about them.
+    /// </summary>
+    private static IEnumerable<V1EnvVar> CapsEnv(SandboxCaps caps)
+    {
+        string Number(long value) => value.ToString(CultureInfo.InvariantCulture);
+        const string Prefix = "Trax__SandboxLauncher__Caps__";
+        yield return Value(Prefix + nameof(caps.MaxCpuMillicores), Number(caps.MaxCpuMillicores));
+        yield return Value(Prefix + nameof(caps.MaxMemoryMiB), Number(caps.MaxMemoryMiB));
+        yield return Value(Prefix + nameof(caps.MaxDiskMiB), Number(caps.MaxDiskMiB));
+        yield return Value(Prefix + nameof(caps.MaxTimeoutSeconds), Number(caps.MaxTimeoutSeconds));
+        yield return Value(Prefix + nameof(caps.MaxConcurrent), Number(caps.MaxConcurrent));
+        yield return Value(Prefix + nameof(caps.MaxPids), Number(caps.MaxPids));
+        yield return Value(Prefix + nameof(caps.MaxInputBytes), Number(caps.MaxInputBytes));
+        yield return Value(Prefix + nameof(caps.MaxResultBytes), Number(caps.MaxResultBytes));
+        yield return Value(Prefix + nameof(caps.MaxArchiveBytes), Number(caps.MaxArchiveBytes));
+        yield return Value(Prefix + nameof(caps.MaxArchiveFiles), Number(caps.MaxArchiveFiles));
     }
 
     private static V1Deployment LauncherDeployment(SandboxLauncherOptions options, string image)
@@ -360,6 +406,8 @@ public static class KubernetesSandboxManifests
                             Name = KubernetesJobSpec.RunsVolume,
                             MountPath = options.Kubernetes.RunsPath,
                         },
+                        // The root is read-only; .NET and ASP.NET still want a temp directory.
+                        new V1VolumeMount { Name = "tmp", MountPath = "/tmp" },
                     ],
                 },
             ],
@@ -373,6 +421,7 @@ public static class KubernetesSandboxManifests
                         ClaimName = options.Kubernetes.RunsClaimName,
                     },
                 },
+                new V1Volume { Name = "tmp", EmptyDir = new V1EmptyDirVolumeSource() },
             ],
         };
 

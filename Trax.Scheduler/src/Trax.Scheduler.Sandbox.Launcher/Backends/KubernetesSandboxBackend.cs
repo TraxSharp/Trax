@@ -76,7 +76,7 @@ internal sealed class KubernetesSandboxBackend(
 
             var (end, code) = await WatchAsync(name, run, job.Limits, ct).ConfigureAwait(false);
             await DeleteAndWaitAsync(name, ct).ConfigureAwait(false);
-            if (end is SandboxEnd.Failed or SandboxEnd.DiskExceeded)
+            if (end is SandboxEnd.Failed or SandboxEnd.DiskExceeded or SandboxEnd.TooManyEntries)
                 return new SandboxExecution(
                     end,
                     code,
@@ -157,15 +157,15 @@ internal sealed class KubernetesSandboxBackend(
             await Task.Delay(Kube.PollInterval, time, ct).ConfigureAwait(false);
 
             var job = await client
-                .BatchV1.ReadNamespacedJobStatusAsync(name, Kube.Namespace, cancellationToken: ct)
+                .BatchV1.ReadNamespacedJobAsync(name, Kube.Namespace, cancellationToken: ct)
                 .ConfigureAwait(false);
             if (Ended(job) is { } ended)
                 return await EndOfAsync(name, ended, ct).ConfigureAwait(false);
 
-            if (
-                DirectoryOutput.Size(output, options.Caps.MaxArchiveFiles + 2)
-                > limits.DiskMiB * MiB
-            )
+            var (bytes, tooMany) = DirectoryOutput.Size(output, options.Caps.MaxArchiveFiles + 2);
+            if (tooMany)
+                return (SandboxEnd.TooManyEntries, null);
+            if (bytes > limits.DiskMiB * MiB)
                 return (SandboxEnd.DiskExceeded, null);
 
             if (time.GetUtcNow() > giveUp)

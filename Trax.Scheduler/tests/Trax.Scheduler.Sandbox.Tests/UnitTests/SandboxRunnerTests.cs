@@ -100,6 +100,11 @@ public class SandboxRunnerTests
     [TestCase(nameof(SandboxEnd.OutOfMemory), SandboxOutcome.OutOfMemory, "192 MiB of memory")]
     [TestCase(nameof(SandboxEnd.DiskExceeded), SandboxOutcome.Exited, "8 MiB of output")]
     [TestCase(nameof(SandboxEnd.Failed), SandboxOutcome.Failed, "could not run the sandbox")]
+    [TestCase(
+        nameof(SandboxEnd.TooManyEntries),
+        SandboxOutcome.OutputRefused,
+        "more than 10000 entries"
+    )]
     public async Task RunAsync_Killed_FailsWithTheReasonAndNoOutput(
         string ended,
         SandboxOutcome outcome,
@@ -137,7 +142,7 @@ public class SandboxRunnerTests
         );
 
         response.Outcome.Should().Be(SandboxOutcome.Exited);
-        response.Reason.Should().Contain("code 137");
+        response.Reason.Should().Contain("code 137").And.Contain("under Kata");
     }
 
     [Test]

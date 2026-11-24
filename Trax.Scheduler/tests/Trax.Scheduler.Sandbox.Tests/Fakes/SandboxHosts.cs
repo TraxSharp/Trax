@@ -36,7 +36,11 @@ public static class SandboxHosts
         SandboxClientOptions? options = null
     ) =>
         new(
-            new HttpClient(launcher) { BaseAddress = new Uri("http://launcher") },
+            new HttpClient(launcher)
+            {
+                BaseAddress = new Uri(options?.LauncherUrl ?? "http://launcher"),
+                Timeout = Timeout.InfiniteTimeSpan,
+            },
             options ?? Options(),
             hub.GetRequiredService<ITrainDiscoveryService>(),
             TimeProvider.System,

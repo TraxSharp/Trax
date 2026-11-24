@@ -15,6 +15,9 @@ internal enum SandboxEnd
     /// <summary>It went over its disk and the launcher killed it.</summary>
     DiskExceeded,
 
+    /// <summary>It left more files than the output may hold and the launcher killed it.</summary>
+    TooManyEntries,
+
     /// <summary>It could not be started or watched.</summary>
     Failed,
 }

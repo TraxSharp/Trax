@@ -14,6 +14,7 @@
     <Project Path="tests/Trax.Scheduler.Tests.Meta/Trax.Scheduler.Tests.Meta.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.Stress/Trax.Scheduler.Tests.Stress.csproj" />
     <Project Path="tests/Trax.Scheduler.Sandbox.Image/Trax.Scheduler.Sandbox.Image.csproj" />
+    <Project Path="tests/Trax.Scheduler.Sandbox.LauncherHost/Trax.Scheduler.Sandbox.LauncherHost.csproj" />
     <Project Path="tests/Trax.Scheduler.Sandbox.Tests/Trax.Scheduler.Sandbox.Tests.csproj" />
   </Folder>
 </Solution>

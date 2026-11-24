@@ -70,9 +70,16 @@ answer comes back at once with the reason.
 - [Run a train in a sandbox](/docs/scheduler/run-a-train-in-a-sandbox) and the
   [sandbox threat model](/docs/security/sandbox-threat-model) are the rule this produces.
 
-Not covered: the admission policies have not been applied to a real cluster; their CEL is checked
-only as text.
+The admission policies were applied to k3s 1.36 and refused, by server-side dry run, a pod with no
+RuntimeClass or another one, a foreign digest, the right image by tag, extra env, env or envFrom
+from a Secret, a Secret or projected token volume, a token mounted or left to the default, the
+launcher's account, two containers, another claim, a launcher-labelled pod with a foreign image, and
+a Job whose pods carry the launcher's label; they admitted the sandbox's own pod and Job shape.
+
+Not covered: no test runs the policies in CI; their CEL is checked there only as text.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
+- **2026-11-24**: Applied to k3s; the launcher reads Jobs with a plain get, since its Role grants
+  no `jobs/status`.
