@@ -165,6 +165,13 @@ updates:
     cooldown: { default-days: 7 }
     groups:
       docker: { patterns: ["*"] }
+  # The egress image's two base images, pinned by digest in its Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/Trax.Egress"
+    schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }
+    groups:
+      egress-images: { patterns: ["*"] }
   - package-ecosystem: "docker-compose"
     directories: ["/Trax.Effect", "/Trax.Effect/.devcontainer", "/Trax.Scheduler", "/Trax.Samples"]
     schedule: { interval: "weekly" }

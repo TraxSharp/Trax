@@ -1318,6 +1318,61 @@ jobs:
           sudo loginctl enable-linger "$USER"
           .github/ci/deploy/podman.sh
 
+  # The egress image, Trax.Egress (packages.json suite egress): the Go program, its Dockerfile, the
+  # seccomp profile and the end-to-end test that runs the image in real network namespaces. The Go
+  # code has no dependencies and builds inside the golang image the Dockerfile pins, so the toolchain
+  # here is the one a release builds with. test/e2e.sh runs pods under the runner's rootless podman
+  # and probes them: the allowed domain (api.github.com, allowed below) must open, and everything
+  # else (other names, direct addresses, metadata, private ranges, DNS to an outside resolver) must
+  # not. Its positive controls fail the job if a probe could not have worked.
+  egress:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.suite-names), 'egress')
+    name: egress
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: Trax.Egress
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            dl-cdn.alpinelinux.org:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Format, vet and test
+        # In the golang image the Dockerfile builds with, with no network: the module has no
+        # dependencies to fetch.
+        run: |
+          set -eu
+          go_image=$(sed -n 's/^FROM \(docker.io\/library\/golang[^ ]*\) AS build$/\1/p' Dockerfile)
+          podman run --rm --network none -v "$PWD:/src:ro" -w /src \
+            -e GOFLAGS=-mod=mod -e GOTOOLCHAIN=local -e GOPROXY=off -e GOCACHE=/tmp/gocache \
+            "$go_image" sh -c 'test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt would change these"; exit 1; }; go vet ./... && go test ./...'
+      - name: The seccomp profile is the one its generator writes
+        run: python3 -I seccomp/generate.py seccomp/containers-default.json | diff -u seccomp/apps-nouserns.json -
+      - name: Shellcheck
+        run: shellcheck test/e2e.sh
+      - name: Build the image
+        run: podman build --build-arg VERSION=ci -t localhost/trax-egress:ci .
+      - name: Run the image in real network namespaces
+        run: test/e2e.sh localhost/trax-egress:ci api.github.com
+
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
   # that adds pull requests' release notes. Its tests take seconds and read no folder, so they
   # run on every pull request rather than through the change detection.
@@ -1357,7 +1412,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, checkin-web, board-client, state-machine, state-machine-rust, deploy-cluster, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, checkin-web, board-client, state-machine, state-machine-rust, deploy-cluster, egress, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

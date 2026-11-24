@@ -50,6 +50,7 @@ Trax.Cli/               The `trax` tool
 Trax.Samples/           Sample applications and the dotnet new templates
 Trax.Docs/              Documentation content, the central ADRs, the ADR guard
 Trax.Website/           Next.js site for traxsharp.net
+Trax.Egress/            The egress image trax deploy puts beside a service (Go, a Dockerfile; Trax.Docs/adr/0064)
 .github/                CI, release, Dependabot; per-folder CI settings in .github/ci/packages.json
 ```
 
@@ -237,7 +238,8 @@ so the title's type is what counts.
 Merging to `main` publishes nothing. To release, dispatch **Release** in the Actions tab. It runs
 the full CI over every folder, then semantic-release reads every commit since the last `v*` tag
 and cuts **one** version for **every** package, at the highest bump those commits call for:
-the NuGet packages, and the TypeScript engine, `@traxsharp/state-machine`, on npm. Both
+the NuGet packages, the TypeScript engine, `@traxsharp/state-machine`, on npm, and the egress
+image, `ghcr.io/traxsharp/trax-egress`, whose digest is packed into Trax.Cli. Both
 the versioning and the publish job wait on the protected `release` environment. After the
 packages are on nuget.org, publish the site by dispatching **Website** with the new tag (`v1.63.1`);
 the release does not do it.

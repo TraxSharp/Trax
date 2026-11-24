@@ -70,6 +70,8 @@ public partial class SdkReferenceBlockTests
         "reference/benchmarks.md",
         "reference/cli.md",
         "reference/comparison.md",
+        // The egress image is a container, not a .NET API: its code blocks are compose YAML and podman commands.
+        "reference/egress-image.md",
         "contributing/releases.md",
         // Only code block is a `gh attestation verify` CLI command, no SDK calls.
         "security/supply-chain.md",

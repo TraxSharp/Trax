@@ -1,0 +1,6 @@
+*
+!go.mod
+!cmd
+!internal
+!seccomp/apps-nouserns.json
+internal/**/*_test.go
