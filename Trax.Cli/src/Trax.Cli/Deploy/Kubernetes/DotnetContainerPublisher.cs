@@ -30,6 +30,20 @@ internal sealed class DotnetContainerPublisher : IContainerImagePublisher
             );
     }
 
+    /// <summary>
+    /// The SDK's name for a local container runtime. It accepts only <c>Docker</c> and <c>Podman</c>, case and all
+    /// (CONTAINER2002 otherwise), where trax.deploy.json writes them in lower case.
+    /// </summary>
+    internal static string LocalRegistry(string runtime) =>
+        runtime switch
+        {
+            DeployEnvironment.Podman => "Podman",
+            DeployEnvironment.Docker => "Docker",
+            _ => throw new InvalidOperationException(
+                $"'{runtime}' is not a container runtime the .NET SDK loads images into. Use podman or docker."
+            ),
+        };
+
     internal static ProcessStartInfo StartInfo(
         string projectPath,
         string? registry,
@@ -63,7 +77,7 @@ internal sealed class DotnetContainerPublisher : IContainerImagePublisher
             psi.ArgumentList.Add($"-p:ContainerRepository={repository}");
             // The SDK loads into docker when it finds one; a podman environment's units read podman's store.
             if (localRuntime is not null)
-                psi.ArgumentList.Add($"-p:LocalRegistry={localRuntime}");
+                psi.ArgumentList.Add($"-p:LocalRegistry={LocalRegistry(localRuntime)}");
         }
         else
         {
