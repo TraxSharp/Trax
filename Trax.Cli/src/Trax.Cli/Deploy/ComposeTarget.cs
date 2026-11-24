@@ -31,23 +31,29 @@ internal static class ComposeTarget
     public static IReadOnlyList<(string Path, string Content)> Render(
         DeployFile file,
         IReadOnlyDictionary<string, DeployManifest> exports,
-        string engine = DeployEnvironment.Podman
+        string engine = DeployEnvironment.Podman,
+        IReadOnlyDictionary<string, DeployLimits>? limits = null
     )
     {
+        limits ??= new Dictionary<string, DeployLimits>(StringComparer.Ordinal);
         if (engine is not (DeployEnvironment.Podman or DeployEnvironment.Docker))
             throw new InvalidOperationException($"Engine '{engine}' is not podman or docker.");
         var podman = string.Equals(engine, DeployEnvironment.Podman, StringComparison.Ordinal);
         Check(file, exports);
 
         var rabbit = exports.Values.Any(e => e.Transports.Contains("rabbitmq"));
+        if (!rabbit && limits.ContainsKey(DeployFile.BackingBroker))
+            throw new InvalidOperationException(
+                $"limits names {DeployFile.BackingBroker}, and no host uses RabbitMQ, so the stack runs none."
+            );
         var migrator = Migrator(file, exports);
 
         var y = new StringBuilder();
         AppendCommon(y, file, rabbit, podman);
-        AppendDatabase(y, file, podman);
+        AppendDatabase(y, file, podman, limits.GetValueOrDefault(DeployFile.BackingDatabase));
 
         if (rabbit)
-            AppendRabbitMq(y, file, podman);
+            AppendRabbitMq(y, file, podman, limits.GetValueOrDefault(DeployFile.BackingBroker));
 
         AppendMigrate(y, file, migrator, podman);
 
@@ -95,7 +101,12 @@ internal static class ComposeTarget
         y.AppendLine("services:");
     }
 
-    private static void AppendDatabase(StringBuilder y, DeployFile file, bool podman)
+    private static void AppendDatabase(
+        StringBuilder y,
+        DeployFile file,
+        bool podman,
+        DeployLimits? limits
+    )
     {
         y.AppendLine("  database:");
         y.AppendLine("    image: postgres:17");
@@ -108,11 +119,16 @@ internal static class ComposeTarget
         y.AppendLine("    healthcheck:");
         y.AppendLine($"      test: [\"CMD\", \"pg_isready\", \"-U\", \"{file.App}\"]");
         y.AppendLine("      interval: 5s");
-        Hardened(y, ServiceHardening.Database, podman);
+        Hardened(y, ServiceHardening.Database(limits), podman);
         y.AppendLine("    restart: unless-stopped");
     }
 
-    private static void AppendRabbitMq(StringBuilder y, DeployFile file, bool podman)
+    private static void AppendRabbitMq(
+        StringBuilder y,
+        DeployFile file,
+        bool podman,
+        DeployLimits? limits
+    )
     {
         y.AppendLine();
         y.AppendLine("  rabbitmq:");
@@ -123,7 +139,7 @@ internal static class ComposeTarget
         y.AppendLine("    healthcheck:");
         y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
         y.AppendLine("      interval: 5s");
-        Hardened(y, ServiceHardening.Broker, podman);
+        Hardened(y, ServiceHardening.Broker(limits), podman);
         y.AppendLine("    restart: unless-stopped");
     }
 
@@ -255,10 +271,23 @@ internal static class ComposeTarget
         y.AppendLine("      - no-new-privileges:true");
         if (podman)
             y.AppendLine("    userns_mode: nomap");
-        y.AppendLine(CultureInfo.InvariantCulture, $"    pids_limit: {ServiceHardening.Pids}");
-        y.AppendLine(CultureInfo.InvariantCulture, $"    mem_limit: {hardening.MemoryMiB}m");
-        // Without it the runtime allows as much swap again, so a copy could hold twice its memory before the kill.
-        y.AppendLine(CultureInfo.InvariantCulture, $"    memswap_limit: {hardening.MemoryMiB}m");
+        if (hardening.ReadOnlyRoot)
+        {
+            // A Trax host writes nothing outside /tmp; anything else it tries to write fails instead of persisting.
+            y.AppendLine("    read_only: true");
+            y.AppendLine("    tmpfs:");
+            y.AppendLine("      - /tmp");
+        }
+        if (hardening.Pids is { } pids)
+            y.AppendLine(CultureInfo.InvariantCulture, $"    pids_limit: {pids}");
+        if (hardening.Cpus is { } cpus)
+            y.AppendLine(CultureInfo.InvariantCulture, $"    cpus: {cpus}");
+        if (hardening.MemoryMiB is { } memory)
+        {
+            y.AppendLine(CultureInfo.InvariantCulture, $"    mem_limit: {memory}m");
+            // Without it the runtime allows as much swap again, so a copy could hold twice its memory before the kill.
+            y.AppendLine(CultureInfo.InvariantCulture, $"    memswap_limit: {memory}m");
+        }
     }
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";

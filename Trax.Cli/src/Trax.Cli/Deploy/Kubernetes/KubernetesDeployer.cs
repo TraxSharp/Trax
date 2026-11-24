@@ -7,7 +7,8 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// <summary>
 /// Puts an environment on a Kubernetes cluster: checks the namespace is this app's and its Secret has every key,
 /// builds the images, brings up the in-cluster Postgres and RabbitMQ, runs the migrate Job, and only after it succeeds
-/// applies the services and waits for each to roll out. It never creates a cluster.
+/// applies the services and waits for each to roll out. A service that does not roll out puts every service back on
+/// the version it ran before the deploy, as ECS's circuit breaker does. It never creates a cluster.
 /// </summary>
 internal sealed class KubernetesDeployer(
     IKubernetesDeployClient cluster,
@@ -43,9 +44,96 @@ internal sealed class KubernetesDeployer(
         await MigrateAsync(environment, manifests, ct).ConfigureAwait(false);
 
         say($"Rolling the services onto {tag}...");
-        await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Services, ct)
-            .ConfigureAwait(false);
+        var before = await DeploymentsBeforeAsync(manifests, ct).ConfigureAwait(false);
+        try
+        {
+            await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Services, ct)
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException failed) when (!ct.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                $"{failed.Message} {await RollBackAsync(manifests.NamespaceName, before, ct).ConfigureAwait(false)}",
+                failed
+            );
+        }
     }
+
+    /// <summary>
+    /// The Deployment each rendered service had before this deploy changes it, by name, or null for one this deploy
+    /// creates.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, V1Deployment?>> DeploymentsBeforeAsync(
+        KubernetesManifests manifests,
+        CancellationToken ct
+    )
+    {
+        var before = new Dictionary<string, V1Deployment?>(StringComparer.Ordinal);
+        foreach (var deployment in manifests.Services.OfType<V1Deployment>())
+            before[deployment.Metadata.Name] = await cluster
+                .ReadDeploymentAsync(manifests.NamespaceName, deployment.Metadata.Name, ct)
+                .ConfigureAwait(false);
+        return before;
+    }
+
+    /// <summary>
+    /// Puts every service back as it was before this deploy: a Deployment that existed gets its earlier spec (its pod
+    /// template, copies and strategy) applied again and is waited on; one this deploy created is deleted. A first deploy,
+    /// with nothing to go back to, is left as it is. The migration is not undone: a migration must leave the version
+    /// before it working, since that version serves while it runs. Returns the sentence the failure ends with.
+    /// </summary>
+    private async Task<string> RollBackAsync(
+        string ns,
+        IReadOnlyDictionary<string, V1Deployment?> before,
+        CancellationToken ct
+    )
+    {
+        if (before.Values.All(d => d is null))
+            return "Nothing was rolled back: no service ran before this deploy. Fix it and deploy again.";
+        say("Rolling the services back to the version before this deploy...");
+        try
+        {
+            foreach (var (name, previous) in before)
+                if (previous is null)
+                    await cluster
+                        .DeleteAsync(
+                            ns,
+                            new KubernetesObjectState("Deployment", name, App: null),
+                            ct
+                        )
+                        .ConfigureAwait(false);
+                else
+                    await cluster.ApplyAsync(Restored(ns, previous), ct).ConfigureAwait(false);
+            foreach (var (name, previous) in before)
+                if (previous is not null)
+                    await cluster
+                        .WaitForRolloutAsync(ns, "Deployment", name, RolloutTimeout, ct)
+                        .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException rollback)
+        {
+            return $"Rolling back failed too, so the services are in between versions: {rollback.Message}";
+        }
+        return "Every service was rolled back to the version it ran before this deploy; the migration stays.";
+    }
+
+    /// <summary>
+    /// <paramref name="previous"/> as a body to apply: its name, labels and spec, without the status and the
+    /// server-set metadata (uid, resource version, managed fields) that an apply refuses.
+    /// </summary>
+    internal static V1Deployment Restored(string ns, V1Deployment previous) =>
+        new()
+        {
+            ApiVersion = "apps/v1",
+            Kind = "Deployment",
+            Metadata = new V1ObjectMeta
+            {
+                Name = previous.Metadata.Name,
+                NamespaceProperty = ns,
+                Labels = previous.Metadata.Labels,
+            },
+            Spec = previous.Spec,
+        };
 
     /// <summary>
     /// Makes the namespace this app's to apply to: refuses it or any object in it another app deployed, and a Secret

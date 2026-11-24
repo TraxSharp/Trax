@@ -37,6 +37,9 @@ internal interface IKubernetesDeployClient
     /// <summary>Creates or updates a Service, Deployment or StatefulSet with server-side apply.</summary>
     Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct);
 
+    /// <summary>The Deployment as the cluster holds it, or null when it does not exist.</summary>
+    Task<V1Deployment?> ReadDeploymentAsync(string ns, string name, CancellationToken ct);
+
     Task CreateJobAsync(V1Job body, CancellationToken ct);
 
     /// <summary>Waits for the Job to succeed or fail, and on failure returns the end of its pod's log.</summary>
@@ -49,7 +52,8 @@ internal interface IKubernetesDeployClient
 
     /// <summary>
     /// Waits until the Deployment or StatefulSet has rolled out: its controller has seen the latest change, and every
-    /// copy is updated and ready. Throws when it has not within <paramref name="timeout"/>.
+    /// copy is updated and ready. Throws when it has not within <paramref name="timeout"/>, or as soon as a Deployment
+    /// passes its progress deadline.
     /// </summary>
     Task WaitForRolloutAsync(
         string ns,

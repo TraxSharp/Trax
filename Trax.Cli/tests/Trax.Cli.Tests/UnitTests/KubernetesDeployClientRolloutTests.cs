@@ -53,6 +53,53 @@ public class KubernetesDeployClientRolloutTests
             .Done.Should()
             .Be(done);
 
+    [Test]
+    public void A_Deployment_past_its_progress_deadline_says_so()
+    {
+        var d = Deployment(2, 2, 1, 1, 2);
+        d.Status.Conditions =
+        [
+            new V1DeploymentCondition
+            {
+                Type = "Progressing",
+                Status = "False",
+                Reason = "ProgressDeadlineExceeded",
+                Message = "ReplicaSet \"hub-7c\" has timed out progressing.",
+            },
+        ];
+
+        var (done, state) = KubernetesDeployClient.Rolled(d);
+
+        done.Should().BeFalse();
+        state
+            .Should()
+            .StartWith(KubernetesDeployClient.PastDeadline)
+            .And.Contain("timed out progressing");
+    }
+
+    [Test]
+    public void A_deadline_from_an_earlier_spec_is_not_this_rollouts()
+    {
+        var d = Deployment(3, 2, 1, 1, 2);
+        d.Status.Conditions =
+        [
+            new V1DeploymentCondition
+            {
+                Type = "Progressing",
+                Status = "False",
+                Reason = "ProgressDeadlineExceeded",
+            },
+        ];
+
+        KubernetesDeployClient
+            .Rolled(d)
+            .State.Should()
+            .NotStartWith(
+                KubernetesDeployClient.PastDeadline,
+                "the controller has not seen this deploy's spec yet"
+            );
+    }
+
     [TestCase(3, 3, 1, 1, true)]
     [TestCase(3, 2, 1, 1, false)]
     [TestCase(3, 3, 0, 1, false)]

@@ -720,7 +720,7 @@ Without `--env`, `--target compose` (the default) writes the podman stack below;
 | Key | Meaning |
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
-| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `memory` is the memory each copy may use, in MiB, at least 128; 1024 when left out. `init` names a lone project `hub` and several by the last part of their names. |
+| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `memory` is the memory each copy may use, in MiB, at least 128; with none a copy has no memory limit (on aws a Fargate task needs one, so it gets 1024). `cpus` is the CPU each copy may use (`1.5`), from 0.1 to 16; with none, no limit (on aws, half a vCPU). `pids` is how many processes and threads a copy may run, at least 64; 512 when left out. Only compose applies it: Kubernetes and Fargate have no per-container process limit, so an aws or kubernetes environment refuses a file whose services name `pids`. Set `memory` in production: a copy with no limit that leaks can take the memory Postgres and its neighbours need, and on Kubernetes a pod with no request or limit is the first evicted when its node runs short. `init` names a lone project `hub` and several by the last part of their names. |
 | `connectionStrings` | The name under `ConnectionStrings:` the hosts read Postgres from, and the name they read RabbitMQ's settings under. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 | `environments` | Each environment by name (lower-case letters and digits), with its `target` and that target's keys below. |
@@ -747,15 +747,34 @@ compose:
   publishes a port, so a `port` on one is refused, and so are two services with the same `port`.
 
 Every service drops every Linux capability and runs with `no-new-privileges`, `userns_mode: nomap` (the deploying
-user's own uid is not mapped into the container, so an escape does not land as them), `pids_limit: 512` and a
-`mem_limit`: the service's `memory`, 1024 MiB for Postgres and 512 MiB for RabbitMQ. `memswap_limit` is the same
-value, so a service gets no swap on top of its memory. Postgres gets back `CHOWN`,
+user's own uid is not mapped into the container, so an escape does not land as them) and `pids_limit`: the
+service's `pids`, 512 when it names none. A service that names `memory` gets it as `mem_limit`, with `memswap_limit`
+the same value so it gets no swap on top; one that names `cpus` gets `cpus`. Postgres runs in 1024 MiB and RabbitMQ
+in 512 MiB unless the environment's `limits` say otherwise. Every Trax service and `migrate` runs with `read_only:
+true` and a `tmpfs` on `/tmp`: a host writes nothing outside `/tmp`, so a file it writes anywhere else is an error,
+not something that persists. Postgres and RabbitMQ keep a writable root. Postgres gets back `CHOWN`,
 `DAC_OVERRIDE`, `FOWNER`, `SETGID` and `SETUID`, and RabbitMQ the same less `FOWNER`, which their entrypoints need to
 take their data directories and drop to their own users. docker compose refuses `nomap`: an environment with
 `"target": "compose", "engine": "docker"` writes the same stack without `userns_mode` (its header says so), and
 `trax deploy --env <name>` writes it. `engine` is `podman` when left out, and so is the stack written without
 `--env`. A compose environment takes no `settings` or `counts`: the stack reads its settings from the `.env` and
 runs each service's `count`.
+
+An environment's `limits` set the memory, CPU and pids of the services trax runs beside the app, by name:
+
+```json
+"home": {
+  "target": "compose",
+  "limits": {
+    "database": { "memory": 4096, "cpus": 2, "pids": 1024 },
+    "rabbitmq": { "memory": 768 }
+  }
+}
+```
+
+Only `database` and `rabbitmq` are names it takes; an app service's limits are in its own entry. A `rabbitmq` limit
+when no host uses RabbitMQ is refused, since the stack runs none.
+
 Nothing is reachable from other machines until something in front of the stack (a reverse proxy, `tailscale serve`)
 decides who may reach it.
 
@@ -824,6 +843,12 @@ A deploy:
 4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
 5. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
    if it never gets healthy, and prints the address.
+
+Each task is the smallest Fargate size that holds its service's `memory` and `cpus` (Fargate accepts only certain
+pairs: `"memory": 3000` runs as half a vCPU and 3 GB, `"memory": 9000` as two vCPUs and 9 GB). A service that names
+neither runs as half a vCPU and 1 GB, and plan prices each service at its own size. Every Trax container has a
+read-only root filesystem and a scratch `/tmp` volume of the task's own, as on compose and Kubernetes. An aws
+environment refuses `pids` on a service and `limits` (RDS is sized by the profile, and there is no broker to limit).
 
 Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
 database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and
@@ -908,7 +933,17 @@ What it applies, in this order:
    runs one copy with `strategy: Recreate`, so the old hub stops before the new one starts: a few seconds without a
    hub, never two. Workers roll at their count. A hub also gets a ClusterIP Service on port 8080, and every service
    that reports a health endpoint gets readiness and liveness probes on it;
-5. waits for each Deployment to roll out: every copy updated and available, within ten minutes.
+5. waits for each Deployment to roll out: every copy updated and available, within ten minutes. Each Deployment has
+   `progressDeadlineSeconds: 300`, so a rollout that makes no progress for five minutes (a crash loop, an image that
+   never passes readiness) ends the wait as soon as the cluster marks it, not at ten minutes.
+
+When a service does not roll out, the deploy puts every service back as it was before it started, as ECS's circuit
+breaker does: each Deployment that existed gets its earlier spec applied again (the pod template, the copies and the
+strategy it had) and is waited on, and one this deploy created is deleted. The error names the service that failed
+and ends with what was done. The migration is not undone: the version before it served while it ran, so it must
+already work on the new schema. A first deploy has nothing to go back to and is left as it is. If the rollback itself
+does not roll out, the error says the services are in between versions. A deploy you interrupt (Ctrl-C) is not rolled
+back.
 
 Services, Deployments and the StatefulSet are applied server-side under the field manager `trax`. Every object
 carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kubernetes.io/managed-by: trax` and
@@ -920,8 +955,12 @@ Every container runs under the same limits compose gives it: every capability dr
 RabbitMQ's own added back, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault` (and the
 `container.seccomp.security.alpha.kubernetes.io/<container>: runtime/default` annotation, which `podman kube play`
 reads in its place), `runAsNonRoot` for every Trax container, the service's `memory` as both request and limit, and
-a pod with `hostUsers: false`, no service account token and no service links. Kubernetes has no per-container
-pids limit, so the node's applies.
+a pod with `hostUsers: false`, no service account token and no service links. A service's `memory` and `cpus`
+are its request and its limit, both the same; one that names neither has no request or limit. Every Trax container
+has `readOnlyRootFilesystem: true` and an `emptyDir` mounted on `/tmp`. Kubernetes has no per-container pids limit
+(the node's `podPidsLimit` applies), so a service or `limits` entry that names `pids` is refused. `limits.database`
+applies to Postgres when it runs in the cluster and is refused otherwise; `limits.rabbitmq` applies to RabbitMQ and
+is refused when no host uses it.
 
 trax writes no secret value into a manifest. Each name under `secrets`, and `POSTGRES_PASSWORD` and
 `RABBITMQ_PASSWORD` when Postgres or RabbitMQ run in the cluster, is read by `secretKeyRef` from one Secret,
@@ -1028,13 +1067,29 @@ this host's podman as `localhost/<app>-<service>:<tag>` and writes:
   Secrets with their values from `.env`, which each unit plays before its pod. It is never written beside the
   project.
 
-It starts nothing. It prints the three commands that do:
+It starts nothing. It prints the commands that do:
 
 ```bash
 mkdir -p ~/.config/containers/systemd && cp .trax/deploy/podman/orders-home/*.{kube,network} ~/.config/containers/systemd/
 systemctl --user daemon-reload
 systemctl --user restart orders-home-database.service orders-home-hub.service orders-home-reports.service orders-home-worker.service
 ```
+
+Later releases restart only what changed. trax compares the files it is about to write with the ones the last
+deploy left in `.trax/deploy/podman/<app>-<env>/`: a unit whose own `.kube` or pod YAML changed restarts, and so does
+the unit that runs a changed migration. A release that changes only the app's images leaves Postgres and RabbitMQ
+running and says so:
+
+```text
+systemctl --user restart orders-home-hub.service orders-home-reports.service orders-home-worker.service
+Unchanged, left running: orders-home-database.
+Each restarted service stops before its new version starts, so it is down for that moment; for no downtime, deploy to a cluster.
+```
+
+A changed network or changed Secrets restart every unit, since each unit plays the Secrets before its pod. A service
+the stack no longer has (RabbitMQ after the last host stops using it, say) is stopped and its unit removed. A
+restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
+for none, deploy to a cluster, one machine included (see [one machine, no downtime](deploy-to-one-machine-with-no-downtime.md)).
 
 What differs from a cluster, and why:
 

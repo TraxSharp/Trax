@@ -32,6 +32,12 @@ internal static partial class KubernetesTarget
     public const string Broker = "rabbitmq";
     public const string MigrateName = "migrate";
 
+    /// <summary>How long a service's rollout may go without progress before the cluster calls it failed: five minutes.</summary>
+    public const int RolloutProgressDeadlineSeconds = 300;
+
+    /// <summary>The empty volume a read-only container writes its <c>/tmp</c> to.</summary>
+    public const string ScratchVolume = "tmp";
+
     public const string PostgresPasswordKey = "POSTGRES_PASSWORD";
     public const string RabbitMqPasswordKey = "RABBITMQ_PASSWORD";
 
@@ -96,6 +102,11 @@ internal static partial class KubernetesTarget
             );
         ComposeTarget.CheckHosts(file, exports, name => file.Count(env, name));
         var rabbit = exports.Values.Any(e => e.Transports.Contains("rabbitmq"));
+        if (!rabbit && env.Limits.ContainsKey(DeployFile.BackingBroker))
+            throw new InvalidOperationException(
+                $"Environment '{environment}': limits names {DeployFile.BackingBroker}, and no host uses RabbitMQ, so "
+                    + "the cluster runs none."
+            );
         if (
             rabbit
             && string.Equals(env.Profile, DeployEnvironment.Production, StringComparison.Ordinal)
@@ -415,8 +426,10 @@ internal static partial class KubernetesTarget
 
         /// <summary>
         /// A container under <paramref name="hardening"/>: every capability dropped and only its own added back, no
-        /// privilege gained, the runtime's seccomp profile, and its memory as both request and limit. Kubernetes has
-        /// no per-container pids limit, so <see cref="ServiceHardening.Pids"/> is the node's to enforce.
+        /// privilege gained, the runtime's seccomp profile, its memory and CPU as both request and limit when they are
+        /// set (none when they are not, which makes the pod BestEffort, the first evicted when its node runs short),
+        /// and a read-only root with an empty <c>/tmp</c> when the hardening asks for one. Kubernetes has no
+        /// per-container pids limit, so <see cref="ServiceHardening.Pids"/> is the node's to enforce.
         /// </summary>
         public static V1Container Container(
             string name,
@@ -426,12 +439,15 @@ internal static partial class KubernetesTarget
             IList<V1EnvVar> vars
         )
         {
-            var memory = new Dictionary<string, ResourceQuantity>(StringComparer.Ordinal)
-            {
-                ["memory"] = new ResourceQuantity(
-                    string.Create(CultureInfo.InvariantCulture, $"{hardening.MemoryMiB}Mi")
-                ),
-            };
+            var resources = new Dictionary<string, ResourceQuantity>(StringComparer.Ordinal);
+            if (hardening.MemoryMiB is { } memory)
+                resources["memory"] = new ResourceQuantity(
+                    string.Create(CultureInfo.InvariantCulture, $"{memory}Mi")
+                );
+            if (hardening.Cpus is { } cpus)
+                resources["cpu"] = new ResourceQuantity(
+                    string.Create(CultureInfo.InvariantCulture, $"{(int)(cpus * 1000)}m")
+                );
             return new V1Container
             {
                 Name = name,
@@ -442,6 +458,7 @@ internal static partial class KubernetesTarget
                 {
                     RunAsNonRoot = nonRoot,
                     AllowPrivilegeEscalation = false,
+                    ReadOnlyRootFilesystem = hardening.ReadOnlyRoot ? true : null,
                     Capabilities = new V1Capabilities
                     {
                         Drop = ["ALL"],
@@ -452,14 +469,20 @@ internal static partial class KubernetesTarget
                     },
                     SeccompProfile = new V1SeccompProfile { Type = "RuntimeDefault" },
                 },
-                Resources = new V1ResourceRequirements
-                {
-                    Limits = memory,
-                    Requests = new Dictionary<string, ResourceQuantity>(
-                        memory,
-                        StringComparer.Ordinal
-                    ),
-                },
+                VolumeMounts = hardening.ReadOnlyRoot
+                    ? [new V1VolumeMount { Name = ScratchVolume, MountPath = "/tmp" }]
+                    : null,
+                Resources =
+                    resources.Count == 0
+                        ? null
+                        : new V1ResourceRequirements
+                        {
+                            Limits = resources,
+                            Requests = new Dictionary<string, ResourceQuantity>(
+                                resources,
+                                StringComparer.Ordinal
+                            ),
+                        },
             };
         }
 
@@ -487,6 +510,19 @@ internal static partial class KubernetesTarget
                     EnableServiceLinks = false,
                     RestartPolicy = restart,
                     Containers = [container],
+                    Volumes = container.VolumeMounts?.Any(m =>
+                        string.Equals(m.Name, ScratchVolume, StringComparison.Ordinal)
+                    )
+                        is true
+                        ?
+                        [
+                            new V1Volume
+                            {
+                                Name = ScratchVolume,
+                                EmptyDir = new V1EmptyDirVolumeSource(),
+                            },
+                        ]
+                        : null,
                 },
             };
 
@@ -530,6 +566,9 @@ internal static partial class KubernetesTarget
                     {
                         Type = hub ? "Recreate" : "RollingUpdate",
                     },
+                    // The cluster marks a rollout that stops making progress for this long as failed, which ends
+                    // the deploy's wait early and rolls it back.
+                    ProgressDeadlineSeconds = RolloutProgressDeadlineSeconds,
                     Selector = new V1LabelSelector { MatchLabels = Selector(name) },
                     Template = Pod(name, container),
                 },
@@ -609,7 +648,7 @@ internal static partial class KubernetesTarget
             var container = Container(
                 Database,
                 "postgres:17",
-                ServiceHardening.Database,
+                ServiceHardening.Database(env.Limits.GetValueOrDefault(DeployFile.BackingDatabase)),
                 nonRoot: false,
                 [
                     Value("POSTGRES_DB", file.App),
@@ -655,7 +694,7 @@ internal static partial class KubernetesTarget
             var container = Container(
                 Broker,
                 "rabbitmq:4",
-                ServiceHardening.Broker,
+                ServiceHardening.Broker(env.Limits.GetValueOrDefault(DeployFile.BackingBroker)),
                 nonRoot: false,
                 [
                     Value("RABBITMQ_DEFAULT_USER", file.App),

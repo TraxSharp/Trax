@@ -215,10 +215,29 @@ public partial class DeployKubernetesTests
                 ]
                 .Should()
                 .Be("runtime/default", "podman kube play reads the annotation, not the field");
-            MiB(container.Resources.Limits["memory"]).Should().BeGreaterThan(0);
-            MiB(container.Resources.Requests["memory"])
-                .Should()
-                .Be(MiB(container.Resources.Limits["memory"]));
+            if (container.Resources is { } resources)
+                MiB(resources.Requests["memory"])
+                    .Should()
+                    .Be(MiB(resources.Limits["memory"]), container.Name);
+            var trax = container.Name is not ("database" or "rabbitmq");
+            security.ReadOnlyRootFilesystem.Should().Be(trax ? true : null, container.Name);
+            if (trax)
+            {
+                container
+                    .VolumeMounts.Should()
+                    .ContainSingle(v =>
+                        string.Equals(v.MountPath, "/tmp", StringComparison.Ordinal)
+                    );
+                pod.Spec.Volumes.Should()
+                    .ContainSingle(v =>
+                        string.Equals(
+                            v.Name,
+                            KubernetesTarget.ScratchVolume,
+                            StringComparison.Ordinal
+                        )
+                        && v.EmptyDir != null
+                    );
+            }
             security
                 .RunAsNonRoot.Should()
                 .Be(container.Name is not ("database" or "rabbitmq"), container.Name);
@@ -257,11 +276,14 @@ public partial class DeployKubernetesTests
             (container.SecurityContext.Capabilities.Add ?? [])
                 .Should()
                 .Equal(composeAdds, container.Name);
-            var composeMemory = MemLimit.Match(block).Groups["mib"].Value;
-            MiB(container.Resources.Limits["memory"])
-                .ToString(System.Globalization.CultureInfo.InvariantCulture)
-                .Should()
-                .Be(composeMemory, container.Name);
+            var composeMemory = MemLimit.Match(block);
+            if (composeMemory.Success)
+                MiB(container.Resources.Limits["memory"])
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    .Should()
+                    .Be(composeMemory.Groups["mib"].Value, container.Name);
+            else
+                container.Resources.Should().BeNull(container.Name);
             block.Should().Contain("      - ALL\n", "compose drops every capability too");
         }
         containers
@@ -347,7 +369,7 @@ public partial class DeployKubernetesTests
         container.Image.Should().Be("postgres:17");
         container
             .SecurityContext.Capabilities.Add.Should()
-            .Equal(ServiceHardening.Database.AddCapabilities);
+            .Equal(ServiceHardening.Database(limits: null).AddCapabilities);
         set.Spec.VolumeClaimTemplates.Single().Metadata.Name.Should().Be("data");
     }
 

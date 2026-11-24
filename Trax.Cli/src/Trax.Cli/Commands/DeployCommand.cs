@@ -324,13 +324,16 @@ internal static class DeployCommand
                 );
             var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
             // Without an environment the stack is for podman, as before environments named their target.
-            var engine = environment is null
-                ? DeployEnvironment.Podman
-                : file.Environment(environment).Engine ?? DeployEnvironment.Podman;
+            var env = environment is null ? null : file.Environment(environment);
+            var engine = env?.Engine ?? DeployEnvironment.Podman;
             var exports = await ExportAsync(file, filePath, exporter, stdout).ConfigureAwait(false);
 
             var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
-            await WriteStackAsync(dir, ComposeTarget.Render(file, exports, engine), stdout)
+            await WriteStackAsync(
+                    dir,
+                    ComposeTarget.Render(file, exports, engine, env?.Limits),
+                    stdout
+                )
                 .ConfigureAwait(false);
 
             if (build)

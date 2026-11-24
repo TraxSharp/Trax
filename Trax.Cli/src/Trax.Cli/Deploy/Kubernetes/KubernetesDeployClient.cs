@@ -64,6 +64,9 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             cancellationToken: ct
         );
 
+    public Task<V1Deployment?> ReadDeploymentAsync(string ns, string name, CancellationToken ct) =>
+        OrNull(() => _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct));
+
     public async Task<IReadOnlyCollection<string>?> SecretKeysAsync(
         string ns,
         string name,
@@ -450,6 +453,11 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             };
             if (done)
                 return;
+            if (state.StartsWith(PastDeadline, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"{kind} {name} did not roll out: {state}. See "
+                        + $"'kubectl describe {kind.ToLowerInvariant()} {name} -n {ns}'."
+                );
             if (_clock.GetUtcNow() > deadline)
                 throw new InvalidOperationException(
                     string.Create(
@@ -461,10 +469,20 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         }
     }
 
+    /// <summary>How <see cref="Rolled(V1Deployment)"/> starts the state of a Deployment past its progress deadline.</summary>
+    internal const string PastDeadline = "past its progress deadline";
+
     internal static (bool Done, string State) Rolled(V1Deployment d)
     {
         var want = d.Spec.Replicas ?? 1;
         var s = d.Status;
+        var stalled = s?.Conditions?.FirstOrDefault(c =>
+            string.Equals(c.Type, "Progressing", StringComparison.Ordinal)
+            && string.Equals(c.Status, "False", StringComparison.Ordinal)
+            && string.Equals(c.Reason, "ProgressDeadlineExceeded", StringComparison.Ordinal)
+        );
+        if (stalled is not null && s?.ObservedGeneration >= d.Metadata.Generation)
+            return (false, $"{PastDeadline} ({stalled.Message})");
         var done =
             s is not null
             && s.ObservedGeneration >= d.Metadata.Generation

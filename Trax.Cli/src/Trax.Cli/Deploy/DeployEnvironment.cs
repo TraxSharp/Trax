@@ -79,6 +79,13 @@ internal sealed class DeployEnvironment
     /// <summary>The sign-in the stack creates: <c>cognito</c>, or none when the hosts trust an existing issuer.</summary>
     public DeployAuth? Auth { get; set; }
 
+    /// <summary>
+    /// Limits on the services trax runs beside the app, by name: <c>database</c> and <c>rabbitmq</c>. On compose, and
+    /// on kubernetes where they run in the cluster; aws runs neither.
+    /// </summary>
+    public SortedDictionary<string, DeployLimits> Limits { get; set; } =
+        new(StringComparer.Ordinal);
+
     /// <summary>Copies per service in this environment, over the file's <c>count</c>.</summary>
     public SortedDictionary<string, int> Counts { get; set; } = new(StringComparer.Ordinal);
 

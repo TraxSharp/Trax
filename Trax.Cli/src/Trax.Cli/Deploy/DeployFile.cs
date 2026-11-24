@@ -90,6 +90,7 @@ internal sealed partial class DeployFile
                 Problem($"profile '{env.Profile}' is not production or try.")
             );
         CheckTarget(name, env, Problem);
+        CheckEnvironmentLimits(env, Problem);
         foreach (var service in env.Counts.Keys)
             if (!Services.ContainsKey(service))
                 throw new InvalidOperationException(
@@ -259,21 +260,45 @@ internal sealed partial class DeployFile
                         $"service '{name}' has port {port.ToString(CultureInfo.InvariantCulture)}, which service '{ports[port]}' has too."
                     )
                 );
-            if (service.Memory < ServiceHardening.MinimumMemoryMiB)
-                throw new InvalidOperationException(
-                    Problem(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"service '{name}' has memory {service.Memory}; it must be at least "
-                                + $"{ServiceHardening.MinimumMemoryMiB} (MiB)."
-                        )
-                    )
-                );
+            var limit = CheckLimits(
+                $"service '{name}'",
+                service.Memory,
+                service.Pids,
+                service.Cpus
+            );
+            if (limit is not null)
+                throw new InvalidOperationException(Problem(limit));
             if (service.Count < 1)
                 throw new InvalidOperationException(
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
                 );
         }
+    }
+
+    /// <summary>
+    /// The first limit of <paramref name="who"/> that no runtime would accept, as a sentence, or null when every one
+    /// is in range: memory at least <see cref="ServiceHardening.MinimumMemoryMiB"/>, pids at least
+    /// <see cref="ServiceHardening.MinimumPids"/>, CPUs from <see cref="ServiceHardening.MinimumCpus"/> to
+    /// <see cref="ServiceHardening.MaximumCpus"/>.
+    /// </summary>
+    internal static string? CheckLimits(string who, int? memory, int? pids, decimal? cpus)
+    {
+        if (memory < ServiceHardening.MinimumMemoryMiB)
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{who} has memory {memory}; it must be at least {ServiceHardening.MinimumMemoryMiB} (MiB)."
+            );
+        if (pids < ServiceHardening.MinimumPids)
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{who} has pids {pids}; it must be at least {ServiceHardening.MinimumPids}."
+            );
+        if (cpus is { } c && (c < ServiceHardening.MinimumCpus || c > ServiceHardening.MaximumCpus))
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{who} has cpus {c}; it must be from {ServiceHardening.MinimumCpus} to {ServiceHardening.MaximumCpus}."
+            );
+        return null;
     }
 
     /// <summary>The full path of <paramref name="service"/>'s project.</summary>

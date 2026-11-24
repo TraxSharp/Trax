@@ -315,6 +315,80 @@ internal sealed partial class DeployFile
     }
 
     /// <summary>Refuses the fields only an aws environment reads.</summary>
+    /// <summary>
+    /// Checks the limits an environment sets on its backing services, and refuses a limit its target has no way to
+    /// apply: pids on aws and kubernetes (neither counts processes per container), any backing-service limit on aws
+    /// (it runs neither service), and a database limit on kubernetes when the database is not in the cluster.
+    /// </summary>
+    private void CheckEnvironmentLimits(DeployEnvironment env, Func<string, string> problem)
+    {
+        foreach (var (name, limits) in env.Limits)
+        {
+            if (name is not (BackingDatabase or BackingBroker))
+                throw new InvalidOperationException(
+                    problem(
+                        $"limits names '{name}', which is not a service trax runs beside the app. Use "
+                            + $"{BackingDatabase} or {BackingBroker}; a service of the app takes its limits in its "
+                            + "own entry under services."
+                    )
+                );
+            var limit = CheckLimits($"limits.{name}", limits.Memory, limits.Pids, limits.Cpus);
+            if (limit is not null)
+                throw new InvalidOperationException(problem(limit));
+        }
+        var aws = string.Equals(env.Target, DeployEnvironment.Aws, StringComparison.Ordinal);
+        var kubernetes = string.Equals(
+            env.Target,
+            DeployEnvironment.Kubernetes,
+            StringComparison.Ordinal
+        );
+        if (aws && env.Limits.Count > 0)
+            throw new InvalidOperationException(
+                problem(
+                    "limits are for compose and kubernetes. On aws the database is RDS, sized by the profile, and "
+                        + "there is no broker to limit."
+                )
+            );
+        if (aws || kubernetes)
+        {
+            var target = aws ? "aws (Fargate)" : "kubernetes";
+            foreach (var (service, entry) in Services)
+                if (entry.Pids is not null)
+                    throw new InvalidOperationException(
+                        problem(
+                            $"service '{service}' names pids, which {target} cannot apply: it has no "
+                                + "per-container process limit (on kubernetes it is the node's podPidsLimit). pids "
+                                + "is for compose; a file that also deploys to this target leaves it out."
+                        )
+                    );
+            foreach (var (name, limits) in env.Limits)
+                if (limits.Pids is not null)
+                    throw new InvalidOperationException(
+                        problem(
+                            $"limits.{name} names pids, which kubernetes cannot apply: it has no per-container "
+                                + "process limit."
+                        )
+                    );
+        }
+        if (
+            kubernetes
+            && env.Limits.ContainsKey(BackingDatabase)
+            && env.Database is not { InCluster: true }
+        )
+            throw new InvalidOperationException(
+                problem(
+                    $"limits.{BackingDatabase} is for a database trax runs in the cluster (\"database\": "
+                        + "{ \"inCluster\": true }); this environment's database is not one."
+                )
+            );
+    }
+
+    /// <summary>The name <c>limits</c> takes for the Postgres trax runs beside the app.</summary>
+    public const string BackingDatabase = "database";
+
+    /// <summary>The name <c>limits</c> takes for the RabbitMQ trax runs beside the app.</summary>
+    public const string BackingBroker = "rabbitmq";
+
     private static void NotForCloud(
         DeployEnvironment env,
         Func<string, string> problem,

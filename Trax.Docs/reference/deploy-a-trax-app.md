@@ -43,8 +43,9 @@ podman compose up -d
 The stack is Postgres, RabbitMQ when a host uses it, one `migrate` run of the new version, then each service. The
 API service answers on port 8080. Every service drops all Linux capabilities (Postgres and RabbitMQ get back the
 few their entrypoints need), runs in a user namespace that leaves your own uid out of it (`userns_mode: nomap`,
-which docker does not accept), and is held to 512 processes and a memory limit: a service's `memory` in MiB,
-1024 when it names none.
+which docker does not accept), and is held to 512 processes. A Trax service's root filesystem is read-only, with a
+scratch `/tmp`. A service that names `memory` (MiB) or `cpus` runs under them; one that names neither has no limit,
+so set them in production.
 
 Passwords reach the hosts as values of their own, never inside a connection string or a URI: Postgres's as
 `PGPASSWORD`, RabbitMQ's as `RabbitMq__Password` beside `RabbitMq__Host` and `RabbitMq__UserName`. A host that

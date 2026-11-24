@@ -21,6 +21,18 @@ internal sealed class DeployService
     /// </summary>
     public int? Port { get; set; }
 
-    /// <summary>The memory each copy may use, in MiB. Without it, 1024.</summary>
+    /// <summary>
+    /// The memory each copy may use, in MiB. Without it the copy has no limit (on AWS, a Fargate task's 1024): set it
+    /// in production, where one leaking copy could otherwise take the memory its neighbours need.
+    /// </summary>
     public int? Memory { get; set; }
+
+    /// <summary>
+    /// The processes and threads one copy may run. Without it, 512. Compose only: Kubernetes and Fargate have no
+    /// per-container limit, and an environment on either refuses it.
+    /// </summary>
+    public int? Pids { get; set; }
+
+    /// <summary>The CPUs each copy may use (<c>1.5</c>). Without it the copy has no limit (on AWS, a Fargate task's 0.5).</summary>
+    public decimal? Cpus { get; set; }
 }
