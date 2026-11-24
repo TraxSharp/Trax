@@ -114,6 +114,19 @@
       "upstream": ["Trax.Effect"],
       "paths": ["Trax.StateMachine/"],
       "dotnet": { "state-machine": true, "conformance": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "--filter TestCategory=CrossEngine" }
+    },
+    {
+      "name": "deploy-cluster",
+      "folder": "Trax.Cli",
+      "upstream": [],
+      "paths": [
+        "Trax.Cli/src/Trax.Cli/Deploy/",
+        "Trax.Cli/src/Trax.Cli/Commands/Deploy",
+        ".github/ci/deploy/",
+        "Trax.Samples/templates/content/Trax.Samples.Hub/",
+        "Trax.Effect/src/Trax.Effect/Configuration/Deploy/",
+        "Trax.Api/src/Trax.Api.GraphQL/Deploy/"
+      ]
     }
   ]
 }

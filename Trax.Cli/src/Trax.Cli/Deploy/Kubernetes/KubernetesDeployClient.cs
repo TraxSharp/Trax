@@ -381,6 +381,70 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         return new KubernetesJobResult(Succeeded: false, reason, tail);
     }
 
+    /// <summary>
+    /// Why a pod of the workload can never start, or null: a container waiting on something that does not fix itself
+    /// (an image it cannot pull, a Secret key it cannot read), or a sandbox the node has failed to create
+    /// <see cref="SandboxAttempts"/> times. The second is what a cluster that cannot give a pod a user namespace of
+    /// its own (<c>hostUsers: false</c>) does with every Trax pod: kind, whose nodes are containers, is one. Without
+    /// this the wait runs to its ten minutes and says only that the rollout did not finish.
+    /// </summary>
+    private async Task<string?> CannotStartAsync(string ns, string selector, CancellationToken ct)
+    {
+        var pods = await _client
+            .CoreV1.ListNamespacedPodAsync(ns, labelSelector: selector, cancellationToken: ct)
+            .ConfigureAwait(false);
+        var waiting = pods
+            .Items.Select(Waiting)
+            .Where(w => w?.Reason is { } reason && NeverStarts.Contains(reason))
+            .Select(w => $"{w?.Reason}: {w?.Message}".TrimEnd(' ', ':'))
+            .FirstOrDefault();
+        if (waiting is not null)
+            return waiting;
+        foreach (var pod in pods.Items)
+        {
+            var events = await _client
+                .CoreV1.ListNamespacedEventAsync(
+                    ns,
+                    fieldSelector: $"involvedObject.name={pod.Metadata.Name},reason={SandboxFailed}",
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
+            if (SandboxFailure(events.Items) is { } failure)
+                return failure;
+        }
+        return null;
+    }
+
+    /// <summary>The event reason a kubelet reports when it cannot create a pod's sandbox.</summary>
+    internal const string SandboxFailed = "FailedCreatePodSandBox";
+
+    /// <summary>How many failed sandbox attempts mean the node will never create it, not that it is still trying.</summary>
+    internal const int SandboxAttempts = 3;
+
+    /// <summary>
+    /// The sentence for a pod whose sandbox the node has failed to create <see cref="SandboxAttempts"/> times or more
+    /// (an event's count, or its series' when the kubelet groups them), or null.
+    /// </summary>
+    internal static string? SandboxFailure(IEnumerable<Corev1Event> events)
+    {
+        var failed = events
+            .Where(e => string.Equals(e.Reason, SandboxFailed, StringComparison.Ordinal))
+            .ToList();
+        var attempts = failed.Sum(e => Math.Max(e.Count ?? 1, e.Series?.Count ?? 0));
+        if (attempts < SandboxAttempts)
+            return null;
+        var message = failed[^1].Message ?? "";
+        return
+            message.Contains("sysfs", StringComparison.Ordinal)
+            || message.Contains("user namespace", StringComparison.OrdinalIgnoreCase)
+            ? $"the node cannot give it a user namespace of its own, which every Trax pod asks for with hostUsers: "
+                + $"false. kind cannot (its nodes are containers); k3s, EKS and a kernel of 6.3 or later can. {message}"
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"the node failed {attempts} times to create its sandbox: {message}"
+            );
+    }
+
     /// <summary>The waiting reasons a container does not recover from without a change to the Job.</summary>
     private static readonly HashSet<string> NeverStarts = new(StringComparer.Ordinal)
     {
@@ -453,6 +517,15 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             };
             if (done)
                 return;
+            if (
+                await CannotStartAsync(ns, $"{KubernetesTarget.NameLabel}={name}", ct)
+                    .ConfigureAwait(false) is
+                { } why
+            )
+                throw new InvalidOperationException(
+                    $"{kind} {name} did not roll out: its pod cannot start ({why}). See "
+                        + $"'kubectl describe pods -l {KubernetesTarget.NameLabel}={name} -n {ns}'."
+                );
             if (state.StartsWith(PastDeadline, StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"{kind} {name} did not roll out: {state}. See "

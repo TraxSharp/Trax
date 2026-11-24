@@ -367,7 +367,10 @@ public partial class DeployPodmanTests
         );
 
         psi.ArgumentList.Should()
-            .Contain("-p:LocalRegistry=Podman", "the SDK refuses any other spelling (CONTAINER2002)")
+            .Contain(
+                "-p:LocalRegistry=Podman",
+                "the SDK refuses any other spelling (CONTAINER2002)"
+            )
             .And.Contain("-p:ContainerRepository=orders-hub");
     }
 
@@ -381,7 +384,9 @@ public partial class DeployPodmanTests
     {
         var act = () => DotnetContainerPublisher.LocalRegistry("containerd");
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*'containerd'*Use podman or docker*");
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*'containerd'*Use podman or docker*");
     }
 
     [Test]

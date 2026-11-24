@@ -131,19 +131,21 @@ public class KubernetesDeployClientRolloutTests
     [Test]
     public async Task A_Deployment_that_does_not_roll_out_in_time_is_an_error_naming_its_state()
     {
-        var api = new StubKubernetesApi().On(
-            "GET",
-            $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
-            HttpStatusCode.OK,
-            """
-            {
-              "kind": "Deployment", "apiVersion": "apps/v1",
-              "metadata": { "name": "hub", "generation": 2 },
-              "spec": { "replicas": 2, "selector": {}, "template": {} },
-              "status": { "observedGeneration": 2, "updatedReplicas": 1, "availableReplicas": 1, "replicas": 3 }
-            }
-            """
-        );
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                HttpStatusCode.OK,
+                """
+                {
+                  "kind": "Deployment", "apiVersion": "apps/v1",
+                  "metadata": { "name": "hub", "generation": 2 },
+                  "spec": { "replicas": 2, "selector": {}, "template": {} },
+                  "status": { "observedGeneration": 2, "updatedReplicas": 1, "availableReplicas": 1, "replicas": 3 }
+                }
+                """
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/pods", HttpStatusCode.OK, NoPods);
         var clock = new SteppingClock();
 
         var act = () =>
@@ -161,6 +163,148 @@ public class KubernetesDeployClientRolloutTests
                 + "'kubectl describe deployment hub -n orders-staging'*"
         );
         clock.Elapsed.Should().BeGreaterThan(KubernetesDeployer.RolloutTimeout);
+    }
+
+    private const string NoPods = """{ "kind": "PodList", "apiVersion": "v1", "items": [] }""";
+
+    private const string RollingHub = """
+        {
+          "kind": "Deployment", "apiVersion": "apps/v1",
+          "metadata": { "name": "hub", "generation": 2 },
+          "spec": { "replicas": 1, "selector": {}, "template": {} },
+          "status": { "observedGeneration": 2, "updatedReplicas": 0, "availableReplicas": 0, "replicas": 1 }
+        }
+        """;
+
+    private const string OnePod = """
+        {
+          "kind": "PodList", "apiVersion": "v1",
+          "items": [ { "metadata": { "name": "hub-7c-abc" }, "status": { "containerStatuses": [
+            { "name": "hub", "ready": false, "restartCount": 0, "image": "x", "imageID": "",
+              "state": { "waiting": { "reason": "ContainerCreating" } } } ] } } ]
+        }
+        """;
+
+    [Test]
+    public async Task A_pod_the_node_cannot_give_a_user_namespace_ends_the_wait_at_once_saying_why()
+    {
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                HttpStatusCode.OK,
+                RollingHub
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/pods", HttpStatusCode.OK, OnePod)
+            .On(
+                "GET",
+                $"/api/v1/namespaces/{Ns}/events",
+                HttpStatusCode.OK,
+                """
+                {
+                  "kind": "EventList", "apiVersion": "v1",
+                  "items": [ { "metadata": { "name": "e1" }, "involvedObject": { "name": "hub-7c-abc" },
+                    "reason": "FailedCreatePodSandBox", "count": 4,
+                    "message": "runc create failed: error mounting \"sysfs\" to rootfs at \"/sys\": operation not permitted" } ]
+                }
+                """
+            );
+        var clock = new SteppingClock();
+
+        var act = () =>
+            api.Client(clock)
+                .WaitForRolloutAsync(
+                    Ns,
+                    "Deployment",
+                    "hub",
+                    KubernetesDeployer.RolloutTimeout,
+                    CancellationToken.None
+                );
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out: its pod cannot start (the node cannot give it a user namespace of its "
+                + "own*hostUsers: false. kind cannot*"
+        );
+        clock
+            .Elapsed.Should()
+            .BeLessThan(TimeSpan.FromMinutes(1), "a pod that cannot start is not waited out");
+    }
+
+    [Test]
+    public async Task A_pod_that_cannot_pull_its_image_ends_the_wait_at_once()
+    {
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                HttpStatusCode.OK,
+                RollingHub
+            )
+            .On(
+                "GET",
+                $"/api/v1/namespaces/{Ns}/pods",
+                HttpStatusCode.OK,
+                OnePod.Replace("ContainerCreating", "ImagePullBackOff", StringComparison.Ordinal)
+            );
+
+        var act = () =>
+            api.Client(new SteppingClock())
+                .WaitForRolloutAsync(
+                    Ns,
+                    "Deployment",
+                    "hub",
+                    KubernetesDeployer.RolloutTimeout,
+                    CancellationToken.None
+                );
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out: its pod cannot start (ImagePullBackOff)*"
+        );
+    }
+
+    [TestCase(1, 0, false)]
+    [TestCase(2, 0, false)]
+    [TestCase(3, 0, true)]
+    [TestCase(1, 5, true)]
+    public void A_sandbox_counts_as_failed_after_three_attempts(int count, int series, bool failed)
+    {
+        var events = new[]
+        {
+            new Corev1Event
+            {
+                Reason = KubernetesDeployClient.SandboxFailed,
+                Count = count,
+                Series = series == 0 ? null : new Corev1EventSeries { Count = series },
+                Message = "failed to create containerd task",
+                InvolvedObject = new V1ObjectReference { Name = "hub-1" },
+                Metadata = new V1ObjectMeta { Name = "e" },
+            },
+        };
+
+        (KubernetesDeployClient.SandboxFailure(events) is not null).Should().Be(failed);
+    }
+
+    [Test]
+    public void A_sandbox_failure_that_is_not_about_user_namespaces_is_reported_as_it_is()
+    {
+        var events = new[]
+        {
+            new Corev1Event
+            {
+                Reason = KubernetesDeployClient.SandboxFailed,
+                Count = 3,
+                Message = "failed to set up network: no IP addresses available",
+                InvolvedObject = new V1ObjectReference { Name = "hub-1" },
+                Metadata = new V1ObjectMeta { Name = "e" },
+            },
+        };
+
+        KubernetesDeployClient
+            .SandboxFailure(events)
+            .Should()
+            .Be(
+                "the node failed 3 times to create its sandbox: failed to set up network: no IP addresses available"
+            );
     }
 
     [Test]
