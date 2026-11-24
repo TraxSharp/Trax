@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Trax.Api.DTOs;
 using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.Operations;
@@ -27,6 +28,50 @@ public class ConfigMutations
         var result = await operationsService
             .UpdateSchedulerConfigAsync(input, ct)
             .ConfigureAwait(false);
+        return new OperationResponse(result.Success, result.Count, result.Message);
+    }
+
+    /// <summary>
+    /// Drains every host sharing the database: no host dispatches, queues a scheduled run or claims
+    /// a job until the drain lapses after <paramref name="minutes"/> or <c>resume</c> ends it, while
+    /// running work carries on. A schedule due meanwhile is a misfire when the drain ends. Replaces a
+    /// drain in force and records the caller as who set it. The console's Drain calls the same
+    /// <see cref="IOperationsService.DrainAsync"/>. A duration outside 1 to 1440 minutes is refused.
+    /// </summary>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="user">The caller, recorded on the drain; not a GraphQL argument.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="minutes">How long the drain lasts; 20 when omitted.</param>
+    public async Task<OperationResponse> Drain(
+        [Service] IOperationsService operationsService,
+        [GlobalState(nameof(ClaimsPrincipal))] ClaimsPrincipal? user,
+        CancellationToken ct,
+        int? minutes = null
+    )
+    {
+        var result = await operationsService
+            .DrainAsync(
+                minutes is { } m ? TimeSpan.FromMinutes(m) : null,
+                OperationsMutations.ActorOf(user).Display,
+                ct
+            )
+            .ConfigureAwait(false);
+        return new OperationResponse(result.Success, result.Count, result.Message);
+    }
+
+    /// <summary>
+    /// Ends the drain, so every host takes work again, whoever set it. <c>count</c> is 1 when a
+    /// drain was in force and 0 when none was. The console's Resume calls the same
+    /// <see cref="IOperationsService.EndDrainAsync"/>.
+    /// </summary>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<OperationResponse> Resume(
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    )
+    {
+        var result = await operationsService.EndDrainAsync(ct).ConfigureAwait(false);
         return new OperationResponse(result.Success, result.Count, result.Message);
     }
 

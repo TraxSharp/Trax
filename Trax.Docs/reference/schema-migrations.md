@@ -738,3 +738,17 @@ The table is new and starts empty. A host on the previous version writes transit
 during a rolling deploy a transition that host writes sets no policy off. A runner reads only the rows of the policies
 its host serves whose target machine it registers, and leaves every other row for a host that does, so a host that
 lacks a newer policy does not drop the fires it owes. A row of a policy no host serves stays in the table.
+
+## Drain (091, SQLite 050)
+
+`091_drain.sql` (SQLite `050`) adds `trax.drain`, `Drain` on the model and `IDataContext.Drains`: at most one row (a
+CHECK holds `id = 1`) that stops every host sharing the database from starting new work until its `until`. While it
+holds, the job dispatcher dispatches nothing, the manifest manager queues no scheduled run and no local worker claims a
+job. `started_at` and `started_by` say when it was set and by whom (`deploy`, or the operator). A deploy sets it with
+`--trax-drain` before it replaces the hosts and ends it after; a scheduler host ends it when it starts, and a row whose
+`until` has passed holds nothing, so a deploy that dies does not leave the hosts paused. See
+[TraxDrain](/docs/sdk-reference/configuration/trax-drain).
+
+The table is new and starts empty. A host on the previous version does not read it, so during the rolling deploy that
+brings this migration in, the old hosts keep dispatching while the drain is set: the first deploy of this version
+drains only the hosts already on it. Every later deploy drains them all.

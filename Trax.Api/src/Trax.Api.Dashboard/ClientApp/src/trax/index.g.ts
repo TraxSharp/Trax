@@ -23,6 +23,8 @@ export { deadLetterGroups, deadLetterGroupsDocument, type DeadLetterGroupsVariab
 export { deadLetters, deadLettersDocument, type DeadLettersVariables, type DeadLettersResult } from "./documents/deadLetters.g";
 export { decisions, decisionsDocument, type DecisionsVariables, type DecisionsResult } from "./documents/decisions.g";
 export { disableManifest, disableManifestDocument, type DisableManifestVariables, type DisableManifestResult } from "./documents/disableManifest.g";
+export { drain, drainDocument, type DrainVariables, type DrainResult } from "./documents/drain.g";
+export { drainHosts, drainHostsDocument, type DrainHostsVariables, type DrainHostsResult } from "./documents/drainHosts.g";
 export { effects, effectsDocument, type EffectsVariables, type EffectsResult } from "./documents/effects.g";
 export { enableManifest, enableManifestDocument, type EnableManifestVariables, type EnableManifestResult } from "./documents/enableManifest.g";
 export { environmentName, environmentNameDocument, type EnvironmentNameVariables, type EnvironmentNameResult } from "./documents/environmentName.g";
@@ -68,6 +70,7 @@ export { requeueDeadLetters, requeueDeadLettersDocument, type RequeueDeadLetters
 export { requeueExecution, requeueExecutionDocument, type RequeueExecutionVariables, type RequeueExecutionResult } from "./documents/requeueExecution.g";
 export { restorePersistedOperation, restorePersistedOperationDocument, type RestorePersistedOperationVariables, type RestorePersistedOperationResult } from "./documents/restorePersistedOperation.g";
 export { resumeExecution, resumeExecutionDocument, type ResumeExecutionVariables, type ResumeExecutionResult } from "./documents/resumeExecution.g";
+export { resumeHosts, resumeHostsDocument, type ResumeHostsVariables, type ResumeHostsResult } from "./documents/resumeHosts.g";
 export { runGraph, runGraphDocument, type RunGraphVariables, type RunGraphResult } from "./documents/runGraph.g";
 export { runLinks, runLinksDocument, type RunLinksVariables, type RunLinksResult } from "./documents/runLinks.g";
 export { runTrain, runTrainDocument, type RunTrainVariables, type RunTrainResult } from "./documents/runTrain.g";

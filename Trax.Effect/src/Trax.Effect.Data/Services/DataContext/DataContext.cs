@@ -157,6 +157,11 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     public DbSet<Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats { get; set; }
 
     /// <summary>
+    /// Gets or sets the DbSet for the drain, the one row that stops every host starting new work until its time.
+    /// </summary>
+    public DbSet<Effect.Models.Drain.Drain> Drains { get; set; }
+
+    /// <summary>
     /// Gets or sets the DbSet for the history of each state-machine instance, one row per snapshot write.
     /// </summary>
     public DbSet<Effect.Models.SnapshotTransition.SnapshotTransition> SnapshotTransitions { get; set; }
@@ -202,6 +207,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         Models.EffectClaim.PersistentEffectClaim.OnModelCreating(modelBuilder);
         Models.Checkpoint.PersistentCheckpoint.OnModelCreating(modelBuilder);
         Models.HostHeartbeat.PersistentHostHeartbeat.OnModelCreating(modelBuilder);
+        Models.Drain.PersistentDrain.OnModelCreating(modelBuilder);
         Models.SnapshotTransition.PersistentSnapshotTransition.OnModelCreating(modelBuilder);
         Models.MachinePolicyFire.PersistentMachinePolicyFire.OnModelCreating(modelBuilder);
     }

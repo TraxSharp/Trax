@@ -4,10 +4,12 @@ import { useRefreshStatus } from "../lib/refreshStatus";
 import { useNow } from "../lib/useNow";
 import { ENVIRONMENT_BADGE, environmentTone } from "../lib/environment";
 import { schedulerPaused } from "../lib/scheduler";
+import { drainMark } from "../lib/drain";
+import { useAnswers } from "../lib/answerable";
 import { Search } from "./Search";
-import { CirclePause, Clock, RotateCw, TriangleAlert } from "lucide-react";
+import { CirclePause, CircleStop, Clock, RotateCw, TriangleAlert } from "lucide-react";
 import { useTraxQuery } from "../lib/consoleClient";
-import { environmentNameDocument, schedulerConfigDocument } from "../trax/index.g";
+import { drainDocument, environmentNameDocument, schedulerConfigDocument } from "../trax/index.g";
 
 /**
  * The top bar, as the Blazor DashboardHeader: the host's environment badge, a "Last refresh
@@ -20,6 +22,10 @@ export function DashboardHeader() {
   // Pausing the scheduler stops every schedule and every dispatch, so it shows on every page.
   const [{ data: scheduler }] = useTraxQuery(schedulerConfigDocument, { ignoreRefreshStatus: true });
   const paused = schedulerPaused(scheduler?.operations?.config?.scheduler ?? null);
+  // A drain stops every host starting work, so it shows on every page too. The demo does not offer it.
+  const drainAnswered = useAnswers("Drain");
+  const [{ data: drain }] = useTraxQuery(drainDocument, { ignoreRefreshStatus: true, pause: !drainAnswered });
+  const drained = drainAnswered ? drainMark(drain?.operations?.config?.drain) : null;
   const { lastRefreshAt, lastError } = useRefreshStatus();
   const pollSeconds = usePollSeconds();
   const now = useNow(500);
@@ -47,6 +53,15 @@ export function DashboardHeader() {
         >
           <CirclePause className="size-3.5" />
           {paused}
+        </Link>
+      )}
+      {drained && (
+        <Link
+          to="/system/scheduler"
+          className="flex items-center gap-1 rounded px-2 py-0.5 font-semibold bg-warn-soft text-warn-fg hover:underline"
+        >
+          <CircleStop className="size-3.5" />
+          {drained}
         </Link>
       )}
       <Search />

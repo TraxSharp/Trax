@@ -5,6 +5,7 @@ import { changedLogLevels, LOG_LEVEL_NAMES, notAppliedMessage } from "../lib/log
 import { buildDuration, parseDuration, UNIT_LABEL, type DurationUnit } from "../lib/duration";
 import type { SchedulerConfigSnapshot, SetLogLevelsResponse } from "../types";
 import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import { DrainPanel } from "../components/DrainPanel";
 import {
   logLevelsDocument,
   schedulerConfigDocument,
@@ -54,6 +55,8 @@ export function SettingsPage() {
           {result.error.message}
         </div>
       )}
+      <DrainPanel />
+
       {!cfg && !result.error && <p className="text-muted">Loading…</p>}
       {cfg && <SchedulerSections cfg={cfg} save={save} />}
 

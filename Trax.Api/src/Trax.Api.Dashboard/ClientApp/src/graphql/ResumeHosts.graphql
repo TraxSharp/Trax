@@ -1,0 +1,11 @@
+# End the drain, so every host takes work again.
+mutation ResumeHosts {
+  operations {
+    config {
+      resume {
+        success
+        message
+      }
+    }
+  }
+}

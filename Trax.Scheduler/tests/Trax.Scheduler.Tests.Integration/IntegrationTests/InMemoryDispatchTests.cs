@@ -6,6 +6,7 @@ using NUnit.Framework;
 using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Every = Trax.Scheduler.Services.Scheduling.Every;
@@ -66,6 +67,44 @@ public class InMemoryDispatchTests
             .Where(m => m.Name.Contains(TrainNameFilter))
             .ToListAsync();
         metadatas.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ManifestManager_InMemory_Drained_DispatchesNothingUntilResumed()
+    {
+        // The InMemory manifest manager dispatches inline, so the drain (Trax.Docs/adr/0065)
+        // is what keeps it from starting the run.
+        await using var fx = SchedulerE2EFixture.CreateInMemory(s =>
+            s.Schedule<ISchedulerTestTrain>(
+                "inmem-drained",
+                new SchedulerTestInput(),
+                Every.Minutes(1)
+            )
+        );
+        await fx.MaterializePendingManifestsAsync();
+        var operations = fx.Services.GetRequiredService<IOperationsService>();
+        (await operations.DrainAsync(duration: null, "operator", CancellationToken.None))
+            .Success.Should()
+            .BeTrue();
+
+        await fx.RunManifestManagerAsync();
+        (
+            await fx
+                .DataContext.Metadatas.AsNoTracking()
+                .CountAsync(m => m.Name.Contains(TrainNameFilter))
+        )
+            .Should()
+            .Be(0, "a drained InMemory host dispatches nothing");
+
+        await operations.EndDrainAsync(CancellationToken.None);
+        await fx.RunManifestManagerAsync();
+        (
+            await fx
+                .DataContext.Metadatas.AsNoTracking()
+                .CountAsync(m => m.Name.Contains(TrainNameFilter))
+        )
+            .Should()
+            .BeGreaterThan(0, "it dispatches again once resumed");
     }
 
     [Test]

@@ -74,7 +74,8 @@ public static class ServiceExtensions
             configure,
             TraxDeployExport.Requested,
             TraxMigrate.Requested,
-            TraxClientExport.Requested
+            TraxClientExport.Requested,
+            TraxDrain.Requested
         );
 
     /// <param name="services">The service collection.</param>
@@ -82,12 +83,14 @@ public static class ServiceExtensions
     /// <param name="exportsDeploy">Whether the process was started with <c>--trax-export-deploy</c>.</param>
     /// <param name="migrates">Whether the process was started with <c>--trax-migrate</c>.</param>
     /// <param name="exportsClient">Whether the process was started with <c>--trax-export-client</c>.</param>
+    /// <param name="drains">Whether the process was started with <c>--trax-drain</c> or <c>--trax-resume</c>.</param>
     internal static IServiceCollection AddTrax(
         this IServiceCollection services,
         Action<TraxBuilder> configure,
         bool exportsDeploy,
         bool migrates,
-        bool exportsClient
+        bool exportsClient,
+        bool drains = false
     )
     {
         var registry = new EffectRegistry();
@@ -102,7 +105,7 @@ public static class ServiceExtensions
             builder.EffectConfiguration
             ?? new Trax.Effect.Configuration.TraxEffectConfiguration.TraxEffectConfiguration();
 
-        // A process started to export its deploy or client manifest, or to migrate, exits through RunTraxAsync. The
+        // A process started to export its deploy or client manifest, to migrate, or to drain, exits through RunTraxAsync. The
         // gates that refuse to serve otherwise go in whatever its data provider, including none.
         if (exportsDeploy)
             services.TryAddEnumerable(
@@ -115,6 +118,10 @@ public static class ServiceExtensions
         if (exportsClient)
             services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IHostedService, ClientExportServeGate>()
+            );
+        if (drains)
+            services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IHostedService, DrainServeGate>()
             );
 
         // Marker so AddTraxGraphQL() can verify AddTrax() was called

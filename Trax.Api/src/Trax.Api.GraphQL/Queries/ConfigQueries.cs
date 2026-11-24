@@ -26,6 +26,19 @@ public class ConfigQueries
         operationsService.GetSchedulerConfig();
 
     /// <summary>
+    /// Whether the hosts sharing the database are drained, until when and by whom, and the work a
+    /// drain waits on (at most 50 items, with the total): runs that are Pending or InProgress and
+    /// state-machine instances not at rest. The console's scheduler page reads the same
+    /// <see cref="IOperationsService.GetDrainAsync"/>.
+    /// </summary>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public Task<DrainStatus> GetDrain(
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) => operationsService.GetDrainAsync(ct);
+
+    /// <summary>
     /// The API host's environment name (<c>IHostEnvironment.EnvironmentName</c>), which the
     /// dashboard shows as its environment badge.
     /// </summary>

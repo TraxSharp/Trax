@@ -28,7 +28,7 @@ enable/disable, replay-on-retry, hide admin trains, dependency DAG), Logs (run, 
 message filters, either order, "10,000+" for a capped text-filtered count), Trains (Queue and Run
 dialogs built from each train's input schema, warning when Run bypasses a subject key), Effects
 (toggle, save/discard, a Configure dialog built from each setting's kind that never shows a
-sensitive value), Settings (scheduler settings and runtime log levels), and Persisted operations
+sensitive value), Settings (scheduler settings, drain and resume with what a drain waits on, and runtime log levels), and Persisted operations
 (list, history, upload with shape-diff guardrail, deactivate/restore), which the sidebar shows
 only when the host calls `UsePersistedOperations`. The header shows the host's environment, a
 "last refresh failed" mark, the auto-refresh countdown and the UTC time; the footer shows the Trax
@@ -98,9 +98,9 @@ then run `npm test` here.
   filtered here the way the API filters it. A query nothing answers gets an error saying so; the
   demo never falls back to invented data, and it does not carry the auto-mock schema.
 - A page part whose read no recording holds is not offered (`src/lib/answerable.ts`). The
-  recorder records every read a page sends today, so `NOT_RECORDED_YET` in `src/demo/harness.tsx`
-  is empty; a new read goes there until the recorder records it, and its page part is hidden in the
-  demo meanwhile.
+  recorder records every read a page sends, except `Drain`, which was added after the recordings
+  were last taken: `NOT_RECORDED_YET` in `src/demo/harness.tsx` names it. A new read goes there
+  until the recordings are taken again, and its page part is hidden in the demo meanwhile.
 - A write goes through the mock's overlays (`src/mock/store/overlays.ts`), so the change reads
   back on every page until the tab reloads. Its answer is the host's: a write recorded with the
   same variables against the rows as the recording shows them answers with that recording, a

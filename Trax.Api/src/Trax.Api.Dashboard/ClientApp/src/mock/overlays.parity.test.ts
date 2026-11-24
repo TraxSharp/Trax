@@ -27,6 +27,8 @@ import {
   cancelWorkQueueEntryDocument,
   configureEffectDocument,
   deactivatePersistedOperationDocument,
+  drainDocument,
+  drainHostsDocument,
   effectsDocument,
   executionDetailDocument,
   executionsDocument,
@@ -41,6 +43,7 @@ import {
   queueTrainDocument,
   requeueExecutionDocument,
   restorePersistedOperationDocument,
+  resumeHostsDocument,
   resumeExecutionDocument,
   runTrainDocument,
   setAllManifestGroupsEnabledDocument,
@@ -605,5 +608,48 @@ describe("log levels", () => {
     expect(
       get((await c.mutation(setLogLevelsDocument, { levels: [] })).data, "operations.config.setLogLevels.message"),
     ).toBe("No levels were given.");
+  });
+});
+
+describe("drain", () => {
+  const status = async (c: ReturnType<typeof client>) =>
+    get((await c.query(drainDocument, {})).data, "operations.config.drain") as Record<string, unknown>;
+
+  test("drain sets it for the minutes given, and the read shows who and until when", async () => {
+    const c = client(schedulerConfigScenario);
+    expect(await status(c)).toMatchObject({ drained: false, until: null, busyTotal: 0 });
+    const ack = get((await c.mutation(drainHostsDocument, { minutes: 30 })).data, "operations.config.drain");
+    expect(ack).toMatchObject({ success: true, count: 1 });
+    expect(await status(c)).toMatchObject({
+      drained: true,
+      startedAt: "2026-07-07T12:00:00.000Z",
+      until: "2026-07-07T12:30:00.000Z",
+      startedBy: "apikey:admin",
+    });
+  });
+
+  test("no minutes means 20, as the API's default", async () => {
+    const c = client(schedulerConfigScenario);
+    await c.mutation(drainHostsDocument, {});
+    expect(await status(c)).toMatchObject({ drained: true, until: "2026-07-07T12:20:00.000Z" });
+  });
+
+  test("a length outside 1 to 1440 minutes is refused and changes nothing", async () => {
+    const c = client(schedulerConfigScenario);
+    for (const minutes of [0, 1441, -5]) {
+      const ack = get((await c.mutation(drainHostsDocument, { minutes })).data, "operations.config.drain");
+      expect(ack).toMatchObject({ success: false, message: "Not drained: a drain lasts from 1 minute to 24 hours." });
+    }
+    expect(await status(c)).toMatchObject({ drained: false });
+  });
+
+  test("resume ends a drain with count 1, and again with count 0", async () => {
+    const c = client(schedulerConfigScenario);
+    await c.mutation(drainHostsDocument, { minutes: 5 });
+    const first = get((await c.mutation(resumeHostsDocument, {})).data, "operations.config.resume");
+    expect(first).toMatchObject({ success: true, count: 1, message: "Resumed: every host takes work again." });
+    expect(await status(c)).toMatchObject({ drained: false, until: null, startedBy: null });
+    const second = get((await c.mutation(resumeHostsDocument, {})).data, "operations.config.resume");
+    expect(second).toMatchObject({ success: true, count: 0, message: "No drain was in force; nothing changed." });
   });
 });

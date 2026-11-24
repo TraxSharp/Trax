@@ -822,5 +822,34 @@ public class AdminMutationStressTests : StressTestSetup
         );
     }
 
+    [Test]
+    public async Task DrainAndResume_AtScale_WithinBudget()
+    {
+        // Drain then resume, as the console's two buttons do; each write is one row, but the
+        // hosts of the stress fixture read it on every cycle meanwhile.
+        await MeasureWriteAsync(
+            "operations.config.drain + resume",
+            ListBudget,
+            async () =>
+            {
+                var scope = Services.CreateAsyncScope();
+                await using var scopeDisposal = scope.ConfigureAwait(false);
+                await Operations(scope.ServiceProvider)
+                    .EndDrainAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+            },
+            async (_, ct) =>
+            {
+                var drained = await Mutate("drain(minutes: 5) { success message }", ct, "config")
+                    .ConfigureAwait(false);
+                Success(drained).Should().BeTrue(Message(drained));
+                var resumed = await Mutate("resume { success count message }", ct, "config")
+                    .ConfigureAwait(false);
+                Success(resumed).Should().BeTrue(Message(resumed));
+                Count(resumed).Should().Be(1, Message(resumed));
+            }
+        );
+    }
+
     #endregion
 }

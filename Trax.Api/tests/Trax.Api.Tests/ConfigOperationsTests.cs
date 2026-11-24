@@ -71,6 +71,70 @@ public class ConfigOperationsTests
     }
 
     [Test]
+    public async Task Drain_ForwardsMinutesAndTheCaller_AndMapsTheResult()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.DrainAsync(Arg.Any<TimeSpan?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(Success: true, Id: 1, Count: 1, Message: "drained"));
+        var user = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "alice")],
+                "test"
+            )
+        );
+
+        var response = await new ConfigMutations().Drain(ops, user, default, minutes: 45);
+
+        response.Success.Should().BeTrue();
+        response.Message.Should().Be("drained");
+        await ops.Received(1)
+            .DrainAsync(TimeSpan.FromMinutes(45), "alice", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Drain_WithoutMinutes_LeavesTheDurationToTheService()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.DrainAsync(Arg.Any<TimeSpan?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(Success: true));
+
+        await new ConfigMutations().Drain(ops, user: null, ct: default);
+
+        await ops.Received(1)
+            .DrainAsync(duration: null, "<anonymous>", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Resume_ForwardsToEndDrain()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.EndDrainAsync(Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(Success: true, Count: 0, Message: "none"));
+
+        var response = await new ConfigMutations().Resume(ops, default);
+
+        response.Count.Should().Be(0);
+        await ops.Received(1).EndDrainAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GetDrain_ForwardsToOperationsService()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        var status = new DrainStatus(
+            Drained: true,
+            Until: DateTime.UnixEpoch,
+            StartedAt: DateTime.UnixEpoch,
+            StartedBy: "deploy",
+            Busy: [],
+            BusyTotal: 0
+        );
+        ops.GetDrainAsync(Arg.Any<CancellationToken>()).Returns(status);
+
+        (await new ConfigQueries().GetDrain(ops, default)).Should().BeSameAs(status);
+    }
+
+    [Test]
     public void OperationsQueries_ConfigNamespace_ReturnsNewInstance()
     {
         new OperationsQueries().Config().Should().NotBeNull();

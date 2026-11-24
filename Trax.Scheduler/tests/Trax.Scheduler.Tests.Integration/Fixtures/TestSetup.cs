@@ -122,6 +122,9 @@ public abstract class TestSetup
         // Delete manifest groups after manifests (FK dependency)
         await dataContext.ManifestGroups.ExecuteDeleteAsync().ConfigureAwait(false);
 
+        // A drain one test left would stop every later test's dispatcher and workers.
+        await dataContext.Drains.ExecuteDeleteAsync().ConfigureAwait(false);
+
         dataContext.Reset();
     }
 

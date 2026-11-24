@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Functional;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Drain;
 using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Utilities;
@@ -122,6 +123,20 @@ internal sealed class JobDispatcherPollingService(
         {
             var scope = serviceProvider.CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
+
+            // A drain stops every host dispatching (Trax.Docs/adr/0065). The loop stays alive and
+            // stamped, as when the dispatcher is switched off, so the health check stays green.
+            if (
+                await SchedulerDrain
+                    .IsDrainedAsync(scope.ServiceProvider, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                livenessMonitor.RecordDispatchCycle();
+                logger.LogDebug("Drained: the JobDispatcher dispatches nothing this cycle");
+                return;
+            }
+
             var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
             logger.LogDebug("JobDispatcher polling cycle starting");

@@ -1,6 +1,6 @@
 ---
 title: "operations.config queries"
-description: "Reference for operations.config: live scheduler settings, environment name, Trax version, log levels and whether the caller may manage persisted operations."
+description: "Reference for operations.config: live scheduler settings, the drain, environment name, Trax version, log levels and persisted-operation access."
 type: reference
 area: api
 surface: graphql
@@ -52,6 +52,49 @@ query {
 ```
 
 **Returns**: `SchedulerConfigSnapshot`.
+
+## drain
+
+Whether the hosts sharing the database are drained, until when and by whom, and the work a drain
+waits on. The console's scheduler page reads the same `IOperationsService.GetDrainAsync`. See
+[TraxDrain](/docs/sdk-reference/configuration/trax-drain) for what a drain stops and how a deploy
+uses it.
+
+```graphql
+query {
+  operations {
+    config {
+      drain {
+        drained
+        until
+        startedAt
+        startedBy
+        busy { kind id name state since host }
+        busyTotal
+      }
+    }
+  }
+}
+```
+
+**Returns**: `DrainStatus!`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `drained` | `Boolean!` | Whether a drain is in force now. A drain whose time has passed is not |
+| `until` | `DateTime` | When the drain lapses, in UTC; null when none is in force |
+| `startedAt` | `DateTime` | When it was set; null when none is in force |
+| `startedBy` | `String` | `deploy` for a drain a deploy set, or the caller who set it from the console or `drain`; null when none is in force |
+| `busy` | `[DrainBusyWork!]!` | At most 50 items, runs first. Read whether or not a drain is in force, so an operator sees what one would wait on |
+| `busyTotal` | `Int!` | How many items are busy in all, past the 50 listed |
+
+Each `DrainBusyWork` has `kind` (`run` or `instance`), `id` (a run's id, or an instance's machine
+and id joined by `/`), `name` (the train or the machine), `state`, `since` (when the run started, or
+when the instance was last written) and `host` (the host a run is on, when it records one).
+
+A run is busy while it is Pending or InProgress, except a Pending run whose job still waits in the
+queue unclaimed (the next hosts run it) and the scheduler's own trains. A state-machine instance is
+busy while an effect is in flight on it, or while the run it invoked is busy.
 
 ## environmentName, version and logLevels
 

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.Drain;
 using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -179,6 +180,9 @@ internal sealed class LocalWorkerService(
                 .BeginTransaction(stoppingToken)
                 .ConfigureAwait(false);
 
+            if (await RefusedByDrainAsync(dataContext, stoppingToken).ConfigureAwait(false))
+                return [];
+
             var jobs = await dataContext
                 .BackgroundJobs.FromSqlRaw(
                     sqlDialect.NotNull().DequeueBackgroundJobs(),
@@ -217,6 +221,23 @@ internal sealed class LocalWorkerService(
 
             return claimedJobs;
         }
+    }
+
+    /// <summary>
+    /// Whether a drain stops this claim (Trax.Docs/adr/0065), rolling the claim's transaction back
+    /// when it does. Read inside the transaction, so a claim that saw no drain commits before the
+    /// drain's first look at what is busy settles.
+    /// </summary>
+    private async Task<bool> RefusedByDrainAsync(IDataContext dataContext, CancellationToken ct)
+    {
+        if (
+            !await DrainStore
+                .IsDrainedAsync(dataContext, Clock.GetUtcNow(), ct)
+                .ConfigureAwait(false)
+        )
+            return false;
+        await dataContext.RollbackTransaction().ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>

@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.Drain;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -50,6 +52,43 @@ internal sealed class SchedulerStartupService(
             await RecoverStuckJobs(cancellationToken).ConfigureAwait(false);
 
         await SeedPendingManifests(cancellationToken).ConfigureAwait(false);
+
+        await EndDrainAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Ends a drain in force, so a deploy that replaced this host and died before ending the drain
+    /// does not leave every host idle until it lapses (Trax.Docs/adr/0065). Runs after the
+    /// recovery: a deploy drains before it replaces the hosts, so no run that recovery fails is
+    /// live anywhere. A failure is logged, not thrown: the drain lapses on its own.
+    /// </summary>
+    private async Task EndDrainAsync(CancellationToken cancellationToken)
+    {
+        var factory = serviceProvider.GetService<IDataContextProviderFactory>();
+        if (factory is null)
+            return;
+        try
+        {
+            var context = await factory
+                .CreateDbContextAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await using var disposal = context.ConfigureAwait(false);
+            if (
+                await DrainStore
+                    .ClearAsync(context, Clock.GetUtcNow(), cancellationToken)
+                    .ConfigureAwait(false)
+            )
+                logger.LogInformation(
+                    "Ended the drain in force: this scheduler host started, so every host takes work again"
+                );
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Could not end the drain at startup; a drain in force lapses at its own time"
+            );
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
