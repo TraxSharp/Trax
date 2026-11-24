@@ -58,6 +58,13 @@
     <InternalsVisibleTo Include="Trax.Cli.Tests" />
   </ItemGroup>
 
+  <!-- The egress image this build renders beside a service that names "egress", by digest. The Release workflow
+       builds the image first and passes its digest here; a build without it names no image, and refuses "egress"
+       unless trax.deploy.json names one (Trax.Docs/adr/0064). -->
+  <ItemGroup Condition="'$(TraxEgressImage)' != ''">
+    <AssemblyMetadata Include="TraxEgressImage" Value="$(TraxEgressImage)" />
+  </ItemGroup>
+
   <!-- The tool ships its dependencies' assemblies, so it carries their licences and copyrights. The file is
        generated from the tool's runtime dependencies by ThirdPartyNoticesTests in Trax.Cli.Tests.Meta. -->
   <ItemGroup>

@@ -544,6 +544,16 @@ public class KubernetesDeployerTests
             return Task.FromResult<IReadOnlyList<KubernetesObjectState>>(Existing);
         }
 
+        /// <summary>The cluster-wide objects the cluster holds, by kind/name.</summary>
+        public Dictionary<string, KubernetesObjectState> ClusterObjects { get; } =
+            new(StringComparer.Ordinal);
+
+        public Task<KubernetesObjectState?> ClusterObjectAsync(
+            string kind,
+            string name,
+            CancellationToken ct
+        ) => Task.FromResult(ClusterObjects.GetValueOrDefault($"{kind}/{name}"));
+
         public Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct)
         {
             Calls.Add($"apply {body.Kind}/{body.Metadata.Name}");

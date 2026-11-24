@@ -245,6 +245,45 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         return found;
     }
 
+    public async Task<KubernetesObjectState?> ClusterObjectAsync(
+        string kind,
+        string name,
+        CancellationToken ct
+    )
+    {
+        var meta = kind switch
+        {
+            "ValidatingAdmissionPolicy" => (
+                await OrNull(() =>
+                        _client.AdmissionregistrationV1.ReadValidatingAdmissionPolicyAsync(
+                            name,
+                            cancellationToken: ct
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )?.Metadata,
+            "ValidatingAdmissionPolicyBinding" => (
+                await OrNull(() =>
+                        _client.AdmissionregistrationV1.ReadValidatingAdmissionPolicyBindingAsync(
+                            name,
+                            cancellationToken: ct
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )?.Metadata,
+            _ => throw new InvalidOperationException($"trax does not read a cluster-wide {kind}."),
+        };
+        if (meta is null)
+            return null;
+        return new KubernetesObjectState(
+            kind,
+            name,
+            meta.Labels is { } labels && labels.TryGetValue(KubernetesTarget.AppLabel, out var app)
+                ? app
+                : null
+        );
+    }
+
     public async Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct)
     {
         var patch = new V1Patch(body, V1Patch.PatchType.ApplyPatch);
@@ -377,6 +416,28 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                         patch,
                         name,
                         ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                break;
+            case V1ValidatingAdmissionPolicy:
+                await _client
+                    .AdmissionregistrationV1.PatchValidatingAdmissionPolicyAsync(
+                        patch,
+                        name,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                break;
+            case V1ValidatingAdmissionPolicyBinding:
+                await _client
+                    .AdmissionregistrationV1.PatchValidatingAdmissionPolicyBindingAsync(
+                        patch,
+                        name,
                         fieldManager: FieldManager,
                         force: true,
                         cancellationToken: ct
@@ -864,6 +925,11 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             await DeleteAroundAsync(ns, target, ct).ConfigureAwait(false);
             return;
         }
+        if (target.Kind is "ValidatingAdmissionPolicy" or "ValidatingAdmissionPolicyBinding")
+        {
+            await DeleteAdmissionAsync(target, ct).ConfigureAwait(false);
+            return;
+        }
         const string background = "Background";
         await OrNull<object>(async () =>
                 target.Kind switch
@@ -909,6 +975,25 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             )
             .ConfigureAwait(false);
     }
+
+    /// <summary>A cluster-wide admission policy or binding, which has no namespace.</summary>
+    private async Task DeleteAdmissionAsync(KubernetesObjectState target, CancellationToken ct) =>
+        await OrNull<object>(async () =>
+                string.Equals(target.Kind, "ValidatingAdmissionPolicy", StringComparison.Ordinal)
+                    ? await _client
+                        .AdmissionregistrationV1.DeleteValidatingAdmissionPolicyAsync(
+                            target.Name,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false)
+                    : await _client
+                        .AdmissionregistrationV1.DeleteValidatingAdmissionPolicyBindingAsync(
+                            target.Name,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
 
     /// <summary>
     /// A pod's log, or null when there is none to read: the pod is gone (404), or its container has not started

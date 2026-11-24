@@ -52,6 +52,12 @@ internal sealed partial class DeployFile
     public List<string> Secrets { get; set; } = [];
 
     /// <summary>
+    /// The egress image to run beside a service that names <c>egress</c>, by digest
+    /// (<c>ghcr.io/traxsharp/trax-egress@sha256:...</c>). Without it, the image this trax was released with.
+    /// </summary>
+    public string? EgressImage { get; set; }
+
+    /// <summary>
     /// The environments this app deploys to, by name (<c>production</c>, <c>staging</c>), each on the target it names:
     /// a compose stack, an AWS stack or a Kubernetes namespace.
     /// </summary>
@@ -89,6 +95,9 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem($"profile '{env.Profile}' is not production or try.")
             );
+        foreach (var (service, entry) in Services)
+            if (CheckEgress(service, entry) is { } egress)
+                throw new InvalidOperationException(Problem(egress));
         CheckTarget(name, env, Problem);
         CheckEnvironmentLimits(env, Problem);
         foreach (var service in env.Counts.Keys)
@@ -240,6 +249,8 @@ internal sealed partial class DeployFile
     {
         string Problem(string what) => $"{path}: {what}";
 
+        CheckEgressImage(Problem);
+
         var dir = Path.GetDirectoryName(Path.GetFullPath(path)).NotNull();
         var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
@@ -284,7 +295,39 @@ internal sealed partial class DeployFile
                 throw new InvalidOperationException(
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
                 );
+            if (CheckEgress(name, service) is { } egress)
+                throw new InvalidOperationException(Problem(egress));
         }
+    }
+
+    /// <summary>Refuses an <c>egressImage</c> not named by digest.</summary>
+    private void CheckEgressImage(Func<string, string> problem)
+    {
+        if (EgressImage is { } image && !DeployEgress.IsDigestReference(image))
+            throw new InvalidOperationException(
+                problem(
+                    $"egressImage '{image}' is not an image named by digest. Give "
+                        + $"<registry>/<path>@sha256:<digest> ({DeployEgress.Repository}@sha256:...), so what runs "
+                        + "cannot change after the file is written."
+                )
+            );
+    }
+
+    /// <summary>
+    /// The first problem with <paramref name="service"/>'s egress, or null: its domains, and its sidecar's name, which
+    /// compose takes as <c>&lt;service&gt;-egress</c> and another service must not have.
+    /// </summary>
+    private string? CheckEgress(string name, DeployService service)
+    {
+        if (DeployEgress.Check(name, service.Egress) is { } problem)
+            return problem;
+        if (
+            service.Egress is not null
+            && Services.ContainsKey($"{name}-{DeployEgress.SidecarContainer}")
+        )
+            return $"service '{name}' names egress, and its egress sidecar would be named "
+                + $"'{name}-{DeployEgress.SidecarContainer}', which is another service. Rename that service.";
+        return null;
     }
 
     /// <summary>

@@ -6,8 +6,9 @@ namespace Trax.Cli.Deploy.Kubernetes;
 
 /// <summary>
 /// Puts an environment on a Kubernetes cluster: checks the namespace is this app's and its Secret has every key,
-/// builds the images, brings up the in-cluster Postgres and RabbitMQ, runs the migrate Job, and only after it succeeds
-/// applies the services and waits for each to roll out. A service that does not roll out puts every service back on
+/// builds the images, applies the egress admission policy when a service names egress, brings up the in-cluster
+/// Postgres and RabbitMQ, runs the migrate Job, and only after it succeeds applies the services and waits for each to
+/// roll out. A service that does not roll out puts every service back on
 /// the version it ran before the deploy, as ECS's circuit breaker does. It never creates a cluster.
 /// </summary>
 internal sealed class KubernetesDeployer(
@@ -43,7 +44,10 @@ internal sealed class KubernetesDeployer(
         if (eks is null)
             await PublishImagesAsync(file, filePath, env, tag).ConfigureAwait(false);
 
-        // The policies go first, so the in-cluster database and broker are never up without them.
+        // Before any pod: the admission policy is what refuses NET_ADMIN to every container but the egress rules.
+        await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Admission, ct)
+            .ConfigureAwait(false);
+        // The network policies go first, so the in-cluster database and broker are never up without them.
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Policies, ct)
             .ConfigureAwait(false);
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Backing, ct)
@@ -226,6 +230,15 @@ internal sealed class KubernetesDeployer(
             await cluster.CreateNamespaceAsync(manifests.Namespace, ct).ConfigureAwait(false);
         }
 
+        foreach (var o in manifests.Admission)
+            if (
+                await cluster
+                    .ClusterObjectAsync(o.Kind, o.Metadata.Name, ct)
+                    .ConfigureAwait(false) is
+                { } existing
+            )
+                CheckOwner(file, $"{o.Kind} {o.Metadata.Name}", existing.App, ownerless: false);
+
         await CheckProxySecretOwnerAsync(file, manifests, ct).ConfigureAwait(false);
 
         var applying = manifests.All.Skip(1).Select(o => (o.Kind, o.Metadata.Name)).ToHashSet();
@@ -377,6 +390,7 @@ internal sealed class KubernetesDeployer(
             await cluster.DeleteAsync(ns, target, ct).ConfigureAwait(false);
         }
         await DeleteProxySecretAsync(file, environment, ns, ct).ConfigureAwait(false);
+        await DeleteAdmissionAsync(file, ns, ct).ConfigureAwait(false);
         var claims = mine.Where(o =>
                 string.Equals(o.Kind, "PersistentVolumeClaim", StringComparison.Ordinal)
             )
@@ -421,6 +435,28 @@ internal sealed class KubernetesDeployer(
                 .DeleteAsync(ns, new KubernetesObjectState("Secret", proxySecret, file.App), ct)
                 .ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Deletes the egress admission binding and policy that hold <paramref name="ns"/>, when this app wrote them: the
+    /// binding first, so the policy is never left bound to a namespace that has gone.
+    /// </summary>
+    private async Task DeleteAdmissionAsync(DeployFile file, string ns, CancellationToken ct)
+    {
+        foreach (
+            var kind in new[] { "ValidatingAdmissionPolicyBinding", "ValidatingAdmissionPolicy" }
+        )
+            if (
+                await cluster
+                    .ClusterObjectAsync(kind, KubernetesTarget.EgressAdmissionName(ns), ct)
+                    .ConfigureAwait(false)
+                    is { } admission
+                && string.Equals(admission.App, file.App, StringComparison.Ordinal)
+            )
+            {
+                say($"Deleting {kind} {admission.Name}...");
+                await cluster.DeleteAsync(ns, admission, ct).ConfigureAwait(false);
+            }
     }
 
     private static bool Rolls(k8s.IKubernetesObject o) => o.Kind is "Deployment" or "StatefulSet";

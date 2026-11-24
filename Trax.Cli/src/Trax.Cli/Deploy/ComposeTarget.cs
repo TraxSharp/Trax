@@ -55,9 +55,13 @@ internal static class ComposeTarget
         if (rabbit)
             AppendRabbitMq(y, file, podman, limits.GetValueOrDefault(DeployFile.BackingBroker));
 
-        AppendMigrate(y, file, migrator, podman);
+        var egress = file.Services.Values.Any(s => s.Egress is not null)
+            ? new Egress(DeployEgress.Image(file), OwnServices(rabbit))
+            : null;
 
-        AppendServices(y, file, exports, rabbit, podman);
+        AppendMigrate(y, file, migrator, podman, egress);
+
+        AppendServices(y, file, exports, rabbit, podman, egress);
 
         y.AppendLine();
         y.AppendLine("volumes:");
@@ -147,9 +151,11 @@ internal static class ComposeTarget
         StringBuilder y,
         DeployFile file,
         string migrator,
-        bool podman
+        bool podman,
+        Egress? egress
     )
     {
+        var held = egress is not null && file.Services[migrator].Egress is not null;
         y.AppendLine();
         y.AppendLine(
             "  # The new version migrates the database once, before any service of it starts."
@@ -158,19 +164,99 @@ internal static class ComposeTarget
         y.AppendLine($"    image: {Image(file, migrator)}");
         y.AppendLine($"    command: [\"{TraxMigrate.Argument}\"]");
         y.AppendLine("    environment: *trax");
+        // The migration runs the migrator's code, so it is held to the migrator's egress.
+        if (held)
+            y.AppendLine($"    network_mode: \"service:{SidecarName(migrator)}\"");
         Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
         y.AppendLine("    depends_on:");
         y.AppendLine("      database:");
         y.AppendLine("        condition: service_healthy");
+        if (held)
+        {
+            y.AppendLine($"      {SidecarName(migrator)}:");
+            y.AppendLine("        condition: service_healthy");
+        }
         y.AppendLine("    restart: \"no\"");
     }
+
+    /// <summary>The egress image, and the deployment's own services every held service still reaches.</summary>
+    private sealed record Egress(string Image, IReadOnlyList<string> Own);
+
+    /// <summary>The services trax runs beside the app that a held service still reaches: Postgres, and RabbitMQ.</summary>
+    private static List<string> OwnServices(bool rabbit)
+    {
+        var own = new List<string> { DeployEgress.Own("database", 5432) };
+        if (rabbit)
+            own.Add(DeployEgress.Own("rabbitmq", 5672));
+        return own;
+    }
+
+    /// <summary>A held service's egress sidecar: <c>&lt;service&gt;-egress</c>.</summary>
+    internal static string SidecarName(string service) =>
+        $"{service}-{DeployEgress.SidecarContainer}";
+
+    /// <summary>
+    /// The sidecar that holds <paramref name="name"/> to its egress. Compose has no init container, so it runs
+    /// <c>run</c>: it applies the rules as root with NET_ADMIN, gives up root and every capability, and serves; the
+    /// service joins its network namespace and starts once it is ready. It owns the namespace, so the service's port
+    /// is published here.
+    /// </summary>
+    private static void AppendSidecar(
+        StringBuilder y,
+        string name,
+        DeployService service,
+        Egress egress,
+        bool podman,
+        int? port
+    )
+    {
+        y.AppendLine();
+        y.AppendLine(
+            $"  # Holds {name} to the domains it names; {name} joins this service's network namespace."
+        );
+        y.AppendLine($"  {SidecarName(name)}:");
+        y.AppendLine($"    image: {egress.Image}");
+        // Root only to apply the rules; the process gives it up, and every capability, before it serves.
+        y.AppendLine("    user: \"0:0\"");
+        y.AppendLine($"    command: [\"{DeployEgress.RunCommand}\"]");
+        y.AppendLine("    environment:");
+        y.AppendLine(
+            $"      {DeployEgress.AllowVariable}: \"{DeployEgress.Allow(service.Egress ?? [], egress.Own)}\""
+        );
+        if (port is { } p)
+        {
+            y.AppendLine("    ports:");
+            y.AppendLine(CultureInfo.InvariantCulture, $"      - \"127.0.0.1:{p}:8080\"");
+        }
+        y.AppendLine("    healthcheck:");
+        y.AppendLine(
+            $"      test: [\"CMD\", \"{DeployEgress.Binary}\", \"{DeployEgress.ReadyCommand}\"]"
+        );
+        y.AppendLine("      interval: 2s");
+        y.AppendLine("      retries: 30");
+        Hardened(y, EgressHardening, podman);
+        y.AppendLine("    restart: unless-stopped");
+    }
+
+    /// <summary>
+    /// The sidecar's limits: NET_ADMIN to apply the rules, SETUID and SETGID to give up root after, and nothing it
+    /// keeps once it serves.
+    /// </summary>
+    private static readonly ServiceHardening EgressHardening = new(
+        ["NET_ADMIN", "SETGID", "SETUID"],
+        MemoryMiB: null,
+        Pids: 256,
+        Cpus: null,
+        ReadOnlyRoot: true
+    );
 
     private static void AppendServices(
         StringBuilder y,
         DeployFile file,
         IReadOnlyDictionary<string, DeployManifest> exports,
         bool rabbit,
-        bool podman
+        bool podman,
+        Egress? egress
     )
     {
         // A port asked for in the file is the service's; the rest take 8080 and on, skipping those.
@@ -186,21 +272,25 @@ internal static class ComposeTarget
         foreach (var (name, service) in file.Services)
         {
             var export = exports[name];
+            // Loopback only: whatever puts the app in front of people (a reverse proxy, tailscale serve) decides who
+            // reaches it, not the machine's network.
+            int? port = Hub(export) ? service.Port ?? FreePort() : null;
+            var sidecar = service.Egress is not null ? egress : null;
+            var held = sidecar is not null;
+            if (sidecar is not null)
+                AppendSidecar(y, name, service, sidecar, podman, port);
             y.AppendLine();
             y.AppendLine($"  {name}:");
             y.AppendLine($"    image: {Image(file, name)}");
             y.AppendLine("    environment:");
             y.AppendLine("      <<: *trax");
             y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
-            if (Hub(export))
+            if (held)
+                y.AppendLine($"    network_mode: \"service:{SidecarName(name)}\"");
+            else if (port is { } p)
             {
-                // Loopback only: whatever puts the app in front of people (a reverse proxy, tailscale serve)
-                // decides who reaches it, not the machine's network.
                 y.AppendLine("    ports:");
-                y.AppendLine(
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    $"      - \"127.0.0.1:{service.Port ?? FreePort()}:8080\""
-                );
+                y.AppendLine(CultureInfo.InvariantCulture, $"      - \"127.0.0.1:{p}:8080\"");
             }
             Hardened(y, ServiceHardening.Trax(service), podman);
             if (service.Count > 1)
@@ -214,6 +304,11 @@ internal static class ComposeTarget
             y.AppendLine("    depends_on:");
             y.AppendLine("      migrate:");
             y.AppendLine("        condition: service_completed_successfully");
+            if (held)
+            {
+                y.AppendLine($"      {SidecarName(name)}:");
+                y.AppendLine("        condition: service_healthy");
+            }
             if (rabbit)
             {
                 y.AppendLine("      rabbitmq:");
@@ -313,11 +408,23 @@ internal static class ComposeTarget
                 + "DNS rebinding, can send those headers."
         );
         foreach (var (name, service) in file.Services)
+        {
             if (service.Port is { } port && !Hub(exports[name]))
                 throw new InvalidOperationException(
                     $"Service '{name}' has port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)}, but compose publishes a port only for a service that serves "
                         + "HTTP and runs the api or scheduler role. Remove the port."
                 );
+            if (service.Egress is not null && service.Count > 1)
+                throw new InvalidOperationException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Service '{name}' names egress and has count {service.Count}. Under compose its copies "
+                    )
+                        + "would share one egress sidecar's network namespace, and with it one set of ports, so "
+                        + "a held service runs one copy. Give it count 1, or deploy it with the kubernetes target, "
+                        + "where each copy has a sidecar of its own."
+                );
+        }
     }
 
     /// <summary>

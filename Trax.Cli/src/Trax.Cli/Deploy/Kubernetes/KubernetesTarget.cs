@@ -16,6 +16,8 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// secret value is written: each comes from a Secret by reference. On a cluster every pod in the namespace refuses
 /// ingress but from the app's own pods, and a <c>tailnet</c> exposure adds the edge and the Tailscale operator's
 /// Ingress in front of the hub (<see cref="KubernetesTailnet"/>).
+/// A service that names egress gets the egress image beside it, and the namespace an admission policy that allows the
+/// egress rules their NET_ADMIN and nothing else.
 /// </summary>
 internal static partial class KubernetesTarget
 {
@@ -249,6 +251,9 @@ internal static partial class KubernetesTarget
             StringComparison.Ordinal
         );
         var hub = TailnetHub(file, environment, env, exports);
+        var egressImage = file.Services.Values.Any(s => s.Egress is not null)
+            ? DeployEgress.Image(file)
+            : null;
         var r = new Renderer(
             file,
             env,
@@ -257,18 +262,12 @@ internal static partial class KubernetesTarget
             eks,
             tailnet ? KubernetesTailnet.ProxySecretName(file, environment) : null,
             tag
-        );
+        )
+        {
+            EgressImage = egressImage,
+        };
 
-        var migrator = ComposeTarget.Migrator(file, exports);
-        var job = r.MigrateJob(
-            MigrateJobName(file, tag),
-            r.Image(migrator, tag),
-            ServiceHardening.Trax(file.Services[migrator]),
-            r.TraxEnv(rabbit)
-        );
-        if (eks is not null)
-            job.Spec.Template.Spec.ServiceAccountName = migrator;
-
+        var job = Migrate(file, exports, tag, r, rabbit);
         var services = Services(file, env, exports, tag, r, rabbit);
         if (tailnet && !onPodman)
             services.AddRange(
@@ -276,6 +275,7 @@ internal static partial class KubernetesTarget
             );
         return new KubernetesManifests(
             NamespaceObject(file, ns),
+            egressImage is null || onPodman ? [] : EgressAdmission(file, ns, egressImage),
             onPodman ? [] : r.Policies(hub),
             secret,
             eks is null ? SecretKeys(file, inCluster, rabbit, tailnet && onPodman) : [],
@@ -287,6 +287,31 @@ internal static partial class KubernetesTarget
             services,
             r.ProxySecret
         );
+    }
+
+    /// <summary>
+    /// The migrate Job: the migrator's image and hardening, its service account on EKS, and its egress, since the
+    /// migration runs the migrator's code.
+    /// </summary>
+    private static V1Job Migrate(
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        string tag,
+        Renderer r,
+        bool rabbit
+    )
+    {
+        var migrator = ComposeTarget.Migrator(file, exports);
+        var job = r.MigrateJob(
+            MigrateJobName(file, tag),
+            r.Image(migrator, tag),
+            ServiceHardening.Trax(file.Services[migrator]),
+            r.TraxEnv(rabbit)
+        );
+        if (r.OnEks)
+            job.Spec.Template.Spec.ServiceAccountName = migrator;
+        r.HoldEgress(job.Spec.Template, file.Services[migrator], rabbit);
+        return job;
     }
 
     /// <summary>Refuses a broker the environment cannot run: none on production, none on EKS, a limit on none.</summary>
@@ -443,6 +468,7 @@ internal static partial class KubernetesTarget
                 deployment.Spec.Template.Spec.ServiceAccountName = name;
             if (hub)
                 r.TrustTailnetProxy(deployment);
+            r.HoldEgress(deployment.Spec.Template, service, rabbit);
             services.Add(deployment);
         }
         return services;
@@ -479,7 +505,7 @@ internal static partial class KubernetesTarget
             },
         };
 
-    private sealed class Renderer(
+    private sealed partial class Renderer(
         DeployFile file,
         DeployEnvironment env,
         string ns,
@@ -493,6 +519,10 @@ internal static partial class KubernetesTarget
 
         /// <summary>The Secret the proxy secret is held in, when the environment is exposed on a tailnet.</summary>
         public string? ProxySecret => proxySecret;
+
+        private EksTarget? Eks => eks;
+
+        private DeployEnvironment Env => env;
 
         /// <summary>A service's image: where a deploy to EKS pushed it, else from the environment's registry.</summary>
         public string Image(string service, string tag) =>
@@ -939,8 +969,7 @@ internal static partial class KubernetesTarget
                     Labels = Labels(name),
                     Annotations = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
-                        [$"container.seccomp.security.alpha.kubernetes.io/{container.Name}"] =
-                            "runtime/default",
+                        [$"{SeccompAnnotation}/{container.Name}"] = "runtime/default",
                     },
                 },
                 Spec = new V1PodSpec

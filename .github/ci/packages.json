@@ -43,7 +43,7 @@
     },
     {
       "folder": "Trax.Cli",
-      "upstream": ["Trax.Scheduler", "Trax.StateMachine"],
+      "upstream": ["Trax.Scheduler", "Trax.StateMachine", "Trax.Egress"],
       "dotnet": { "solution": "Trax.Cli.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "", "current-node-tests": "FullyQualifiedName~MachineGenerateFromPackedToolTests" },
       "adr": { "adr-root": "docs/adr", "known-areas": "tooling,platform,testing", "census-root": "tests/Trax.Cli.Tests.Meta" }
     },
@@ -130,6 +130,7 @@
         "Trax.Cli/src/Trax.Cli/Deploy/",
         "Trax.Cli/src/Trax.Cli/Commands/Deploy",
         ".github/ci/deploy/",
+        "Trax.Egress/",
         "Trax.Samples/templates/content/Trax.Samples.Hub/",
         "Trax.Effect/src/Trax.Effect/Configuration/Deploy/",
         "Trax.Api/src/Trax.Api.GraphQL/Deploy/"

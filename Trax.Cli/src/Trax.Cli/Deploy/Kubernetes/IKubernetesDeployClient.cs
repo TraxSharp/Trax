@@ -45,8 +45,14 @@ internal interface IKubernetesDeployClient
     Task<IReadOnlyList<KubernetesObjectState>> ListAsync(string ns, CancellationToken ct);
 
     /// <summary>
+    /// A cluster-wide object trax writes for a namespace (a ValidatingAdmissionPolicy or its binding), with the app
+    /// its <c>trax/app</c> label names, or null when it does not exist.
+    /// </summary>
+    Task<KubernetesObjectState?> ClusterObjectAsync(string kind, string name, CancellationToken ct);
+
+    /// <summary>
     /// Creates or updates a Service, Deployment, StatefulSet, ServiceAccount, SecurityGroupPolicy, NetworkPolicy,
-    /// ConfigMap, Ingress or Secret with server-side apply.
+    /// ConfigMap, Ingress, Secret, ValidatingAdmissionPolicy or ValidatingAdmissionPolicyBinding with server-side apply.
     /// </summary>
     Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct);
 
@@ -93,5 +99,6 @@ internal interface IKubernetesDeployClient
         CancellationToken ct
     );
 
+    /// <summary>Deletes the object, or a cluster-wide one (an admission policy or binding), ignoring <paramref name="ns"/>.</summary>
     Task DeleteAsync(string ns, KubernetesObjectState target, CancellationToken ct);
 }

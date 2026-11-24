@@ -105,7 +105,10 @@ internal static class PodmanTarget
                         name,
                         after: isMigrator ? backing : [.. backing, migratorUnit],
                         migrate: isMigrator
-                            ? new Migration(env.Database is { InCluster: true })
+                            ? new Migration(
+                                env.Database is { InCluster: true },
+                                file.Services[migrator].Egress is not null
+                            )
                             : null,
                         port: !tailnet && ComposeTarget.Hub(exports[service])
                             ? file.Services[service].Port
@@ -181,6 +184,7 @@ internal static class PodmanTarget
         var pod = hub.Spec.Template;
         var edge = KubernetesTarget.EdgeContainer(proxySecret);
         var tailscale = KubernetesTarget.TailscaleSidecar(appSecret, hostname);
+        RunBesideEgress(pod.Spec, tailscale);
         // Each sidecar gets a /tmp of its own rather than the hub's.
         foreach (
             var (container, scratch) in new[] { (edge, "edge-tmp"), (tailscale, "tailscale-tmp") }
@@ -222,6 +226,26 @@ internal static class PodmanTarget
             },
         ];
         return [config, claim, hub];
+    }
+
+    /// <summary>
+    /// A hub held to its egress has every process but the egress uid's sent through the egress resolver and proxy,
+    /// which would leave Tailscale unable to reach its control plane and relays. Tailscale runs as the egress uid
+    /// there: it reaches the internet over TCP and DNS as the egress itself does (so DERP, not direct UDP), and the
+    /// app still does not. A hub that is not held keeps Tailscale as it was.
+    /// </summary>
+    private static void RunBesideEgress(V1PodSpec pod, V1Container tailscale)
+    {
+        if (
+            pod.InitContainers?.Any(c =>
+                string.Equals(c.Name, DeployEgress.RulesContainer, StringComparison.Ordinal)
+            )
+            is not true
+        )
+            return;
+        tailscale.SecurityContext.RunAsUser = DeployEgress.Uid;
+        tailscale.SecurityContext.RunAsGroup = DeployEgress.Uid;
+        tailscale.SecurityContext.RunAsNonRoot = true;
     }
 
     /// <summary>The edge's Caddyfile, bound to 127.0.0.1 in the hub's pod, and Tailscale's serve configuration.</summary>
@@ -355,10 +379,59 @@ internal static class PodmanTarget
         if (pod is not null)
         {
             pod.HostUsers = null;
-            foreach (var c in pod.Containers)
+            HoldEgress(o, pod);
+            foreach (var c in pod.Containers.Concat(pod.InitContainers ?? []))
                 c.Image = FullImage(c.Image);
         }
         return o;
+    }
+
+    /// <summary>
+    /// The annotation that makes <c>kube play</c> run a pod's init containers on every start of the pod, not only
+    /// the first (podman 6.2; the default, <c>once</c>, removes them after their first run).
+    /// </summary>
+    public const string InitContainerTypeAnnotation = "io.podman.annotations.init.container.type";
+
+    /// <summary>
+    /// The egress as podman runs it. <c>kube play</c> has no native sidecar: it waits for every init container to
+    /// exit, so one that keeps running would hold the pod from starting (checked on podman 6.2). The sidecar becomes
+    /// an ordinary container that runs <c>run</c>: it applies the rules itself, as root with NET_ADMIN, then gives up
+    /// root and every capability and serves. The rules init container stays, and runs on every start of the pod,
+    /// so the rules are in place before any container does. Both are needed: <c>podman pod restart</c> makes the
+    /// pod's network namespace afresh and does not run init containers again, and the sidecar putting the rules back
+    /// as it starts is what holds the namespace then.
+    /// </summary>
+    private static void HoldEgress<T>(T o, V1PodSpec pod)
+        where T : IKubernetesObject<V1ObjectMeta>
+    {
+        var sidecars =
+            pod.InitContainers?.Where(c =>
+                    string.Equals(c.RestartPolicy, "Always", StringComparison.Ordinal)
+                )
+                .ToList()
+            ?? [];
+        if (pod.InitContainers is not { Count: > 0 })
+            return;
+        foreach (var sidecar in sidecars)
+        {
+            pod.InitContainers.Remove(sidecar);
+            sidecar.RestartPolicy = null;
+            sidecar.StartupProbe = null;
+            sidecar.Args = [DeployEgress.RunCommand];
+            sidecar.SecurityContext.RunAsUser = 0;
+            sidecar.SecurityContext.RunAsGroup = 0;
+            sidecar.SecurityContext.RunAsNonRoot = false;
+            sidecar.SecurityContext.Capabilities.Add = ["NET_ADMIN", "SETGID", "SETUID"];
+            pod.Containers.Add(sidecar);
+        }
+        var template = o switch
+        {
+            V1Deployment d => d.Spec.Template,
+            V1Job j => j.Spec.Template,
+            _ => null,
+        };
+        if (template is not null && pod.InitContainers.Count > 0)
+            template.Metadata.Annotations[InitContainerTypeAnnotation] = "always";
     }
 
     /// <summary>
@@ -429,8 +502,11 @@ internal static class PodmanTarget
         return (deployment.Metadata.Name, [claim, deployment]);
     }
 
-    /// <summary>What the migrator's unit runs before its pod: whether it first waits for the database on this host.</summary>
-    private sealed record Migration(bool WaitForDatabase);
+    /// <summary>
+    /// What the migrator's unit runs before its pod: whether it first waits for the database on this host, and
+    /// whether the migrate pod has an egress sidecar, which keeps running after the migration exits and is stopped.
+    /// </summary>
+    private sealed record Migration(bool WaitForDatabase, bool StopEgress);
 
     private sealed class Units(
         DeployFile file,
@@ -520,6 +596,10 @@ internal static class PodmanTarget
                     "echo \"the migration failed (exit $$code), so no service was started\" >&2; "
                 )
                 .Append("exit 1; }'\n");
+            if (migrate.StopEgress)
+                u.Append(
+                    $"ExecStartPre=-{Podman} pod stop --ignore -t 10 {stack}-{KubernetesTarget.MigrateName}-pod\n"
+                );
         }
     }
 }

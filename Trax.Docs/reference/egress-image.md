@@ -11,7 +11,7 @@ source:
 # The egress image
 
 `ghcr.io/traxsharp/trax-egress` limits what a container may reach to a list of domains. `trax deploy` puts it beside
-every service that names `"egress"` in `trax.deploy.json` ([the CLI reference](/docs/reference/cli#deployments-trax-deploy)), and any
+every service that names `"egress"` in `trax.deploy.json` ([the CLI reference](/docs/reference/cli#egress)), and any
 other container stack can run it the same way. It is released with Trax, at the Trax version, and a trax of a
 version names the image of the same version by digest.
 
@@ -136,7 +136,17 @@ podman run --rm --pod my-pod --user 1654:1654 --cap-drop ALL \
 ```
 
 It prints one line a probe and exits 1 when any probe did not do what it must. On Kubernetes, run it as an ephemeral
-container in the pod (`kubectl debug`), with the same environment.
+container in the pod, with the same environment and the app's uid. Use `kubectl debug`'s `restricted` profile: the
+`general` one adds `SYS_PTRACE`, which the namespace's admission policy refuses. A command after `--` replaces the
+image's entrypoint, so name the binary.
+
+```bash
+printf '%s' '{"env":[{"name":"TRAX_EGRESS_ALLOW","value":"api.anthropic.com tcp:database:5432"}],
+  "securityContext":{"runAsUser":1654,"runAsGroup":1654}}' > check.json
+kubectl -n orders-staging debug pod/<hub pod> --image=ghcr.io/traxsharp/trax-egress@sha256:<digest> \
+  --container=egress-check --profile=restricted --custom=check.json --attach=false -- /usr/local/bin/trax-egress check
+kubectl -n orders-staging logs <hub pod> -c egress-check
+```
 
 ## The seccomp profile
 

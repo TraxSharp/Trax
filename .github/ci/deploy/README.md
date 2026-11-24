@@ -16,6 +16,12 @@ What `cluster.sh` proves, in order:
    default-deny NetworkPolicy holds: a pod labelled as the app reaches Postgres, one that is not is refused;
 3. a release that cannot start (a setting the hub refuses at start) is rolled back: the deploy fails at the
    Deployment's progress deadline naming the hub, and the hub that was serving serves again on the old image.
+4. the hub held to its egress (`"egress": ["api.github.com"]`, the egress image built from the same commit and
+   named by digest): it rolls out healthy and answers GraphQL, so it reached Postgres through the egress; its pod
+   has the rules init container and the egress sidecar and still no user namespace of the node's; the egress check,
+   run in the hub's pod as an ephemeral container with the app's uid, finds api.github.com and the database open and
+   everything else (other names, DNS to an outside resolver, metadata, private ranges, `nft flush ruleset`) refused;
+   and the admission policy refuses NET_ADMIN on an app container and on a rules container running another image.
 
 What `podman.sh` proves:
 

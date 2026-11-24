@@ -11,6 +11,7 @@ internal sealed partial class DeployFile
             case DeployEnvironment.Aws:
                 CheckAws(env, problem);
                 CheckAwsNetworkAndAuth(env, problem);
+                RefuseEgressOnEcs(problem);
                 break;
             case DeployEnvironment.Compose:
                 CheckCompose(env, problem);
@@ -72,6 +73,25 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 problem("the try profile serves on a CloudFront address and takes no domain.")
             );
+    }
+
+    /// <summary>
+    /// ECS refuses <c>egress</c>: Fargate gives a task no NET_ADMIN, so the egress image cannot apply its rules, and a
+    /// security group filters by address, not by name. The kubernetes target on EKS limits a service on AWS.
+    /// </summary>
+    private void RefuseEgressOnEcs(Func<string, string> problem)
+    {
+        foreach (var (service, entry) in Services)
+            if (entry.Egress is not null)
+                throw new InvalidOperationException(
+                    problem(
+                        $"service '{service}' names egress, which aws (ECS Fargate) cannot hold it to: Fargate "
+                            + "gives a task no NET_ADMIN, so the egress rules cannot be applied, and a security "
+                            + "group filters by address, not by domain. Deploy it with \"target\": \"kubernetes\" "
+                            + "on EKS (\"aws\": { \"cluster\": ... }), or leave egress out of a file that deploys "
+                            + "to ECS."
+                    )
+                );
     }
 
     private static void CheckAwsNetworkAndAuth(DeployEnvironment env, Func<string, string> problem)

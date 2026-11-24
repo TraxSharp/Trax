@@ -87,8 +87,13 @@ domains, which is what an app that calls one model API and one package feed need
 runs the image in real network namespaces and proves what it allows and refuses, with a positive control on every
 run. In Trax.Cli, `EgressContractTests` holds the uid, ports and commands the CLI renders to the ones the image
 uses, and `DeployEgressTests` holds every target to its answer: the sidecar on compose and Kubernetes, the policy
-beside it, the refusal on ECS.
+beside it, the refusal on ECS. The `deploy-cluster` job's `.github/ci/deploy/cluster.sh` deploys a held hub to k3s
+(with `hostUsers: false` and the namespace's network policies) and runs the check inside its pod, and tries the
+admission policy with NET_ADMIN on an app container, a rules container of another image and a `kubectl debug`
+container adding `SYS_PTRACE`.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
+- **2026-11-24**: Proved on k3s v1.36: the rules init container's NET_ADMIN and the uid match both work in a pod
+  with a user namespace of its own (`hostUsers: false`).
