@@ -13,6 +13,8 @@ stops a service before its new version starts. For a release with no outage on o
 real cluster on it: k3s, inside a virtual machine, and deploy to it with the kubernetes target, the
 same way you would deploy to EKS. Kubernetes brings the new copy up beside the old one and moves
 traffic over once it is ready.
+[A zero-downtime deploy on k3s](/docs/reference/a-zero-downtime-deploy-on-k3s) walks the same path step by step,
+with the output at each one.
 
 Use a virtual machine, not k3s installed on the host. k3s runs as root, so a container that escaped
 would be root on the machine your keys and other services live on. Inside a VM it is root in the VM,
@@ -32,7 +34,7 @@ reach.
 
 ```bash
 # in the VM, as root
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.36.4+k3s1 sh -s - --disable traefik
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.36.6+k3s1 sh -s - --disable traefik
 kubectl get nodes
 ```
 
@@ -88,8 +90,8 @@ kubectl -n orders-home create secret generic orders-home --from-env-file=orders-
 trax deploy --env home
 ```
 
-`trax deploy` checks the context it is about to use, applies to it, waits for each service, and
-rolls every service back to the version before if one never gets ready.
+`trax deploy` checks the context it is about to use, applies to it, drains the hosts already running,
+waits for each service, and rolls every service back to the version before if one never gets ready.
 
 ## 4. Reach it on the tailnet
 

@@ -19,7 +19,7 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 ## What was decided
 
 - **Each environment names its own target**: `"target": "compose"`, `"aws"` (ECS Fargate) or `"kubernetes"`. One
-  file can hold staging on kind and production on ECS.
+  file can hold staging on k3s and production on ECS.
 - **The Kubernetes target never creates a cluster**, on any cloud. It applies plain manifests to the cluster the
   current kubeconfig context names, with the Kubernetes .NET client: the migrate Job first, then the Deployments.
   The hub's Deployment rolls with its next copy beside it after the deploy drains the hosts
@@ -76,6 +76,8 @@ cluster, is refused before anything changes. `TraxAwsSecretsTests` in `Trax.Effe
 
 ## Changelog
 
+- **2026-11-24**: kind is not a cluster trax deploys to: its nodes are containers, so its pods cannot have
+  `hostUsers: false`. The example above names k3s instead.
 - **2026-11-24**: A hub rolls with its next copy beside it after a drain, in place of `Recreate`; recorded in
   cli/0007 (user).
 - **2026-11-23**: On EKS: how the database password reaches the host, pod security groups by default with node access

@@ -13,7 +13,8 @@ Shopfront has run on one machine, in Development, from `dotnet run`. In this cha
 would deployed: a hub and two workers in containers, one Postgres, and RabbitMQ between them. Four
 things change before it can: the shop's schema is migrated rather than created, the processes tell
 each other about runs, each says whether it is healthy, and the hub runs in Production, which
-turns off everything that was there for Development.
+turns off everything that was there for Development. The last section says what `trax deploy` would add to it, and
+what in Shopfront's code it still needs first.
 
 This chapter starts from the end of [chapter 18](/docs/book/require-persisted-operations).
 

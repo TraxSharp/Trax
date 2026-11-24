@@ -72,7 +72,10 @@ Pages to look things up in. Per-type and per-method pages are in the
 
 ## Tooling
 
-- [CLI](/docs/reference/cli): the `trax` command, `generate` and `machine`.
+- [CLI](/docs/reference/cli): the `trax` command, `generate`, `machine` and `deploy`.
+- [Deploy a Trax app](/docs/reference/deploy-a-trax-app): `trax deploy` to compose, Kubernetes or AWS.
+- [How a deploy works](/docs/reference/how-a-deploy-works): the targets, what each refuses, and the order of a deploy.
+- [The egress image](/docs/reference/egress-image): what a service held to a list of domains can and cannot reach.
 - [Project Templates](/docs/reference/templates): the `dotnet new` templates.
 - [Architecture Guards](/docs/reference/architecture-guards): the guard packages, their fixtures and what they check.
 - [Trax.Analyzers](/docs/reference/analyzers): the opt-in analyzer package, its switches and levels.

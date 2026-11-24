@@ -1015,10 +1015,10 @@ kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm
 
 | Key | Meaning |
 |---|---|
-| `profile` | `production` (the default) or `try`. Only `try` may run Postgres or RabbitMQ in the cluster. The predicate is the profile, not the kind of cluster: a `try` environment on a managed cloud cluster may, a `production` one on kind may not. |
+| `profile` | `production` (the default) or `try`. Only `try` may run Postgres or RabbitMQ in the cluster. The predicate is the profile, not the kind of cluster: a `try` environment on a managed cloud cluster may, a `production` one on k3s may not. |
 | `runtime` | `cluster` (the default): applied to the current kubeconfig context. `podman`: written for one host to run under systemd, below. |
 | `namespace` | The namespace the app goes in; `<app>-<env>` when left out. trax creates it when it does not exist. |
-| `registry` | Where images are pushed and pulled from (`ghcr.io/acme`), as `<registry>/<app>-<service>:<tag>`, with the login docker or podman holds for it. Without one, images are built into the local container runtime as `<app>-<service>:<tag>` with `imagePullPolicy: IfNotPresent`, for a cluster that reads that runtime (Docker Desktop, podman). kind does not: give it a registry, such as kind's local one on `localhost:5001`. |
+| `registry` | Where images are pushed and pulled from (`ghcr.io/acme`), as `<registry>/<app>-<service>:<tag>`, with the login docker or podman holds for it. Without one, images are built into the local container runtime as `<app>-<service>:<tag>` with `imagePullPolicy: IfNotPresent`, for a cluster whose nodes read that runtime. kind is not supported at all: its nodes are containers, so its pods cannot have the user namespace every Trax pod asks for (`hostUsers: false`), and a deploy stops saying so once the node has failed to create a pod three times. |
 | `database` | Required: every kubernetes environment names its database, and a `production` one names a Secret. `{ "secret": ..., "key": ... }`: an existing Secret in the namespace holding the whole Postgres connection string, read as `ConnectionStrings__<trax name>`. Or `{ "inCluster": true }`: Postgres 17 as a StatefulSet of one with a 1Gi volume and a headless Service, refused under `production`. |
 | `settings` | A value for each name the file lists under `settings`, written into the manifests as plain values. |
 | `counts` | Copies per service here, over the file's `count`. |

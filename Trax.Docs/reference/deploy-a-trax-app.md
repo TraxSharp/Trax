@@ -14,6 +14,10 @@ reports the rest itself when trax runs it once with `--trax-export-deploy`: its 
 or runs the scheduler, its endpoints and its sign-in. The [CLI reference](/docs/reference/cli#deployments-trax-deploy)
 has every option.
 
+New to it? [A zero-downtime deploy on k3s](/docs/reference/a-zero-downtime-deploy-on-k3s) walks one path end to end.
+[How a deploy works](/docs/reference/how-a-deploy-works) explains what each target can and cannot do and the order a
+deploy runs in, and [Deployment security](/docs/security/deployment-security) what each layer keeps out.
+
 Before you start, the hosts end with `await app.RunTraxAsync(args);` in place of `app.Run()`, as the templates do,
 and keep their runs in Postgres when `ConnectionStrings:Trax` is set
 ([Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres)). An API host maps a health check
@@ -125,8 +129,9 @@ binds a public address. With it the hub can sign people in by their tailnet logi
 
 The `production` profile, the default, refuses Postgres and RabbitMQ in the cluster: name an existing database
 with `"database": { "secret": "orders-db", "key": "connection" }`, a Secret holding its whole connection string.
-Without a `registry`, images are built into your local container runtime, which Docker Desktop's and podman's
-clusters read; kind does not, so give it a registry (`"registry": "localhost:5001"`).
+Without a `registry`, images are built into your local container runtime, for a cluster whose nodes read it. kind is
+not supported: its nodes are containers, so a pod there cannot have the user namespace every Trax pod asks for. On one
+machine, run k3s in a virtual machine ([Deploy to one machine with no downtime](/docs/reference/deploy-to-one-machine-with-no-downtime)).
 
 On an EKS cluster you created, an `"aws"` block names it, and trax deploys the AWS foundation beside it for the
 database and secrets: the pods read their secrets from Secrets Manager with a role of their own, through
@@ -142,11 +147,12 @@ the same `.env`, and no port is published on the host. The
 
 ## One hub
 
-The API and the scheduler run as one copy each. On AWS a deploy starts the new copy before it stops the old one, but runs
-still live on the old copy when it stops can fail: a restarting host fails the runs it finds in progress, including
-another host's. On Kubernetes the old copy stops before the new one starts, so a deploy has a few seconds with no
-hub, never two. Workers scale freely (`count`). Running more than one hub waits on hosts holding leases on their
-runs.
+The API and the scheduler run as one copy each. On Kubernetes and AWS a deploy drains the hosts first, then starts the
+hub's new copy beside the old one and stops the old one once the new one is ready, so the API stays up and the new
+hub's startup finds no live run to fail. Under compose and the podman runtime the hub stops before its new version
+starts. Workers scale freely (`count`). In steady state a hub stays one copy: a second copy that restarted with no
+drain before it would fail the runs live on the first. Running more than one hub waits on hosts holding leases on
+their runs.
 
 ## Take it down
 
