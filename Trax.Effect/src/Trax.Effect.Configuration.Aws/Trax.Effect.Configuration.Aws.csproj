@@ -5,8 +5,6 @@
     <Nullable>enable</Nullable>
     <Description>Reads a Trax .NET host's secrets from AWS Secrets Manager into its configuration at start, with the credentials the host already has (on EKS, its Pod Identity role). Adds AddTraxAwsSecretsAsync to the host's configuration. trax deploy names the secrets; the values never pass through Kubernetes.</Description>
     <AssemblyName>Trax.Effect.Configuration.Aws</AssemblyName>
-    <!-- New package: nothing on nuget.org to validate against yet. Remove once it has shipped. -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>
