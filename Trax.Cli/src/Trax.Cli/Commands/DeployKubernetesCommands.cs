@@ -469,12 +469,17 @@ internal static class DeployKubernetesCommands
     )
     {
         Directory.CreateDirectory(dir);
+        var previous = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (
             var old in Directory
                 .EnumerateFiles(dir)
                 .Where(f => Path.GetExtension(f) is ".yaml" or ".kube" or ".network")
         )
+        {
+            previous[Path.GetFileName(old)] = await File.ReadAllTextAsync(old, ct)
+                .ConfigureAwait(false);
             File.Delete(old);
+        }
         foreach (var (name, content) in stack.Files)
             await File.WriteAllTextAsync(Path.Combine(dir, name), content, ct)
                 .ConfigureAwait(false);
@@ -489,18 +494,61 @@ internal static class DeployKubernetesCommands
                 .ConfigureAwait(false);
             return;
         }
+        var secretsChanged =
+            !File.Exists(secretPath)
+            || !string.Equals(
+                await File.ReadAllTextAsync(secretPath, ct).ConfigureAwait(false),
+                secretYaml,
+                StringComparison.Ordinal
+            );
         await WritePrivateAsync(secretPath, secretYaml, ct).ConfigureAwait(false);
         await stdout.WriteLineAsync($"Wrote {secretPath} (mode 0600).").ConfigureAwait(false);
-        var units = string.Join(' ', stack.Units.Select(u => $"{u}.service"));
         await stdout
-            .WriteLineAsync(
-                "Install and start it on this host:\n"
-                    + $"  mkdir -p ~/.config/containers/systemd && cp {dir}/*.kube {dir}/*.network "
-                    + "~/.config/containers/systemd/\n"
-                    + "  systemctl --user daemon-reload\n"
-                    + $"  systemctl --user restart {units}"
-            )
+            .WriteLineAsync(InstallHint(stack, dir, stack.ReleaseFrom(previous, secretsChanged)))
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The commands that put <paramref name="release"/> on the host: copy the units, reload systemd, stop and remove
+    /// what the stack no longer has, and restart only what changed.
+    /// </summary>
+    internal static string InstallHint(PodmanStack stack, string dir, PodmanStack.Release release)
+    {
+        var lines = new List<string>
+        {
+            "Install and start it on this host:",
+            $"  mkdir -p ~/.config/containers/systemd && cp {dir}/*.kube {dir}/*.network "
+                + "~/.config/containers/systemd/",
+        };
+        if (release.Removed.Count > 0)
+            lines.Add(
+                "  systemctl --user stop "
+                    + string.Join(' ', release.Removed.Select(u => $"{u}.service"))
+                    + " && rm "
+                    + string.Join(
+                        ' ',
+                        release.Removed.Select(u => $"~/.config/containers/systemd/{u}.kube")
+                    )
+            );
+        lines.Add("  systemctl --user daemon-reload");
+        if (release.Restart.Count > 0)
+            lines.Add(
+                "  systemctl --user restart "
+                    + string.Join(' ', release.Restart.Select(u => $"{u}.service"))
+            );
+        var kept = stack.Units.Except(release.Restart, StringComparer.Ordinal).ToList();
+        if (release.Restart.Count == 0)
+            lines.Add("Nothing changed: every unit keeps running.");
+        else
+        {
+            if (kept.Count > 0)
+                lines.Add($"Unchanged, left running: {string.Join(", ", kept)}.");
+            lines.Add(
+                "Each restarted service stops before its new version starts, so it is down for that moment; for no "
+                    + "downtime, deploy to a cluster."
+            );
+        }
+        return string.Join('\n', lines);
     }
 
     /// <summary>Writes <paramref name="content"/> where only this user can read it: the folder 0700, the file 0600.</summary>
