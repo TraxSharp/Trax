@@ -18,7 +18,7 @@ the [sandbox threat model](/docs/security/sandbox-threat-model). How the deploy 
 
 | Layer | Keeps out | Where |
 |---|---|---|
-| Container hardening | A compromised process gaining privileges: every capability dropped (Postgres and RabbitMQ get back the few their entrypoints need), no privilege escalation, the runtime's default seccomp profile, a non-root user for every Trax container, memory and CPU limits when the service names them. | compose, the podman runtime and a cluster. An ECS task drops every capability and gets the read-only root and its Fargate size; Fargate has no seccomp profile or `no-new-privileges` setting to give it. |
+| Container hardening | A compromised process gaining privileges: every capability dropped (Postgres gets back the few its entrypoint needs, and so does RabbitMQ under compose; on a cluster and under the podman runtime RabbitMQ runs as its own user with none), no privilege escalation, the runtime's default seccomp profile, a non-root user for every Trax container, memory and CPU limits when the service names them. | compose, the podman runtime and a cluster. An ECS task drops every capability and gets the read-only root and its Fargate size; Fargate has no seccomp profile or `no-new-privileges` setting to give it. |
 | A read-only root | A compromised process changing its own binaries or leaving a file that survives a restart. A Trax container writes only to a scratch `/tmp`. | Every target, for every Trax container and Job. Postgres and RabbitMQ keep a writable root. |
 | A user namespace | An escape landing as root on the machine. Root in the container maps to an unprivileged uid outside it; under podman, `nomap` also leaves your own uid out, so an escape does not land as you. | `hostUsers: false` on a cluster, `nomap` under podman. Not under docker compose, which refuses `nomap`, and not on ECS. |
 | No token, no service links | A compromised pod calling the Kubernetes API as a ServiceAccount, or reading other services' addresses from its environment. | Every pod on a cluster. On EKS a pod gets a role through Pod Identity that reads only its environment's secrets. |
@@ -37,31 +37,39 @@ no endpoint into the app.
 
 ## What has been proved
 
-`.github/ci/deploy/cluster.sh` and `podman.sh` run `trax deploy` for real, against the `trax-hub` template built from
+`.github/ci/deploy/cluster.sh` and `podman.sh` run `trax deploy` for real, against the DistributedWorkers sample (a
+hub, two workers, Postgres and RabbitMQ, from `Trax.Samples/samples/DistributedWorkers/trax.deploy.json`) built from
 the same commit, and check what it did. They are the `deploy-cluster` CI job, and `cluster.sh` also runs against an
-existing cluster, which is how it was run on k3s v1.36.6 in a virtual machine:
+existing cluster. Both were run on k3s v1.36.6 in a Debian 13 virtual machine on 2026-11-24:
 
-- **A first deploy.** The Secret was checked, Postgres came up in the cluster under its limits, the migrate Job ran,
-  the hub rolled out, and `/trax/health` and GraphQL answered.
-- **Hardening.** Every hub pod ran with `hostUsers: false`, no service account token and a read-only root.
-- **Network policy.** A pod labelled as the app reached Postgres; the same probe from a pod that was not was refused.
-  The first is the control that makes the second mean the policy.
-- **The drain.** With a run InProgress on the serving hub, the drain Job reported it busy and the hub's image did not
-  change until the run ended. Then the hub rolled with two hub pods running at once, and a probe inside the namespace
-  that asked the Service for `/trax/health` five times a second for the whole deploy saw 347 answers and no failure.
-  The run was left as it had been ended: the new hub's recovery did not touch it. The drain row was gone afterwards.
-- **Rollback.** A release the hub refuses at start failed at the Deployment's progress deadline, naming the hub, and
-  the hub that had been serving served again on its old image.
-- **Egress.** The hub, held to `api.github.com` with the egress image built from the same commit and named by
-  digest, rolled out healthy and answered GraphQL, so it reached Postgres through the egress. Its pod had the rules
-  init container and the sidecar, and still `hostUsers: false`. The egress check, run inside the hub's pod as the
-  app's uid, found `api.github.com` and the database open, and other names, DNS to an outside resolver, metadata,
-  the private ranges and `nft flush ruleset` refused. The admission policy refused `NET_ADMIN` on an app container, a
-  rules container running another image, and a `kubectl debug` container adding `SYS_PTRACE`.
+- **A first deploy.** The Secret was checked, Postgres and RabbitMQ came up in the cluster under their limits, the
+  migrate Job ran, the hub and both workers rolled out, and `/trax/health` and GraphQL answered.
+- **Hardening.** Every hub and worker pod ran with `hostUsers: false`, no service account token, a read-only root and
+  its service's memory and CPU.
+- **Network policy.** A pod labelled as the app reached Postgres and RabbitMQ; the same probe from a pod that was not
+  was refused by both. The first is the control that makes the second mean the policy.
+- **The split.** A worker finished a run of the hub's schedule, and the hub and a worker were both connected to
+  RabbitMQ.
+- **The drain.** With a run InProgress, the drain Job reported it busy and neither the hub's nor the workers' image
+  changed until the run ended. Then the hub rolled with two hub pods running at once, and a probe inside the
+  namespace that asked the Service for `/trax/health` five times a second for the whole deploy saw 332 answers and no
+  failure. The run was left as it had been ended: the new hub's recovery did not touch it. The drain row was gone
+  afterwards.
+- **Rollback.** A release whose hub cannot serve failed at the Deployment's progress deadline, naming the hub, and
+  the hub and workers that had been serving served again on their old images.
+- **Egress.** With the egress image built from the same commit and named by digest, the workers on the sample's empty
+  list and the hub on `api.github.com`, everything rolled out healthy, a worker finished a new run and was connected to
+  RabbitMQ, so both reached what they needed through the egress. Each pod had the rules init container and the sidecar,
+  and still `hostUsers: false`. The egress check, run inside each pod as the app's uid, found what that pod's list
+  allows open (the hub: `api.github.com`, the database and the broker; a worker: the database and the broker) and
+  other names, `api.github.com` from a worker, DNS to an outside resolver, metadata, the private ranges and
+  `nft flush ruleset` refused. The admission policy refused `NET_ADMIN` on an app container, a rules container running
+  another image, and a `kubectl debug` container adding `SYS_PTRACE`.
 
-Under podman, with the units running under `systemd --user`: the first deploy started Postgres, ran the migration and
-served a healthy hub on `127.0.0.1` with a read-only root; a release that changed only the image drained first, held
-while a run was busy, then restarted only the hub and left Postgres running.
+Under podman, with the units running under `systemd --user`: the first deploy started Postgres and RabbitMQ, ran the
+migration and served a healthy hub on `127.0.0.1` and a worker, both with a read-only root; the worker ran the hub's
+schedule and both were connected to RabbitMQ; a release that changed only the images drained first, held while a run
+was busy, then restarted only the hub and the worker and left Postgres and RabbitMQ running.
 
 The sandbox escape suite ran through the launcher on k3s with a Kata RuntimeClass, and every case passed (15 of 15);
 the [threat model](/docs/security/sandbox-threat-model#hostile-work-in-a-sandbox) lists each one.

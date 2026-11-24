@@ -85,11 +85,14 @@ made those changes yet:
 - **Both read the broker from `ConnectionStrings:RabbitMq`.** A deploy passes the broker's host, user name and
   password as `RabbitMq__Host`, `RabbitMq__UserName` and `RabbitMq__Password`, so no password sits inside a URI;
   `UseRabbitMq(builder.Configuration)` reads them.
-- **Both decode `Broadcast:SigningKey` before they are built.** For the report, every secret is given a placeholder
-  that is not base64, so both stop there.
+- **Both read `Broadcast:AllowInsecureTransport` with `GetValue<bool>`.** For the report, every setting is given an
+  `https://` URL, which is not a boolean, so both stop there. Reading it as the text `true` and nothing else gets
+  past it, and still refuses cleartext unless the deployment says so.
 
 Until then, [A zero-downtime deploy on k3s](/docs/reference/a-zero-downtime-deploy-on-k3s) walks the same path with a
-`trax-hub` project, and [How a deploy works](/docs/reference/how-a-deploy-works) explains each step.
+`trax-hub` project, the [DistributedWorkers sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers)
+deploys a hub and workers on one Postgres and one RabbitMQ with each of those changes made, and
+[How a deploy works](/docs/reference/how-a-deploy-works) explains each step.
 
 ## What we have
 
