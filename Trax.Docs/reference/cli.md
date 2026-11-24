@@ -765,13 +765,49 @@ Every target says what it does with it:
 | kubernetes, `runtime: podman` | The same pod, with the sidecar as an ordinary container, since `kube play` does not run native sidecars. |
 | aws (ECS) | Refused, naming the service: Fargate gives a task no `NET_ADMIN`, so the rules cannot be applied. Use the kubernetes target on EKS. |
 
-The migration runs the migrator's code, so it is held to the migrator's `egress` too. The app must not run as uid
+The migration, the drain and the resume run the migrator's code, so each is held to the migrator's `egress` too. The app must not run as uid
 61000, which the rules let out.
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
 leaving out test projects, and refuses to replace an existing file without `--force`. `init --target aws` adds a
 `production` environment to fill in, and `init --target kubernetes` a `staging` one on the `try` profile with
 Postgres in the cluster.
+
+### Drain before a rollout
+
+Replacing a host cuts off whatever it is running, and a starting hub fails every run still InProgress from before it
+started. So every target drains the hosts before it replaces any and ends the drain after. The drain runs the new version's image once, inside
+the cluster, the ECS network or the compose stack, the way the migration does, with `--trax-drain <timeout>`: it sets
+a flag in the database that stops every host starting new work (the dispatcher dispatches nothing, the manifest
+manager queues no scheduled run, no worker claims a job) and waits for what is busy to finish, runs and machine
+instances alike. Nothing outside reaches the app to do it. Once the hosts are replaced, `--trax-resume` ends the
+drain; a hub that starts ends it too, and a drain a crashed deploy left behind lapses on its own after the timeout
+plus ten minutes. A first deploy has nothing to drain and skips it. [Drain before a deploy](/docs/reference/drain-before-a-deploy) explains
+what counts as busy and what to do when a deploy refuses; [TraxDrain](/docs/sdk-reference/configuration/trax-drain) has the
+arguments.
+
+```json
+"production": { "target": "aws", "drainTimeout": "00:20:00" }
+```
+
+`drainTimeout` is how long the drain waits, per environment, as hours, minutes and seconds; `00:10:00` when left out,
+and anything outside one second to one day is refused. Past it the drain ends itself and the deploy refuses, nothing
+replaced, with the end of the drain's log, which lists what was still busy:
+
+```text
+The drain failed (BackoffLimitExceeded), so no service was moved to the new version. The end of its log, which names any work still busy:
+  run 4182 Orders.Trains.IBillCustomerTrain (InProgress, since 2026-11-24 14:02:11Z, on orders-hub-7f9c)
+  instance checkout/3f2a... checkout (Charging, effect charge in flight, since 2026-11-24 14:05:40Z)
+```
+
+Let the work finish or cancel it, raise `drainTimeout`, or deploy with `--force`, which replaces the hosts anyway and
+keeps the drain until the new hub ends it. On Kubernetes, ECS and the podman runtime `--force` reaches the drain
+itself; compose's file is run by you, so there set `TRAX_DRAIN_FORCE=true` for that one `compose up`.
+
+With the drain done, a hub's new copy can start beside the old one: dispatch already copes with two hubs (claims use
+`FOR UPDATE SKIP LOCKED`, the manifest manager an advisory lock), and the startup recovery finds nothing live to fail.
+On Kubernetes and ECS the hubs overlap during the roll; in steady state a hub still runs one copy. The reasoning is
+in `Trax.Cli/docs/adr/0007`.
 
 ### `--target compose`
 
@@ -781,10 +817,15 @@ compose:
 - `database`, Postgres 17, with the app's name as database and user;
 - `rabbitmq`, only when a host connects to RabbitMQ;
 - `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
-- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish, and `count` becomes
+- `drain`, the same image with `--trax-drain <drainTimeout>` after `migrate`, while the old containers still run.
+  Compose replaces a service only once its dependencies are met, so a drain that refuses stops the `compose up` with
+  every old container still running. `TRAX_DRAIN_FORCE` (in `.env.example`, `false`) forces it;
+- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` and `drain` to finish, and `count` becomes
   `deploy.replicas`. A hub (a service that serves HTTP and runs the `api` or `scheduler` role, so runs as one) is
   published on `127.0.0.1` only, on its `port` or the first port from 8080 no other service names. No other service
-  publishes a port, so a `port` on one is refused, and so are two services with the same `port`.
+  publishes a port, so a `port` on one is refused, and so are two services with the same `port`;
+- `resume`, the same image with `--trax-resume` once every service has started, which ends the drain when a release
+  restarted no hub.
 
 Every service drops every Linux capability and runs with `no-new-privileges`, `userns_mode: nomap` (the deploying
 user's own uid is not mapped into the container, so an escape does not land as them) and `pids_limit`: the
@@ -894,8 +935,16 @@ A deploy:
 3. creates or updates the foundation, then the runtime with the migrate task on the new image, while the services
    stay where they are (a new stack's, and a service the stack does not run yet, at zero);
 4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
-5. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
-   if it never gets healthy, and prints the address.
+5. on a stack that already runs, drains the hosts: the migrate task definition run with `--trax-drain <timeout>`,
+   refusing with the end of its log when work is still busy at the timeout (see
+   [Drain before a rollout](#drain-before-a-rollout));
+6. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
+   if it never gets healthy. The old and new tasks of a hub overlap (minimum healthy 100%, maximum 200%), which the
+   drain makes safe;
+7. ends the drain with the same task run with `--trax-resume`, after a failed roll too, and prints the address.
+
+Every container stops within 120 seconds of SIGTERM (`StopTimeout`, the most Fargate allows), so the drain has to
+finish before the roll; the stop only covers a host's own shutdown.
 
 Each task is the smallest Fargate size that holds its service's `memory` and `cpus` (Fargate accepts only certain
 pairs: `"memory": 3000` runs as half a vCPU and 3 GB, `"memory": 9000` as two vCPUs and 9 GB). A service that names
@@ -987,14 +1036,23 @@ What it applies, in this order:
    service that serves the API, run with `--trax-migrate`, `backoffLimit: 0`, kept a day after it finishes. If it
    fails, trax prints the end of its log and stops; no Deployment is touched;
 6. with `"exposure": "tailnet"`, a new proxy secret in the Secret `<app>-<env>-tailnet` (below);
-7. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
-   runs one copy with `strategy: Recreate`, so the old hub stops before the new one starts: a few seconds without a
-   hub, never two. Workers roll at their count. A hub also gets a ClusterIP Service on port 8080, and every service
-   that reports a health endpoint gets readiness and liveness probes on it. With `"exposure": "tailnet"`, the edge
-   and the operator's Ingress too;
-8. waits for each Deployment to roll out: every copy updated and available, within ten minutes. Each Deployment has
+7. when any service already runs, the drain Job `<app>-drain-<tag>`: the same image run with `--trax-drain
+   <drainTimeout>`, `backoffLimit: 0`, waited on for its timeout plus five minutes. If it fails, trax prints the end
+   of its log, which lists what was still busy, and stops; no Deployment is touched (see
+   [Drain before a rollout](#drain-before-a-rollout));
+8. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
+   runs one copy and rolls with `maxSurge: 1` and `maxUnavailable: 0`: the new hub starts beside the old one and the
+   old one stops only once the new one is ready, so the API stays up. Its pod sleeps ten seconds in `preStop` (the
+   kubelet's `sleep` action, so the image needs no shell) so the Service stops routing to it before it is signalled.
+   Workers roll at their count. Every Trax pod gets `terminationGracePeriodSeconds` of the drain's timeout plus those
+   ten seconds, which only matters after `--force`. A hub also gets a ClusterIP Service on port 8080, and every
+   service that reports a health endpoint gets readiness and liveness probes on it. With `"exposure": "tailnet"`,
+   the edge and the operator's Ingress too;
+9. waits for each Deployment to roll out: every copy updated and available, within ten minutes. Each Deployment has
    `progressDeadlineSeconds: 300`, so a rollout that makes no progress for five minutes (a crash loop, an image that
-   never passes readiness) ends the wait as soon as the cluster marks it, not at ten minutes.
+   never passes readiness) ends the wait as soon as the cluster marks it, not at ten minutes;
+10. the resume Job `<app>-resume-<tag>` (`--trax-resume`), after a rollback too. If it fails the deploy still stands
+   and says so: the new hub ended the drain when it started, and one left behind lapses on its own.
 
 When a service does not roll out, the deploy puts every service back as it was before it started, as ECS's circuit
 breaker does: each Deployment that existed gets its earlier spec applied again (the pod template, the copies and the
@@ -1002,7 +1060,7 @@ strategy it had) and is waited on, and one this deploy created is deleted. The e
 and ends with what was done. The migration is not undone: the version before it served while it ran, so it must
 already work on the new schema. A first deploy has nothing to go back to and is left as it is. If the rollback itself
 does not roll out, the error says the services are in between versions. A deploy you interrupt (Ctrl-C) is not rolled
-back.
+back, and its drain is not ended: it lapses after the timeout plus ten minutes, or a hub that starts ends it.
 
 Services, Deployments and the StatefulSet are applied server-side under the field manager `trax`. Every object
 carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kubernetes.io/managed-by: trax` and
@@ -1028,8 +1086,9 @@ native sidecar (Kubernetes 1.29 and later): it starts before the app, the app st
 (`trax-egress ready`) passes, and it runs beside the app for the pod's life. Both read `TRAX_EGRESS_ALLOW`: the
 service's domains, then `tcp:database:5432` when Postgres runs in the cluster and `tcp:rabbitmq:5672` when RabbitMQ
 does. An existing database is allowed by the hosts of the connection string in its Secret, passed to both as
-`TRAX_EGRESS_POSTGRES` by `secretKeyRef`, so its address is written nowhere new. The migrate Job's pod is held to
-the migrator's egress the same way; the native sidecar stops when the Job's container does.
+`TRAX_EGRESS_POSTGRES` by `secretKeyRef`, so its address is written nowhere new. The migrate, drain and resume Jobs'
+pods are held to the migrator's egress the same way, so they still reach the database; the native sidecar stops
+when the Job's container does.
 
 The network policies decide what may reach a pod, the egress what may leave it, and the two do not overlap: the
 egress proxy connects from the pod's own address, so the in-cluster database's policy admits a held hub exactly as
@@ -1212,8 +1271,8 @@ unit per pod, which systemd starts at boot and restarts when it dies. compose st
 uses RabbitMQ, each name under `secrets`, and the database's `key` when it names one). Then it builds the images into
 this host's podman as `localhost/<app>-<service>:<tag>` and writes:
 
-- under `.trax/deploy/podman/<app>-<env>/`: a YAML file and a `.kube` unit for each pod, the migration's YAML, and a
-  `.network` unit, `<app>-<env>`, that every pod joins. None of them holds a secret value;
+- under `.trax/deploy/podman/<app>-<env>/`: a YAML file and a `.kube` unit for each pod, the migration's, the
+  drain's and the resume's YAML, and a `.network` unit, `<app>-<env>`, that every pod joins. None of them holds a secret value;
 - `~/.config/trax/<app>-<env>/secret.yaml` (or under `$XDG_CONFIG_HOME`), mode 0600 in a 0700 folder: the
   Secrets with their values from `.env`, which each unit plays before its pod. It is never written beside the
   project.
@@ -1232,12 +1291,18 @@ the unit that runs a changed migration. A release that changes only the app's im
 running and says so:
 
 ```text
-systemctl --user restart orders-home-hub.service orders-home-reports.service orders-home-worker.service
+/usr/bin/podman kube play --replace ~/.config/trax/orders-home/secret.yaml && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-drain.yaml && test "$(/usr/bin/podman wait orders-home-drain-pod-drain)" = 0 && systemctl --user restart orders-home-hub.service orders-home-reports.service orders-home-worker.service
+/usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-resume.yaml
+The drain stops every host starting new work and waits for what is busy; the restart runs only once it exits 0. ...
 Unchanged, left running: orders-home-database.
 Each restarted service stops before its new version starts, so it is down for that moment; for no downtime, deploy to a cluster.
 ```
 
-A changed network or changed Secrets restart every unit, since each unit plays the Secrets before its pod. A service
+A release that restarts one of the app's own units drains first, as above: systemd stops a unit before anything in
+it could run, so the drain is a pod of its own, and the restart is chained to it exiting 0. Past the timeout
+`podman logs orders-home-drain-pod-drain` lists what was still busy; `--force` writes the drain pod to roll anyway.
+A first release, or one that restarts only Postgres or RabbitMQ, does not drain. A changed network or changed
+Secrets restart every unit, since each unit plays the Secrets before its pod. A service
 the stack no longer has (RabbitMQ after the last host stops using it, say) is stopped and its unit removed. A
 restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
 for none, deploy to a cluster, one machine included (see [one machine, no downtime](/docs/reference/deploy-to-one-machine-with-no-downtime)).
@@ -1264,7 +1329,7 @@ What differs from a cluster, and why:
 | `hostUsers: false` | `UserNS=nomap` on every unit, as compose: rootless podman cannot map a range per pod. |
 | Network policies | None: `kube play` does not read them. The network holds only this app's pods, and a tailnet hub's edge listens on the pod's loopback. |
 | The operator's Ingress and the edge's own pod | Tailscale and the edge as sidecars in the hub's pod. |
-| The egress as a native sidecar, and an admission policy | `kube play` waits for every init container to exit, so a native sidecar would hold the pod from starting (podman 6.2). The sidecar is an ordinary container that runs `run`: it puts the rules back as it starts, then gives up root and every capability and serves. The `egress-rules` init container stays, with `io.podman.annotations.init.container.type: always` so it runs on every start of the pod. `podman pod restart` makes the pod's network namespace afresh without running init containers, and the sidecar putting the rules back is what holds it then; restart the unit instead, which plays the pod again. No admission policy: podman reads none. After the migration, the migrate pod's sidecar is stopped. |
+| The egress as a native sidecar, and an admission policy | `kube play` waits for every init container to exit, so a native sidecar would hold the pod from starting (podman 6.2). The sidecar is an ordinary container that runs `run`: it puts the rules back as it starts, then gives up root and every capability and serves. The `egress-rules` init container stays, with `io.podman.annotations.init.container.type: always` so it runs on every start of the pod. `podman pod restart` makes the pod's network namespace afresh without running init containers, and the sidecar putting the rules back is what holds it then; restart the unit instead, which plays the pod again. No admission policy: podman reads none. After the migration, the migrate pod's sidecar is stopped, and the drain and resume pods' once each has run. |
 | A held hub with a tailnet exposure | The pod has both sidecars. Tailscale runs as the egress uid (61000), so its traffic is not sent through the egress proxy: it reaches its control plane and relays over TCP and DNS, as the egress itself does, and relays through DERP rather than direct UDP. A Tailscale state volume an earlier deploy wrote as root has to be removed (or given to uid 61000) when a hub is held for the first time. |
 
 `plan --env home` writes the same files without building an image or writing the secret file. `status`, `logs`

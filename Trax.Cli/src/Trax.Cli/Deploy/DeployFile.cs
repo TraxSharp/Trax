@@ -99,6 +99,14 @@ internal sealed partial class DeployFile
             if (CheckEgress(service, entry) is { } egress)
                 throw new InvalidOperationException(Problem(egress));
         CheckTarget(name, env, Problem);
+        try
+        {
+            env.DrainTimeoutValue();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(Problem(ex.Message), ex);
+        }
         CheckEnvironmentLimits(env, Problem);
         foreach (var service in env.Counts.Keys)
             if (!Services.ContainsKey(service))

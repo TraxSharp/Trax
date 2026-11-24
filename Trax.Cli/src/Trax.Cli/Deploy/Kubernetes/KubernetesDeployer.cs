@@ -7,9 +7,10 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// <summary>
 /// Puts an environment on a Kubernetes cluster: checks the namespace is this app's and its Secret has every key,
 /// builds the images, applies the egress admission policy when a service names egress, brings up the in-cluster
-/// Postgres and RabbitMQ, runs the migrate Job, and only after it succeeds applies the services and waits for each to
-/// roll out. A service that does not roll out puts every service back on
-/// the version it ran before the deploy, as ECS's circuit breaker does. It never creates a cluster.
+/// Postgres and RabbitMQ, runs the migrate Job, and only after it succeeds drains the hosts (the drain Job, when
+/// services ran before), applies the services and waits for each to roll out, then ends the drain (the resume Job). A
+/// service that does not roll out puts every service back on the version it ran before the deploy, as ECS's circuit
+/// breaker does, and the drain is ended after that too. It never creates a cluster.
 /// </summary>
 internal sealed class KubernetesDeployer(
     IKubernetesDeployClient cluster,
@@ -24,6 +25,15 @@ internal sealed class KubernetesDeployer(
     public static readonly TimeSpan RolloutTimeout = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan MigrateTimeout = TimeSpan.FromMinutes(30);
 
+    /// <summary>
+    /// How much longer than the drain's own timeout the deploy waits for the drain Job: time to schedule the pod,
+    /// pull the image and start the host, and the drain's first settle.
+    /// </summary>
+    public static readonly TimeSpan DrainJobSlack = TimeSpan.FromMinutes(5);
+
+    /// <summary>How long the deploy waits for the resume Job.</summary>
+    public static readonly TimeSpan ResumeTimeout = TimeSpan.FromMinutes(5);
+
     public async Task DeployAsync(
         DeployFile file,
         string filePath,
@@ -31,11 +41,12 @@ internal sealed class KubernetesDeployer(
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
         CancellationToken ct,
-        EksTarget? eks = null
+        EksTarget? eks = null,
+        bool force = false
     )
     {
         var env = file.Environment(environment);
-        var manifests = KubernetesTarget.Render(file, environment, exports, tag, eks);
+        var manifests = KubernetesTarget.Render(file, environment, exports, tag, eks, force);
         say(
             $"Deploying {file.App} to namespace {manifests.NamespaceName} in context {cluster.Context}."
         );
@@ -55,8 +66,14 @@ internal sealed class KubernetesDeployer(
         await MigrateAsync(environment, manifests, ct).ConfigureAwait(false);
         await RotateProxySecretAsync(file, manifests, ct).ConfigureAwait(false);
 
-        say($"Rolling the services onto {tag}...");
         var before = await DeploymentsBeforeAsync(manifests, ct).ConfigureAwait(false);
+        // A first deploy has nothing running to drain.
+        var drained = before.Values.Any(d => d is not null);
+        if (drained)
+            await DrainAsync(environment, env.DrainTimeoutValue(), manifests, ct)
+                .ConfigureAwait(false);
+
+        say($"Rolling the services onto {tag}...");
         try
         {
             await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Services, ct)
@@ -64,10 +81,76 @@ internal sealed class KubernetesDeployer(
         }
         catch (InvalidOperationException failed) when (!ct.IsCancellationRequested)
         {
+            var rolledBack = await RollBackAsync(manifests.NamespaceName, before, ct)
+                .ConfigureAwait(false);
+            var resumed = drained ? await ResumeAsync(manifests, ct).ConfigureAwait(false) : "";
+            throw new InvalidOperationException($"{failed.Message} {rolledBack}{resumed}", failed);
+        }
+        if (drained)
+        {
+            var resumed = await ResumeAsync(manifests, ct).ConfigureAwait(false);
+            if (resumed.Length > 0)
+                say(resumed.Trim());
+        }
+    }
+
+    /// <summary>
+    /// Runs the drain Job: every host stops starting new work, and the Job waits up to the environment's drain timeout
+    /// for what is busy to finish. Refuses to go on when it failed, with the end of its log, which lists what was
+    /// still busy. The Job ended the drain itself when it refused.
+    /// </summary>
+    private async Task DrainAsync(
+        string environment,
+        TimeSpan timeout,
+        KubernetesManifests manifests,
+        CancellationToken ct
+    )
+    {
+        var ns = manifests.NamespaceName;
+        var job = manifests.Drain.Metadata.Name;
+        say(
+            $"Draining: no host starts new work while the deploy waits up to {timeout:c} for what is busy (job {job})..."
+        );
+        await cluster.CreateJobAsync(manifests.Drain, ct).ConfigureAwait(false);
+        var drain = await cluster
+            .WaitForJobAsync(ns, job, timeout + DrainJobSlack, ct)
+            .ConfigureAwait(false);
+        if (!drain.Succeeded)
             throw new InvalidOperationException(
-                $"{failed.Message} {await RollBackAsync(manifests.NamespaceName, before, ct).ConfigureAwait(false)}",
-                failed
+                $"The drain failed{(drain.Reason is null ? "" : $" ({drain.Reason})")}, so no service was moved to "
+                    + $"the new version. The end of its log, which names any work still busy:\n{drain.LogTail}\n"
+                    + "Work still busy at the timeout ends the drain, so the hosts take work again. Let it finish or "
+                    + $"cancel it, raise drainTimeout, or run 'trax deploy --env {environment} --force' to roll "
+                    + "anyway. A drain that failed some other way lapses on its own after the timeout and 10 "
+                    + $"minutes. All of its log: 'kubectl logs -n {ns} job/{job}'."
             );
+    }
+
+    /// <summary>
+    /// Runs the resume Job, so every host takes work again. A failure does not undo the deploy: the new hub ended the
+    /// drain when it started, and a drain left behind lapses on its own. Returns a sentence saying so, or empty.
+    /// </summary>
+    private async Task<string> ResumeAsync(KubernetesManifests manifests, CancellationToken ct)
+    {
+        var ns = manifests.NamespaceName;
+        var job = manifests.Resume.Metadata.Name;
+        say($"Ending the drain (job {job})...");
+        try
+        {
+            await cluster.CreateJobAsync(manifests.Resume, ct).ConfigureAwait(false);
+            var resume = await cluster
+                .WaitForJobAsync(ns, job, ResumeTimeout, ct)
+                .ConfigureAwait(false);
+            if (resume.Succeeded)
+                return "";
+            return $" Ending the drain failed{(resume.Reason is null ? "" : $" ({resume.Reason})")}: a scheduler "
+                + "host ends it when it starts, and otherwise it lapses on its own. End it from the console's "
+                + $"scheduler page, or 'kubectl logs -n {ns} job/{job}' for why.";
+        }
+        catch (InvalidOperationException ex) when (!ct.IsCancellationRequested)
+        {
+            return $" Ending the drain failed ({ex.Message}): a scheduler host ends it when it starts, and "
+                + "otherwise it lapses on its own.";
         }
     }
 

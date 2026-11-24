@@ -10,8 +10,9 @@ namespace Trax.Cli.Deploy.Kubernetes;
 
 /// <summary>
 /// Renders a kubernetes environment from trax.deploy.json and what each host reports: one Deployment per service (a
-/// hub at one copy with <c>Recreate</c>, so two never run at once; workers rolling at their count), a ClusterIP
-/// Service for each hub, a migrate Job that runs before any of them, and in-cluster Postgres and RabbitMQ off
+/// hub at one copy that rolls with one new copy beside the old before the old stops, Trax.Cli/docs/adr/0007; workers
+/// rolling at their count), a ClusterIP Service for each hub, a migrate Job that runs before any of them, a drain Job
+/// and a resume Job the deploy runs around the roll (Trax.Docs/adr/0065), and in-cluster Postgres and RabbitMQ off
 /// production. Every container gets <see cref="ServiceHardening"/> as its securityContext and memory limit, and no
 /// secret value is written: each comes from a Secret by reference. On a cluster every pod in the namespace refuses
 /// ingress but from the app's own pods, and a <c>tailnet</c> exposure adds the edge and the Tailscale operator's
@@ -36,6 +37,14 @@ internal static partial class KubernetesTarget
     public const string Database = "database";
     public const string Broker = "rabbitmq";
     public const string MigrateName = "migrate";
+    public const string DrainName = "drain";
+    public const string ResumeName = "resume";
+
+    /// <summary>
+    /// How long a hub's old pod keeps serving after it is marked for termination, before it is sent the stop signal:
+    /// ten seconds, time for the Service to stop routing new requests to it.
+    /// </summary>
+    public const int PreStopSeconds = 10;
 
     /// <summary>How long a service's rollout may go without progress before the cluster calls it failed: five minutes.</summary>
     public const int RolloutProgressDeadlineSeconds = 300;
@@ -210,13 +219,20 @@ internal static partial class KubernetesTarget
     /// The migrate Job's name, new on every deploy because a Job cannot be changed:
     /// <c>&lt;app&gt;-migrate-&lt;tag&gt;</c>, made a valid object name of at most 63 characters.
     /// </summary>
-    public static string MigrateJobName(DeployFile file, string tag)
+    public static string MigrateJobName(DeployFile file, string tag) =>
+        JobName(file, MigrateName, tag);
+
+    /// <summary>
+    /// A deploy's Job of <paramref name="kind"/> (migrate, drain or resume): <c>&lt;app&gt;-&lt;kind&gt;-&lt;tag&gt;</c>,
+    /// new on every deploy because a Job cannot be changed, made a valid object name of at most 63 characters.
+    /// </summary>
+    public static string JobName(DeployFile file, string kind, string tag)
     {
         var suffix = NotNameChars.Replace(tag.ToLowerInvariant(), "-").Trim('-');
-        var name = $"{file.App}-{MigrateName}-{suffix}";
+        var name = $"{file.App}-{kind}-{suffix}";
         // A long app name would cut the time off the tag, and with it what makes the name new.
         if (name.Length > 63)
-            name = $"{MigrateName}-{suffix}";
+            name = $"{kind}-{suffix}";
         return name[..Math.Min(name.Length, 63)].TrimEnd('-');
     }
 
@@ -224,20 +240,18 @@ internal static partial class KubernetesTarget
     /// The environment's manifests. With <paramref name="eks"/>, for a cluster on EKS: images from ECR, a service
     /// account per service for Pod Identity, the database and secrets read by the host from Secrets Manager rather
     /// than from a Kubernetes Secret, and the security group policy that lets the app's pods reach the database.
+    /// With <paramref name="force"/>, the drain Job rolls on even when work is still busy at its timeout.
     /// </summary>
     public static KubernetesManifests Render(
         DeployFile file,
         string environment,
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
-        EksTarget? eks = null
+        EksTarget? eks = null,
+        bool force = false
     )
     {
-        var env = file.Environment(environment);
-        if (!string.Equals(env.Target, DeployEnvironment.Kubernetes, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                $"Environment '{environment}' has target {env.Target}, not kubernetes."
-            );
+        var env = KubernetesEnvironment(file, environment);
         ComposeTarget.CheckHosts(file, exports, name => file.Count(env, name));
         var rabbit = exports.Values.Any(e => e.Transports.Contains("rabbitmq"));
         CheckBroker(environment, env, rabbit, eks);
@@ -245,15 +259,9 @@ internal static partial class KubernetesTarget
         var ns = NamespaceName(file, environment, env);
         var secret = SecretName(file, environment);
         var tailnet = KubernetesTailnet.Exposed(env);
-        var onPodman = string.Equals(
-            env.Runtime,
-            DeployEnvironment.Podman,
-            StringComparison.Ordinal
-        );
+        var onPodman = RunsOnPodman(env);
         var hub = TailnetHub(file, environment, env, exports);
-        var egressImage = file.Services.Values.Any(s => s.Egress is not null)
-            ? DeployEgress.Image(file)
-            : null;
+        var egressImage = EgressImageOf(file);
         var r = new Renderer(
             file,
             env,
@@ -267,8 +275,18 @@ internal static partial class KubernetesTarget
             EgressImage = egressImage,
         };
 
-        var job = Migrate(file, exports, tag, r, rabbit);
-        var services = Services(file, env, exports, tag, r, rabbit);
+        var timeout = env.DrainTimeoutValue();
+        var (job, drain, resume) = DeployJobs(
+            file,
+            r,
+            ComposeTarget.Migrator(file, exports),
+            tag,
+            rabbit,
+            timeout,
+            force
+        );
+
+        var services = Services(file, env, exports, tag, r, rabbit, timeout);
         if (tailnet && !onPodman)
             services.AddRange(
                 r.TailnetEdge(KubernetesTailnet.Hostname(file, environment, env), hub.NotNull())
@@ -284,35 +302,31 @@ internal static partial class KubernetesTarget
                 : null,
             eks is null ? Backing(r, inCluster, rabbit) : r.EksIdentity(eks),
             job,
+            drain,
             services,
+            resume,
             r.ProxySecret
         );
     }
 
-    /// <summary>
-    /// The migrate Job: the migrator's image and hardening, its service account on EKS, and its egress, since the
-    /// migration runs the migrator's code.
-    /// </summary>
-    private static V1Job Migrate(
-        DeployFile file,
-        IReadOnlyDictionary<string, DeployManifest> exports,
-        string tag,
-        Renderer r,
-        bool rabbit
-    )
+    /// <summary>The environment, refused when its target is not kubernetes.</summary>
+    private static DeployEnvironment KubernetesEnvironment(DeployFile file, string environment)
     {
-        var migrator = ComposeTarget.Migrator(file, exports);
-        var job = r.MigrateJob(
-            MigrateJobName(file, tag),
-            r.Image(migrator, tag),
-            ServiceHardening.Trax(file.Services[migrator]),
-            r.TraxEnv(rabbit)
-        );
-        if (r.OnEks)
-            job.Spec.Template.Spec.ServiceAccountName = migrator;
-        r.HoldEgress(job.Spec.Template, file.Services[migrator], rabbit);
-        return job;
+        var env = file.Environment(environment);
+        if (!string.Equals(env.Target, DeployEnvironment.Kubernetes, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Environment '{environment}' has target {env.Target}, not kubernetes."
+            );
+        return env;
     }
+
+    /// <summary>Whether the environment runs under podman rather than on a cluster.</summary>
+    private static bool RunsOnPodman(DeployEnvironment env) =>
+        string.Equals(env.Runtime, DeployEnvironment.Podman, StringComparison.Ordinal);
+
+    /// <summary>The egress image when any service names egress, else null.</summary>
+    private static string? EgressImageOf(DeployFile file) =>
+        file.Services.Values.Any(s => s.Egress is not null) ? DeployEgress.Image(file) : null;
 
     /// <summary>Refuses a broker the environment cannot run: none on production, none on EKS, a limit on none.</summary>
     private static void CheckBroker(
@@ -341,6 +355,63 @@ internal static partial class KubernetesTarget
                 $"Environment '{environment}': a host uses RabbitMQ, and on EKS trax neither runs a broker nor names "
                     + "an existing one yet. Use a transport other than RabbitMQ."
             );
+    }
+
+    /// <summary>
+    /// The Jobs a deploy runs on the new version's image: the migration, the drain and the resume. Each reaches the
+    /// database from inside the cluster, so nothing outside it reaches the app.
+    /// </summary>
+    private static (V1Job Migrate, V1Job Drain, V1Job Resume) DeployJobs(
+        DeployFile file,
+        Renderer r,
+        string migrator,
+        string tag,
+        bool rabbit,
+        TimeSpan timeout,
+        bool force
+    )
+    {
+        var image = r.Image(migrator, tag);
+        var hardening = ServiceHardening.Trax(file.Services[migrator]);
+        var job = r.TraxJob(
+            MigrateName,
+            MigrateJobName(file, tag),
+            image,
+            hardening,
+            r.TraxEnv(rabbit),
+            [TraxMigrate.Argument]
+        );
+        List<V1EnvVar> drainEnv =
+        [
+            .. r.TraxEnv(rabbit),
+            Value(TraxMigrate.Variable, TraxMigrate.SkipValue),
+        ];
+        if (force)
+            drainEnv.Add(Value(TraxDrain.ForceVariable, "true"));
+        var drain = r.TraxJob(
+            DrainName,
+            JobName(file, DrainName, tag),
+            image,
+            hardening,
+            drainEnv,
+            [TraxDrain.Argument, timeout.ToString("c", CultureInfo.InvariantCulture)]
+        );
+        var resume = r.TraxJob(
+            ResumeName,
+            JobName(file, ResumeName, tag),
+            image,
+            hardening,
+            [.. r.TraxEnv(rabbit), Value(TraxMigrate.Variable, TraxMigrate.SkipValue)],
+            [TraxDrain.ResumeArgument]
+        );
+        foreach (var j in new[] { job, drain, resume })
+        {
+            if (r.OnEks)
+                j.Spec.Template.Spec.ServiceAccountName = migrator;
+            // Each runs the migrator's code, so each is held to the migrator's egress and still reaches the database.
+            r.HoldEgress(j.Spec.Template, file.Services[migrator], rabbit);
+        }
+        return (job, drain, resume);
     }
 
     /// <summary>
@@ -445,7 +516,8 @@ internal static partial class KubernetesTarget
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
         Renderer r,
-        bool rabbit
+        bool rabbit,
+        TimeSpan drainTimeout
     )
     {
         var services = new List<IKubernetesObject<V1ObjectMeta>>();
@@ -462,7 +534,8 @@ internal static partial class KubernetesTarget
                 hub,
                 ServiceHardening.Trax(service),
                 [.. r.TraxEnv(rabbit), Value(TraxMigrate.Variable, TraxMigrate.SkipValue)],
-                export
+                export,
+                drainTimeout
             );
             if (r.OnEks)
                 deployment.Spec.Template.Spec.ServiceAccountName = name;
@@ -1002,7 +1075,8 @@ internal static partial class KubernetesTarget
             bool hub,
             ServiceHardening hardening,
             IList<V1EnvVar> vars,
-            DeployManifest export
+            DeployManifest export,
+            TimeSpan drainTimeout
         )
         {
             var container = Container(name, image, hardening, nonRoot: true, vars);
@@ -1022,6 +1096,13 @@ internal static partial class KubernetesTarget
                     PeriodSeconds = 10,
                 };
             }
+            if (hub)
+                container.Lifecycle = PreStop();
+            var pod = Pod(name, container);
+            // After the drain nothing is running, so a stopping host exits at once. A deploy with --force rolls with
+            // work still running: the stop gives it the drain's timeout again to finish, past the preStop's sleep.
+            pod.Spec.TerminationGracePeriodSeconds =
+                (long)drainTimeout.TotalSeconds + PreStopSeconds;
             return new V1Deployment
             {
                 ApiVersion = "apps/v1",
@@ -1030,19 +1111,37 @@ internal static partial class KubernetesTarget
                 Spec = new V1DeploymentSpec
                 {
                     Replicas = replicas,
-                    // A hub stops before its next version starts: two hubs never run at once.
+                    // A hub's next version starts beside the old one and takes traffic once ready, and only then does
+                    // the old one stop. Two hubs at once are safe because the deploy drained first
+                    // (Trax.Cli/docs/adr/0007).
                     Strategy = new V1DeploymentStrategy
                     {
-                        Type = hub ? "Recreate" : "RollingUpdate",
+                        Type = "RollingUpdate",
+                        RollingUpdate = hub
+                            ? new V1RollingUpdateDeployment { MaxSurge = 1, MaxUnavailable = 0 }
+                            : null,
                     },
                     // The cluster marks a rollout that stops making progress for this long as failed, which ends
                     // the deploy's wait early and rolls it back.
                     ProgressDeadlineSeconds = RolloutProgressDeadlineSeconds,
                     Selector = new V1LabelSelector { MatchLabels = Selector(name) },
-                    Template = Pod(name, container),
+                    Template = pod,
                 },
             };
         }
+
+        /// <summary>
+        /// The old pod keeps serving while the Service stops routing to it, then gets the stop signal. The kubelet
+        /// sleeps, so the image needs no shell.
+        /// </summary>
+        private static V1Lifecycle PreStop() =>
+            new()
+            {
+                PreStop = new V1LifecycleHandler
+                {
+                    Sleep = new V1SleepAction { Seconds = PreStopSeconds },
+                },
+            };
 
         public V1Service Service(string name, int port) =>
             new()
@@ -1065,18 +1164,24 @@ internal static partial class KubernetesTarget
             return service;
         }
 
-        public V1Job MigrateJob(
+        /// <summary>
+        /// A Job that runs the app's image once with <paramref name="args"/> (the migration, the drain or the resume),
+        /// never retried: a second try would hide why the first failed.
+        /// </summary>
+        public V1Job TraxJob(
+            string kind,
             string name,
             string image,
             ServiceHardening hardening,
-            IList<V1EnvVar> vars
+            IList<V1EnvVar> vars,
+            IList<string> args
         )
         {
-            var container = Container(MigrateName, image, hardening, nonRoot: true, vars);
-            container.Args = [TraxMigrate.Argument];
+            var container = Container(kind, image, hardening, nonRoot: true, vars);
+            container.Args = args;
             var meta = Meta(name);
-            meta.Labels[NameLabel] = MigrateName;
-            var pod = Pod(MigrateName, container, restart: "Never");
+            meta.Labels[NameLabel] = kind;
+            var pod = Pod(kind, container, restart: "Never");
             return new V1Job
             {
                 ApiVersion = "batch/v1",

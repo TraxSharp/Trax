@@ -72,8 +72,8 @@ trax deploy status --env production
 
 An environment is two CloudFormation stacks: `orders-production-base` holds the network, the database, its secret
 and the sign-in, and `orders-production` runs the services on ECS over it. The first deploy takes 15 to 25
-minutes, most of it the database and, in production, the certificate. Later deploys push new images, migrate, and
-roll the services. With `"auth": { "kind": "cognito" }`, the user pool trax
+minutes, most of it the database and, in production, the certificate. Later deploys push new images, migrate, drain the
+running hosts so nothing is cut off mid-run, and roll the services. With `"auth": { "kind": "cognito" }`, the user pool trax
 creates admits only users you invite; add the first in the Cognito console, and put operators in its `Operator`
 group.
 
@@ -108,10 +108,13 @@ kubectl port-forward -n orders-staging service/hub 8080
 
 The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in the
 process list. A deploy refuses before it applies anything, even the namespace, while the Secret lacks a key. It brings up Postgres (and RabbitMQ),
-runs the migration as a Job, and only when that succeeds rolls each service and waits for it to be ready. The hub
-runs one copy and stops before its next version starts; workers roll at their `count`. Every pod in the namespace
-accepts connections only from the app's own pods. Nothing outside the cluster reaches the hub, so reach it with
-`kubectl port-forward`.
+runs the migration as a Job, and only when that succeeds drains the hosts already running (they stop starting new
+work, and the deploy waits up to the environment's `drainTimeout`, ten minutes by default, for what is busy), rolls
+each service and waits for it to be ready, then ends the drain. The hub runs one copy, and its next version starts
+beside it and takes traffic before the old one stops; workers roll at their `count`. Work still busy at the timeout
+refuses the deploy with a list of it; `--force` rolls anyway. See
+[Drain before a rollout](/docs/reference/cli#drain-before-a-rollout). Every pod in the namespace accepts connections
+only from the app's own pods. Nothing outside the cluster reaches the hub, so reach it with `kubectl port-forward`.
 
 To reach it from your devices instead, put it on your tailnet: install the
 [Tailscale Kubernetes operator](https://tailscale.com/kb/1236/kubernetes-operator) in the cluster and add

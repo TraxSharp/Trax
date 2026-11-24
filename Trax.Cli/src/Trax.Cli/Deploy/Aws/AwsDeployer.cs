@@ -9,10 +9,22 @@ namespace Trax.Cli.Deploy.Aws;
 /// <summary>
 /// Puts an environment on AWS: checks its secrets, pushes the images, brings the foundation (network, database,
 /// secrets, sign-in) up to date, then changes the ECS runtime in two passes around the migration, so no service of
-/// the new version starts before its schema exists.
+/// the new version starts before its schema exists. Between the migration and the roll it drains the hosts (a task
+/// that runs the new image with <c>--trax-drain</c>), and after the roll it ends the drain (Trax.Docs/adr/0065). ECS
+/// gives a stopping container at most 120 seconds, so the drain finishes before the roll rather than in the stop.
 /// </summary>
-internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, Action<string> say)
+internal sealed class AwsDeployer(
+    IAwsDeployClient aws,
+    IImagePublisher images,
+    Action<string> say,
+    TimeProvider? clock = null
+)
 {
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
+    /// <summary>How many of the drain log's last lines a refusal shows.</summary>
+    public const int DrainLogTail = 40;
+
     /// <summary>CloudFormation's limit on a template sent inline.</summary>
     public const int InlineTemplateLimit = 51_200;
 
@@ -43,7 +55,8 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
         string environment,
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
-        CancellationToken ct
+        CancellationToken ct,
+        bool force = false
     )
     {
         var env = file.Environment(environment);
@@ -79,16 +92,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
 
         // Pass 1: the runtime, and the migrate task on the new image. A service the stack does not run yet (every
         // service of a new stack) waits at zero on the new image; one it runs keeps its image and count.
-        var first = new Dictionary<string, string?>(given, StringComparer.Ordinal)
-        {
-            [AwsStack.MigrateImageParameter] = migrator,
-        };
-        foreach (var name in file.Services.Keys)
-        {
-            var (count, current) = Holding(existing, name);
-            first[AwsStack.CountParameter(name)] = count;
-            first[AwsStack.ImageParameter(name)] = current ? null : image[name];
-        }
+        var first = FirstPassParameters(file, existing, migrator, image, given);
         var tags = StackTags(file, environment, RuntimePart);
         say(existing is null ? $"Creating {stack}..." : $"Updating {stack}...");
         await aws.DeployAsync(stack, runtimeTemplate, first, tags, AnyReplaced, say, ct)
@@ -96,9 +100,18 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
 
         await MigrateAsync(stack, environment, ct).ConfigureAwait(false);
 
-        var second = SecondPassParameters(file, env, migrator, image, given);
-        say($"Rolling the services onto {tag}...");
-        await aws.DeployAsync(stack, runtimeTemplate, second, tags, AnyReplaced, say, ct)
+        // A new stack has nothing running to drain.
+        await RollAsync(
+                stack,
+                environment,
+                runtimeTemplate,
+                SecondPassParameters(file, env, migrator, image, given),
+                tags,
+                drain: existing is { Created: true } ? env.DrainTimeoutValue() : null,
+                force,
+                tag,
+                ct
+            )
             .ConfigureAwait(false);
 
         return (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
@@ -313,6 +326,181 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
                     + $"{AwsStack.LogGroup(stack, AwsStack.MigrateContainer)} {migration.LogStream}: "
                     + $"'trax deploy logs migrate --env {environment}'."
             );
+    }
+
+    /// <summary>
+    /// The drain when <paramref name="drain"/> gives its timeout, pass 2, then the end of the drain: after the roll,
+    /// and after a roll that failed, which the circuit breaker rolled back.
+    /// </summary>
+    private async Task RollAsync(
+        string stack,
+        string environment,
+        string template,
+        Dictionary<string, string?> parameters,
+        IReadOnlyDictionary<string, string> tags,
+        TimeSpan? drain,
+        bool force,
+        string tag,
+        CancellationToken ct
+    )
+    {
+        var drained = drain is not null;
+        if (drain is { } timeout)
+            await DrainAsync(stack, environment, timeout, force, ct).ConfigureAwait(false);
+        say($"Rolling the services onto {tag}...");
+        try
+        {
+            await aws.DeployAsync(stack, template, parameters, tags, AnyReplaced, say, ct)
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException failed) when (drained && !ct.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                failed.Message + await ResumeAsync(stack, ct).ConfigureAwait(false),
+                failed
+            );
+        }
+        if (drained && await ResumeAsync(stack, ct).ConfigureAwait(false) is { Length: > 0 } left)
+            say(left.Trim());
+    }
+
+    /// <summary>
+    /// Runs the drain task: every host stops starting new work, and the task waits up to <paramref name="timeout"/> for
+    /// what is busy to finish. Refuses to go on when it fails, with the end of its log, which lists what was still
+    /// busy; the task ended the drain itself when it refused.
+    /// </summary>
+    private async Task DrainAsync(
+        string stack,
+        string environment,
+        TimeSpan timeout,
+        bool force,
+        CancellationToken ct
+    )
+    {
+        say(
+            $"Draining: no host starts new work while the deploy waits up to {timeout:c} for what is busy..."
+        );
+        var started = _clock.GetUtcNow().UtcDateTime;
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [TraxMigrate.Variable] = TraxMigrate.SkipValue,
+        };
+        if (force)
+            env[TraxDrain.ForceVariable] = "true";
+        var drain = await RunAsync(
+                stack,
+                [TraxDrain.Argument, timeout.ToString("c", CultureInfo.InvariantCulture)],
+                env,
+                "drain",
+                ct
+            )
+            .ConfigureAwait(false);
+        if (drain.ExitCode == 0)
+            return;
+        var group = AwsStack.LogGroup(stack, AwsStack.MigrateContainer);
+        var tail = new List<string>();
+        await foreach (
+            var line in aws.LogsAsync(group, started, follow: false, ct).ConfigureAwait(false)
+        )
+        {
+            tail.Add(line);
+            if (tail.Count > DrainLogTail)
+                tail.RemoveAt(0);
+        }
+        throw new InvalidOperationException(
+            $"The drain ended {(drain.ExitCode is null ? "without an exit code" : string.Create(CultureInfo.InvariantCulture, $"with exit code {drain.ExitCode}"))}"
+                + (drain.StoppedReason is null ? "" : $" ({drain.StoppedReason})")
+                + ", so no service was moved to the new version. The end of its log, which names any work still "
+                + $"busy:\n{string.Join('\n', tail)}\nWork still busy at the timeout ends the drain, so the hosts "
+                + "take work again. Let it finish or cancel it, raise drainTimeout, or run "
+                + $"'trax deploy --env {environment} --force' to roll anyway. A drain that failed some other way "
+                + $"lapses on its own after the timeout and 10 minutes. Its log is {group} {drain.LogStream}."
+        );
+    }
+
+    /// <summary>
+    /// Runs the resume task, so every host takes work again. A failure does not undo the deploy: a new hub ends the
+    /// drain when it starts, and one left behind lapses on its own. Returns a sentence saying so, or empty.
+    /// </summary>
+    private async Task<string> ResumeAsync(string stack, CancellationToken ct)
+    {
+        say("Ending the drain...");
+        try
+        {
+            var resume = await RunAsync(
+                    stack,
+                    [TraxDrain.ResumeArgument],
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [TraxMigrate.Variable] = TraxMigrate.SkipValue,
+                    },
+                    "resume",
+                    ct
+                )
+                .ConfigureAwait(false);
+            return resume.ExitCode == 0
+                ? ""
+                : " Ending the drain failed: a scheduler host ends it when it starts, and otherwise it lapses on its "
+                    + "own. End it from the console's scheduler page.";
+        }
+        catch (InvalidOperationException ex) when (!ct.IsCancellationRequested)
+        {
+            return $" Ending the drain failed ({ex.Message}): a scheduler host ends it when it starts, and "
+                + "otherwise it lapses on its own.";
+        }
+    }
+
+    // The migrate task definition, run with another command: the drain and the resume reach the database from inside
+    // the VPC, as the migration does, and nothing outside it reaches the app.
+    private async Task<AwsTaskResult> RunAsync(
+        string stack,
+        IReadOnlyList<string> command,
+        IReadOnlyDictionary<string, string> environment,
+        string label,
+        CancellationToken ct
+    )
+    {
+        var outputs = (await aws.DescribeStackAsync(stack, ct).ConfigureAwait(false))
+            .NotNull()
+            .Outputs;
+        return await aws.RunTaskAsync(
+                new AwsTaskRequest(
+                    outputs["ClusterName"],
+                    outputs["MigrateTaskDefinition"],
+                    AwsStack.MigrateContainer,
+                    outputs["ServiceSubnets"].Split(','),
+                    outputs["TaskSecurityGroups"].Split(','),
+                    string.Equals(outputs["AssignPublicIp"], "ENABLED", StringComparison.Ordinal),
+                    command,
+                    environment,
+                    label
+                ),
+                say,
+                ct
+            )
+            .ConfigureAwait(false);
+    }
+
+    // Pass 1's parameters: the migrate task on the new image, every running service held as it is.
+    private static Dictionary<string, string?> FirstPassParameters(
+        DeployFile file,
+        AwsStackState? existing,
+        string migrator,
+        Dictionary<string, string> image,
+        Dictionary<string, string?> given
+    )
+    {
+        var first = new Dictionary<string, string?>(given, StringComparer.Ordinal)
+        {
+            [AwsStack.MigrateImageParameter] = migrator,
+        };
+        foreach (var name in file.Services.Keys)
+        {
+            var (count, current) = Holding(existing, name);
+            first[AwsStack.CountParameter(name)] = count;
+            first[AwsStack.ImageParameter(name)] = current ? null : image[name];
+        }
+        return first;
     }
 
     // Pass 2: every service onto the new image at its count, rolled with the circuit breaker on.

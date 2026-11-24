@@ -15,8 +15,10 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// <c>hostUsers</c> (rootless podman cannot map it; every unit runs <c>UserNS=nomap</c>, as compose does). Postgres
 /// is a Deployment of one with a claim, since <c>kube play</c> has no StatefulSet. The migration runs in the
 /// migrator's unit before its pod starts and fails the unit unless it exits 0, and every other service starts after
-/// it. No secret value is written here: the Secrets are filled from <c>.env</c> by the deploy, into a file outside
-/// the project.
+/// it. The drain and resume Jobs are written as pods the install runs around a restart of the app's units
+/// (<see cref="Commands.DeployKubernetesCommands.InstallHint"/>), since systemd stops a unit before its
+/// <c>ExecStartPre</c> runs. No secret value is written here: the Secrets are filled from <c>.env</c> by the deploy,
+/// into a file outside the project.
 /// </summary>
 internal static class PodmanTarget
 {
@@ -59,30 +61,22 @@ internal static class PodmanTarget
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
         string directory,
-        string secretPath
+        string secretPath,
+        bool force = false
     )
     {
-        var env = file.Environment(environment);
-        if (!string.Equals(env.Runtime, DeployEnvironment.Podman, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                $"Environment '{environment}' does not run under podman. Give it \"runtime\": \"podman\"."
-            );
-        var cluster = KubernetesTarget.Render(file, environment, exports, tag);
+        var env = PodmanEnvironment(file, environment);
+        var cluster = KubernetesTarget.Render(file, environment, exports, tag, eks: null, force);
         var stack = file.StackName(environment);
         var r = new Units(file, environment, stack, directory, secretPath);
 
-        var files = new List<(string Path, string Content)>
-        {
-            ($"{stack}.network", r.Network()),
-            (
-                $"{stack}-{KubernetesTarget.MigrateName}.yaml",
-                r.Yaml(Migrate(cluster.Migrate, stack))
-            ),
-        };
+        var files = new List<(string Path, string Content)> { ($"{stack}.network", r.Network()) };
+        files.AddRange(OneShots(cluster, stack, r));
         var backing = BackingUnits(cluster, stack, r, files);
 
         var migrator = ComposeTarget.Migrator(file, exports);
         var units = new List<string>(backing);
+        var serviceUnits = new List<string>();
         var migratorUnit = $"{stack}-{migrator}";
         var tailnet = KubernetesTailnet.Exposed(env);
         var host = tailnet ? KubernetesTailnet.Hostname(file, environment, env) : null;
@@ -118,8 +112,28 @@ internal static class PodmanTarget
                 )
             );
             units.Add(name);
+            serviceUnits.Add(name);
         }
-        return new PodmanStack(stack, files, Secrets(cluster), units, cluster.ProxySecretName);
+        return new PodmanStack(
+            stack,
+            files,
+            Secrets(cluster),
+            units,
+            serviceUnits,
+            secretPath,
+            cluster.ProxySecretName
+        );
+    }
+
+    /// <summary>The environment, refused when it does not run under podman.</summary>
+    private static DeployEnvironment PodmanEnvironment(DeployFile file, string environment)
+    {
+        var env = file.Environment(environment);
+        if (!string.Equals(env.Runtime, DeployEnvironment.Podman, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Environment '{environment}' does not run under podman. Give it \"runtime\": \"podman\"."
+            );
+        return env;
     }
 
     /// <summary>Adds the files of Postgres and RabbitMQ when the environment runs them, and returns their units.</summary>
@@ -381,7 +395,11 @@ internal static class PodmanTarget
             pod.HostUsers = null;
             HoldEgress(o, pod);
             foreach (var c in pod.Containers.Concat(pod.InitContainers ?? []))
+            {
                 c.Image = FullImage(c.Image);
+                // A preStop gives a cluster's Service time to stop routing; a unit's restart stops the pod outright.
+                c.Lifecycle = null;
+            }
         }
         return o;
     }
@@ -445,9 +463,22 @@ internal static class PodmanTarget
             ? $"docker.io/library/{image}"
         : $"localhost/{image}";
 
-    private static V1Job Migrate(V1Job job, string stack)
+    /// <summary>The migrate, drain and resume pods, each a Job run once.</summary>
+    private static IEnumerable<(string Path, string Content)> OneShots(
+        KubernetesManifests cluster,
+        string stack,
+        Units r
+    ) =>
+        new[]
+        {
+            (KubernetesTarget.MigrateName, cluster.Migrate),
+            (KubernetesTarget.DrainName, cluster.Drain),
+            (KubernetesTarget.ResumeName, cluster.Resume),
+        }.Select(o => ($"{stack}-{o.Item1}.yaml", r.Yaml(OneShot(o.Item2, o.Item1, stack))));
+
+    private static V1Job OneShot(V1Job job, string kind, string stack)
     {
-        job.Metadata.Name = KubernetesTarget.MigrateName;
+        job.Metadata.Name = kind;
         job.Spec.TtlSecondsAfterFinished = null;
         return Local(job, stack);
     }

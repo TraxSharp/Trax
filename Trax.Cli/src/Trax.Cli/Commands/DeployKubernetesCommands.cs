@@ -47,7 +47,8 @@ internal static class DeployKubernetesCommands
         IHostExporter exporter,
         TextWriter stdout,
         TextWriter stderr,
-        CancellationToken ct
+        CancellationToken ct,
+        bool force = false
     ) =>
         await GuardAsync(
                 stderr,
@@ -56,7 +57,14 @@ internal static class DeployKubernetesCommands
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
                     if (OnPodman(file, environment))
                     {
-                        await DeployPodmanAsync(file, filePath, environment, exporter, stdout)
+                        await DeployPodmanAsync(
+                                file,
+                                filePath,
+                                environment,
+                                exporter,
+                                stdout,
+                                force
+                            )
                             .ConfigureAwait(false);
                         return;
                     }
@@ -77,7 +85,7 @@ internal static class DeployKubernetesCommands
                             DeployAwsCommands.Images,
                             stdout.WriteLine
                         )
-                            .DeployAsync(file, filePath, environment, exports, tag, ct)
+                            .DeployAsync(file, filePath, environment, exports, tag, ct, force)
                             .ConfigureAwait(false);
                     else
                         await new KubernetesDeployer(
@@ -86,22 +94,33 @@ internal static class DeployKubernetesCommands
                             stdout.WriteLine,
                             MintProxySecret
                         )
-                            .DeployAsync(file, filePath, environment, exports, tag, ct)
+                            .DeployAsync(
+                                file,
+                                filePath,
+                                environment,
+                                exports,
+                                tag,
+                                ct,
+                                eks: null,
+                                force
+                            )
                             .ConfigureAwait(false);
-                    var env = file.Environment(environment);
-                    await stdout
-                        .WriteLineAsync(
-                            KubernetesTailnet.Exposed(env)
-                                ? $"Deployed {file.App} to {environment}. Once the Tailscale operator's proxy is up, "
-                                    + $"the hub is at https://{KubernetesTailnet.Hostname(file, environment, env)}"
-                                    + ".<tailnet>.ts.net, and nowhere else."
-                                : $"Deployed {file.App} to {environment}. It is not exposed: reach a hub with "
-                                    + $"'kubectl port-forward -n {Namespace(file, environment)} service/<hub> 8080'."
-                        )
-                        .ConfigureAwait(false);
+                    await stdout.WriteLineAsync(Deployed(file, environment)).ConfigureAwait(false);
                 }
             )
             .ConfigureAwait(false);
+
+    /// <summary>What a deploy says once it is done: where the hub is, or how to reach it when it is not exposed.</summary>
+    private static string Deployed(DeployFile file, string environment)
+    {
+        var env = file.Environment(environment);
+        return KubernetesTailnet.Exposed(env)
+            ? $"Deployed {file.App} to {environment}. Once the Tailscale operator's proxy is up, "
+                + $"the hub is at https://{KubernetesTailnet.Hostname(file, environment, env)}"
+                + ".<tailnet>.ts.net, and nowhere else."
+            : $"Deployed {file.App} to {environment}. It is not exposed: reach a hub with "
+                + $"'kubectl port-forward -n {Namespace(file, environment)} service/<hub> 8080'.";
+    }
 
     /// <summary>
     /// Writes the manifests a deploy would apply under <c>.trax/deploy/kubernetes/&lt;app&gt;-&lt;env&gt;/</c>,
@@ -430,7 +449,8 @@ internal static class DeployKubernetesCommands
         string filePath,
         string environment,
         IHostExporter exporter,
-        TextWriter stdout
+        TextWriter stdout,
+        bool force
     )
     {
         var root = Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
@@ -443,7 +463,7 @@ internal static class DeployKubernetesCommands
             .ConfigureAwait(false);
         var dir = PodmanTarget.DeployDirectory(root, stackName);
         var secretPath = PodmanTarget.SecretPath(ConfigHome(), stackName);
-        var stack = PodmanTarget.Render(file, environment, exports, tag, dir, secretPath);
+        var stack = PodmanTarget.Render(file, environment, exports, tag, dir, secretPath, force);
         var envFile = Path.Combine(root, ".env");
         var secretYaml = PodmanTarget.SecretYaml(
             stack,
@@ -539,7 +559,9 @@ internal static class DeployKubernetesCommands
 
     /// <summary>
     /// The commands that put <paramref name="release"/> on the host: copy the units, reload systemd, stop and remove
-    /// what the stack no longer has, and restart only what changed.
+    /// what the stack no longer has, and restart only what changed. When the release restarts one of the app's own
+    /// units, the restart runs only after the drain pod exits 0, and the resume pod runs after it (Trax.Docs/adr/0065):
+    /// systemd stops a unit before anything in it could drain.
     /// </summary>
     internal static string InstallHint(PodmanStack stack, string dir, PodmanStack.Release release)
     {
@@ -560,11 +582,13 @@ internal static class DeployKubernetesCommands
                     )
             );
         lines.Add("  systemctl --user daemon-reload");
-        if (release.Restart.Count > 0)
-            lines.Add(
-                "  systemctl --user restart "
-                    + string.Join(' ', release.Restart.Select(u => $"{u}.service"))
-            );
+        var restart =
+            "systemctl --user restart "
+            + string.Join(' ', release.Restart.Select(u => $"{u}.service"));
+        if (release.Restart.Count > 0 && release.Drain)
+            lines.AddRange(DrainLines(stack, dir, restart));
+        else if (release.Restart.Count > 0)
+            lines.Add($"  {restart}");
         var kept = stack.Units.Except(release.Restart, StringComparer.Ordinal).ToList();
         if (release.Restart.Count == 0)
             lines.Add("Nothing changed: every unit keeps running.");
@@ -578,6 +602,35 @@ internal static class DeployKubernetesCommands
             );
         }
         return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// The lines of a release that restarts one of the app's own units: the drain pod, the restart once it exits 0,
+    /// then the resume pod, and what to do when the drain refuses.
+    /// </summary>
+    private static List<string> DrainLines(PodmanStack stack, string dir, string restart)
+    {
+        var drain = $"{stack.Name}-{KubernetesTarget.DrainName}-pod-{KubernetesTarget.DrainName}";
+        var resume =
+            $"{stack.Name}-{KubernetesTarget.ResumeName}-pod-{KubernetesTarget.ResumeName}";
+        string Play(string kind) =>
+            $"{PodmanTarget.Podman} kube play --replace --userns=nomap --network {stack.Name} "
+            + Path.Combine(dir, $"{stack.Name}-{kind}.yaml");
+        // A pod held to the migrator's egress keeps its sidecar serving after the drain or the resume exits, so
+        // each is stopped once its container is done; a pod with none has stopped already.
+        string Stop(string kind) =>
+            $"{PodmanTarget.Podman} pod stop --ignore -t 10 {stack.Name}-{kind}-pod >/dev/null";
+        return
+        [
+            $"  {PodmanTarget.Podman} kube play --replace {stack.SecretPath} && {Play(KubernetesTarget.DrainName)} "
+                + $"&& test \"$({PodmanTarget.Podman} wait {drain})\" = 0 && {restart}; "
+                + Stop(KubernetesTarget.DrainName),
+            $"  {Play(KubernetesTarget.ResumeName)} && {PodmanTarget.Podman} wait {resume} >/dev/null; "
+                + Stop(KubernetesTarget.ResumeName),
+            "The drain stops every host starting new work and waits for what is busy; the restart runs only "
+                + $"once it exits 0. Past its timeout it ends itself and '{PodmanTarget.Podman} logs {drain}' "
+                + "lists what was still busy: let it finish, or deploy again with --force to restart anyway.",
+        ];
     }
 
     /// <summary>Writes <paramref name="content"/> where only this user can read it: the folder 0700, the file 0600.</summary>

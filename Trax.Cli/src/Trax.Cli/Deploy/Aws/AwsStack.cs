@@ -31,6 +31,9 @@ internal static partial class AwsStack
 
     public const string MigrateContainer = "migrate";
 
+    /// <summary>How long ECS waits after SIGTERM before it kills a container: 120 seconds, the most Fargate allows.</summary>
+    public const int StopTimeoutSeconds = 120;
+
     /// <summary>The address range of a VPC the stack creates; also the networks hosts trust forwarded headers from.</summary>
     public const string VpcCidr = "10.0.0.0/16";
 
@@ -1427,6 +1430,9 @@ internal static partial class AwsStack
             );
         if (command is not null)
             container["Command"] = new JsonArray(command);
+        // A stopped task's container gets this long after SIGTERM before it is killed: Fargate's most. A deploy drains
+        // before it rolls (Trax.Docs/adr/0065), so a host has nothing left to finish here unless it ran with --force.
+        container["StopTimeout"] = StopTimeoutSeconds;
         // A Trax host writes nothing outside /tmp, which is the task's own scratch volume.
         container["ReadonlyRootFilesystem"] = hardening.ReadOnlyRoot;
         if (hardening.ReadOnlyRoot)

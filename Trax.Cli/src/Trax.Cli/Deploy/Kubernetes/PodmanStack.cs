@@ -4,15 +4,18 @@ namespace Trax.Cli.Deploy.Kubernetes;
 
 /// <summary>
 /// A kubernetes environment rendered for one host: the files written beside the project (pod YAML and Quadlet units,
-/// no secret value in any of them), the Secrets the pods read, which a deploy fills from <c>.env</c>, and the units
-/// to start, the service units last. <see cref="ProxySecretName"/> names the Secret of a tailnet exposure's proxy
-/// secret, which a deploy mints and writes to a file of its own.
+/// no secret value in any of them), the Secrets the pods read, which a deploy fills from <c>.env</c>, the units to
+/// start, the service units last, which of them run the app's own hosts, and where the filled Secrets are written.
+/// <see cref="ProxySecretName"/> names the Secret of a tailnet exposure's proxy secret, which a deploy mints and writes
+/// to a file of its own.
 /// </summary>
 internal sealed record PodmanStack(
     string Name,
     IReadOnlyList<(string Path, string Content)> Files,
     IReadOnlyList<V1Secret> Secrets,
     IReadOnlyList<string> Units,
+    IReadOnlyList<string> ServiceUnits,
+    string SecretPath,
     string? ProxySecretName = null
 )
 {
@@ -25,7 +28,8 @@ internal sealed record PodmanStack(
     /// unit when the network or the Secrets changed (each unit plays the Secrets before its pod). A unit whose files
     /// are as they were keeps running, so a release that changes only the app's images leaves Postgres and RabbitMQ
     /// up. With no earlier files every unit starts. <see cref="Release.Removed"/> lists the units an earlier deploy
-    /// wrote that this one does not, to stop and remove.
+    /// wrote that this one does not, to stop and remove. <see cref="Release.Drain"/> says the hosts are drained before
+    /// the restart: an earlier deploy's units run, and the release restarts one of the app's own.
     /// </summary>
     public Release ReleaseFrom(IReadOnlyDictionary<string, string> previous, bool secretsChanged)
     {
@@ -39,8 +43,10 @@ internal sealed record PodmanStack(
             .Where(u => !Units.Contains(u, StringComparer.Ordinal))
             .Order(StringComparer.Ordinal)
             .ToList();
-        if (previous.Count == 0 || secretsChanged || Changed($"{Name}.network"))
-            return new Release(Units, removed);
+        if (previous.Count == 0)
+            return new Release(Units, removed, Drain: false);
+        if (secretsChanged || Changed($"{Name}.network"))
+            return new Release(Units, removed, Drain: ServiceUnits.Count > 0);
         var migration = $"{Name}-migrate.yaml";
         var restart = Units
             .Where(u =>
@@ -54,9 +60,20 @@ internal sealed record PodmanStack(
                 )
             )
             .ToList();
-        return new Release(restart, removed);
+        return new Release(
+            restart,
+            removed,
+            Drain: restart.Exists(u => ServiceUnits.Contains(u, StringComparer.Ordinal))
+        );
     }
 
-    /// <summary>The units a release restarts, in start order, and those it stops and removes.</summary>
-    internal sealed record Release(IReadOnlyList<string> Restart, IReadOnlyList<string> Removed);
+    /// <summary>
+    /// The units a release restarts, in start order, those it stops and removes, and whether it drains the hosts
+    /// before the restart and ends the drain after.
+    /// </summary>
+    internal sealed record Release(
+        IReadOnlyList<string> Restart,
+        IReadOnlyList<string> Removed,
+        bool Drain
+    );
 }

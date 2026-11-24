@@ -107,7 +107,15 @@ public class AwsDeployerTests
             CancellationToken.None
         );
 
-        aws.Calls.Should().Equal("deploy-base", "deploy", "run-task", "deploy");
+        aws.Calls.Should()
+            .Equal(
+                "deploy-base",
+                "deploy",
+                "run-task",
+                "run-task drain",
+                "deploy",
+                "run-task resume"
+            );
         aws.Deploys[1]["ReportsCount"].Should().Be("0", "its image is new and the schema is not");
         aws.Deploys[1]["HubCount"].Should().BeNull("a running service keeps its count");
         aws.Deploys[1]["HubImage"].Should().BeNull("and its image");
@@ -1073,6 +1081,15 @@ public class AwsDeployerTests
         public int? ExitCode { get; set; } = 0;
         public AwsTaskRequest? Task { get; private set; }
 
+        /// <summary>Every task run, in order.</summary>
+        public List<AwsTaskRequest> Tasks { get; } = [];
+
+        /// <summary>The exit code of a task by its label, over <see cref="ExitCode"/>.</summary>
+        public Dictionary<string, int?> ExitCodes { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>What a log group holds, read by <c>LogsAsync</c>.</summary>
+        public List<string> LogLines { get; } = [];
+
         private static bool IsFoundation(string stack) =>
             stack.EndsWith("-base", StringComparison.Ordinal);
 
@@ -1202,8 +1219,15 @@ public class AwsDeployerTests
             Stacks.Add(stack);
             Deploys.Add(parameters);
             Templates.Add(template);
+            if (Deploys.Count == FailDeployNumber)
+                throw new InvalidOperationException(
+                    $"{stack} ended UPDATE_ROLLBACK_COMPLETE: the circuit breaker rolled it back"
+                );
             return System.Threading.Tasks.Task.FromResult(true);
         }
+
+        /// <summary>Which deploy (1 for the first, the foundation's included) fails as a rolled-back update.</summary>
+        public int? FailDeployNumber { get; set; }
 
         public Task<AwsTaskResult> RunTaskAsync(
             AwsTaskRequest request,
@@ -1211,10 +1235,19 @@ public class AwsDeployerTests
             CancellationToken ct
         )
         {
-            Calls.Add("run-task");
+            Calls.Add(
+                string.Equals(request.Label, "migrate", StringComparison.Ordinal)
+                    ? "run-task"
+                    : $"run-task {request.Label}"
+            );
             Task = request;
+            Tasks.Add(request);
             return System.Threading.Tasks.Task.FromResult(
-                new AwsTaskResult(ExitCode, StoppedReason: null, "migrate/migrate/1")
+                new AwsTaskResult(
+                    ExitCodes.TryGetValue(request.Label, out var code) ? code : ExitCode,
+                    StoppedReason: null,
+                    "migrate/migrate/1"
+                )
             );
         }
 
@@ -1312,8 +1345,11 @@ public class AwsDeployerTests
             [EnumeratorCancellation] CancellationToken ct
         )
         {
-            await System.Threading.Tasks.Task.CompletedTask.ConfigureAwait(false);
-            yield break;
+            foreach (var line in LogLines)
+            {
+                await System.Threading.Tasks.Task.Yield();
+                yield return line;
+            }
         }
     }
 }

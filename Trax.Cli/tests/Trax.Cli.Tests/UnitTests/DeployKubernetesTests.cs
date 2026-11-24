@@ -10,9 +10,9 @@ using Trax.Effect.Configuration.Deploy;
 namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
-/// An environment with <c>"target": "kubernetes"</c> becomes one Deployment per service (a hub at one copy with
-/// <c>Recreate</c>, workers rolling at their count), a ClusterIP Service per hub, and a migrate Job that runs before
-/// them, every container under the same hardening compose renders for that service, and no secret value anywhere:
+/// An environment with <c>"target": "kubernetes"</c> becomes one Deployment per service (a hub at one copy that rolls
+/// with its next copy beside it, workers rolling at their count), a ClusterIP Service per hub, and a migrate Job that
+/// runs before them, every container under the same hardening compose renders for that service, and no secret value anywhere:
 /// each comes from a Secret by reference. Postgres and RabbitMQ run in the cluster only off production. The file's
 /// environments each name their target; a version 1 file's are aws. Holds the Kubernetes target to
 /// <c>Trax.Docs/adr/0062</c>.
@@ -146,7 +146,7 @@ public partial class DeployKubernetesTests
         deployments["hub"].Spec.Replicas.Should().Be(1);
         deployments["hub"]
             .Spec.Strategy.Type.Should()
-            .Be("Recreate", "the old hub stops before the new one starts");
+            .Be("RollingUpdate", "the new hub starts beside the old one, after the deploy drained");
         deployments["worker"].Spec.Strategy.Type.Should().Be("RollingUpdate");
         deployments["worker"]
             .Spec.Replicas.Should()
@@ -172,10 +172,12 @@ public partial class DeployKubernetesTests
                 "Service",
                 "StatefulSet",
                 "Job",
+                "Job",
                 "Service",
                 "Deployment",
                 "Deployment",
-                "Deployment"
+                "Deployment",
+                "Job"
             );
     }
 
@@ -201,7 +203,11 @@ public partial class DeployKubernetesTests
     {
         var m = Render(exports: Exports(rabbit: true));
         var pods = Pods(m).ToList();
-        pods.Should().HaveCount(1 + 1 + 1 + 3, "database, rabbitmq, migrate and three services");
+        pods.Should()
+            .HaveCount(
+                1 + 1 + 3 + 3,
+                "database, rabbitmq, migrate, drain, resume and three services"
+            );
 
         foreach (var pod in pods)
         {
@@ -291,7 +297,16 @@ public partial class DeployKubernetesTests
         containers
             .Select(c => c.Name)
             .Should()
-            .BeEquivalentTo(["database", "rabbitmq", "migrate", "hub", "worker", "reports"]);
+            .BeEquivalentTo([
+                "database",
+                "rabbitmq",
+                "migrate",
+                "drain",
+                "hub",
+                "worker",
+                "reports",
+                "resume",
+            ]);
     }
 
     private static string Block(string compose, string service)
@@ -782,11 +797,12 @@ public partial class DeployKubernetesTests
             .Order(StringComparer.Ordinal)
             .ToList();
         files[0].Should().Be("00-namespace-orders-staging.yaml");
-        files.Should().Contain("07-deployment-hub.yaml");
-        (await File.ReadAllTextAsync(Path.Combine(dir, "07-deployment-hub.yaml")))
+        files.Should().Contain("08-deployment-hub.yaml");
+        (await File.ReadAllTextAsync(Path.Combine(dir, "08-deployment-hub.yaml")))
             .Should()
             .Contain("kind: Deployment")
-            .And.Contain("type: Recreate")
+            .And.Contain("type: RollingUpdate")
+            .And.Contain("maxUnavailable: 0")
             .And.Contain("hostUsers: false")
             .And.Contain("secretKeyRef:");
     }

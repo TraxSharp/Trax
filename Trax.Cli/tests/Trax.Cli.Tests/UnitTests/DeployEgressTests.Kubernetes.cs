@@ -113,6 +113,24 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void Kubernetes_holds_the_drain_and_resume_jobs_to_the_migrators_egress()
+    {
+        // They run the migrator's code as the migration does, and reach the database through the same sidecar.
+        var m = Cluster();
+
+        foreach (var job in new[] { m.Drain, m.Resume })
+        {
+            var pod = job.Spec.Template;
+            pod.Spec.InitContainers.Select(c => c.Name).Should().Equal("egress-rules", "egress");
+            Allow(pod.Spec.InitContainers[1])
+                .Should()
+                .Be(Allow(m.Migrate.Spec.Template.Spec.InitContainers[1]));
+            pod.Metadata.Annotations.Should()
+                .ContainKey("container.seccomp.security.alpha.kubernetes.io/egress");
+        }
+    }
+
+    [Test]
     public void Kubernetes_allows_the_in_cluster_broker_by_name()
     {
         Allow(PodOf(Cluster(rabbit: true), "hub").InitContainers[1])

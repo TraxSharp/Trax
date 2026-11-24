@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy;
 
@@ -103,6 +104,35 @@ internal sealed class DeployEnvironment
 
     /// <summary>Copies per service in this environment, over the file's <c>count</c>.</summary>
     public SortedDictionary<string, int> Counts { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// How long a deploy waits for busy work after it drains the hosts and before it replaces them, as a .NET time span
+    /// (<c>00:10:00</c>). Ten minutes when not set. Past it the deploy refuses and lists what is still busy, unless it
+    /// was run with <c>--force</c>.
+    /// </summary>
+    public string? DrainTimeout { get; set; }
+
+    /// <summary>
+    /// <see cref="DrainTimeout"/> as a time span, or <see cref="TraxDrain.DefaultTimeout"/> when it is not set. Throws
+    /// <see cref="InvalidOperationException"/> for a value that is not a time span from one second to 24 hours.
+    /// </summary>
+    public TimeSpan DrainTimeoutValue()
+    {
+        if (DrainTimeout is null)
+            return TraxDrain.DefaultTimeout;
+        try
+        {
+            return TraxDrain.ParseTimeout(DrainTimeout, nameof(DrainTimeout));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(
+                $"drainTimeout '{DrainTimeout}' is not a time span from 00:00:01 to 1.00:00:00. Write it as hours, "
+                    + "minutes and seconds, as in \"00:10:00\" for ten minutes.",
+                ex
+            );
+        }
+    }
 
     /// <summary>A value for each name the file lists under <c>settings</c>.</summary>
     public SortedDictionary<string, string> Settings { get; set; } = new(StringComparer.Ordinal);

@@ -81,6 +81,15 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void Compose_holds_the_drain_and_resume_to_the_migrators_egress()
+    {
+        var compose = Compose();
+
+        Block(compose, "drain").Should().Contain("network_mode: \"service:hub-egress\"");
+        Block(compose, "resume").Should().Contain("network_mode: \"service:hub-egress\"");
+    }
+
+    [Test]
     public void Compose_gives_a_service_without_egress_no_sidecar()
     {
         var compose = Compose();

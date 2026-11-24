@@ -307,6 +307,8 @@ public class KubernetesDeployerTests
                 "apply Deployment/worker",
                 "wait Deployment/hub",
                 "wait Deployment/worker",
+                "create-job orders-resume-20261117-120000-abc",
+                "wait-job orders-resume-20261117-120000-abc",
             ]);
         var restoredWorker = cluster
             .Applied.OfType<V1Deployment>()
@@ -470,6 +472,16 @@ public class KubernetesDeployerTests
 
         public KubernetesJobResult Job { get; set; } = new(Succeeded: true, Reason: null, "");
 
+        /// <summary>The result of each Job whose name holds the key, over <see cref="Job"/>: "-drain-", "-resume-".</summary>
+        public Dictionary<string, KubernetesJobResult> JobResults { get; } =
+            new(StringComparer.Ordinal);
+
+        /// <summary>Every Job created, in order.</summary>
+        public List<V1Job> Jobs { get; } = [];
+
+        /// <summary>How long each Job was waited for, by name.</summary>
+        public Dictionary<string, TimeSpan> JobTimeouts { get; } = new(StringComparer.Ordinal);
+
         /// <summary>
         /// The kind/name whose rollout times out, as the real client reports it. Only its first wait fails, so a
         /// rollback of it rolls out.
@@ -570,6 +582,7 @@ public class KubernetesDeployerTests
         public Task CreateJobAsync(V1Job body, CancellationToken ct)
         {
             Calls.Add($"create-job {body.Metadata.Name}");
+            Jobs.Add(body);
             return Task.CompletedTask;
         }
 
@@ -581,7 +594,12 @@ public class KubernetesDeployerTests
         )
         {
             Calls.Add($"wait-job {name}");
-            return Task.FromResult(Job);
+            JobTimeouts[name] = timeout;
+            var result = JobResults
+                .Where(r => name.Contains(r.Key, StringComparison.Ordinal))
+                .Select(r => r.Value)
+                .FirstOrDefault();
+            return Task.FromResult(result ?? Job);
         }
 
         public async Task WaitForRolloutAsync(

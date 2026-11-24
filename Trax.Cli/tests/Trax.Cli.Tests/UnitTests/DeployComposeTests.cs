@@ -162,6 +162,30 @@ public partial class DeployComposeTests
                 condition: service_healthy
             restart: "no"
 
+          # Before any service is replaced: every running host stops taking new work, and this waits for what is
+          # busy. Past the timeout it ends the drain and fails, naming what is busy, and nothing is replaced;
+          # TRAX_DRAIN_FORCE=true replaces the services anyway.
+          drain:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            command: ["--trax-drain", "00:10:00"]
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+              TRAX_DRAIN_FORCE: ${TRAX_DRAIN_FORCE:-false}
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
+            pids_limit: 512
+            depends_on:
+              migrate:
+                condition: service_completed_successfully
+            restart: "no"
+
           hub:
             image: orders-hub:${TRAX_IMAGE_TAG:-latest}
             environment:
@@ -180,6 +204,8 @@ public partial class DeployComposeTests
             pids_limit: 512
             depends_on:
               migrate:
+                condition: service_completed_successfully
+              drain:
                 condition: service_completed_successfully
               rabbitmq:
                 condition: service_healthy
@@ -204,9 +230,35 @@ public partial class DeployComposeTests
             depends_on:
               migrate:
                 condition: service_completed_successfully
+              drain:
+                condition: service_completed_successfully
               rabbitmq:
                 condition: service_healthy
             restart: unless-stopped
+
+          # Once every service has started, the drain ends and every host takes work again. A scheduler host that
+          # starts ends it too; this covers a release that restarted none.
+          resume:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            command: ["--trax-resume"]
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
+            pids_limit: 512
+            depends_on:
+              hub:
+                condition: service_started
+              worker:
+                condition: service_started
+            restart: "no"
 
         volumes:
           database:
@@ -230,6 +282,9 @@ public partial class DeployComposeTests
                 RABBITMQ_PASSWORD=
                 Auth__Authority=
                 Stripe__ApiKey=
+                # true replaces the services even when work is still busy when the drain times out. Leave it false, and
+                # set it for one 'compose up' when you mean it: TRAX_DRAIN_FORCE=true podman compose up -d.
+                TRAX_DRAIN_FORCE=false
                 # The tag of the images to run, as trax deploy --build tagged them.
                 TRAX_IMAGE_TAG=latest
 

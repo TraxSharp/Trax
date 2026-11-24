@@ -249,7 +249,8 @@ internal static class DeployAwsCommands
         IHostExporter exporter,
         TextWriter stdout,
         TextWriter stderr,
-        CancellationToken ct
+        CancellationToken ct,
+        bool force = false
     ) =>
         await GuardAsync(
                 stderr,
@@ -263,7 +264,8 @@ internal static class DeployAwsCommands
                     var deployer = new AwsDeployer(
                         Client(env.Region ?? ""),
                         Images,
-                        stdout.WriteLine
+                        stdout.WriteLine,
+                        Clock
                     );
                     var tag = await ImageTags
                         .CreateAsync(
@@ -272,7 +274,7 @@ internal static class DeployAwsCommands
                         )
                         .ConfigureAwait(false);
                     var url = await deployer
-                        .DeployAsync(file, filePath, environment, exports, tag, ct)
+                        .DeployAsync(file, filePath, environment, exports, tag, ct, force)
                         .ConfigureAwait(false);
                     await stdout
                         .WriteLineAsync(

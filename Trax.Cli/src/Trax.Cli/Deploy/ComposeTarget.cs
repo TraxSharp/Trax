@@ -7,8 +7,10 @@ namespace Trax.Cli.Deploy;
 /// <summary>
 /// Writes a compose stack for a Trax app, for a host that runs rootless podman compose (or docker compose, for an
 /// environment whose engine is docker): Postgres, RabbitMQ when a
-/// host connects to it, a <c>migrate</c> service that runs the new version once with <c>--trax-migrate</c>, and each
-/// deployed service after it with <c>TRAX_MIGRATIONS=skip</c>. Every password, setting and secret comes from the
+/// host connects to it, a <c>migrate</c> service that runs the new version once with <c>--trax-migrate</c>, a
+/// <c>drain</c> service after it that stops every running host taking new work and waits for what is busy
+/// (<c>--trax-drain</c>, Trax.Docs/adr/0065), each deployed service after that with <c>TRAX_MIGRATIONS=skip</c>, and a
+/// <c>resume</c> service once they have started (<c>--trax-resume</c>). Every password, setting and secret comes from the
 /// environment and stops <c>compose up</c> when it is missing.
 /// </summary>
 internal static class ComposeTarget
@@ -32,7 +34,8 @@ internal static class ComposeTarget
         DeployFile file,
         IReadOnlyDictionary<string, DeployManifest> exports,
         string engine = DeployEnvironment.Podman,
-        IReadOnlyDictionary<string, DeployLimits>? limits = null
+        IReadOnlyDictionary<string, DeployLimits>? limits = null,
+        TimeSpan? drainTimeout = null
     )
     {
         limits ??= new Dictionary<string, DeployLimits>(StringComparer.Ordinal);
@@ -61,7 +64,11 @@ internal static class ComposeTarget
 
         AppendMigrate(y, file, migrator, podman, egress);
 
+        AppendDrain(y, file, migrator, podman, drainTimeout ?? TraxDrain.DefaultTimeout, egress);
+
         AppendServices(y, file, exports, rabbit, podman, egress);
+
+        AppendResume(y, file, migrator, podman, egress);
 
         y.AppendLine();
         y.AppendLine("volumes:");
@@ -250,6 +257,76 @@ internal static class ComposeTarget
         ReadOnlyRoot: true
     );
 
+    private static void AppendDrain(
+        StringBuilder y,
+        DeployFile file,
+        string migrator,
+        bool podman,
+        TimeSpan timeout,
+        Egress? egress
+    )
+    {
+        var held = egress is not null && file.Services[migrator].Egress is not null;
+        y.AppendLine();
+        y.AppendLine(
+            "  # Before any service is replaced: every running host stops taking new work, and this waits for what is"
+        );
+        y.AppendLine(
+            "  # busy. Past the timeout it ends the drain and fails, naming what is busy, and nothing is replaced;"
+        );
+        y.AppendLine("  # TRAX_DRAIN_FORCE=true replaces the services anyway.");
+        y.AppendLine("  drain:");
+        y.AppendLine($"    image: {Image(file, migrator)}");
+        y.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"    command: [\"{TraxDrain.Argument}\", \"{timeout:c}\"]"
+        );
+        y.AppendLine("    environment:");
+        y.AppendLine("      <<: *trax");
+        y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
+        y.AppendLine($"      {TraxDrain.ForceVariable}: ${{{TraxDrain.ForceVariable}:-false}}");
+        // The drain runs the migrator's code, so it is held to the migrator's egress, as the migration is.
+        if (held)
+            y.AppendLine($"    network_mode: \"service:{SidecarName(migrator)}\"");
+        Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
+        y.AppendLine("    depends_on:");
+        y.AppendLine("      migrate:");
+        y.AppendLine("        condition: service_completed_successfully");
+        y.AppendLine("    restart: \"no\"");
+    }
+
+    private static void AppendResume(
+        StringBuilder y,
+        DeployFile file,
+        string migrator,
+        bool podman,
+        Egress? egress
+    )
+    {
+        var held = egress is not null && file.Services[migrator].Egress is not null;
+        y.AppendLine();
+        y.AppendLine(
+            "  # Once every service has started, the drain ends and every host takes work again. A scheduler host that"
+        );
+        y.AppendLine("  # starts ends it too; this covers a release that restarted none.");
+        y.AppendLine("  resume:");
+        y.AppendLine($"    image: {Image(file, migrator)}");
+        y.AppendLine($"    command: [\"{TraxDrain.ResumeArgument}\"]");
+        y.AppendLine("    environment:");
+        y.AppendLine("      <<: *trax");
+        y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
+        if (held)
+            y.AppendLine($"    network_mode: \"service:{SidecarName(migrator)}\"");
+        Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
+        y.AppendLine("    depends_on:");
+        foreach (var name in file.Services.Keys)
+        {
+            y.AppendLine($"      {name}:");
+            y.AppendLine("        condition: service_started");
+        }
+        y.AppendLine("    restart: \"no\"");
+    }
+
     private static void AppendServices(
         StringBuilder y,
         DeployFile file,
@@ -309,6 +386,8 @@ internal static class ComposeTarget
                 y.AppendLine($"      {SidecarName(name)}:");
                 y.AppendLine("        condition: service_healthy");
             }
+            y.AppendLine("      drain:");
+            y.AppendLine("        condition: service_completed_successfully");
             if (rabbit)
             {
                 y.AppendLine("      rabbitmq:");
@@ -329,6 +408,13 @@ internal static class ComposeTarget
             env.AppendLine("RABBITMQ_PASSWORD=");
         foreach (var name in file.Settings.Concat(file.Secrets).Order(StringComparer.Ordinal))
             env.AppendLine($"{name}=");
+        env.AppendLine(
+            "# true replaces the services even when work is still busy when the drain times out. Leave it false, and"
+        );
+        env.AppendLine(
+            "# set it for one 'compose up' when you mean it: TRAX_DRAIN_FORCE=true podman compose up -d."
+        );
+        env.AppendLine($"{TraxDrain.ForceVariable}=false");
         env.AppendLine("# The tag of the images to run, as trax deploy --build tagged them.");
         env.AppendLine("TRAX_IMAGE_TAG=latest");
 
@@ -387,7 +473,11 @@ internal static class ComposeTarget
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";
 
-    /// <summary>The roles a service runs as one copy of, until hosts hold leases on their runs.</summary>
+    /// <summary>
+    /// The roles a service runs as one copy of, until hosts hold leases on their runs: a copy that restarts fails the
+    /// runs live on the others in its startup recovery. During a deploy the old and new copy of a hub may overlap,
+    /// which is safe only because the deploy drained first (Trax.Cli/docs/adr/0007).
+    /// </summary>
     internal static readonly string[] SingleRoles = ["api", "scheduler"];
 
     /// <summary>

@@ -116,6 +116,8 @@ public partial class DeployPodmanTests
             .BeEquivalentTo([
                 "orders-home.network",
                 "orders-home-migrate.yaml",
+                "orders-home-drain.yaml",
+                "orders-home-resume.yaml",
                 "orders-home-database.yaml",
                 "orders-home-database.kube",
                 "orders-home-rabbitmq.yaml",

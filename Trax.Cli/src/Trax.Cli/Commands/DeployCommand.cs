@@ -35,6 +35,13 @@ internal static class DeployCommand
             Description =
                 "Also build each service's image with dotnet publish -t:PublishContainer, tagged latest.",
         };
+        var force = new Option<bool>("--force")
+        {
+            Description =
+                "Replace the hosts even when work is still busy at the end of the drain's timeout (drainTimeout, "
+                + "ten minutes by default). Without it the deploy refuses and lists what is busy. On compose, "
+                + "set TRAX_DRAIN_FORCE=true for the compose up instead.",
+        };
 
         var command = new Command(
             "deploy",
@@ -46,12 +53,14 @@ internal static class DeployCommand
             file,
             output,
             build,
+            force,
             CreateInit(),
         };
         foreach (var subcommand in DeployAwsCommands.Create())
             command.Subcommands.Add(subcommand);
         command.SetAction(
-            (parseResult, ct) => RunActionAsync(parseResult, target, env, file, output, build, ct)
+            (parseResult, ct) =>
+                RunActionAsync(parseResult, target, env, file, output, build, force, ct)
         );
         return command;
     }
@@ -63,6 +72,7 @@ internal static class DeployCommand
         Option<FileInfo?> file,
         Option<DirectoryInfo?> output,
         Option<bool> build,
+        Option<bool> force,
         CancellationToken ct
     ) =>
         DispatchAsync(
@@ -75,7 +85,8 @@ internal static class DeployCommand
             new DotnetHostExporter(ct),
             parseResult.InvocationConfiguration.Output,
             parseResult.InvocationConfiguration.Error,
-            ct
+            ct,
+            parseResult.GetValue(force)
         );
 
     /// <summary>
@@ -91,9 +102,12 @@ internal static class DeployCommand
         IHostExporter exporter,
         TextWriter stdout,
         TextWriter stderr,
-        CancellationToken ct
+        CancellationToken ct,
+        bool force = false
     )
     {
+        if (force && environment is null)
+            await stdout.WriteLineAsync(ComposeForce).ConfigureAwait(false);
         if (environment is null)
             return await DispatchWithoutEnvironmentAsync(
                     path,
@@ -124,12 +138,19 @@ internal static class DeployCommand
         return chosen switch
         {
             DeployEnvironment.Aws => await DeployAwsCommands
-                .DeployAsync(path, environment, exporter, stdout, stderr, ct)
+                .DeployAsync(path, environment, exporter, stdout, stderr, ct, force)
                 .ConfigureAwait(false),
             DeployEnvironment.Kubernetes => await DeployKubernetesCommands
-                .DeployAsync(path, environment, exporter, stdout, stderr, ct)
+                .DeployAsync(path, environment, exporter, stdout, stderr, ct, force)
                 .ConfigureAwait(false),
-            _ => await RunAsync(
+            _ => await ComposeAsync().ConfigureAwait(false),
+        };
+
+        async Task<int> ComposeAsync()
+        {
+            if (force)
+                await stdout.WriteLineAsync(ComposeForce).ConfigureAwait(false);
+            return await RunAsync(
                     DeployEnvironment.Compose,
                     path,
                     outDir,
@@ -140,9 +161,14 @@ internal static class DeployCommand
                     stderr,
                     environment
                 )
-                .ConfigureAwait(false),
-        };
+                .ConfigureAwait(false);
+        }
     }
+
+    /// <summary>What <c>--force</c> means for compose, which trax writes rather than runs.</summary>
+    internal const string ComposeForce =
+        "--force changes nothing in the compose file: the drain runs when you run compose up. To replace the "
+        + "services while work is still busy, run that once with TRAX_DRAIN_FORCE=true set.";
 
     private static async Task<int> DispatchWithoutEnvironmentAsync(
         string path,
@@ -331,7 +357,13 @@ internal static class DeployCommand
             var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath)).NotNull();
             await WriteStackAsync(
                     dir,
-                    ComposeTarget.Render(file, exports, engine, env?.Limits),
+                    ComposeTarget.Render(
+                        file,
+                        exports,
+                        engine,
+                        env?.Limits,
+                        env?.DrainTimeoutValue()
+                    ),
                     stdout
                 )
                 .ConfigureAwait(false);
