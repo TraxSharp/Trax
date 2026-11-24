@@ -24,7 +24,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// <summary>
 /// A HotChocolate TypeModule that dynamically generates GraphQL query fields
 /// for entities marked with <c>[TraxQueryModel]</c>. Each entity gets a query
-/// field under <c>discover</c> with optional cursor pagination, filtering,
+/// field under <c>discover</c> with optional cursor or offset pagination, filtering,
 /// sorting, and projection based on the attribute configuration.
 /// </summary>
 internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModule
@@ -77,7 +77,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                     {
                         d.Name("DiscoverQueries");
                         foreach (var reg in group)
-                            AddModelQueryField(d, reg);
+                            AddModelQueryField(d, reg, configuration.MaxOffsetSkip);
                     })
                 );
                 continue;
@@ -91,7 +91,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                 {
                     d.Name(nsTypeName);
                     foreach (var reg in group)
-                        AddModelQueryField(d, reg);
+                        AddModelQueryField(d, reg, configuration.MaxOffsetSkip);
                 })
             );
             types.Add(NamespaceTypes.Field("DiscoverQueries", group.Key, nsTypeName));
@@ -110,7 +110,8 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
 
     private static void AddModelQueryField(
         IObjectTypeDescriptor descriptor,
-        QueryModelRegistration reg
+        QueryModelRegistration reg,
+        int maxOffsetSkip
     )
     {
         var field = descriptor.Field(FieldName(reg));
@@ -123,12 +124,15 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
 
         // Delegate to a generic method so HotChocolate gets properly typed
         // delegates for projection, filtering, sorting, and the resolver.
-        ConfigureFieldMethod.MakeGenericMethod(reg.EntityType).Invoke(null, [field, reg]);
+        ConfigureFieldMethod
+            .MakeGenericMethod(reg.EntityType)
+            .Invoke(null, [field, reg, maxOffsetSkip]);
     }
 
     private static void ConfigureField<TEntity>(
         IObjectFieldDescriptor field,
-        QueryModelRegistration reg
+        QueryModelRegistration reg,
+        int maxOffsetSkip
     )
         where TEntity : class
     {
@@ -162,12 +166,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
 
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
-        if (attr.Paging)
-        {
-            field.UsePaging<ObjectType<TEntity>>(
-                options: new PagingOptions { IncludeTotalCount = true }
-            );
-        }
+        UsePagingStyle<TEntity>(field, reg, maxOffsetSkip);
 
         if (attr.Projection)
             field.Use(QueryModelProjection.CreateMiddleware<TEntity>());
@@ -179,6 +178,35 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
             var dbContext = (DbContext)ctx.Services.GetRequiredService(reg.DbContextType);
             return dbContext.Set<TEntity>();
         });
+    }
+
+    private static void UsePagingStyle<TEntity>(
+        IObjectFieldDescriptor field,
+        QueryModelRegistration reg,
+        int maxOffsetSkip
+    )
+        where TEntity : class
+    {
+        switch (reg.Paging)
+        {
+            case TraxPaging.Cursor:
+                field.UsePaging<ObjectType<TEntity>>(
+                    options: new PagingOptions { IncludeTotalCount = true }
+                );
+                break;
+            case TraxPaging.Offset:
+                field.Use(OffsetSkipLimit.Create(maxOffsetSkip));
+                field.UseOffsetPaging<ObjectType<TEntity>>(
+                    options: new PagingOptions { IncludeTotalCount = true }
+                );
+                break;
+            case TraxPaging.None:
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"{typeof(TEntity).Name} has no resolved paging style ({reg.Paging})."
+                );
+        }
     }
 
     private static void UseFilteringAndSorting<TEntity>(

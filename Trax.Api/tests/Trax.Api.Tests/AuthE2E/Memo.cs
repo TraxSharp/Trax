@@ -7,9 +7,14 @@ namespace Trax.Api.Tests.AuthE2E;
 
 /// <summary>
 /// Entity gated with a CSV role list (<c>Roles="Admin,Player"</c>). Both roles
-/// satisfy the gate (OR semantics within a single attribute).
+/// satisfy the gate (OR semantics within a single attribute). Offset-paged, so the
+/// gate is also held on a collection segment's <c>totalCount</c> and <c>pageInfo</c>.
 /// </summary>
-[TraxQueryModel(Namespace = "vault", Description = "Memos visible to Admin or Player.")]
+[TraxQueryModel(
+    Namespace = "vault",
+    Description = "Memos visible to Admin or Player.",
+    Paging = TraxPaging.Offset
+)]
 [TraxAuthorize(Roles = "Admin,Player")]
 [Table("memos", Schema = "test_authz")]
 public class Memo

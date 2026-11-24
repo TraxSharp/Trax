@@ -52,6 +52,7 @@ public partial class TraxGraphQLBuilder
             MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
             MaxConnectionLifetime = MaxConnectionLifetimeValue,
             ConnectionCredentialRecheckInterval = ConnectionCredentialRecheckIntervalValue,
+            MaxOffsetSkip = MaxOffsetSkipValue,
             NavigationTargets = NavigationTargetPosture.Discover(
                 modelRegistrations.Select(r => r.EntityType)
             ),
@@ -108,6 +109,9 @@ public partial class TraxGraphQLBuilder
                         authorizeAttributes,
                         allowAnonymous
                     )
+                    {
+                        Paging = ResolvePaging(entityType, attr),
+                    }
                 );
             }
         }

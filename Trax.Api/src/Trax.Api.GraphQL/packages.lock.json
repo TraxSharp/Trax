@@ -86,6 +86,15 @@
           "HotChocolate.Types": "16.7.5"
         }
       },
+      "HotChocolate.Types.OffsetPagination": {
+        "type": "Direct",
+        "requested": "[16.7.5, )",
+        "resolved": "16.7.5",
+        "contentHash": "Mrpxl5vovGR6m1OokfN54T2chKqnuRFFwdLsp5N+8eo/lFnVz7nF5TI3iZq9wfWlKw3aBi3fzl93ko3BrF/4MA==",
+        "dependencies": {
+          "HotChocolate.Types": "16.7.5"
+        }
+      },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
         "requested": "[5.6.0, )",

@@ -5,6 +5,7 @@ namespace Trax.Api.GraphQL.Configuration
         public System.TimeSpan ConnectionCredentialRecheckInterval { get; }
         public System.TimeSpan MaxConnectionLifetime { get; }
         public int MaxExecutionDepth { get; }
+        public int MaxOffsetSkip { get; }
         public int MaxOperationsPerConnection { get; }
         public int MaxOperationsPerRequest { get; }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> ModelRegistrations { get; }
@@ -19,6 +20,7 @@ namespace Trax.Api.GraphQL.Configuration
         public System.Type DbContextType { get; }
         public System.Type EntityType { get; }
         public System.Type? FilterInputType { get; }
+        public Trax.Effect.Attributes.TraxPaging Paging { get; }
         public System.Type? SortInputType { get; }
     }
 }
@@ -33,6 +35,7 @@ namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder
 {
     public class TraxGraphQLBuilder
     {
+        public const int DefaultMaxOffsetSkip = 10000;
         public TraxGraphQLBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder AddDbContext<TDbContext>()
             where TDbContext : Microsoft.EntityFrameworkCore.DbContext { }
@@ -57,12 +60,14 @@ namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureCost(System.Action<HotChocolate.CostAnalysis.CostOptions> configure) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureFiltering(System.Func<Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder, Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder> configure) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureSchema(System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder> configure) { }
+        public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder DefaultPaging(Trax.Effect.Attributes.TraxPaging paging) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ExposeOperationMutations() { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ExposeOperationQueries() { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder GateOperations(string? policy = null, string? roles = null) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder GateOperationsToAuthenticatedUsers() { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxConnectionLifetime(System.TimeSpan lifetime) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxExecutionDepth(int depth) { }
+        public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxOffsetSkip(int maxSkip) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxOperationsPerConnection(int maxOperations) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxOperationsPerRequest(int maxOperations) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder RecheckConnectionCredentialsEvery(System.TimeSpan interval) { }

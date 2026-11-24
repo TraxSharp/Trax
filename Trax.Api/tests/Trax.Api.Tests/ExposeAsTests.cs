@@ -51,7 +51,7 @@ public class ExposeAsTests
             Description = "Books",
             Namespace = "library",
             ExposeAs = typeof(IBookReference),
-            Paging = true,
+            Paging = TraxPaging.Cursor,
             Filtering = true,
             Sorting = true,
             Projection = true,

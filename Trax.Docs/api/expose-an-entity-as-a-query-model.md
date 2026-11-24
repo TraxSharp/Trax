@@ -106,6 +106,26 @@ query {
 }
 ```
 
+For numbered pages, set `Paging = TraxPaging.Offset` on the attribute, or `DefaultPaging(TraxPaging.Offset)`
+on the builder for every model. The field then takes `skip` and `take` and returns `items`,
+`pageInfo` and `totalCount`:
+
+```graphql
+query {
+  discover {
+    playerRecords(skip: 20, take: 10, order: { rating: DESC }) {
+      items {
+        displayName
+        rating
+      }
+      totalCount
+    }
+  }
+}
+```
+
+See [Paging](/docs/sdk-reference/graphql-api/query-models#paging) for the limits on both styles.
+
 ## SDK Reference
 
 > [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize)

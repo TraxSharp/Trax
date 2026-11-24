@@ -1,12 +1,14 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using AwesomeAssertions;
+using HotChocolate;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Extensions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests;
@@ -152,7 +154,8 @@ public class QueryModelTypeModuleTests
 
         config.ModelRegistrations.Should().HaveCount(1);
         var attr = config.ModelRegistrations[0].Attribute;
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
+        config.ModelRegistrations[0].Paging.Should().Be(TraxPaging.Cursor);
         attr.Filtering.Should().BeFalse();
         attr.Sorting.Should().BeFalse();
         attr.Projection.Should().BeTrue();
@@ -168,7 +171,8 @@ public class QueryModelTypeModuleTests
         var config = builder.Build();
 
         var attr = config.ModelRegistrations[0].Attribute;
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
+        config.ModelRegistrations[0].Paging.Should().Be(TraxPaging.Cursor);
         attr.Filtering.Should().BeTrue();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeTrue();
@@ -243,6 +247,56 @@ public class QueryModelTypeModuleTests
             );
 
         types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_UnresolvedPaging_FailsTheSchemaBuild()
+    {
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Filtering = false, Sorting = false },
+                    AllowAnonymous: true
+                )
+                {
+                    Paging = TraxPaging.Default,
+                },
+            ],
+            [],
+            [],
+            []
+        );
+        var module = new QueryModelTypeModule(config);
+        var types = await module
+            .CreateTypesAsync(
+                Null.Of<HotChocolate.Types.Descriptors.IDescriptorContext>(),
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        var schema = SchemaBuilder
+            .New()
+            .AddQueryType(d => d.Name("DiscoverQueries").Field("ping").Resolve("pong"));
+        foreach (var definition in types.OfType<ITypeDefinition>())
+            schema.AddType(definition);
+        foreach (var extension in types.OfType<ITypeDefinitionExtension>())
+            schema.AddType(extension);
+
+        var act = () => schema.Create();
+
+        act.Should()
+            .Throw<SchemaException>()
+            .Which.Errors.Should()
+            .ContainSingle()
+            .Which.Exception.NotNull()
+            .GetBaseException()
+            .Should()
+            .BeOfType<InvalidOperationException>(
+                "a paging style the module has no arm for must not become an unpaged list"
+            )
+            .Which.Message.Should()
+            .Be("TestPlayer has no resolved paging style (Default).");
     }
 
     [Test]
@@ -400,7 +454,7 @@ public class QueryModelTypeModuleTests
         attr.Name.Should().BeNull();
         attr.Description.Should().BeNull();
         attr.DeprecationReason.Should().BeNull();
-        attr.Paging.Should().BeTrue();
+        attr.Paging.Should().Be(TraxPaging.Default);
         attr.Filtering.Should().BeTrue();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeTrue();
@@ -415,7 +469,7 @@ public class QueryModelTypeModuleTests
             Name = "allPlayers",
             Description = "All players",
             DeprecationReason = "Use v2",
-            Paging = false,
+            Paging = TraxPaging.None,
             Filtering = false,
             Sorting = true,
             Projection = false,
@@ -424,7 +478,7 @@ public class QueryModelTypeModuleTests
         attr.Name.Should().Be("allPlayers");
         attr.Description.Should().Be("All players");
         attr.DeprecationReason.Should().Be("Use v2");
-        attr.Paging.Should().BeFalse();
+        attr.Paging.Should().Be(TraxPaging.None);
         attr.Filtering.Should().BeFalse();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeFalse();

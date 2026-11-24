@@ -30,5 +30,6 @@
     <PackageReference Include="HotChocolate.Data" />
     <PackageReference Include="HotChocolate.Data.EntityFramework" />
     <PackageReference Include="HotChocolate.Execution.Projections" />
+    <PackageReference Include="HotChocolate.Types.OffsetPagination" />
   </ItemGroup>
 </Project>

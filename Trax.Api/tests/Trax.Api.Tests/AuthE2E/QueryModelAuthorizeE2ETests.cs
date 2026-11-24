@@ -69,6 +69,10 @@ public class QueryModelAuthorizeE2ETests
         { discover { vault { memos { totalCount } } } }
         """;
 
+    private const string MemosPageInfoQuery = """
+        { discover { vault { memos(skip: 1, take: 1) { pageInfo { hasNextPage hasPreviousPage } } } } }
+        """;
+
     private const string RestrictedDocsQuery = """
         { discover { vault { restrictedDocs { totalCount } } } }
         """;
@@ -322,6 +326,35 @@ public class QueryModelAuthorizeE2ETests
         using var doc = await host.PostGraphQLAsync(MemosQuery);
 
         AssertTraxAuthorizationError(doc);
+    }
+
+    [Test]
+    public async Task CsvRoles_OffsetPageInfoOnly_Anonymous_ReturnsAuthorizationError()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(MemosPageInfoQuery);
+
+        AssertTraxAuthorizationError(doc);
+    }
+
+    [Test]
+    public async Task CsvRoles_OffsetPageInfoOnly_AsPlayer_Succeeds()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(
+            MemosPageInfoQuery,
+            req => req.Headers.Add("X-Api-Key", PlayerApiKey)
+        );
+
+        AssertNoErrors(doc);
+        VaultField(doc, "memos")
+            .GetProperty("pageInfo")
+            .GetProperty("hasPreviousPage")
+            .GetBoolean()
+            .Should()
+            .BeTrue();
     }
 
     // ── Stacked attributes (AND across) ──────────────────────────────────
