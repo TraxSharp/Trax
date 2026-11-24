@@ -201,6 +201,19 @@ public class QueryModelPagingTests
     }
 
     [Test]
+    public void Build_UndefinedPagingValue_Throws()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+        builder.AddDbContext<UndefinedPagingDbContext>();
+
+        var act = () => builder.Build();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*PagedScroll*Paging = 99*Default, None, Cursor or Offset*");
+    }
+
+    [Test]
     public void MaxOffsetSkip_Negative_Throws()
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());

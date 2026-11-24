@@ -85,7 +85,9 @@ services.AddTraxGraphQL(graphql => graphql
     .DefaultPaging(TraxPaging.Offset));
 ```
 
-A model that names a style keeps it whatever the default is. Both paged styles take the same
+A model that names a style keeps it whatever the default is. A `Paging` that is not one of the four
+values, such as a cast integer, fails `AddTraxGraphQL` with an `InvalidOperationException` naming
+the model. Both paged styles take the same
 `where` and `order` arguments, project the same way, and hold `totalCount` and `pageInfo` behind the
 model's `[TraxAuthorize]` gate. A page holds at most 50 rows and 10 when `first` or `take` is left
 out, HotChocolate's defaults.

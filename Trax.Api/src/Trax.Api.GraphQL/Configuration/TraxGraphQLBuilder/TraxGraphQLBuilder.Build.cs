@@ -110,7 +110,7 @@ public partial class TraxGraphQLBuilder
                         allowAnonymous
                     )
                     {
-                        Paging = ResolvePaging(attr),
+                        Paging = ResolvePaging(entityType, attr),
                     }
                 );
             }
