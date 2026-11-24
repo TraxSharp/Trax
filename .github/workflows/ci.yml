@@ -1256,7 +1256,8 @@ jobs:
           done
 
   # trax deploy against a real cluster: k3s on the runner with a local registry, then the podman runtime under
-  # systemd --user, with the trax-hub template as the app (.github/ci/deploy/README.md says what each proves).
+  # systemd --user, with the DistributedWorkers sample as the app: a hub, workers, Postgres and RabbitMQ
+  # (.github/ci/deploy/README.md says what each proves).
   # Not kind: its nodes are containers and cannot run pods with hostUsers: false, which every Trax pod has.
   # It runs when the deploy code or the fixture changes, and on every push and release.
   deploy-cluster:
@@ -1264,13 +1265,13 @@ jobs:
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'deploy-cluster')
     name: deploy-cluster
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
       - name: Harden runner
         # The suite job's .NET list; the k3s installer and binary from GitHub; the registries the images come
-        # from: Docker Hub for k3s's own images, Postgres and the local registry, MCR for the ASP.NET base image;
+        # from: Docker Hub for k3s's own images, Postgres, RabbitMQ and the local registry, MCR for the ASP.NET base image;
         # Alpine's packages for the egress image, and api.github.com, the domain the held hub is let reach.
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:

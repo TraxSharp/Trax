@@ -131,7 +131,8 @@
         "Trax.Cli/src/Trax.Cli/Commands/Deploy",
         ".github/ci/deploy/",
         "Trax.Egress/",
-        "Trax.Samples/templates/content/Trax.Samples.Hub/",
+        "Trax.Samples/samples/DistributedWorkers/",
+        "Trax.Effect/src/Trax.Effect.Broadcaster.RabbitMQ/",
         "Trax.Effect/src/Trax.Effect/Configuration/Deploy/",
         "Trax.Api/src/Trax.Api.GraphQL/Deploy/"
       ]
