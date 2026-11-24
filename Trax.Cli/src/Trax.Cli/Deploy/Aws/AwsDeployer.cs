@@ -106,13 +106,13 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
             .Outputs.GetValueOrDefault("Url");
     }
 
-    private static readonly IReadOnlySet<string> AnyReplaced = new HashSet<string>(
+    internal static readonly IReadOnlySet<string> AnyReplaced = new HashSet<string>(
         StringComparer.Ordinal
     );
 
     // What the runtime's tasks run in and wear. A foundation update must not replace these under a running runtime:
     // the old ones cannot be deleted while tasks hold them, CloudFormation forgets them, and destroy later fails.
-    private static HashSet<string> NetworkResources(JsonObject foundation) =>
+    internal static HashSet<string> NetworkResources(JsonObject foundation) =>
         [
             .. foundation["Resources"]
                 .NotNull()
@@ -566,7 +566,7 @@ internal sealed class AwsDeployer(IAwsDeployClient aws, IImagePublisher images, 
     /// another app's (<c>orders-eu</c> + <c>prod</c>, <c>orders</c> + <c>eu-prod</c>), and changing that stack would
     /// move the other app's services onto this app's images.
     /// </summary>
-    private static void CheckOwner(AwsStackState existing, DeployFile file, string stack)
+    internal static void CheckOwner(AwsStackState existing, DeployFile file, string stack)
     {
         var owner = existing.Tags.GetValueOrDefault("trax:app");
         if (string.Equals(owner, file.App, StringComparison.Ordinal))

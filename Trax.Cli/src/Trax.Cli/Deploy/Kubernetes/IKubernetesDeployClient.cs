@@ -13,6 +13,9 @@ internal interface IKubernetesDeployClient
     /// <summary>The kubeconfig context the calls go to, for what trax prints.</summary>
     string Context { get; }
 
+    /// <summary>The API server the context points at (<c>https://ABC.gr7.us-east-1.eks.amazonaws.com</c>).</summary>
+    string Server { get; }
+
     /// <summary>The namespace's labels, or null when it does not exist.</summary>
     Task<IReadOnlyDictionary<string, string>?> NamespaceLabelsAsync(
         string name,

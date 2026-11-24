@@ -56,6 +56,15 @@
           "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
+      "AWSSDK.EKS": {
+        "type": "Direct",
+        "requested": "[4.0.106.1, )",
+        "resolved": "4.0.106.1",
+        "contentHash": "k+O4TV5fOfsUnuEMfg3Zjf54tINYMSr1NG05oxPk7w0FEhtBkxoLh0MZp22b6SNo/0mqLfzZliVwxBlSIQ5H9A==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
       "AWSSDK.SecretsManager": {
         "type": "Direct",
         "requested": "[4.0.100.15, )",

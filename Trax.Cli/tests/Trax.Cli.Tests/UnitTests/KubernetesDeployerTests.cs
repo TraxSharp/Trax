@@ -324,6 +324,8 @@ public class KubernetesDeployerTests
 
         public string Context => "kind-test";
 
+        public string Server { get; set; } = "https://kind-test:6443";
+
         public Task<IReadOnlyDictionary<string, string>?> NamespaceLabelsAsync(
             string name,
             CancellationToken ct

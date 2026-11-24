@@ -34,10 +34,13 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     {
         _clock = clock;
         Context = config.CurrentContext ?? "(none)";
+        Server = config.Host ?? "";
         _client = new k8s.Kubernetes(config, handlers);
     }
 
     public string Context { get; }
+
+    public string Server { get; }
 
     public async Task<IReadOnlyDictionary<string, string>?> NamespaceLabelsAsync(
         string name,
@@ -129,11 +132,67 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         all.AddRange(
             (
                 await _client
+                    .CoreV1.ListNamespacedServiceAccountAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("ServiceAccount", o.Metadata))
+        );
+        all.AddRange(await SecurityGroupPoliciesAsync(ns, ct).ConfigureAwait(false));
+        all.AddRange(
+            (
+                await _client
                     .CoreV1.ListNamespacedPersistentVolumeClaimAsync(ns, cancellationToken: ct)
                     .ConfigureAwait(false)
             ).Items.Select(o => State("PersistentVolumeClaim", o.Metadata))
         );
         return all;
+    }
+
+    /// <summary>
+    /// The namespace's SecurityGroupPolicies, by name and app label. A cluster without the VPC resource controller has
+    /// no such kind, and so none.
+    /// </summary>
+    private async Task<List<KubernetesObjectState>> SecurityGroupPoliciesAsync(
+        string ns,
+        CancellationToken ct
+    )
+    {
+        var found = new List<KubernetesObjectState>();
+        JsonElement json;
+        try
+        {
+            json = await _client
+                .CustomObjects.ListNamespacedCustomObjectAsync<JsonElement>(
+                    EksSecurityGroupPolicy.Group,
+                    EksSecurityGroupPolicy.Version,
+                    ns,
+                    EksSecurityGroupPolicy.Plural,
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
+        }
+        catch (HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return found;
+        }
+        if (!json.TryGetProperty("items", out var items))
+            return found;
+        foreach (var item in items.EnumerateArray())
+        {
+            var meta = item.GetProperty("metadata");
+            var app =
+                meta.TryGetProperty("labels", out var labels)
+                && labels.TryGetProperty(KubernetesTarget.AppLabel, out var label)
+                    ? label.GetString()
+                    : null;
+            found.Add(
+                new KubernetesObjectState(
+                    "SecurityGroupPolicy",
+                    meta.GetProperty("name").GetString() ?? "",
+                    app
+                )
+            );
+        }
+        return found;
     }
 
     public async Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct)
@@ -173,6 +232,50 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                         patch,
                         name,
                         ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                break;
+            default:
+                await ApplyIdentityAsync(body, patch, name, ns, ct).ConfigureAwait(false);
+                break;
+        }
+    }
+
+    /// <summary>A ServiceAccount, or an EKS SecurityGroupPolicy: what a deploy to EKS applies beside the workloads.</summary>
+    private async Task ApplyIdentityAsync(
+        IKubernetesObject<V1ObjectMeta> body,
+        V1Patch patch,
+        string name,
+        string ns,
+        CancellationToken ct
+    )
+    {
+        switch (body)
+        {
+            case V1ServiceAccount:
+                await _client
+                    .CoreV1.PatchNamespacedServiceAccountAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                break;
+            case EksSecurityGroupPolicy:
+                await _client
+                    .CustomObjects.PatchNamespacedCustomObjectAsync(
+                        patch,
+                        EksSecurityGroupPolicy.Group,
+                        EksSecurityGroupPolicy.Version,
+                        ns,
+                        EksSecurityGroupPolicy.Plural,
+                        name,
                         fieldManager: FieldManager,
                         force: true,
                         cancellationToken: ct
@@ -547,6 +650,11 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
 
     public async Task DeleteAsync(string ns, KubernetesObjectState target, CancellationToken ct)
     {
+        if (target.Kind is "ServiceAccount" or "SecurityGroupPolicy")
+        {
+            await DeleteIdentityAsync(ns, target, ct).ConfigureAwait(false);
+            return;
+        }
         const string background = "Background";
         await OrNull<object>(async () =>
                 target.Kind switch
@@ -609,6 +717,38 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             return null;
         }
     }
+
+    private async Task DeleteIdentityAsync(
+        string ns,
+        KubernetesObjectState target,
+        CancellationToken ct
+    ) =>
+        await OrNull<object>(async () =>
+                target.Kind switch
+                {
+                    "ServiceAccount" => await _client
+                        .CoreV1.DeleteNamespacedServiceAccountAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "SecurityGroupPolicy" => await _client
+                        .CustomObjects.DeleteNamespacedCustomObjectAsync(
+                            EksSecurityGroupPolicy.Group,
+                            EksSecurityGroupPolicy.Version,
+                            ns,
+                            EksSecurityGroupPolicy.Plural,
+                            target.Name,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    _ => throw new InvalidOperationException(
+                        $"trax does not delete a {target.Kind}."
+                    ),
+                }
+            )
+            .ConfigureAwait(false);
 
     /// <summary>The call's result, or null when the object does not exist.</summary>
     private static async Task<T?> OrNull<T>(Func<Task<T>> call)

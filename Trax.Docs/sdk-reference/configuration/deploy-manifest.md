@@ -39,12 +39,14 @@ public static class TraxDeployExport
 public sealed class DeployManifest
 {
     public const int CurrentVersion = 1;
+    public const string SecretSourcesSection = "Trax:Deploy:SecretSources";
     public int Version { get; set; }
     public List<string> Roles { get; set; }
     public DeployDatabase? Database { get; set; }
     public List<string> Transports { get; set; }
     public DeployEndpoints Endpoints { get; set; }
     public List<DeployAuthenticationScheme> Authentication { get; set; }
+    public List<string> SecretSources { get; set; }
     public string Write();
     public static DeployManifest Read(string json);
 }
@@ -60,6 +62,7 @@ public sealed class DeployManifest
 | `Transports` | Sorted: `rabbitmq` when the host broadcasts through RabbitMQ (`UseRabbitMq`) or its persisted operations invalidate their caches through it (`UseRabbitMqInvalidation`). |
 | `Endpoints` | `DeployEndpoints`: the paths of `GraphQL` (`UseTraxGraphQL`), `Health` (`MapHealthChecks`) and `Console` (`UseTraxApiDashboard`), each null when not mapped. |
 | `Authentication` | `DeployAuthenticationScheme` per registered scheme, sorted by `Name`, with its `Handler` type name (`JwtBearerHandler`, `OpenIdConnectHandler`, ...). |
+| `SecretSources` | Sorted: where the host reads secrets from at start besides its environment. `aws-secrets` when it calls [AddTraxAwsSecretsAsync](/docs/sdk-reference/configuration/add-trax-aws-secrets). A reader marks itself with `Trax:Deploy:SecretSources:<name> = true` in the host's configuration (`SecretSourcesSection`). A Kubernetes environment on EKS refuses a host without `aws-secrets`, since that is the only way its secrets reach it. |
 
 ## Behavior
 
@@ -85,7 +88,8 @@ dotnet Orders.dll --trax-export-deploy deploy.json
   "database": { "provider": "postgres", "migratesOnStart": true },
   "transports": [],
   "endpoints": { "graphQL": "/trax/graphql", "health": "/trax/health" },
-  "authentication": [{ "name": "Bearer", "handler": "JwtBearerHandler" }]
+  "authentication": [{ "name": "Bearer", "handler": "JwtBearerHandler" }],
+  "secretSources": []
 }
 ```
 

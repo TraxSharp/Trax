@@ -592,7 +592,7 @@ internal static class DeployAwsCommands
                 async () =>
                 {
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
-                    var env = Aws(file, environment, "secret set");
+                    var region = SecretsRegion(file, environment, "secret set");
                     if (!file.Secrets.Contains(name))
                         throw new InvalidOperationException(
                             $"'{name}' is not listed under secrets in {DeployFile.FileName}. Add it there first, so every "
@@ -604,7 +604,7 @@ internal static class DeployAwsCommands
                             "The value is empty; nothing was stored."
                         );
                     var stack = file.StackName(environment);
-                    await Client(env.Region ?? "")
+                    await Client(region)
                         .PutSecretAsync(
                             AwsStack.AppSecretName(stack, name),
                             value,
@@ -633,10 +633,10 @@ internal static class DeployAwsCommands
                 async () =>
                 {
                     var file = await DeployFile.ReadAsync(filePath).ConfigureAwait(false);
-                    var env = Aws(file, environment, "secret list");
+                    var region = SecretsRegion(file, environment, "secret list");
                     var stack = file.StackName(environment);
                     var stored = (
-                        await Client(env.Region ?? "")
+                        await Client(region)
                             .ListSecretsAsync(AwsStack.AppSecretName(stack, ""), ct)
                             .ConfigureAwait(false)
                     ).ToDictionary(s => s.Name, s => s.Changed, StringComparer.Ordinal);
@@ -680,6 +680,15 @@ internal static class DeployAwsCommands
     }
 
     /// <summary>The environment, checked, refused unless its target is aws.</summary>
+    /// <summary>
+    /// The region an environment's app secrets are kept in: an aws environment's, or a kubernetes environment's on EKS,
+    /// whose pods read the same Secrets Manager secrets. Any other environment is refused as <see cref="Aws"/> refuses it.
+    /// </summary>
+    private static string SecretsRegion(DeployFile file, string environment, string command) =>
+        file.Environment(environment).Eks is { Region: { } region }
+            ? region
+            : Aws(file, environment, command).Region ?? "";
+
     private static DeployEnvironment Aws(DeployFile file, string environment, string command)
     {
         var env = file.Environment(environment);

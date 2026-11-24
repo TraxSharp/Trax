@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Trax.Cli.Deploy;
 
 /// <summary>One environment: a stack or a namespace of its own, on the target it names.</summary>
@@ -35,6 +37,13 @@ internal sealed class DeployEnvironment
     /// it the images stay in the local container runtime, for a cluster that reads it.
     /// </summary>
     public string? Registry { get; set; }
+
+    /// <summary>
+    /// A kubernetes environment on EKS: the cluster, and the AWS foundation trax deploys beside it for its database
+    /// and secrets.
+    /// </summary>
+    [JsonPropertyName("aws")]
+    public DeployEnvironmentAws? Eks { get; set; }
 
     /// <summary>A kubernetes environment's Postgres: an existing one named by secret, or one in the cluster.</summary>
     public DeployEnvironmentDatabase? Database { get; set; }

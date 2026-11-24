@@ -100,6 +100,11 @@
           "System.CodeDom": "6.0.0"
         }
       },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -325,6 +330,14 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
+      "trax.effect.configuration.aws": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.SecretsManager": "[4.0.100.15, )",
+          "Microsoft.Extensions.Configuration": "[10.0.12, )",
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
       "trax.effect.data": {
         "type": "Project",
         "dependencies": {
@@ -404,6 +417,15 @@
         "type": "Project",
         "dependencies": {
           "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "AWSSDK.SecretsManager": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.100.15, )",
+        "resolved": "4.0.100.15",
+        "contentHash": "rT7ynrNzVwjrKVOPncko6lCkd2oZCZV7Fq9BW1bnEP9IZurexHz+Gqg+TNN1CCCh4J9HNnd8vIuSg29IX9FxMA==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
       "dbup-core": {
@@ -500,6 +522,16 @@
           "Microsoft.Extensions.Logging": "10.0.12",
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.12",
           "SQLitePCLRaw.core": "2.1.12"
+        }
+      },
+      "Microsoft.Extensions.Configuration": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "e3IPP32CRNL031VZJAUTlCTG0YN7WFh4mN3fsSHTDQCJB+3+f0jGycv4fXk3rrftaY3B85XrQaj7sRthrOsavg==",
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Primitives": "10.0.12"
         }
       },
       "Microsoft.Extensions.DependencyInjection": {

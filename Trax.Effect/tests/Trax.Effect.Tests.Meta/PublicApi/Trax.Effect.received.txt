@@ -165,11 +165,13 @@ namespace Trax.Effect.Configuration.Deploy
     public sealed class DeployManifest
     {
         public const int CurrentVersion = 1;
+        public const string SecretSourcesSection = "Trax:Deploy:SecretSources";
         public DeployManifest() { }
         public System.Collections.Generic.IList<Trax.Effect.Configuration.Deploy.DeployAuthenticationScheme> Authentication { get; set; }
         public Trax.Effect.Configuration.Deploy.DeployDatabase? Database { get; set; }
         public Trax.Effect.Configuration.Deploy.DeployEndpoints Endpoints { get; set; }
         public System.Collections.Generic.IList<string> Roles { get; set; }
+        public System.Collections.Generic.IList<string> SecretSources { get; set; }
         public System.Collections.Generic.IList<string> Transports { get; set; }
         public int Version { get; set; }
         public string Write() { }
