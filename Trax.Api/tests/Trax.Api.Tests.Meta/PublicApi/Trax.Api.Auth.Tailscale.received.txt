@@ -1,0 +1,30 @@
+namespace Trax.Api.Auth.Tailscale
+{
+    public static class TailscaleAuthServiceCollectionExtensions
+    {
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxTailscaleAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.Tailscale.TailscaleBuilder> configure, System.Action<Trax.Api.Auth.Tailscale.TailscaleAuthenticationOptions>? configureOptions = null) { }
+    }
+    public sealed class TailscaleAuthenticationOptions : Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions
+    {
+        public TailscaleAuthenticationOptions() { }
+        public string? ProxySecret { get; set; }
+    }
+    public sealed class TailscaleBuilder
+    {
+        public TailscaleBuilder() { }
+        public Trax.Api.Auth.Tailscale.TailscaleBuilder AnyLogin(params string[] roles) { }
+        public Trax.Api.Auth.Tailscale.TailscaleBuilder Login(string login, params string[] roles) { }
+    }
+    public static class TailscaleDefaults
+    {
+        public const string FunnelHeader = "Tailscale-Funnel-Request";
+        public const string LoginHeader = "Tailscale-User-Login";
+        public const int MinimumProxySecretLength = 32;
+        public const string NameHeader = "Tailscale-User-Name";
+        public const string PolicyName = "TailscalePolicy";
+        public const string PrincipalType = "tailscale";
+        public const string ProfilePictureClaim = "picture";
+        public const string ProfilePictureHeader = "Tailscale-User-Profile-Pic";
+        public const string SchemeName = "TraxTailscale";
+    }
+}

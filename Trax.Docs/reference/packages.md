@@ -8,7 +8,7 @@ nav_order: 3
 
 # Packages
 
-Trax ships as 49 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
+Trax ships as 50 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
 
 Every package releases at the same version, so install them all at one version. The site is published from the latest release, and the nuget.org link shows that release and its dependencies.
 
@@ -134,6 +134,7 @@ dotnet add package Trax.Api.Dashboard
 | [Trax.Api.Auth.Jwt](https://www.nuget.org/packages/Trax.Api.Auth.Jwt) | `AddTraxJwtAuth(...)`, the `AddTraxCognitoJwtAuth`, `AddTraxEntraJwtAuth` and `AddTraxGoogleJwtAuth` presets, and `AddTraxJwtDispatcher` for several issuers on one endpoint. See [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth). | `Trax.Api.Auth.Jwt` | `Trax.Api.GraphQL`. |
 | [Trax.Api.Auth.Jwt.Cognito](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Cognito) | `UseCognito(region, userPoolId, clientId)` on the JWT builder, which also checks Cognito's `token_use` claim. See [UseCognito](/docs/sdk-reference/api-auth/use-cognito). | `Trax.Api.Auth.Jwt.Cognito` | `Trax.Api.Auth.Jwt`. |
 | [Trax.Api.Auth.Oidc](https://www.nuget.org/packages/Trax.Api.Auth.Oidc) | `AddTraxOidcAuth(...)`: the browser-facing OpenID Connect code flow, with a session cookie. See [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth). | `Trax.Api.Auth.Oidc` | A host that browsers sign in to. Token-based API clients use `Trax.Api.Auth.Jwt` instead. |
+| [Trax.Api.Auth.Tailscale](https://www.nuget.org/packages/Trax.Api.Auth.Tailscale) | `AddTraxTailscaleAuth(...)`: sign-in by tailnet identity, from the headers Tailscale serve adds, trusted only from the proxy `trax deploy` puts in front of the hub. See [AddTraxTailscaleAuth](/docs/sdk-reference/api-auth/add-trax-tailscale-auth). | `Trax.Api.Auth.Tailscale` | A hub deployed with `"exposure": "tailnet"`. It refuses to start anywhere else. |
 | [Trax.Api.Auth.Jwt.Testing](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Testing) | `TestJwksServer` and `TestTokenIssuer`: a local JWKS endpoint and signed tokens for integration tests. See [JWT Testing](/docs/sdk-reference/api-auth/test-jwks-server). | `Trax.Api.Auth.Jwt.Testing` | `Trax.Api.Auth.Jwt`, in a test project. |
 | [Trax.Api.Auth.Jwt.Cognito.Issuer](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Cognito.Issuer) | `CreateCognitoIssuer()` on `TestJwksServer`: tokens shaped like Cognito's, for testing `UseCognito`. See [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-token-issuer). | `Trax.Api.Auth.Jwt.Cognito.Issuer` | `Trax.Api.Auth.Jwt.Testing` and `Trax.Api.Auth.Jwt.Cognito`, in a test project. |
 

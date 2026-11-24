@@ -7,11 +7,13 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Trax.Api.Auth.Tailscale;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Dashboard.Serving;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
@@ -177,18 +179,70 @@ public class DeployManifestExportTests
         manifest.Transports.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The tailnet sign-in scheme is reported by name, which is what <c>trax deploy</c> refuses a target that is not
+    /// exposed on a tailnet by. Its startup check runs in the export like any other, so the export needs the exposure
+    /// and the secret, which <c>trax deploy</c> gives it as placeholders.
+    /// </summary>
+    [Test]
+    public async Task A_host_with_tailnet_sign_in_reports_the_scheme()
+    {
+        await using var app = Build(
+            s => s.AddTraxTailscaleAuth(t => t.Login("admin@example.com", "Admin")),
+            settings: new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                [DeployExposure.ConfigurationKey] = DeployExposure.Tailnet,
+                [DeployExposure.ProxySecretKey] = new string('s', 43),
+            }
+        );
+
+        await app.RunTraxAsync(
+            ["--trax-export-deploy", _path.NotNull()],
+            cancellationToken: CancellationToken.None
+        );
+
+        var manifest = DeployManifest.Read(
+            await File.ReadAllTextAsync(_path.NotNull(), cancellationToken: CancellationToken.None)
+        );
+        manifest
+            .Authentication.Select(a => a.Name)
+            .Should()
+            .Contain(DeployExposure.TailscaleScheme);
+    }
+
+    [Test]
+    public async Task A_host_with_tailnet_sign_in_and_no_exposure_refuses_the_export()
+    {
+        await using var app = Build(s =>
+            s.AddTraxTailscaleAuth(t => t.Login("admin@example.com", "Admin"))
+        );
+
+        var act = async () =>
+            await app.RunTraxAsync(
+                    ["--trax-export-deploy", _path.NotNull()],
+                    cancellationToken: CancellationToken.None
+                )
+                .ConfigureAwait(false);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        File.Exists(_path.NotNull()).Should().BeFalse();
+    }
+
     // The store reads through the Trax data context; the export never opens it.
     private static void PersistedOperationStorage(IServiceCollection services) =>
         services.AddSingleton(Substitute.For<IDataContextProviderFactory>());
 
     private static WebApplication Build(
         Action<IServiceCollection>? more = null,
-        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphql = null
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphql = null,
+        IReadOnlyDictionary<string, string?>? settings = null
     )
     {
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions { EnvironmentName = Environments.Production }
         );
+        if (settings is not null)
+            builder.Configuration.AddInMemoryCollection(settings);
         builder.WebHost.UseTestServer();
         builder.Host.UseDefaultServiceProvider(o => o.ValidateOnBuild = false);
 

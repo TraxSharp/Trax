@@ -923,6 +923,12 @@
           "Trax.Api.Auth": "[1.99.99, )"
         }
       },
+      "trax.api.auth.tailscale": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth": "[1.99.99, )"
+        }
+      },
       "trax.api.dashboard": {
         "type": "Project",
         "dependencies": {

@@ -8,16 +8,19 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
+using Trax.Api.Auth.Tailscale;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Tests.Fakes;
+using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -119,23 +122,60 @@ public static partial class AuthE2EHost
         None = 0,
         ApiKey = 1,
         Jwt = 2,
+
+        /// <summary>
+        /// The tailnet sign-in scheme, admitting <see cref="TailnetAdmin"/> and <see cref="TailnetPlayer"/>, on a
+        /// host whose configuration says it is exposed on a tailnet with <see cref="TailnetProxySecret"/>.
+        /// </summary>
+        Tailscale = 4,
     }
 
+    public const string TailnetProxySecret = "tailnet-e2e-proxy-secret-0123456789abcdef";
+    public const string TailnetAdmin = "admin@example.com";
+    public const string TailnetPlayer = "player@example.com";
+
+    /// <param name="schemes">The auth schemes the host registers.</param>
+    /// <param name="database">The fixture's own database.</param>
+    /// <param name="graphQL">Changes to the GraphQL builder.</param>
+    /// <param name="beforeAuthentication">
+    /// Middleware run before authentication, such as <c>UseForwardedHeaders</c>, and the services it needs.
+    /// </param>
     public static async Task<IHost> StartAsync(
         Schemes schemes,
         string database,
-        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphQL = null
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphQL = null,
+        (
+            Action<IServiceCollection> Services,
+            Action<IApplicationBuilder> App
+        )? beforeAuthentication = null
     )
     {
         EnsureDatabaseExists(database);
         var connectionString = ConnectionString(database);
         var host = new HostBuilder()
+            .ConfigureAppConfiguration(config =>
+            {
+                if (schemes.HasFlag(Schemes.Tailscale))
+                    config.AddInMemoryCollection(
+                        new Dictionary<string, string?>(StringComparer.Ordinal)
+                        {
+                            [DeployExposure.ConfigurationKey] = DeployExposure.Tailnet,
+                            [DeployExposure.ProxySecretKey] = TailnetProxySecret,
+                        }
+                    );
+            })
             .ConfigureWebHost(web =>
                 web.UseTestServer()
                     .ConfigureServices(services =>
-                        ConfigureHostServices(services, schemes, connectionString, graphQL)
-                    )
-                    .Configure(app => ConfigureApp(app))
+                    {
+                        ConfigureHostServices(services, schemes, connectionString, graphQL);
+                        beforeAuthentication?.Services(services);
+                    })
+                    .Configure(app =>
+                    {
+                        beforeAuthentication?.App(app);
+                        ConfigureApp(app);
+                    })
             )
             .Build();
 
@@ -226,6 +266,12 @@ public static partial class AuthE2EHost
             services.AddTraxApiKeyAuth(keys =>
                 keys.Add(AdminApiKey, id: "admin", "Admin", "Player")
                     .Add(PlayerApiKey, id: "player", "Player")
+            );
+        }
+        if (schemes.HasFlag(Schemes.Tailscale))
+        {
+            services.AddTraxTailscaleAuth(tailnet =>
+                tailnet.Login(TailnetAdmin, "Admin", "Player").Login(TailnetPlayer, "Player")
             );
         }
         if (schemes.HasFlag(Schemes.Jwt))

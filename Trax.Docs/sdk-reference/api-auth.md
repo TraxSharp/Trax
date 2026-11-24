@@ -1,6 +1,6 @@
 ---
 title: API Auth
-description: "Index of the Trax auth reference: the principal abstraction, the API-key, JWT, Cognito and OIDC schemes, Cognito token minting and the JWT test fixtures."
+description: "Index of the Trax auth reference: the principal, the API-key, JWT, Cognito, OIDC and tailnet schemes, Cognito token minting and the JWT test fixtures."
 type: landing
 area: security
 parent: SDK Reference
@@ -50,6 +50,10 @@ Reference for the Trax authentication packages. How they fit into a secured host
 
 - [TestJwksServer](/docs/sdk-reference/api-auth/test-jwks-server): an in-process discovery and JWKS host.
 - [TestTokenIssuer](/docs/sdk-reference/api-auth/test-token-issuer): mints test tokens, with `TestTokenBuilder`.
+
+## Trax.Api.Auth.Tailscale
+
+- [AddTraxTailscaleAuth](/docs/sdk-reference/api-auth/add-trax-tailscale-auth): sign-in by tailnet login, `TailscaleBuilder`, `TailscaleAuthenticationOptions`, `TailscaleDefaults`.
 
 ## Trax.Api.Auth.Oidc
 

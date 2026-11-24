@@ -64,6 +64,7 @@ public partial class PackagesPageTests
         "Trax.Api.Auth.Jwt.Cognito.Issuer",
         "Trax.Api.Auth.Jwt.Testing",
         "Trax.Api.Auth.Oidc",
+        "Trax.Api.Auth.Tailscale",
         "Trax.Api.Console.Terminal",
         "Trax.Api.Dashboard",
         "Trax.Api.GraphQL",
