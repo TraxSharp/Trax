@@ -31,10 +31,23 @@ internal interface IKubernetesDeployClient
         CancellationToken ct
     );
 
-    /// <summary>The Deployments, StatefulSets, Services, Jobs and PersistentVolumeClaims in the namespace.</summary>
+    /// <summary>The Secret's labels (never its values), or null when it does not exist.</summary>
+    Task<IReadOnlyDictionary<string, string>?> SecretLabelsAsync(
+        string ns,
+        string name,
+        CancellationToken ct
+    );
+
+    /// <summary>
+    /// The Deployments, StatefulSets, Services, Jobs, ServiceAccounts, SecurityGroupPolicies, PersistentVolumeClaims,
+    /// NetworkPolicies, ConfigMaps and Ingresses in the namespace.
+    /// </summary>
     Task<IReadOnlyList<KubernetesObjectState>> ListAsync(string ns, CancellationToken ct);
 
-    /// <summary>Creates or updates a Service, Deployment or StatefulSet with server-side apply.</summary>
+    /// <summary>
+    /// Creates or updates a Service, Deployment, StatefulSet, ServiceAccount, SecurityGroupPolicy, NetworkPolicy,
+    /// ConfigMap, Ingress or Secret with server-side apply.
+    /// </summary>
     Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct);
 
     /// <summary>The Deployment as the cluster holds it, or null when it does not exist.</summary>

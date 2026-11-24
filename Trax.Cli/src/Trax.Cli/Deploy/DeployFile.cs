@@ -212,6 +212,18 @@ internal sealed partial class DeployFile
                             + "a ':' in configuration (Auth__Authority)."
                     )
                 );
+        foreach (var setting in Settings.Concat(Secrets))
+            if (
+                setting.StartsWith("Trax__Deploy__", StringComparison.OrdinalIgnoreCase)
+                || setting.StartsWith("Trax:Deploy:", StringComparison.OrdinalIgnoreCase)
+            )
+                throw new InvalidOperationException(
+                    Problem(
+                        $"'{setting}' is under Trax:Deploy, which trax deploy sets itself: whether a hub is exposed "
+                            + "only on a tailnet, and the secret its proxy proves itself with. An app that set them "
+                            + "could switch tailnet sign-in on where nothing protects it."
+                    )
+                );
         var both = Settings.Intersect(Secrets, StringComparer.Ordinal).ToList();
         if (both.Count > 0)
             throw new InvalidOperationException(

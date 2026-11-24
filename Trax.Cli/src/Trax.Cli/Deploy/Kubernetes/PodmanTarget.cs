@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using k8s;
 using k8s.Models;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Kubernetes;
@@ -45,6 +46,13 @@ internal static class PodmanTarget
     public static string SecretPath(string configHome, string stack) =>
         Path.Combine(configHome, "trax", stack, "secret.yaml");
 
+    /// <summary>
+    /// Where a deploy writes a tailnet exposure's proxy secret, beside the Secrets: a file of its own, played only by
+    /// the hub's unit, so rotating it on every deploy restarts the hub and nothing else.
+    /// </summary>
+    public static string ProxySecretPath(string secretPath) =>
+        Path.Combine(Path.GetDirectoryName(secretPath) ?? ".", "tailnet.yaml");
+
     public static PodmanStack Render(
         DeployFile file,
         string environment,
@@ -71,23 +79,24 @@ internal static class PodmanTarget
                 r.Yaml(Migrate(cluster.Migrate, stack))
             ),
         };
-        var backing = new List<string>();
-        foreach (var o in cluster.Backing.Where(o => o is V1Deployment or V1StatefulSet))
-        {
-            var (name, objects) = Backing(o, stack);
-            files.Add(($"{name}.yaml", r.Yaml([.. objects])));
-            files.Add(($"{name}.kube", r.Kube(name, after: [], migrate: null)));
-            backing.Add(name);
-        }
+        var backing = BackingUnits(cluster, stack, r, files);
 
         var migrator = ComposeTarget.Migrator(file, exports);
         var units = new List<string>(backing);
         var migratorUnit = $"{stack}-{migrator}";
+        var tailnet = KubernetesTailnet.Exposed(env);
+        var host = tailnet ? KubernetesTailnet.Hostname(file, environment, env) : null;
         foreach (var d in cluster.Services.OfType<V1Deployment>())
         {
             var service = d.Metadata.Name;
             var name = $"{stack}-{service}";
-            files.Add(($"{name}.yaml", r.Yaml(Local(d, stack))));
+            var exposed = tailnet && ComposeTarget.Hub(exports[service]);
+            files.Add(
+                (
+                    $"{name}.yaml",
+                    ServiceYaml(r, Local(d, stack), stack, cluster, exposed ? host : null)
+                )
+            );
             var isMigrator = string.Equals(service, migrator, StringComparison.Ordinal);
             files.Add(
                 (
@@ -98,15 +107,175 @@ internal static class PodmanTarget
                         migrate: isMigrator
                             ? new Migration(env.Database is { InCluster: true })
                             : null,
-                        port: ComposeTarget.Hub(exports[service])
+                        port: !tailnet && ComposeTarget.Hub(exports[service])
                             ? file.Services[service].Port
-                            : null
+                            : null,
+                        proxySecret: exposed ? ProxySecretPath(secretPath) : null
                     )
                 )
             );
             units.Add(name);
         }
-        return new PodmanStack(stack, files, Secrets(cluster), units);
+        return new PodmanStack(stack, files, Secrets(cluster), units, cluster.ProxySecretName);
+    }
+
+    /// <summary>Adds the files of Postgres and RabbitMQ when the environment runs them, and returns their units.</summary>
+    private static List<string> BackingUnits(
+        KubernetesManifests cluster,
+        string stack,
+        Units r,
+        List<(string Path, string Content)> files
+    )
+    {
+        var backing = new List<string>();
+        foreach (var o in cluster.Backing.Where(o => o is V1Deployment or V1StatefulSet))
+        {
+            var (name, objects) = Backing(o, stack);
+            files.Add(($"{name}.yaml", r.Yaml([.. objects])));
+            files.Add(($"{name}.kube", r.Kube(name, after: [], migrate: null)));
+            backing.Add(name);
+        }
+        return backing;
+    }
+
+    /// <summary>
+    /// A service's pod YAML; with <paramref name="hostname"/>, the hub's with its tailnet sidecars. A tailnet hub is
+    /// reached only through its sidecar, so its unit publishes no port on the host.
+    /// </summary>
+    private static string ServiceYaml(
+        Units r,
+        V1Deployment local,
+        string stack,
+        KubernetesManifests cluster,
+        string? hostname
+    ) =>
+        hostname is null
+            ? r.Yaml(local)
+            : r.Yaml(
+                Tailnet(
+                    local,
+                    stack,
+                    cluster.SecretName,
+                    cluster.ProxySecretName.NotNull(),
+                    hostname
+                )
+            );
+
+    /// <summary>
+    /// The hub's pod with a tailnet exposure's two sidecars: the edge, bound to 127.0.0.1 in the pod, which sets the
+    /// proxy secret on every request; and Tailscale, which serves HTTPS on the tailnet to the edge. Before it, the
+    /// ConfigMap with the edge's Caddyfile and Tailscale's serve configuration, and the claim Tailscale keeps its node
+    /// key on.
+    /// </summary>
+    private static IKubernetesObject<V1ObjectMeta>[] Tailnet(
+        V1Deployment hub,
+        string stack,
+        string appSecret,
+        string proxySecret,
+        string hostname
+    )
+    {
+        var configName = $"{stack}-{KubernetesTailnet.EdgeName}";
+        var config = TailnetConfig(configName);
+        var claim = TailscaleClaim(stack);
+        var pod = hub.Spec.Template;
+        var edge = KubernetesTarget.EdgeContainer(proxySecret);
+        var tailscale = KubernetesTarget.TailscaleSidecar(appSecret, hostname);
+        // Each sidecar gets a /tmp of its own rather than the hub's.
+        foreach (
+            var (container, scratch) in new[] { (edge, "edge-tmp"), (tailscale, "tailscale-tmp") }
+        )
+        {
+            foreach (var mount in container.VolumeMounts)
+                if (
+                    string.Equals(
+                        mount.Name,
+                        KubernetesTarget.ScratchVolume,
+                        StringComparison.Ordinal
+                    )
+                )
+                    mount.Name = scratch;
+            container.Image = FullImage(container.Image);
+            pod.Spec.Containers.Add(container);
+            pod.Metadata.Annotations[
+                $"container.seccomp.security.alpha.kubernetes.io/{container.Name}"
+            ] = "runtime/default";
+        }
+        pod.Spec.Volumes =
+        [
+            .. pod.Spec.Volumes ?? [],
+            new V1Volume { Name = "edge-tmp", EmptyDir = new V1EmptyDirVolumeSource() },
+            new V1Volume { Name = "tailscale-tmp", EmptyDir = new V1EmptyDirVolumeSource() },
+            KubernetesTarget.EdgeConfigVolume(configName),
+            new V1Volume
+            {
+                Name = "tailscale-config",
+                ConfigMap = new V1ConfigMapVolumeSource { Name = configName },
+            },
+            new V1Volume
+            {
+                Name = "tailscale-state",
+                PersistentVolumeClaim = new V1PersistentVolumeClaimVolumeSource
+                {
+                    ClaimName = claim.Metadata.Name,
+                },
+            },
+        ];
+        return [config, claim, hub];
+    }
+
+    /// <summary>The edge's Caddyfile, bound to 127.0.0.1 in the hub's pod, and Tailscale's serve configuration.</summary>
+    private static V1ConfigMap TailnetConfig(string configName) =>
+        new()
+        {
+            ApiVersion = "v1",
+            Kind = "ConfigMap",
+            Metadata = new V1ObjectMeta { Name = configName },
+            Data = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [KubernetesTarget.EdgeConfigFile] = KubernetesTailnet.Caddyfile(
+                    bind: "127.0.0.1",
+                    upstream: string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"127.0.0.1:{KubernetesTarget.HttpPort}"
+                    )
+                ),
+                [KubernetesTarget.TailscaleServeFile] = KubernetesTailnet.ServeConfig(),
+            },
+        };
+
+    /// <summary>The volume Tailscale keeps its node key on, so a restarted pod is the same machine on the tailnet.</summary>
+    private static V1PersistentVolumeClaim TailscaleClaim(string stack) =>
+        new()
+        {
+            ApiVersion = "v1",
+            Kind = "PersistentVolumeClaim",
+            Metadata = new V1ObjectMeta { Name = $"{stack}-tailscale" },
+            Spec = new V1PersistentVolumeClaimSpec
+            {
+                AccessModes = ["ReadWriteOnce"],
+                Resources = new V1VolumeResourceRequirements
+                {
+                    Requests = new Dictionary<string, ResourceQuantity>(StringComparer.Ordinal)
+                    {
+                        ["storage"] = new ResourceQuantity("16Mi"),
+                    },
+                },
+            },
+        };
+
+    /// <summary>
+    /// The proxy secret as a Secret document, which the hub's unit plays before its pod. A deploy writes a new one
+    /// every time, to <see cref="ProxySecretPath"/>.
+    /// </summary>
+    public static string ProxySecretYaml(PodmanStack stack, string secret)
+    {
+        var name = stack.ProxySecretName.NotNull();
+        var filled = Secret(name, [KubernetesTailnet.ProxySecretKey]);
+        filled.StringData[KubernetesTailnet.ProxySecretKey] = secret;
+        return "# Written by trax deploy: the tailnet proxy's secret, new on every deploy. Keep it mode 0600 and never "
+            + "commit it.\n---\n"
+            + Document(filled);
     }
 
     /// <summary>The Secrets with their keys and no values; <see cref="SecretYaml"/> fills them.</summary>
@@ -285,7 +454,8 @@ internal static class PodmanTarget
             string name,
             IReadOnlyList<string> after,
             Migration? migrate,
-            int? port = null
+            int? port = null,
+            string? proxySecret = null
         )
         {
             var u = new StringBuilder(Header);
@@ -307,6 +477,8 @@ internal static class PodmanTarget
                 );
             u.Append("\n[Service]\n")
                 .Append($"ExecStartPre={Podman} kube play --replace {secretPath}\n");
+            if (proxySecret is not null)
+                u.Append($"ExecStartPre={Podman} kube play --replace {proxySecret}\n");
             if (migrate is not null)
                 Migrations(u, migrate);
             u.Append(

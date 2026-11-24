@@ -13,9 +13,13 @@ namespace Trax.Cli.Deploy.Kubernetes;
 internal sealed class KubernetesDeployer(
     IKubernetesDeployClient cluster,
     IContainerImagePublisher images,
-    Action<string> say
+    Action<string> say,
+    Func<string>? mintProxySecret = null
 )
 {
+    private readonly Func<string> _mintProxySecret =
+        mintProxySecret ?? KubernetesTailnet.MintSecret;
+
     public static readonly TimeSpan RolloutTimeout = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan MigrateTimeout = TimeSpan.FromMinutes(30);
 
@@ -39,9 +43,13 @@ internal sealed class KubernetesDeployer(
         if (eks is null)
             await PublishImagesAsync(file, filePath, env, tag).ConfigureAwait(false);
 
+        // The policies go first, so the in-cluster database and broker are never up without them.
+        await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Policies, ct)
+            .ConfigureAwait(false);
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Backing, ct)
             .ConfigureAwait(false);
         await MigrateAsync(environment, manifests, ct).ConfigureAwait(false);
+        await RotateProxySecretAsync(file, manifests, ct).ConfigureAwait(false);
 
         say($"Rolling the services onto {tag}...");
         var before = await DeploymentsBeforeAsync(manifests, ct).ConfigureAwait(false);
@@ -57,6 +65,47 @@ internal sealed class KubernetesDeployer(
                 failed
             );
         }
+    }
+
+    /// <summary>
+    /// On a tailnet exposure, writes a new proxy secret to its Secret, which the hub and the edge both restart onto
+    /// in this rollout. <see cref="PrepareNamespaceAsync"/> has refused a Secret of that name trax did not write.
+    /// </summary>
+    private async Task RotateProxySecretAsync(
+        DeployFile file,
+        KubernetesManifests manifests,
+        CancellationToken ct
+    )
+    {
+        if (manifests.ProxySecretName is not { } name)
+            return;
+        var ns = manifests.NamespaceName;
+        say($"Rotating the tailnet proxy's secret ({name})...");
+        await cluster
+            .ApplyAsync(
+                new V1Secret
+                {
+                    ApiVersion = "v1",
+                    Kind = "Secret",
+                    Type = "Opaque",
+                    Metadata = new V1ObjectMeta
+                    {
+                        Name = name,
+                        NamespaceProperty = ns,
+                        Labels = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            [KubernetesTarget.ManagedByLabel] = KubernetesTarget.ManagedBy,
+                            [KubernetesTarget.AppLabel] = file.App,
+                        },
+                    },
+                    StringData = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [KubernetesTailnet.ProxySecretKey] = _mintProxySecret(),
+                    },
+                },
+                ct
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -177,6 +226,8 @@ internal sealed class KubernetesDeployer(
             await cluster.CreateNamespaceAsync(manifests.Namespace, ct).ConfigureAwait(false);
         }
 
+        await CheckProxySecretOwnerAsync(file, manifests, ct).ConfigureAwait(false);
+
         var applying = manifests.All.Skip(1).Select(o => (o.Kind, o.Metadata.Name)).ToHashSet();
         foreach (var existing in await cluster.ListAsync(ns, ct).ConfigureAwait(false))
             if (existing.App is not null || applying.Contains((existing.Kind, existing.Name)))
@@ -186,6 +237,27 @@ internal sealed class KubernetesDeployer(
                     existing.App,
                     ownerless: false
                 );
+    }
+
+    /// <summary>Refuses a Secret named like the tailnet proxy's that this app's deploy did not write.</summary>
+    private async Task CheckProxySecretOwnerAsync(
+        DeployFile file,
+        KubernetesManifests manifests,
+        CancellationToken ct
+    )
+    {
+        var ns = manifests.NamespaceName;
+        if (
+            manifests.ProxySecretName is { } proxySecret
+            && await cluster.SecretLabelsAsync(ns, proxySecret, ct).ConfigureAwait(false)
+                is { } held
+        )
+            CheckOwner(
+                file,
+                $"Secret {proxySecret} in namespace {ns}",
+                held.GetValueOrDefault(KubernetesTarget.AppLabel),
+                ownerless: false
+            );
     }
 
     private async Task PublishImagesAsync(
@@ -255,9 +327,10 @@ internal sealed class KubernetesDeployer(
     }
 
     /// <summary>
-    /// Deletes the app's Deployments, StatefulSets, Jobs and Services in the namespace. The in-cluster database's
-    /// volume only with <paramref name="deleteData"/>. The namespace and the Secret stay: trax did not write the
-    /// Secret, and the namespace may hold other things.
+    /// Deletes the app's Deployments, StatefulSets, Jobs, Ingresses, Services, ConfigMaps and network policies in the
+    /// namespace, and the tailnet proxy's Secret, which trax wrote. The in-cluster database's volume only with
+    /// <paramref name="deleteData"/>. The namespace and the app's Secret stay: trax did not write that Secret, and the
+    /// namespace may hold other things.
     /// </summary>
     public async Task DestroyAsync(
         DeployFile file,
@@ -288,9 +361,12 @@ internal sealed class KubernetesDeployer(
             "Deployment",
             "StatefulSet",
             "Job",
+            "Ingress",
             "Service",
+            "ConfigMap",
             "ServiceAccount",
             "SecurityGroupPolicy",
+            "NetworkPolicy",
         ];
         foreach (var kind in order)
         foreach (
@@ -300,6 +376,7 @@ internal sealed class KubernetesDeployer(
             say($"Deleting {kind} {target.Name}...");
             await cluster.DeleteAsync(ns, target, ct).ConfigureAwait(false);
         }
+        await DeleteProxySecretAsync(file, environment, ns, ct).ConfigureAwait(false);
         var claims = mine.Where(o =>
                 string.Equals(o.Kind, "PersistentVolumeClaim", StringComparison.Ordinal)
             )
@@ -319,6 +396,31 @@ internal sealed class KubernetesDeployer(
         say(
             $"The namespace {ns} and the Secret {KubernetesTarget.SecretName(file, environment)} were kept."
         );
+    }
+
+    /// <summary>Deletes the tailnet proxy's Secret, when there is one and this app's deploy wrote it.</summary>
+    private async Task DeleteProxySecretAsync(
+        DeployFile file,
+        string environment,
+        string ns,
+        CancellationToken ct
+    )
+    {
+        var proxySecret = KubernetesTailnet.ProxySecretName(file, environment);
+        if (
+            await cluster.SecretLabelsAsync(ns, proxySecret, ct).ConfigureAwait(false) is { } held
+            && string.Equals(
+                held.GetValueOrDefault(KubernetesTarget.AppLabel),
+                file.App,
+                StringComparison.Ordinal
+            )
+        )
+        {
+            say($"Deleting Secret {proxySecret}...");
+            await cluster
+                .DeleteAsync(ns, new KubernetesObjectState("Secret", proxySecret, file.App), ct)
+                .ConfigureAwait(false);
+        }
     }
 
     private static bool Rolls(k8s.IKubernetesObject o) => o.Kind is "Deployment" or "StatefulSet";

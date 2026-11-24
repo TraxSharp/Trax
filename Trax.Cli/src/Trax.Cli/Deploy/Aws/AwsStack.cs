@@ -794,6 +794,10 @@ internal static partial class AwsStack
     )
     {
         ComposeTarget.CheckHosts(file, exports, name => file.Count(env, name));
+        TailnetSignIn.Refuse(
+            exports,
+            "an aws environment serves through a public load balancer, where anyone can send those headers."
+        );
         var apis = file.Services.Keys.Where(s => exports[s].Roles.Contains("api")).ToList();
         if (apis.Count > 1)
             throw new InvalidOperationException(

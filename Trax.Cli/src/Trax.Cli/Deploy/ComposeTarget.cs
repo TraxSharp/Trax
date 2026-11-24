@@ -307,6 +307,11 @@ internal static class ComposeTarget
     internal static void Check(DeployFile file, IReadOnlyDictionary<string, DeployManifest> exports)
     {
         CheckHosts(file, exports, name => file.Services[name].Count);
+        TailnetSignIn.Refuse(
+            exports,
+            "a compose stack publishes its hub on 127.0.0.1, where every process on the host, and a browser through "
+                + "DNS rebinding, can send those headers."
+        );
         foreach (var (name, service) in file.Services)
             if (service.Port is { } port && !Hub(exports[name]))
                 throw new InvalidOperationException(

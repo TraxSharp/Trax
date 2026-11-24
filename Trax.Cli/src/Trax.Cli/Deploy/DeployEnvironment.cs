@@ -17,6 +17,9 @@ internal sealed class DeployEnvironment
 
     public const string Cluster = "cluster";
 
+    public const string Tailnet = "tailnet";
+    public const string Public = "public";
+
     /// <summary>Where the environment runs: <c>compose</c>, <c>aws</c> (ECS Fargate) or <c>kubernetes</c>.</summary>
     public string? Target { get; set; }
 
@@ -44,6 +47,18 @@ internal sealed class DeployEnvironment
     /// </summary>
     [JsonPropertyName("aws")]
     public DeployEnvironmentAws? Eks { get; set; }
+
+    /// <summary>
+    /// What reaches a kubernetes environment's hub from outside: <c>tailnet</c>, only the people and devices on the
+    /// user's tailnet, through a Tailscale proxy trax renders (the Tailscale operator's Ingress on a cluster, a sidecar
+    /// in the hub's pod under podman). Without it nothing outside the cluster reaches the hub, and under podman the hub
+    /// is published on 127.0.0.1 only. <c>public</c> is not offered yet.
+    /// </summary>
+    public string? Exposure { get; set; }
+
+    /// <summary>How a <c>tailnet</c> exposure is named and reached.</summary>
+    [JsonPropertyName("tailnet")]
+    public DeployEnvironmentTailnet? TailnetOptions { get; set; }
 
     /// <summary>A kubernetes environment's Postgres: an existing one named by secret, or one in the cluster.</summary>
     public DeployEnvironmentDatabase? Database { get; set; }

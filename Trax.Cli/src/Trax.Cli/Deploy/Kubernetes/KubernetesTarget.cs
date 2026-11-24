@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using k8s;
 using k8s.Models;
 using Trax.Cli.Deploy.Aws;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Kubernetes;
@@ -12,7 +13,9 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// hub at one copy with <c>Recreate</c>, so two never run at once; workers rolling at their count), a ClusterIP
 /// Service for each hub, a migrate Job that runs before any of them, and in-cluster Postgres and RabbitMQ off
 /// production. Every container gets <see cref="ServiceHardening"/> as its securityContext and memory limit, and no
-/// secret value is written: each comes from a Secret by reference.
+/// secret value is written: each comes from a Secret by reference. On a cluster every pod in the namespace refuses
+/// ingress but from the app's own pods, and a <c>tailnet</c> exposure adds the edge and the Tailscale operator's
+/// Ingress in front of the hub (<see cref="KubernetesTailnet"/>).
 /// </summary>
 internal static partial class KubernetesTarget
 {
@@ -46,6 +49,139 @@ internal static partial class KubernetesTarget
 
     /// <summary>How long a finished migrate Job is kept for its log, in seconds: one day.</summary>
     public const int MigrateJobTtlSeconds = 86_400;
+
+    /// <summary>The label Kubernetes puts on every namespace, holding its name.</summary>
+    public const string NamespaceNameLabel = "kubernetes.io/metadata.name";
+
+    /// <summary>The labels the Tailscale operator puts on the proxy pods it runs for an Ingress.</summary>
+    public const string OperatorManagedLabel = "tailscale.com/managed";
+
+    public const string OperatorParentTypeLabel = "tailscale.com/parent-resource-type";
+    public const string OperatorParentNameLabel = "tailscale.com/parent-resource";
+    public const string OperatorParentNamespaceLabel = "tailscale.com/parent-resource-ns";
+
+    /// <summary>The edge's Caddyfile, as a key of its ConfigMap and a file in <see cref="EdgeConfigPath"/>.</summary>
+    public const string EdgeConfigFile = "Caddyfile";
+
+    public const string EdgeConfigPath = "/etc/caddy";
+
+    /// <summary>
+    /// The edge's container: Caddy as an unprivileged user with every capability dropped and a read-only root,
+    /// reading its Caddyfile from <see cref="EdgeConfigPath"/> and the proxy secret from <paramref name="proxySecret"/>.
+    /// </summary>
+    internal static V1Container EdgeContainer(string proxySecret)
+    {
+        var container = Renderer.Container(
+            KubernetesTailnet.EdgeName,
+            KubernetesTailnet.CaddyImage,
+            new ServiceHardening(
+                [],
+                ServiceHardening.MinimumMemoryMiB,
+                ServiceHardening.DefaultPids,
+                Cpus: null,
+                ReadOnlyRoot: true
+            ),
+            nonRoot: true,
+            [
+                FromSecret(
+                    KubernetesTailnet.EdgeSecretVariable,
+                    proxySecret,
+                    KubernetesTailnet.ProxySecretKey
+                ),
+                Value("XDG_CONFIG_HOME", "/tmp/config"),
+                Value("XDG_DATA_HOME", "/tmp/data"),
+            ]
+        );
+        container.SecurityContext.RunAsUser = KubernetesTailnet.EdgeUser;
+        container.SecurityContext.RunAsGroup = KubernetesTailnet.EdgeUser;
+        container.Args =
+        [
+            "caddy",
+            "run",
+            "--config",
+            $"{EdgeConfigPath}/{EdgeConfigFile}",
+            "--adapter",
+            "caddyfile",
+        ];
+        container.Ports =
+        [
+            new V1ContainerPort { Name = "edge", ContainerPort = KubernetesTailnet.EdgePort },
+        ];
+        container.VolumeMounts.Add(
+            new V1VolumeMount
+            {
+                Name = "edge-config",
+                MountPath = EdgeConfigPath,
+                ReadOnlyProperty = true,
+            }
+        );
+        container.ReadinessProbe = new V1Probe
+        {
+            TcpSocket = new V1TCPSocketAction { Port = KubernetesTailnet.EdgePort },
+            PeriodSeconds = 5,
+        };
+        return container;
+    }
+
+    /// <summary>Where the podman sidecar keeps its node key, so a restart is the same machine on the tailnet.</summary>
+    public const string TailscaleStatePath = "/var/lib/tailscale";
+
+    /// <summary>Where the podman sidecar reads its serve configuration.</summary>
+    public const string TailscaleConfigPath = "/config";
+
+    public const string TailscaleServeFile = "serve.json";
+
+    /// <summary>
+    /// The Tailscale sidecar of a podman hub: userspace networking, so it needs no capability and no tun device,
+    /// every capability dropped and a read-only root, its auth key from the app's Secret (from <c>.env</c>), and
+    /// Tailscale serve proxying HTTPS on the tailnet to the edge on 127.0.0.1. It joins as
+    /// <paramref name="hostname"/>.
+    /// </summary>
+    internal static V1Container TailscaleSidecar(string appSecret, string hostname)
+    {
+        var container = Renderer.Container(
+            "tailscale",
+            KubernetesTailnet.TailscaleImage,
+            new ServiceHardening(
+                [],
+                MemoryMiB: 256,
+                ServiceHardening.DefaultPids,
+                Cpus: null,
+                ReadOnlyRoot: true
+            ),
+            nonRoot: false,
+            [
+                FromSecret("TS_AUTHKEY", appSecret, KubernetesTailnet.AuthKeySecretKey),
+                Value("TS_HOSTNAME", hostname),
+                Value("TS_USERSPACE", "true"),
+                Value("TS_AUTH_ONCE", "true"),
+                Value("TS_ACCEPT_DNS", "false"),
+                Value("TS_STATE_DIR", TailscaleStatePath),
+                Value("TS_SOCKET", "/tmp/tailscaled.sock"),
+                Value("TS_SERVE_CONFIG", $"{TailscaleConfigPath}/{TailscaleServeFile}"),
+            ]
+        );
+        container.VolumeMounts.Add(
+            new V1VolumeMount { Name = "tailscale-state", MountPath = TailscaleStatePath }
+        );
+        container.VolumeMounts.Add(
+            new V1VolumeMount
+            {
+                Name = "tailscale-config",
+                MountPath = TailscaleConfigPath,
+                ReadOnlyProperty = true,
+            }
+        );
+        return container;
+    }
+
+    /// <summary>The volume the edge reads its Caddyfile from, the ConfigMap <paramref name="configMap"/>.</summary>
+    internal static V1Volume EdgeConfigVolume(string configMap) =>
+        new()
+        {
+            Name = "edge-config",
+            ConfigMap = new V1ConfigMapVolumeSource { Name = configMap },
+        };
 
     public static string NamespaceName(
         DeployFile file,
@@ -102,6 +238,65 @@ internal static partial class KubernetesTarget
             );
         ComposeTarget.CheckHosts(file, exports, name => file.Count(env, name));
         var rabbit = exports.Values.Any(e => e.Transports.Contains("rabbitmq"));
+        CheckBroker(environment, env, rabbit, eks);
+        var inCluster = env.Database is { InCluster: true };
+        var ns = NamespaceName(file, environment, env);
+        var secret = SecretName(file, environment);
+        var tailnet = KubernetesTailnet.Exposed(env);
+        var onPodman = string.Equals(
+            env.Runtime,
+            DeployEnvironment.Podman,
+            StringComparison.Ordinal
+        );
+        var hub = TailnetHub(file, environment, env, exports);
+        var r = new Renderer(
+            file,
+            env,
+            ns,
+            secret,
+            eks,
+            tailnet ? KubernetesTailnet.ProxySecretName(file, environment) : null,
+            tag
+        );
+
+        var migrator = ComposeTarget.Migrator(file, exports);
+        var job = r.MigrateJob(
+            MigrateJobName(file, tag),
+            r.Image(migrator, tag),
+            ServiceHardening.Trax(file.Services[migrator]),
+            r.TraxEnv(rabbit)
+        );
+        if (eks is not null)
+            job.Spec.Template.Spec.ServiceAccountName = migrator;
+
+        var services = Services(file, env, exports, tag, r, rabbit);
+        if (tailnet && !onPodman)
+            services.AddRange(
+                r.TailnetEdge(KubernetesTailnet.Hostname(file, environment, env), hub.NotNull())
+            );
+        return new KubernetesManifests(
+            NamespaceObject(file, ns),
+            onPodman ? [] : r.Policies(hub),
+            secret,
+            eks is null ? SecretKeys(file, inCluster, rabbit, tailnet && onPodman) : [],
+            env.Database is { Secret: { } dbSecret, Key: { } dbKey }
+                ? new V1SecretKeySelector { Name = dbSecret, Key = dbKey }
+                : null,
+            eks is null ? Backing(r, inCluster, rabbit) : r.EksIdentity(eks),
+            job,
+            services,
+            r.ProxySecret
+        );
+    }
+
+    /// <summary>Refuses a broker the environment cannot run: none on production, none on EKS, a limit on none.</summary>
+    private static void CheckBroker(
+        string environment,
+        DeployEnvironment env,
+        bool rabbit,
+        EksTarget? eks
+    )
+    {
         if (!rabbit && env.Limits.ContainsKey(DeployFile.BackingBroker))
             throw new InvalidOperationException(
                 $"Environment '{environment}': limits names {DeployFile.BackingBroker}, and no host uses RabbitMQ, so "
@@ -121,42 +316,62 @@ internal static partial class KubernetesTarget
                 $"Environment '{environment}': a host uses RabbitMQ, and on EKS trax neither runs a broker nor names "
                     + "an existing one yet. Use a transport other than RabbitMQ."
             );
-        var inCluster = env.Database is { InCluster: true };
-        var ns = NamespaceName(file, environment, env);
-        var secret = SecretName(file, environment);
-        var r = new Renderer(file, env, ns, secret, eks);
-
-        var migrator = ComposeTarget.Migrator(file, exports);
-        var job = r.MigrateJob(
-            MigrateJobName(file, tag),
-            r.Image(migrator, tag),
-            ServiceHardening.Trax(file.Services[migrator]),
-            r.TraxEnv(rabbit)
-        );
-        if (eks is not null)
-            job.Spec.Template.Spec.ServiceAccountName = migrator;
-
-        return new KubernetesManifests(
-            NamespaceObject(file, ns),
-            secret,
-            eks is null ? SecretKeys(file, inCluster, rabbit) : [],
-            env.Database is { Secret: { } dbSecret, Key: { } dbKey }
-                ? new V1SecretKeySelector { Name = dbSecret, Key = dbKey }
-                : null,
-            eks is null ? Backing(r, inCluster, rabbit) : r.EksIdentity(eks),
-            job,
-            Services(file, env, exports, tag, r, rabbit)
-        );
     }
 
-    /// <summary>The keys the app's Secret must hold: the in-cluster passwords it needs, then the file's secrets.</summary>
-    private static List<string> SecretKeys(DeployFile file, bool inCluster, bool rabbit)
+    /// <summary>
+    /// The hub a tailnet exposure puts on the tailnet, or null when the environment is not exposed. Refuses a host that
+    /// signs people in by tailnet identity anywhere else: on an environment that is not exposed on a tailnet, or on a
+    /// service that is not the exposed hub. A tailnet exposure serves exactly one hub.
+    /// </summary>
+    private static string? TailnetHub(
+        DeployFile file,
+        string environment,
+        DeployEnvironment env,
+        IReadOnlyDictionary<string, DeployManifest> exports
+    )
+    {
+        if (!KubernetesTailnet.Exposed(env))
+        {
+            TailnetSignIn.Refuse(
+                exports,
+                $"environment '{environment}' is not exposed on a tailnet, so nothing proves its requests came "
+                    + "through Tailscale."
+            );
+            return null;
+        }
+        var hubs = file.Services.Keys.Where(s => ComposeTarget.Hub(exports[s])).ToList();
+        if (hubs.Count != 1)
+            throw new InvalidOperationException(
+                $"Environment '{environment}': a tailnet exposure puts one hub on the tailnet, and this app has "
+                    + (hubs.Count == 0 ? "none" : string.Join(", ", hubs))
+                    + "."
+            );
+        TailnetSignIn.Refuse(
+            exports,
+            $"only the hub '{hubs[0]}' is behind the tailnet proxy in environment '{environment}'.",
+            allowed: hubs[0]
+        );
+        return hubs[0];
+    }
+
+    /// <summary>
+    /// The keys the app's Secret must hold: the in-cluster passwords it needs, the Tailscale auth key of a podman
+    /// sidecar, then the file's secrets.
+    /// </summary>
+    private static List<string> SecretKeys(
+        DeployFile file,
+        bool inCluster,
+        bool rabbit,
+        bool tailscaleSidecar
+    )
     {
         var keys = new List<string>();
         if (inCluster)
             keys.Add(PostgresPasswordKey);
         if (rabbit)
             keys.Add(RabbitMqPasswordKey);
+        if (tailscaleSidecar)
+            keys.Add(KubernetesTailnet.AuthKeySecretKey);
         keys.AddRange(file.Secrets.Order(StringComparer.Ordinal));
         return keys;
     }
@@ -226,6 +441,8 @@ internal static partial class KubernetesTarget
             );
             if (r.OnEks)
                 deployment.Spec.Template.Spec.ServiceAccountName = name;
+            if (hub)
+                r.TrustTailnetProxy(deployment);
             services.Add(deployment);
         }
         return services;
@@ -267,10 +484,15 @@ internal static partial class KubernetesTarget
         DeployEnvironment env,
         string ns,
         string secret,
-        EksTarget? eks
+        EksTarget? eks,
+        string? proxySecret,
+        string tag
     )
     {
         public bool OnEks => eks is not null;
+
+        /// <summary>The Secret the proxy secret is held in, when the environment is exposed on a tailnet.</summary>
+        public string? ProxySecret => proxySecret;
 
         /// <summary>A service's image: where a deploy to EKS pushed it, else from the environment's registry.</summary>
         public string Image(string service, string tag) =>
@@ -321,6 +543,224 @@ internal static partial class KubernetesTarget
                 );
             return objects;
         }
+
+        /// <summary>
+        /// Makes <paramref name="hub"/> the one the tailnet proxy reaches: it is told it is exposed only on a tailnet
+        /// and given the proxy's secret, and its pod is marked with this deploy so the secret it reads is this
+        /// deploy's. Nothing when the environment is not exposed.
+        /// </summary>
+        public void TrustTailnetProxy(V1Deployment hub)
+        {
+            if (proxySecret is null)
+                return;
+            var container = hub.Spec.Template.Spec.Containers[0];
+            container.Env.Add(Value(DeployExposure.Variable, DeployExposure.Tailnet));
+            container.Env.Add(
+                FromSecret(
+                    DeployExposure.ProxySecretVariable,
+                    proxySecret,
+                    KubernetesTailnet.ProxySecretKey
+                )
+            );
+            Mark(hub.Spec.Template);
+        }
+
+        private void Mark(V1PodTemplateSpec template) =>
+            template.Metadata.Annotations[KubernetesTailnet.GenerationAnnotation] = tag;
+
+        /// <summary>
+        /// The edge on a cluster: its Caddyfile, its Deployment and Service, and the Tailscale operator's Ingress in
+        /// front of it, which puts it on the tailnet as <paramref name="hostname"/>.
+        /// </summary>
+        public List<IKubernetesObject<V1ObjectMeta>> TailnetEdge(string hostname, string hub)
+        {
+            const string name = KubernetesTailnet.EdgeName;
+            var config = new V1ConfigMap
+            {
+                ApiVersion = "v1",
+                Kind = "ConfigMap",
+                Metadata = Meta(name),
+                Data = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [EdgeConfigFile] = KubernetesTailnet.Caddyfile(
+                        bind: null,
+                        upstream: string.Create(CultureInfo.InvariantCulture, $"{hub}:{HttpPort}")
+                    ),
+                },
+            };
+            var template = Pod(name, EdgeContainer(proxySecret.NotNull()));
+            template.Metadata.Labels[KubernetesTailnet.RoleLabel] = KubernetesTailnet.EdgeRole;
+            template.Spec.Volumes = [.. template.Spec.Volumes ?? [], EdgeConfigVolume(name)];
+            Mark(template);
+            var meta = Meta(name);
+            meta.Labels[KubernetesTailnet.RoleLabel] = KubernetesTailnet.EdgeRole;
+            var deployment = new V1Deployment
+            {
+                ApiVersion = "apps/v1",
+                Kind = "Deployment",
+                Metadata = meta,
+                Spec = new V1DeploymentSpec
+                {
+                    Replicas = 1,
+                    ProgressDeadlineSeconds = RolloutProgressDeadlineSeconds,
+                    Selector = new V1LabelSelector { MatchLabels = Selector(name) },
+                    Template = template,
+                },
+            };
+            var service = Service(name, KubernetesTailnet.EdgePort);
+            var ingress = new V1Ingress
+            {
+                ApiVersion = "networking.k8s.io/v1",
+                Kind = "Ingress",
+                Metadata = Meta(name),
+                Spec = new V1IngressSpec
+                {
+                    IngressClassName = KubernetesTailnet.IngressClass,
+                    DefaultBackend = new V1IngressBackend
+                    {
+                        Service = new V1IngressServiceBackend
+                        {
+                            Name = name,
+                            Port = new V1ServiceBackendPort { Number = KubernetesTailnet.EdgePort },
+                        },
+                    },
+                    Tls = [new V1IngressTLS { Hosts = [hostname] }],
+                },
+            };
+            return [config, deployment, service, ingress];
+        }
+
+        /// <summary>
+        /// The namespace's ingress policies: every pod in it refuses every connection by default; the app's pods
+        /// (but the edge) accept the app's pods (but the edge); and, on a tailnet, the edge accepts only the Tailscale
+        /// operator's proxy pod for this Ingress, and the hub accepts the edge. Egress is not limited here.
+        /// </summary>
+        public List<V1NetworkPolicy> Policies(string? hub)
+        {
+            var app = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AppLabel] = file.App,
+            };
+            V1LabelSelector NotEdge() =>
+                new()
+                {
+                    MatchLabels = new Dictionary<string, string>(app, StringComparer.Ordinal),
+                    MatchExpressions =
+                    [
+                        new V1LabelSelectorRequirement
+                        {
+                            Key = KubernetesTailnet.RoleLabel,
+                            OperatorProperty = "DoesNotExist",
+                        },
+                    ],
+                };
+            var policies = new List<V1NetworkPolicy>
+            {
+                Policy($"{file.App}-deny", new V1LabelSelector(), ingress: []),
+                Policy(
+                    $"{file.App}-within",
+                    NotEdge(),
+                    [
+                        new V1NetworkPolicyIngressRule
+                        {
+                            FromProperty = [new V1NetworkPolicyPeer { PodSelector = NotEdge() }],
+                        },
+                    ]
+                ),
+            };
+            if (proxySecret is not null && hub is not null)
+                policies.AddRange(TailnetPolicies(app, hub));
+            return policies;
+        }
+
+        /// <summary>
+        /// The edge accepts only the operator's proxy pod for this Ingress, on the edge's port; the hub accepts the
+        /// edge on its own.
+        /// </summary>
+        private IEnumerable<V1NetworkPolicy> TailnetPolicies(
+            Dictionary<string, string> app,
+            string hub
+        )
+        {
+            var edge = new Dictionary<string, string>(app, StringComparer.Ordinal)
+            {
+                [KubernetesTailnet.RoleLabel] = KubernetesTailnet.EdgeRole,
+            };
+            yield return Policy(
+                $"{file.App}-tailnet",
+                new V1LabelSelector { MatchLabels = edge },
+                [
+                    new V1NetworkPolicyIngressRule
+                    {
+                        FromProperty = [OperatorProxy()],
+                        Ports = [Tcp(KubernetesTailnet.EdgePort)],
+                    },
+                ]
+            );
+            yield return Policy(
+                $"{file.App}-tailnet-hub",
+                new V1LabelSelector { MatchLabels = Selector(hub) },
+                [
+                    new V1NetworkPolicyIngressRule
+                    {
+                        FromProperty =
+                        [
+                            new V1NetworkPolicyPeer
+                            {
+                                PodSelector = new V1LabelSelector { MatchLabels = edge },
+                            },
+                        ],
+                        Ports = [Tcp(HttpPort)],
+                    },
+                ]
+            );
+        }
+
+        /// <summary>
+        /// The Tailscale operator's proxy pod for this environment's Ingress, by the labels the operator puts on it, in
+        /// the operator's namespace.
+        /// </summary>
+        private V1NetworkPolicyPeer OperatorProxy() =>
+            new()
+            {
+                NamespaceSelector = new V1LabelSelector
+                {
+                    MatchLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [NamespaceNameLabel] = KubernetesTailnet.OperatorNamespace(env),
+                    },
+                },
+                PodSelector = new V1LabelSelector
+                {
+                    MatchLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [OperatorManagedLabel] = "true",
+                        [OperatorParentTypeLabel] = "ingress",
+                        [OperatorParentNameLabel] = KubernetesTailnet.EdgeName,
+                        [OperatorParentNamespaceLabel] = ns,
+                    },
+                },
+            };
+
+        private static V1NetworkPolicyPort Tcp(int port) => new() { Protocol = "TCP", Port = port };
+
+        private V1NetworkPolicy Policy(
+            string name,
+            V1LabelSelector pods,
+            IList<V1NetworkPolicyIngressRule> ingress
+        ) =>
+            new()
+            {
+                ApiVersion = "networking.k8s.io/v1",
+                Kind = "NetworkPolicy",
+                Metadata = Meta(name),
+                Spec = new V1NetworkPolicySpec
+                {
+                    PodSelector = pods,
+                    PolicyTypes = ["Ingress"],
+                    Ingress = ingress,
+                },
+            };
 
         public Dictionary<string, string> Labels(string name) =>
             new(StringComparer.Ordinal)

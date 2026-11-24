@@ -162,6 +162,16 @@ namespace Trax.Effect.Configuration.Deploy
         public string? GraphQL { get; set; }
         public string? Health { get; set; }
     }
+    public static class DeployExposure
+    {
+        public const string ConfigurationKey = "Trax:Deploy:Exposure";
+        public const string ProxySecretHeader = "Trax-Proxy-Secret";
+        public const string ProxySecretKey = "Trax:Deploy:ProxySecret";
+        public const string ProxySecretVariable = "Trax__Deploy__ProxySecret";
+        public const string Tailnet = "tailnet";
+        public const string TailscaleScheme = "TraxTailscale";
+        public const string Variable = "Trax__Deploy__Exposure";
+    }
     public sealed class DeployManifest
     {
         public const int CurrentVersion = 1;

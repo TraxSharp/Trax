@@ -167,6 +167,8 @@ public partial class DeployKubernetesTests
             .Should()
             .Equal(
                 "Namespace",
+                "NetworkPolicy",
+                "NetworkPolicy",
                 "Service",
                 "StatefulSet",
                 "Job",
@@ -780,8 +782,8 @@ public partial class DeployKubernetesTests
             .Order(StringComparer.Ordinal)
             .ToList();
         files[0].Should().Be("00-namespace-orders-staging.yaml");
-        files.Should().Contain("05-deployment-hub.yaml");
-        (await File.ReadAllTextAsync(Path.Combine(dir, "05-deployment-hub.yaml")))
+        files.Should().Contain("07-deployment-hub.yaml");
+        (await File.ReadAllTextAsync(Path.Combine(dir, "07-deployment-hub.yaml")))
             .Should()
             .Contain("kind: Deployment")
             .And.Contain("type: Recreate")

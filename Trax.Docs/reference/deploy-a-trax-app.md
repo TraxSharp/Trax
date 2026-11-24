@@ -109,8 +109,16 @@ kubectl port-forward -n orders-staging service/hub 8080
 The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in the
 process list. A deploy refuses before it applies anything, even the namespace, while the Secret lacks a key. It brings up Postgres (and RabbitMQ),
 runs the migration as a Job, and only when that succeeds rolls each service and waits for it to be ready. The hub
-runs one copy and stops before its next version starts; workers roll at their `count`. Nothing is exposed outside
-the cluster yet, so reach the hub with `kubectl port-forward`.
+runs one copy and stops before its next version starts; workers roll at their `count`. Every pod in the namespace
+accepts connections only from the app's own pods. Nothing outside the cluster reaches the hub, so reach it with
+`kubectl port-forward`.
+
+To reach it from your devices instead, put it on your tailnet: install the
+[Tailscale Kubernetes operator](https://tailscale.com/kb/1236/kubernetes-operator) in the cluster and add
+`"exposure": "tailnet"` to the environment. The hub is then at `https://<app>-<env>.<tailnet>.ts.net`, and nothing
+binds a public address. With it the hub can sign people in by their tailnet login
+([`AddTraxTailscaleAuth`](/docs/sdk-reference/api-auth/add-trax-tailscale-auth)); the
+[CLI reference](/docs/reference/cli#exposed-on-a-tailnet) says what it renders.
 
 The `production` profile, the default, refuses Postgres and RabbitMQ in the cluster: name an existing database
 with `"database": { "secret": "orders-db", "key": "connection" }`, a Secret holding its whole connection string.
@@ -124,7 +132,9 @@ database and secrets: the pods read their secrets from Secrets Manager with a ro
 
 The same environment runs on one host with no cluster: give it `"runtime": "podman"` and `trax deploy --env` writes
 pod YAML and Quadlet units for systemd to run, takes the secret values from the `.env` beside `trax.deploy.json` into
-a file only you can read under `~/.config/trax/`, and prints the commands that install and start the units. The
+a file only you can read under `~/.config/trax/`, and prints the commands that install and start the units. With
+`"exposure": "tailnet"` the hub's pod gets a Tailscale sidecar, which reads its auth key from `TAILSCALE_AUTH_KEY` in
+the same `.env`, and no port is published on the host. The
 [CLI reference](/docs/reference/cli#on-one-host-under-podman) lists what differs from a cluster.
 
 ## One hub

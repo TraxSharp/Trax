@@ -111,6 +111,10 @@ internal sealed class DotnetHostExporter(CancellationToken ct = default) : IHost
             values[name] = "https://trax-deploy-export.invalid";
         foreach (var name in file.Secrets)
             values[name] = "trax-deploy-export";
+        // A host with tailnet sign-in refuses to start without both. The export serves nothing, and the target
+        // decides from the report whether the scheme may be deployed there at all.
+        values[DeployExposure.Variable] = DeployExposure.Tailnet;
+        values[DeployExposure.ProxySecretVariable] = "trax-deploy-export-placeholder-proxy-secret";
         return values;
     }
 }

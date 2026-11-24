@@ -920,20 +920,25 @@ kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm
 | `database` | Required: every kubernetes environment names its database, and a `production` one names a Secret. `{ "secret": ..., "key": ... }`: an existing Secret in the namespace holding the whole Postgres connection string, read as `ConnectionStrings__<trax name>`. Or `{ "inCluster": true }`: Postgres 17 as a StatefulSet of one with a 1Gi volume and a headless Service, refused under `production`. |
 | `settings` | A value for each name the file lists under `settings`, written into the manifests as plain values. |
 | `counts` | Copies per service here, over the file's `count`. |
+| `exposure` | What reaches the hub from outside the cluster. Left out, nothing does. `tailnet`: only the people and devices on your tailnet, through the Tailscale operator, below. `public` is not offered yet and is refused, as is any other value. Refused on `aws` and `compose` environments, which serve through their own load balancer and loopback port. |
+| `tailnet` | With `"exposure": "tailnet"` only. `hostname`: the hub's machine name on the tailnet, `<app>-<env>` when left out. `operatorNamespace`: the namespace the Tailscale operator runs its proxies in, `tailscale` when left out; refused under podman. |
 
 What it applies, in this order:
 
 1. the namespace, unless it exists, once the Secret check has passed;
-2. in a `try` environment, Postgres (when `inCluster`) and RabbitMQ (when a host uses it, as a Deployment of one;
+2. the network policies, before anything they protect (below);
+3. in a `try` environment, Postgres (when `inCluster`) and RabbitMQ (when a host uses it, as a Deployment of one;
    refused in `production`, since trax cannot name an existing broker yet), waiting for each to be ready;
-3. the migrate Job `<app>-migrate-<tag>`, a new one each deploy since a Job cannot be changed: the image of the
+4. the migrate Job `<app>-migrate-<tag>`, a new one each deploy since a Job cannot be changed: the image of the
    service that serves the API, run with `--trax-migrate`, `backoffLimit: 0`, kept a day after it finishes. If it
    fails, trax prints the end of its log and stops; no Deployment is touched;
-4. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
+5. with `"exposure": "tailnet"`, a new proxy secret in the Secret `<app>-<env>-tailnet` (below);
+6. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
    runs one copy with `strategy: Recreate`, so the old hub stops before the new one starts: a few seconds without a
    hub, never two. Workers roll at their count. A hub also gets a ClusterIP Service on port 8080, and every service
-   that reports a health endpoint gets readiness and liveness probes on it;
-5. waits for each Deployment to roll out: every copy updated and available, within ten minutes. Each Deployment has
+   that reports a health endpoint gets readiness and liveness probes on it. With `"exposure": "tailnet"`, the edge
+   and the operator's Ingress too;
+7. waits for each Deployment to roll out: every copy updated and available, within ten minutes. Each Deployment has
    `progressDeadlineSeconds: 300`, so a rollout that makes no progress for five minutes (a crash loop, an image that
    never passes readiness) ends the wait as soon as the cluster marks it, not at ten minutes.
 
@@ -979,19 +984,72 @@ rm orders-staging.env
 The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in
 the process list.
 
-Nothing is exposed outside the cluster yet. Until it is, reach a hub with
-`kubectl port-forward -n orders-staging service/hub 8080`.
+Every pod in the namespace refuses connections unless a network policy admits them. trax applies `<app>-deny`, which
+selects every pod and admits nothing, and `<app>-within`, which lets the app's own pods (`trax/app: <app>`) reach
+each other: the hubs, Postgres and RabbitMQ accept only the app's pods, not any other pod in the cluster. The
+policies limit what comes in, not what goes out. They need a network plugin that enforces NetworkPolicy (Calico,
+Cilium, the VPC CNI with its network policy agent on EKS, kindnet on recent kind); on one that does not, they are
+accepted and ignored, and nothing says so.
+
+Without an `exposure`, reach a hub with `kubectl port-forward -n orders-staging service/hub 8080`.
+
+#### Exposed on a tailnet
+
+`"exposure": "tailnet"` puts the hub on your tailnet and nowhere else: no LoadBalancer, no NodePort, no Ingress but
+the Tailscale operator's. The cluster needs the [Tailscale Kubernetes
+operator](https://tailscale.com/kb/1236/kubernetes-operator) installed, with its OAuth client, and MagicDNS and HTTPS
+certificates turned on for the tailnet. trax does not install it and writes no Tailscale credential: the operator
+holds its own.
+
+```json
+"staging": {
+  "target": "kubernetes",
+  "exposure": "tailnet",
+  "tailnet": { "hostname": "orders" },
+  "database": { "secret": "orders-db", "key": "connection" }
+}
+```
+
+Beside the app it renders:
+
+- the ConfigMap, Deployment and Service `tailnet`: Caddy (`caddy:2.11.9`) as an unprivileged user with every
+  capability dropped and a read-only root, which forwards every request to the hub and sets `Trax-Proxy-Secret` on
+  it, replacing any copy the caller sent. This edge exists because Tailscale serve, which the operator's proxy runs,
+  fills in who the caller is but cannot add a header of its own;
+- the Ingress `tailnet` with `ingressClassName: tailscale` and the edge as its backend, which the operator turns into
+  a proxy pod on the tailnet at `https://<hostname>.<tailnet>.ts.net`;
+- the policy `<app>-tailnet`, which admits to the edge only the operator's proxy pod for that Ingress (by the labels
+  the operator gives it, `tailscale.com/parent-resource: tailnet` and the rest, in `operatorNamespace`), and
+  `<app>-tailnet-hub`, which admits the edge to the hub. The edge is left out of `<app>-within`, so it reaches
+  nothing else;
+- on the hub only: `Trax__Deploy__Exposure=tailnet`, and `Trax__Deploy__ProxySecret` read from the Secret
+  `<app>-<env>-tailnet`.
+
+trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the migration
+and before the services; the hub and the edge both restart onto it in the same rollout, so for those seconds a
+signed-in request is anonymous. A Secret of that name that trax did not write is refused. Workers and the migrate
+Job never see it.
+
+A hub that signs people in by tailnet identity
+([`AddTraxTailscaleAuth`](/docs/sdk-reference/api-auth/add-trax-tailscale-auth)) is refused, before anything is
+built, everywhere else: on an environment without `"exposure": "tailnet"`, on any service but the exposed hub, on
+`compose` and on `aws`. A tailnet exposure serves one hub; an app with two is refused. Why the trust is built this
+way is in [Tailnet sign-in](/docs/security/tailnet-sign-in).
+
+The operator's HA mode (a `ProxyGroup`) labels its pods differently and is not supported: the policy would admit
+nothing.
 
 ```bash
 trax deploy plan --env staging       # write the manifests under .trax/deploy/kubernetes/<app>-<env>/, without a cluster
 trax deploy --env staging
 trax deploy status --env staging
-trax deploy logs hub --env staging --follow   # or migrate, database, rabbitmq
+trax deploy logs hub --env staging --follow   # or migrate, database, rabbitmq, tailnet (the edge)
 trax deploy destroy --env staging    # asks for the namespace's name; --delete-data also deletes the database's volume
 ```
 
-`destroy` deletes the app's Deployments, StatefulSet, Jobs and Services in the namespace. It keeps the namespace,
-the Secret, and an in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
+`destroy` deletes the app's Deployments, StatefulSet, Jobs, Ingress, Services, ConfigMaps and network policies in the
+namespace, and the Secret `<app>-<env>-tailnet` that trax wrote. It keeps the namespace, the app's Secret, and an
+in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
 volume and every row in it.
 
 #### On EKS
@@ -1091,6 +1149,17 @@ the stack no longer has (RabbitMQ after the last host stops using it, say) is st
 restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
 for none, deploy to a cluster, one machine included (see [one machine, no downtime](deploy-to-one-machine-with-no-downtime.md)).
 
+With `"exposure": "tailnet"` the hub is published on no host port. Its pod gets two sidecars instead: Tailscale
+(`tailscale/tailscale:v1.104.7`) in userspace networking, so it needs no capability and no `/dev/net/tun`, which
+joins the tailnet as `tailnet.hostname` and serves HTTPS to the edge; and the same Caddy edge, bound to `127.0.0.1`
+inside the pod, in front of the hub. Nothing outside the pod reaches the edge, and a container on the network that
+reaches the hub directly has no proxy secret. Tailscale keeps its node key on the claim `<app>-<env>-tailscale`, so a
+restart is the same machine. Give it an auth key in `.env` as `TAILSCALE_AUTH_KEY` (from the admin console's Keys
+page; a reusable, pre-approved key, tagged if you want the device owned by a tag), which goes into the Secret with
+the rest and is read only by the sidecar. trax never creates one. Each deploy also writes a new proxy secret to
+`~/.config/trax/<app>-<env>/tailnet.yaml`, mode 0600, which only the hub's unit plays, so rotating it restarts the
+hub and nothing else.
+
 What differs from a cluster, and why:
 
 | On a cluster | Under podman |
@@ -1100,6 +1169,8 @@ What differs from a cluster, and why:
 | Postgres as a StatefulSet | A Deployment of one on a claim, which podman keeps as the named volume `<app>-<env>-data`; `kube play` has no StatefulSet. |
 | A migrate Job the deploy waits on | The migration runs in the migrator's unit before its pod starts (after waiting up to two minutes for this host's Postgres), and fails the unit unless it exits 0, printing the end of its log. Every other service's unit `Requires=` the migrator's. |
 | `hostUsers: false` | `UserNS=nomap` on every unit, as compose: rootless podman cannot map a range per pod. |
+| Network policies | None: `kube play` does not read them. The network holds only this app's pods, and a tailnet hub's edge listens on the pod's loopback. |
+| The operator's Ingress and the edge's own pod | Tailscale and the edge as sidecars in the hub's pod. |
 
 `plan --env home` writes the same files without building an image or writing the secret file. `status`, `logs`
 and `destroy` do not reach a podman environment and say what does: `systemctl --user status`, `journalctl --user -u

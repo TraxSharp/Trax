@@ -22,6 +22,9 @@ internal static class DeployKubernetesCommands
 
     internal static IContainerImagePublisher Images { get; set; } = new DotnetContainerPublisher();
 
+    /// <summary>How a deploy mints a tailnet exposure's proxy secret; tests swap in a fixed one.</summary>
+    internal static Func<string> MintProxySecret { get; set; } = KubernetesTailnet.MintSecret;
+
     /// <summary>How an environment on EKS reaches its cluster's description, by region; tests swap in a fake.</summary>
     internal static Func<string, IEksClient> Eks { get; set; } = region => new EksClient(region);
 
@@ -77,13 +80,23 @@ internal static class DeployKubernetesCommands
                             .DeployAsync(file, filePath, environment, exports, tag, ct)
                             .ConfigureAwait(false);
                     else
-                        await new KubernetesDeployer(Client(), Images, stdout.WriteLine)
+                        await new KubernetesDeployer(
+                            Client(),
+                            Images,
+                            stdout.WriteLine,
+                            MintProxySecret
+                        )
                             .DeployAsync(file, filePath, environment, exports, tag, ct)
                             .ConfigureAwait(false);
+                    var env = file.Environment(environment);
                     await stdout
                         .WriteLineAsync(
-                            $"Deployed {file.App} to {environment}. Until it is exposed, reach a hub with 'kubectl "
-                                + $"port-forward -n {Namespace(file, environment)} service/<hub> 8080'."
+                            KubernetesTailnet.Exposed(env)
+                                ? $"Deployed {file.App} to {environment}. Once the Tailscale operator's proxy is up, "
+                                    + $"the hub is at https://{KubernetesTailnet.Hostname(file, environment, env)}"
+                                    + ".<tailnet>.ts.net, and nowhere else."
+                                : $"Deployed {file.App} to {environment}. It is not exposed: reach a hub with "
+                                    + $"'kubectl port-forward -n {Namespace(file, environment)} service/<hub> 8080'."
                         )
                         .ConfigureAwait(false);
                 }
@@ -299,6 +312,9 @@ internal static class DeployKubernetesCommands
                         KubernetesTarget.MigrateName,
                         KubernetesTarget.Database,
                         KubernetesTarget.Broker,
+                        .. KubernetesTailnet.Exposed(file.Environment(environment))
+                            ? [KubernetesTailnet.EdgeName]
+                            : Array.Empty<string>(),
                     ];
                     if (!readable.Contains(service, StringComparer.Ordinal))
                         throw new InvalidOperationException(
@@ -503,6 +519,19 @@ internal static class DeployKubernetesCommands
             );
         await WritePrivateAsync(secretPath, secretYaml, ct).ConfigureAwait(false);
         await stdout.WriteLineAsync($"Wrote {secretPath} (mode 0600).").ConfigureAwait(false);
+        if (stack.ProxySecretName is not null)
+        {
+            var proxySecretPath = PodmanTarget.ProxySecretPath(secretPath);
+            await WritePrivateAsync(
+                    proxySecretPath,
+                    PodmanTarget.ProxySecretYaml(stack, MintProxySecret()),
+                    ct
+                )
+                .ConfigureAwait(false);
+            await stdout
+                .WriteLineAsync($"Wrote {proxySecretPath} (mode 0600), a new tailnet proxy secret.")
+                .ConfigureAwait(false);
+        }
         await stdout
             .WriteLineAsync(InstallHint(stack, dir, stack.ReleaseFrom(previous, secretsChanged)))
             .ConfigureAwait(false);

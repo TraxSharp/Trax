@@ -49,6 +49,8 @@ public class KubernetesDeployerTests
                 "secret orders-staging",
                 "create-namespace orders-staging",
                 "list",
+                "apply NetworkPolicy/orders-deny",
+                "apply NetworkPolicy/orders-within",
                 "apply Service/database",
                 "apply StatefulSet/database",
                 "wait StatefulSet/database",
@@ -518,6 +520,22 @@ public class KubernetesDeployerTests
         {
             Calls.Add($"secret {name}");
             return Task.FromResult<IReadOnlyCollection<string>?>(SecretKeys);
+        }
+
+        /// <summary>The labels of each Secret by name, for the ones whose labels are read.</summary>
+        public Dictionary<string, Dictionary<string, string>> SecretLabels { get; } =
+            new(StringComparer.Ordinal);
+
+        public Task<IReadOnlyDictionary<string, string>?> SecretLabelsAsync(
+            string ns,
+            string name,
+            CancellationToken ct
+        )
+        {
+            Calls.Add($"secret-labels {name}");
+            return Task.FromResult<IReadOnlyDictionary<string, string>?>(
+                SecretLabels.GetValueOrDefault(name)
+            );
         }
 
         public Task<IReadOnlyList<KubernetesObjectState>> ListAsync(string ns, CancellationToken ct)

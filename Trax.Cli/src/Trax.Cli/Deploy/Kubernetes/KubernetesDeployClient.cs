@@ -88,21 +88,30 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         ];
     }
 
+    public async Task<IReadOnlyDictionary<string, string>?> SecretLabelsAsync(
+        string ns,
+        string name,
+        CancellationToken ct
+    )
+    {
+        var secret = await OrNull(() =>
+                _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct)
+            )
+            .ConfigureAwait(false);
+        if (secret is null)
+            return null;
+        // Only the labels leave this method; the values are dropped here.
+        return new Dictionary<string, string>(
+            secret.Metadata.Labels ?? new Dictionary<string, string>(StringComparer.Ordinal),
+            StringComparer.Ordinal
+        );
+    }
+
     public async Task<IReadOnlyList<KubernetesObjectState>> ListAsync(
         string ns,
         CancellationToken ct
     )
     {
-        static KubernetesObjectState State(string kind, V1ObjectMeta meta) =>
-            new(
-                kind,
-                meta.Name,
-                meta.Labels is { } labels
-                && labels.TryGetValue(KubernetesTarget.AppLabel, out var app)
-                    ? app
-                    : null
-            );
-
         var all = new List<KubernetesObjectState>();
         all.AddRange(
             (
@@ -140,12 +149,50 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             ).Items.Select(o => State("ServiceAccount", o.Metadata))
         );
         all.AddRange(await SecurityGroupPoliciesAsync(ns, ct).ConfigureAwait(false));
+        all.AddRange(await AroundAsync(ns, ct).ConfigureAwait(false));
         all.AddRange(
             (
                 await _client
                     .CoreV1.ListNamespacedPersistentVolumeClaimAsync(ns, cancellationToken: ct)
                     .ConfigureAwait(false)
             ).Items.Select(o => State("PersistentVolumeClaim", o.Metadata))
+        );
+        return all;
+    }
+
+    private static KubernetesObjectState State(string kind, V1ObjectMeta meta) =>
+        new(
+            kind,
+            meta.Name,
+            meta.Labels is { } labels && labels.TryGetValue(KubernetesTarget.AppLabel, out var app)
+                ? app
+                : null
+        );
+
+    /// <summary>The namespace's NetworkPolicies, Ingresses and ConfigMaps.</summary>
+    private async Task<List<KubernetesObjectState>> AroundAsync(string ns, CancellationToken ct)
+    {
+        var all = new List<KubernetesObjectState>();
+        all.AddRange(
+            (
+                await _client
+                    .NetworkingV1.ListNamespacedNetworkPolicyAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("NetworkPolicy", o.Metadata))
+        );
+        all.AddRange(
+            (
+                await _client
+                    .NetworkingV1.ListNamespacedIngressAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("Ingress", o.Metadata))
+        );
+        all.AddRange(
+            (
+                await _client
+                    .CoreV1.ListNamespacedConfigMapAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("ConfigMap", o.Metadata))
         );
         return all;
     }
@@ -247,6 +294,70 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         }
     }
 
+    /// <summary>What a deploy applies around the workloads: its network policies, a tailnet exposure's objects.</summary>
+    private async Task<bool> ApplyAroundAsync(
+        IKubernetesObject<V1ObjectMeta> body,
+        V1Patch patch,
+        string name,
+        string ns,
+        CancellationToken ct
+    )
+    {
+        switch (body)
+        {
+            case V1NetworkPolicy:
+                await _client
+                    .NetworkingV1.PatchNamespacedNetworkPolicyAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            case V1Ingress:
+                await _client
+                    .NetworkingV1.PatchNamespacedIngressAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            case V1ConfigMap:
+                await _client
+                    .CoreV1.PatchNamespacedConfigMapAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            case V1Secret:
+                await _client
+                    .CoreV1.PatchNamespacedSecretAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /// <summary>A ServiceAccount, or an EKS SecurityGroupPolicy: what a deploy to EKS applies beside the workloads.</summary>
     private async Task ApplyIdentityAsync(
         IKubernetesObject<V1ObjectMeta> body,
@@ -256,6 +367,8 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         CancellationToken ct
     )
     {
+        if (await ApplyAroundAsync(body, patch, name, ns, ct).ConfigureAwait(false))
+            return;
         switch (body)
         {
             case V1ServiceAccount:
@@ -746,6 +859,11 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             await DeleteIdentityAsync(ns, target, ct).ConfigureAwait(false);
             return;
         }
+        if (target.Kind is "NetworkPolicy" or "Ingress" or "ConfigMap" or "Secret")
+        {
+            await DeleteAroundAsync(ns, target, ct).ConfigureAwait(false);
+            return;
+        }
         const string background = "Background";
         await OrNull<object>(async () =>
                 target.Kind switch
@@ -808,6 +926,46 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             return null;
         }
     }
+
+    /// <summary>A network policy, or a tailnet exposure's Ingress, ConfigMap or proxy Secret.</summary>
+    private async Task DeleteAroundAsync(
+        string ns,
+        KubernetesObjectState target,
+        CancellationToken ct
+    ) =>
+        await OrNull<object>(async () =>
+                target.Kind switch
+                {
+                    "NetworkPolicy" => await _client
+                        .NetworkingV1.DeleteNamespacedNetworkPolicyAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "Ingress" => await _client
+                        .NetworkingV1.DeleteNamespacedIngressAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "ConfigMap" => await _client
+                        .CoreV1.DeleteNamespacedConfigMapAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "Secret" => await _client
+                        .CoreV1.DeleteNamespacedSecretAsync(target.Name, ns, cancellationToken: ct)
+                        .ConfigureAwait(false),
+                    _ => throw new InvalidOperationException(
+                        $"trax does not delete a {target.Kind}."
+                    ),
+                }
+            )
+            .ConfigureAwait(false);
 
     private async Task DeleteIdentityAsync(
         string ns,
