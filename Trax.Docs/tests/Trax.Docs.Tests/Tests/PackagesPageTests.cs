@@ -54,6 +54,7 @@ public partial class PackagesPageTests
         "Trax.Runner.Lambda",
         "Trax.Scheduler",
         "Trax.Scheduler.Lambda",
+        "Trax.Scheduler.Sandbox.Launcher",
         "Trax.Scheduler.Sqs",
         // Trax.Api
         "Trax.Api",

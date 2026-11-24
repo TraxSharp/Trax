@@ -32,6 +32,7 @@
     <ProjectReference Include="../../src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
     <ProjectReference Include="../../src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
+    <ProjectReference Include="../../src/Trax.Scheduler.Sandbox.Launcher/Trax.Scheduler.Sandbox.Launcher.csproj" />
   </ItemGroup>
 
   <ItemGroup>

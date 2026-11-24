@@ -25,5 +25,6 @@
     <InternalsVisibleTo Include="Trax.Scheduler.Tests.Stress" />
     <InternalsVisibleTo Include="Trax.Scheduler.Tests.Sqlite.Integration" />
     <InternalsVisibleTo Include="Trax.Runner.Lambda" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Sandbox.Tests" />
   </ItemGroup>
 </Project>

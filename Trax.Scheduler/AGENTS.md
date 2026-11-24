@@ -36,6 +36,9 @@ if your work contradicts one, say so rather than silently overriding it.
 | `PruneOrphanedManifests`, `Manifest.Owner`, or the startup prune in `SchedulerStartupService` | [0015](./docs/adr/0015-a-startup-prune-deletes-only-its-own-applications-manifests.md), the prune deletes only manifests its own application declared, and keeps unowned ones |
 | `[TraxRemote]` routing, or a scheduler build with no routed submitter | [0016](./docs/adr/0016-a-traxremote-train-with-nowhere-to-go-fails-the-build.md), a marked train with nowhere to go fails the build |
 | `RemoteRunResponse.PublicMessage`, `RemoteRunException`, or what a remote failure shows a client | central `docs/0028`, the runner offers only a plain `TrainException`'s message, and every remote failure is rebuilt as a `RemoteRunException` carrying it |
+| `[TraxSandbox]`, `ITraxSandbox`, the sandbox launcher (`Trax.Scheduler.Sandbox.Launcher`), or the sandbox wire | [0020](./docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md), only the launcher starts a sandbox, from a fixed request a hub cannot shape; never give the hub or a sandbox the runtime socket or a Role that creates pods |
+| `SandboxArchive`, the podman holder, or how a sandbox's output reaches the hub | [0021](./docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md), the output comes back on a volume read after the sandbox exits, checked entry by entry and never extracted |
+| `SandboxRuntime`, the startup canary, or the escape suite | [0022](./docs/adr/0022-a-sandbox-runs-in-a-kata-microvm-proved-by-a-startup-canary.md), Kata by default, gVisor only by name, and the launcher does not start until a canary proves isolation |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
 index lists them by folder. Thirty-five name `scheduler`, three of them superseded. Besides the repository-wide conventions and

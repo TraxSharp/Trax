@@ -116,18 +116,36 @@ internal sealed class TraxRequestHandler(
     /// way, so it runs the train with no trusted scope at all, which
     /// <see cref="WarnIfExecutionServiceReplacedAsync"/> says when the entry point starts.
     /// </summary>
-    private async Task<RunTrainResult> RunAsync(RemoteRunRequest request, CancellationToken ct)
+    private Task<RunTrainResult> RunAsync(RemoteRunRequest request, CancellationToken ct) =>
+        RunAuthorizedAsync(
+            executionService,
+            trustedScope,
+            "scheduler.remote-run",
+            request.TrainName,
+            request.InputJson,
+            ct
+        );
+
+    /// <summary>
+    /// Runs a train that was authorized where it was submitted: its own authorization runs inside
+    /// a trusted scope named <paramref name="scopeName"/>, the run outside it. Shared by the runner
+    /// entry points and the sandbox entry point.
+    /// </summary>
+    internal static async Task<RunTrainResult> RunAuthorizedAsync(
+        ITrainExecutionService executionService,
+        ITrustedExecutionScope trustedScope,
+        string scopeName,
+        string trainName,
+        string inputJson,
+        CancellationToken ct
+    )
     {
         if (executionService is not TrainExecutionService mediator)
-            return await executionService
-                .RunAsync(request.TrainName, request.InputJson, ct)
-                .ConfigureAwait(false);
+            return await executionService.RunAsync(trainName, inputJson, ct).ConfigureAwait(false);
 
         PreparedTrain prepared;
-        using (trustedScope.BeginTrusted("scheduler.remote-run"))
-            prepared = await mediator
-                .PrepareAsync(request.TrainName, request.InputJson, ct)
-                .ConfigureAwait(false);
+        using (trustedScope.BeginTrusted(scopeName))
+            prepared = await mediator.PrepareAsync(trainName, inputJson, ct).ConfigureAwait(false);
 
         return await mediator
             .RunPreparedAsync(prepared, new RunTrainOptions(), ct)

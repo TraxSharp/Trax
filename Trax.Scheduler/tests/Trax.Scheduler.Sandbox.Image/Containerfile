@@ -1,0 +1,6 @@
+# The sandbox escape image: the published Trax.Scheduler.Sandbox.Image on the ASP.NET runtime.
+# build-escape-image.sh builds it; nothing ships it.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+COPY app/ /app/
+USER 65532:65532
+ENTRYPOINT ["dotnet", "/app/Trax.Scheduler.Sandbox.Image.dll"]

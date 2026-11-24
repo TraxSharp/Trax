@@ -10,7 +10,7 @@ nav_order: 2
 
 # Attributes
 
-Every attribute Trax reads ships in the Trax.Effect package, in the `Trax.Effect.Attributes` namespace, so a train library can carry them without referencing the API, scheduler or GraphQL packages that act on them. The GraphQL exposure attributes are documented with the GraphQL API.
+Every attribute Trax reads ships in the Trax.Effect package, in the `Trax.Effect.Attributes` namespace, except `TraxSandbox`, which only the sandbox entry point and its client read and so ships with them in Trax.Scheduler, so a train library can carry them without referencing the API, scheduler or GraphQL packages that act on them. The GraphQL exposure attributes are documented with the GraphQL API.
 
 ## Authorization
 
@@ -31,6 +31,7 @@ Every attribute Trax reads ships in the Trax.Effect package, in the `Trax.Effect
 | Attribute | Targets | Description |
 |-----------|---------|-------------|
 | [TraxRemote](/docs/sdk-reference/attributes/trax-remote) | Class | Sends the train's queued runs to the first remote submitter |
+| [TraxSandbox](/docs/sdk-reference/attributes/trax-sandbox) | Class | Declares the train runs in a sandbox of its own, with its profile and limits (in Trax.Scheduler) |
 | [TraxConcurrencyLimit](/docs/sdk-reference/mediator-api/concurrency-limiting#attribute) | Class | Caps concurrent direct runs of the train |
 | [Inject](/docs/sdk-reference/attributes/inject) | Property | Property injection for `ServiceTrain`'s own framework services |
 
