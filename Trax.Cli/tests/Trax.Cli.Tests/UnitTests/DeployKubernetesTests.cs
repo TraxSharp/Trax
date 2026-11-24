@@ -199,6 +199,24 @@ public partial class DeployKubernetesTests
     }
 
     [Test]
+    public void RabbitMQ_runs_as_its_own_user_with_no_capability()
+    {
+        var m = Render(exports: Exports(rabbit: true));
+
+        var security = Pods(m)
+            .Select(p => p.Spec.Containers.Single())
+            .Single(c => c.Name is "rabbitmq")
+            .SecurityContext;
+
+        // Started as root, its readiness probe can write the Erlang cookie before the server, which then cannot read it.
+        security.RunAsNonRoot.Should().BeTrue();
+        security.RunAsUser.Should().Be(999);
+        security.RunAsGroup.Should().Be(999);
+        security.Capabilities.Drop.Should().Equal("ALL");
+        security.Capabilities.Add.Should().BeNull();
+    }
+
+    [Test]
     public void Every_container_runs_hardened_in_a_user_namespace_of_its_own()
     {
         var m = Render(exports: Exports(rabbit: true));
@@ -246,9 +264,7 @@ public partial class DeployKubernetesTests
                         && v.EmptyDir != null
                     );
             }
-            security
-                .RunAsNonRoot.Should()
-                .Be(container.Name is not ("database" or "rabbitmq"), container.Name);
+            security.RunAsNonRoot.Should().Be(container.Name is not "database", container.Name);
         }
         MiB(
                 Deployments(m)["worker"].Spec.Template.Spec.Containers.Single().Resources.Limits[
@@ -281,9 +297,11 @@ public partial class DeployKubernetesTests
                 .TakeWhile(l => l.StartsWith("      - ", StringComparison.Ordinal))
                 .Select(l => l["      - ".Length..])
                 .ToList();
+            // RabbitMQ is the one difference: here it runs as its image's own user and needs none back
+            // (RabbitMQ_runs_as_its_own_user_with_no_capability).
             (container.SecurityContext.Capabilities.Add ?? [])
                 .Should()
-                .Equal(composeAdds, container.Name);
+                .Equal(container.Name is "rabbitmq" ? [] : composeAdds, container.Name);
             var composeMemory = MemLimit.Match(block);
             if (composeMemory.Success)
                 MiB(container.Resources.Limits["memory"])

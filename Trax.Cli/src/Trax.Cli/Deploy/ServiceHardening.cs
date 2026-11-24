@@ -69,6 +69,26 @@ internal sealed record ServiceHardening(
             ReadOnlyRoot: false
         );
 
+    /// <summary>The uid and gid of the rabbitmq image's own user.</summary>
+    public const long BrokerUser = 999;
+
+    /// <summary>
+    /// RabbitMQ on Kubernetes and under <c>podman kube play</c>, run as the image's own user (<see cref="BrokerUser"/>)
+    /// from the start, so it needs no capability back and its entrypoint changes no owner. Started as root, the
+    /// entrypoint drops to that user before the server writes its Erlang cookie, while the readiness probe
+    /// (<c>rabbitmq-diagnostics</c>, run as the container's user, root) writes one first, which the server then cannot
+    /// read: it stops with eacces and restarts for ever (measured on rabbitmq:4 under k3s v1.36.6 with
+    /// <c>hostUsers: false</c>, 2026-11-24). Its root stays writable, as Postgres's does.
+    /// </summary>
+    public static ServiceHardening BrokerAsItsUser(DeployLimits? limits) =>
+        new(
+            [],
+            limits?.Memory ?? BrokerMemoryMiB,
+            limits?.Pids ?? DefaultPids,
+            limits?.Cpus,
+            ReadOnlyRoot: false
+        );
+
     /// <summary>
     /// A Trax service needs no Linux capability and writes nothing outside <c>/tmp</c>. Its memory and CPU are what
     /// its entry names, unlimited when it names none.

@@ -1068,10 +1068,12 @@ carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kuber
 app or one trax would apply over that has no `trax/app` label. A namespace with no label (one you made with
 `kubectl` to hold the Secret) is used.
 
-Every container runs under the same limits compose gives it: every capability dropped and only Postgres's and
-RabbitMQ's own added back, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault` (and the
+Every container runs under the same limits compose gives it: every capability dropped and only Postgres's own added
+back, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault` (and the
 `container.seccomp.security.alpha.kubernetes.io/<container>: runtime/default` annotation, which `podman kube play`
-reads in its place), `runAsNonRoot` for every Trax container, the service's `memory` as both request and limit, and
+reads in its place), `runAsNonRoot` for every Trax container, RabbitMQ as its image's own user (999) with no
+capability at all (started as root, its readiness probe can write the Erlang cookie as root before the server, which
+then cannot read it), the service's `memory` as both request and limit, and
 a pod with `hostUsers: false`, no service account token and no service links. A service's `memory` and `cpus`
 are its request and its limit, both the same; one that names neither has no request or limit. Every Trax container
 has `readOnlyRootFilesystem: true` and an `emptyDir` mounted on `/tmp`. Kubernetes has no per-container pids limit

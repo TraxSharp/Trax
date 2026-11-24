@@ -1262,19 +1262,26 @@ internal static partial class KubernetesTarget
                 },
             };
 
-        /// <summary>RabbitMQ 4 as a Deployment of one, for a try environment, with no data kept across restarts.</summary>
+        /// <summary>
+        /// RabbitMQ 4 as a Deployment of one, for a try environment, with no data kept across restarts, run as the
+        /// image's own user with no capability (<see cref="ServiceHardening.BrokerAsItsUser"/>).
+        /// </summary>
         public V1Deployment RabbitMq()
         {
             var container = Container(
                 Broker,
                 "rabbitmq:4",
-                ServiceHardening.Broker(env.Limits.GetValueOrDefault(DeployFile.BackingBroker)),
-                nonRoot: false,
+                ServiceHardening.BrokerAsItsUser(
+                    env.Limits.GetValueOrDefault(DeployFile.BackingBroker)
+                ),
+                nonRoot: true,
                 [
                     Value("RABBITMQ_DEFAULT_USER", file.App),
                     FromSecret("RABBITMQ_DEFAULT_PASS", secret, RabbitMqPasswordKey),
                 ]
             );
+            container.SecurityContext.RunAsUser = ServiceHardening.BrokerUser;
+            container.SecurityContext.RunAsGroup = ServiceHardening.BrokerUser;
             container.Ports = [new V1ContainerPort { Name = "amqp", ContainerPort = 5672 }];
             container.ReadinessProbe = new V1Probe
             {
