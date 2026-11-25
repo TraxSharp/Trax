@@ -55,7 +55,8 @@ domains, which is what an app that calls one model API and one package feed need
 - **On Kubernetes, a ValidatingAdmissionPolicy instead of PSA alone.** PSA baseline refuses NET_ADMIN on any
   container, init containers included, so a namespace with egress cannot be held by PSA. The policy allows
   NET_ADMIN only on an init container named `egress-rules` running this image's digest with no command and the
-  argument `rules`, and refuses it (and any capability outside the baseline set) everywhere else.
+  argument `rules`, and refuses it (and any capability outside the baseline set) everywhere else. It refuses
+  `runAsUser: 61000` to every container but the egress sidecar.
 - **ECS refuses `"egress"`.** Fargate allows no NET_ADMIN, so the rules cannot be applied; the Kubernetes target
   on EKS is the way to limit a service on AWS.
 
@@ -84,7 +85,8 @@ domains, which is what an app that calls one model API and one package feed need
 - A `tcp:` entry, and every host `TRAX_EGRESS_POSTGRES` names, is an address allowlist, the thing rejected above
   for TLS. It is meant for single-tenant or private destinations; on a shared endpoint (a managed Postgres pooler,
   a cloud API) it reaches every tenant behind the address.
-- The app must not run as uid 61000.
+- The app must not run as uid 61000. The admission policy refuses `runAsUser: 61000` to anything but the sidecar;
+  an image whose own `USER` is 61000 is not something a policy can see.
 - The image is built for amd64 only until the release builds more.
 
 ## Exemplars
@@ -107,3 +109,4 @@ container adding `SYS_PTRACE`.
 - **2026-11-25**: Built for linux/arm64 as well as linux/amd64; Trax.Cli names the digest of the index of both.
 - **2026-11-25**: A ClientHello carrying ECH or ESNI is refused; the outer name was not a safe thing to decide on.
 - **2026-11-25**: Said that a `tcp:` entry is an address allowlist, for single-tenant destinations only.
+- **2026-11-25**: The admission policy refuses the egress uid to every container but the sidecar.

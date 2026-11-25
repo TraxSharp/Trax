@@ -153,8 +153,9 @@ internal static partial class KubernetesTarget
     /// container and so on the egress rules too. The policy lets a container add only what baseline allows, except
     /// one init container: named <c>egress-rules</c>, running exactly <paramref name="image"/> (by digest) with its
     /// own entrypoint and the one argument <c>rules</c>, not a sidecar, adding NET_ADMIN and nothing else. It also
-    /// refuses a privileged container and the host's network, PID and IPC namespaces, as baseline does. It applies
-    /// to every pod created or changed in the namespace, an ephemeral container added for debugging included.
+    /// refuses a privileged container and the host's network, PID and IPC namespaces, as baseline does, and
+    /// <c>runAsUser</c> 61000 (the uid the rules let out) on the pod or on any container but the egress sidecar. It
+    /// applies to every pod created or changed in the namespace, an ephemeral container added for debugging included.
     /// </summary>
     public static IReadOnlyList<IKubernetesObject<V1ObjectMeta>> EgressAdmission(
         DeployFile file,
@@ -251,6 +252,14 @@ internal static partial class KubernetesTarget
         "(has(c.securityContext) && has(c.securityContext.capabilities) && "
         + "has(c.securityContext.capabilities.add) ? c.securityContext.capabilities.add : [])";
 
+    /// <summary>The egress uid, as the policy writes it.</summary>
+    private static string EgressUid => DeployEgress.Uid.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A container that does not ask to run as the egress uid, in CEL.</summary>
+    private static string NotEgressUid =>
+        "!has(c.securityContext) || !has(c.securityContext.runAsUser) || "
+        + $"c.securityContext.runAsUser != {EgressUid}";
+
     private static List<V1Validation> AdmissionValidations(string image) =>
         [
             new V1Validation
@@ -287,6 +296,19 @@ internal static partial class KubernetesTarget
                     + "!(has(object.spec.hostIPC) && object.spec.hostIPC)",
                 Message =
                     "A pod in this namespace may not share the node's network, PID or IPC namespace.",
+            },
+            new V1Validation
+            {
+                Expression =
+                    "(!has(object.spec.securityContext) || !has(object.spec.securityContext.runAsUser) || "
+                    + $"object.spec.securityContext.runAsUser != {EgressUid}) && "
+                    + $"variables.containers.all(c, {NotEgressUid}) && "
+                    + $"variables.inits.all(c, {NotEgressUid} || "
+                    + $"(c.name == '{DeployEgress.SidecarContainer}' && c.image == '{image}' && "
+                    + $"!has(c.command) && has(c.args) && c.args == ['{DeployEgress.ServeCommand}'] && "
+                    + "has(c.restartPolicy) && c.restartPolicy == 'Always'))",
+                Message =
+                    $"Only the egress sidecar may run as uid {EgressUid}: the egress rules let that uid out.",
             },
         ];
 }

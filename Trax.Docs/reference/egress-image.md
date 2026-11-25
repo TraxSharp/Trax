@@ -92,7 +92,9 @@ exits non-zero, so a pod with a bad list never starts. An empty list allows noth
 | `ready` | any | Exits 0 when the resolver and the proxy are listening. A startup probe or a healthcheck. |
 | `check` | the app's uid | Probes from inside the pod. See [Proving it](#proving-it). |
 
-The app must not run as uid 61000: the rules let that uid out.
+The app must not run as uid 61000: the rules let that uid out. On Kubernetes, the admission policy `trax deploy`
+writes refuses a pod or container other than the sidecar that sets `runAsUser: 61000`. An image whose own `USER` is
+61000 cannot be seen by the policy, so it is on whoever builds the image.
 
 ## Running it beside a stack
 

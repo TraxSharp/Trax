@@ -259,6 +259,27 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void The_policy_refuses_the_egress_uid_to_every_container_but_the_sidecar()
+    {
+        var policy = Cluster().Admission.OfType<V1ValidatingAdmissionPolicy>().Single();
+
+        var uid = policy.Spec.Validations.Single(v =>
+            v.Expression.Contains("runAsUser", StringComparison.Ordinal)
+        );
+        uid.Expression.Should()
+            .Contain("object.spec.securityContext.runAsUser != 61000")
+            .And.Contain("c.securityContext.runAsUser != 61000")
+            .And.Contain("variables.containers.all(c, ")
+            .And.Contain("variables.inits.all(c, ")
+            .And.Contain("c.name == 'egress'")
+            .And.Contain($"c.image == '{Image}'")
+            .And.Contain("c.args == ['serve']")
+            .And.Contain("c.restartPolicy == 'Always'");
+        uid.Message.Should().Contain("61000");
+        PodOf(Cluster(), "hub").InitContainers[1].Command.Should().BeNull();
+    }
+
+    [Test]
     public void Kubernetes_without_egress_renders_no_policy_and_no_init_containers()
     {
         var m = KubernetesTarget.Render(

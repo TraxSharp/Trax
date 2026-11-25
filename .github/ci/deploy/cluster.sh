@@ -375,5 +375,9 @@ refused '{"containers":[{"name":"app","image":"busybox","securityContext":{"capa
 zero=0000000000000000000000000000000000000000000000000000000000000000
 refused '{"initContainers":[{"name":"egress-rules","image":"'"$registry/$APP-egress@sha256:$zero"'","args":["rules"],"securityContext":{"capabilities":{"add":["NET_ADMIN"]}}}],"containers":[{"name":"app","image":"busybox"}]}' \
   "the rules container with another image"
+refused '{"containers":[{"name":"app","image":"busybox","securityContext":{"runAsUser":61000}}]}' \
+  "an app container running as the egress uid"
+refused '{"securityContext":{"runAsUser":61000},"containers":[{"name":"app","image":"busybox"}]}' \
+  "a pod running as the egress uid"
 
 say "cluster: every check passed"

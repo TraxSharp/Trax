@@ -769,7 +769,9 @@ Every target says what it does with it:
 | aws (ECS) | Refused, naming the service: Fargate gives a task no `NET_ADMIN`, so the rules cannot be applied. Use the kubernetes target on EKS. |
 
 The migration, the drain and the resume run the migrator's code, so each is held to the migrator's `egress` too. The app must not run as uid
-61000, which the rules let out.
+61000, which the rules let out. On a cluster the admission policy refuses any container but the egress sidecar that
+asks for it (`runAsUser`). Nothing can see an image's own `USER`, so do not build one that is 61000
+(`ContainerUser` in the project); trax renders none.
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
 leaving out test projects, and refuses to replace an existing file without `--force`. `init --target aws` adds a
@@ -1130,7 +1132,9 @@ to create them; Kubernetes 1.30 or later). On every pod created or changed there
 - an init container that adds one, unless it is named `egress-rules`, runs exactly the egress image trax rendered
   (by digest) with its own entrypoint and the one argument `rules`, is not a sidecar, and adds `NET_ADMIN` and
   nothing else;
-- a privileged container, and a pod on the node's network, PID or IPC namespace.
+- a privileged container, and a pod on the node's network, PID or IPC namespace;
+- a pod or container that sets `runAsUser: 61000`, the uid the egress rules let out, other than the `egress`
+  sidecar trax rendered.
 
 A deploy refuses the policy or binding when another app wrote it, or something other than trax did. `destroy`
 deletes both. A deploy that no longer has a service with `egress` leaves them in place: they still refuse
