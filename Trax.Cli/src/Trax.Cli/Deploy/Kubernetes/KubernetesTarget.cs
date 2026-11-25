@@ -143,9 +143,9 @@ internal static partial class KubernetesTarget
     public const string TailscaleServeFile = "serve.json";
 
     /// <summary>
-    /// The Tailscale sidecar of a podman hub: userspace networking, so it needs no capability and no tun device,
-    /// every capability dropped and a read-only root, its auth key from the app's Secret (from <c>.env</c>), and
-    /// Tailscale serve proxying HTTPS on the tailnet to the edge on 127.0.0.1. It joins as
+    /// The Tailscale container of a podman tailnet exposure: userspace networking, so it needs no capability and no
+    /// tun device, every capability dropped and a read-only root, its auth key from the app's Secret (from
+    /// <c>.env</c>), and Tailscale serve proxying HTTPS on the tailnet to the edge's socket. It joins as
     /// <paramref name="hostname"/>.
     /// </summary>
     internal static V1Container TailscaleSidecar(string appSecret, string hostname)

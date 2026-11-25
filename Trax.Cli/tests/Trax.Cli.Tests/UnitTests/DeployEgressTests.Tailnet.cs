@@ -107,14 +107,14 @@ public partial class DeployEgressTests
 
     // ---- One host, held and exposed ----
 
-    private static V1PodSpec PodmanHeldTailnetHub(bool held)
+    private static (V1PodSpec Hub, V1PodSpec Tailnet) PodmanHeldTailnetHub(bool held)
     {
         var file = DeployPodmanTests.File_();
         file.Environments["home"].Exposure = DeployEnvironment.Tailnet;
         file.EgressImage = Image;
         if (held)
             file.Services["hub"].Egress = ["api.anthropic.com"];
-        var hub = PodmanTarget
+        var files = PodmanTarget
             .Render(
                 file,
                 "home",
@@ -123,50 +123,47 @@ public partial class DeployEgressTests
                 "/src/.trax/deploy/podman/orders-home",
                 "/home/u/.config/trax/orders-home/secret.yaml"
             )
-            .Files.Single(f =>
-                string.Equals(f.Path, "orders-home-hub.yaml", StringComparison.Ordinal)
-            )
-            .Content;
-        return KubernetesYaml
-            .LoadAllFromString(hub)
-            .OfType<V1Deployment>()
-            .Single()
-            .Spec.Template.Spec;
+            .Files.ToDictionary(f => f.Path, f => f.Content, StringComparer.Ordinal);
+        static V1PodSpec Pod(string yaml) =>
+            KubernetesYaml
+                .LoadAllFromString(yaml)
+                .OfType<V1Deployment>()
+                .Single()
+                .Spec.Template.Spec;
+        return (Pod(files["orders-home-hub.yaml"]), Pod(files["orders-home-tailnet.yaml"]));
     }
 
     [Test]
-    public void A_held_and_exposed_podman_hub_has_both_sidecars_and_tailscale_runs_as_the_egress_uid()
+    public void A_held_and_exposed_podman_hub_keeps_tailscale_out_of_its_pod_and_its_rules()
     {
-        var pod = PodmanHeldTailnetHub(held: true);
+        var (hub, tailnet) = PodmanHeldTailnetHub(held: true);
 
-        pod.InitContainers.Select(c => c.Name).Should().Equal("egress-rules");
-        pod.Containers.Select(c => c.Name)
-            .Should()
-            .BeEquivalentTo(["hub", "egress", KubernetesTailnet.EdgeName, "tailscale"]);
-        var tailscale = pod.Containers.Single(c =>
+        hub.InitContainers.Select(c => c.Name).Should().Equal("egress-rules");
+        hub.Containers.Select(c => c.Name).Should().BeEquivalentTo(["hub", "egress"]);
+        tailnet.InitContainers.Should().BeNull();
+        var tailscale = tailnet.Containers.Single(c =>
             string.Equals(c.Name, "tailscale", StringComparison.Ordinal)
         );
         tailscale
             .SecurityContext.RunAsUser.Should()
-            .Be(
-                DeployEgress.Uid,
-                "the rules let only the egress uid out, and Tailscale must reach its control plane"
-            );
+            .Be(KubernetesTailnet.TailscaleUser)
+            .And.NotBe(DeployEgress.Uid);
         tailscale.SecurityContext.Capabilities.Add.Should().BeNull();
-        pod.Containers.Single(c => string.Equals(c.Name, "hub", StringComparison.Ordinal))
+        hub.Containers.Single(c => string.Equals(c.Name, "hub", StringComparison.Ordinal))
             .SecurityContext.RunAsUser.Should()
             .NotBe(DeployEgress.Uid);
     }
 
     [Test]
-    public void An_exposed_podman_hub_that_is_not_held_keeps_tailscale_as_it_was()
+    public void An_exposed_podman_hub_that_is_not_held_has_the_same_tailnet_pod()
     {
-        var pod = PodmanHeldTailnetHub(held: false);
+        var (hub, tailnet) = PodmanHeldTailnetHub(held: false);
 
-        pod.InitContainers.Should().BeNull();
-        pod.Containers.Select(c => c.Name).Should().NotContain("egress");
-        pod.Containers.Single(c => string.Equals(c.Name, "tailscale", StringComparison.Ordinal))
+        hub.InitContainers.Should().BeNull();
+        hub.Containers.Select(c => c.Name).Should().Equal("hub");
+        tailnet
+            .Containers.Single(c => string.Equals(c.Name, "tailscale", StringComparison.Ordinal))
             .SecurityContext.RunAsUser.Should()
-            .BeNull();
+            .Be(KubernetesTailnet.TailscaleUser);
     }
 }

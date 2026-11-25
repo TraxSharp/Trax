@@ -1344,16 +1344,19 @@ the stack no longer has (RabbitMQ after the last host stops using it, say) is st
 restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
 for none, deploy to a cluster, one machine included (see [one machine, no downtime](/docs/reference/deploy-to-one-machine-with-no-downtime)).
 
-With `"exposure": "tailnet"` the hub is published on no host port. Its pod gets two sidecars instead: Tailscale
-(`tailscale/tailscale:v1.104.7`) in userspace networking, so it needs no capability and no `/dev/net/tun`, which
-joins the tailnet as `tailnet.hostname` and serves HTTPS to the edge; and the same Caddy edge, bound to `127.0.0.1`
-inside the pod, in front of the hub. Nothing outside the pod reaches the edge, and a container on the network that
-reaches the hub directly has no proxy secret. Tailscale keeps its node key on the claim `<app>-<env>-tailscale`, so a
-restart is the same machine. Give it an auth key in `.env` as `TAILSCALE_AUTH_KEY` (from the admin console's Keys
-page; a reusable, pre-approved key, tagged if you want the device owned by a tag), which goes into the Secret with
-the rest and is read only by the sidecar. trax never creates one. Each deploy also writes a new proxy secret to
-`~/.config/trax/<app>-<env>/tailnet.yaml`, mode 0600, which only the hub's unit plays, so rotating it restarts the
-hub and nothing else.
+With `"exposure": "tailnet"` the hub is published on no host port. A pod of its own, `<app>-<env>-tailnet`, runs
+beside it instead: Tailscale (`tailscale/tailscale:v1.104.7`) in userspace networking, so it needs no capability and
+no `/dev/net/tun`, which joins the tailnet as `tailnet.hostname` and serves HTTPS to the edge; and the same Caddy
+edge, listening only on a Unix socket in that pod, which passes to the hub by its name on the app's network. In
+userspace networking tailscaled hands any tailnet connection that serve does not take to `127.0.0.1` on the same
+port, so nothing in that pod listens on TCP, and the hub, in another pod, is not on its loopback. A container on the
+network that reaches the hub directly has no proxy secret. Tailscale runs as uid 65533, is held to no egress list, and
+keeps its node key on the claim `<app>-<env>-tailscale`, so a restart is the same machine. Give it an auth key in
+`.env` as `TAILSCALE_AUTH_KEY` (from the admin console's Keys page; a reusable, pre-approved key, tagged if you want
+the device owned by a tag), which goes into the Secret with the rest and is read only by Tailscale. trax never
+creates one. Each deploy also writes a new proxy secret to `~/.config/trax/<app>-<env>/tailnet.yaml`, mode 0600,
+which only the hub's unit and the tailnet unit play. The tailnet unit `Requires=` the hub's, so it restarts whenever
+the hub does and the two always hold the same secret.
 
 What differs from a cluster, and why:
 
@@ -1365,10 +1368,10 @@ What differs from a cluster, and why:
 | Postgres as a StatefulSet | A Deployment of one on a claim, which podman keeps as the named volume `<app>-<env>-data`; `kube play` has no StatefulSet. |
 | A migrate Job the deploy waits on | The migration runs in the migrator's unit before its pod starts (after waiting up to two minutes for this host's Postgres), and fails the unit unless it exits 0, printing the end of its log. Every other service's unit `Requires=` the migrator's. The migrate, drain and resume pods are written as Pods that never restart, not Jobs: `kube play` runs a Job only from podman 5, and a Pod from 4.9 (Ubuntu 24.04's podman) on. |
 | `hostUsers: false` | `UserNS=nomap` on every unit, as compose: rootless podman cannot map a range per pod. |
-| Network policies | None: `kube play` does not read them. The network holds only this app's pods, and a tailnet hub's edge listens on the pod's loopback. |
-| The operator's Ingress and the edge's own pod | Tailscale and the edge as sidecars in the hub's pod. |
+| Network policies | None: `kube play` does not read them. The network holds only this app's pods, and a tailnet exposure's edge listens on a Unix socket only its own pod mounts. |
+| The operator's Ingress and the edge's own pod | Tailscale and the edge in a pod of their own beside the hub's. |
 | The egress as a native sidecar, and an admission policy | `kube play` waits for every init container to exit, so a native sidecar would hold the pod from starting (podman 6.2). The sidecar is an ordinary container that runs `run`: it puts the rules back as it starts, then gives up root and every capability and serves. The `egress-rules` init container stays, with `io.podman.annotations.init.container.type: always` so it runs on every start of the pod. `podman pod restart` makes the pod's network namespace afresh without running init containers, and the sidecar putting the rules back is what holds it then; restart the unit instead, which plays the pod again. No admission policy: podman reads none. After the migration, the migrate pod's sidecar is stopped, and the drain and resume pods' once each has run. |
-| A held hub with a tailnet exposure | The pod has both sidecars. Tailscale runs as the egress uid (61000), so its traffic is not sent through the egress proxy: it reaches its control plane and relays over TCP and DNS, as the egress itself does, and relays through DERP rather than direct UDP. A Tailscale state volume an earlier deploy wrote as root has to be removed (or given to uid 61000) when a hub is held for the first time. |
+| A held hub with a tailnet exposure | The hub's pod has the egress and its rules; Tailscale and the edge are in their own pod, which the rules do not reach, so Tailscale reaches its control plane and relays as it would anywhere. A Tailscale state volume an earlier deploy wrote as another user has to be removed (or given to uid 65533). |
 
 `plan --env home` writes the same files without building an image or writing the secret file. `status`, `logs`
 and `destroy` do not reach a podman environment and say what does: `systemctl --user status`, `journalctl --user -u

@@ -25,13 +25,15 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
   proxy's secret in `Trax-Proxy-Secret`, compared in constant time over SHA-256 digests; anything else is anonymous.
 - **Tailscale serve cannot add a header, so trax renders an edge that does.** A Caddy proxy between serve and the hub
   sets the secret on every request, replacing a caller's copy. On a cluster it is its own Deployment behind the
-  Tailscale operator's Ingress; under podman it is a sidecar in the hub's pod, bound to the pod's loopback, beside a
-  Tailscale sidecar, and the hub publishes no host port.
+  Tailscale operator's Ingress; under podman it shares a pod with Tailscale, beside the hub's, and listens only on a
+  Unix socket that serve dials, and the hub publishes no host port. Tailscale runs in userspace networking there,
+  which hands a tailnet connection serve does not take to `127.0.0.1` on the same port, so nothing in its network
+  namespace listens on TCP and the hub is not in it.
 - **On a cluster, both a network policy and the secret.** Every namespace trax deploys gets a default-deny ingress
   policy; the app's pods reach each other, the edge accepts only the operator's proxy pod for its Ingress, and the hub
   accepts the edge. A plugin that ignores NetworkPolicy leaves the secret.
 - **The secret is minted by `trax deploy` on every deploy** and held in a Secret (`<app>-<env>-tailnet`) or, under
-  podman, a 0600 file only the hub's unit plays. Only the hub and the edge read it.
+  podman, a 0600 file only the hub's unit and the tailnet unit play. Only the hub and the edge read it.
 - **Exposure is a deployment fact the host is told.** `trax deploy` sets `Trax__Deploy__Exposure=tailnet` only on the
   exposed hub. The scheme refuses to start without it or without a secret of 32 characters, in every environment. The
   host reports the scheme in its deploy manifest, and `trax deploy` refuses it on compose, on AWS, on an unexposed
@@ -48,6 +50,9 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
 - **The operator's Service mode.** It forwards TCP and adds no identity headers.
 - **A network policy alone, or the secret alone.** The policy holds only where the plugin enforces it; the secret
   alone leaves the in-cluster database and broker open to every pod, as they were.
+- **A tun device for the podman Tailscale, or keeping it in the hub's pod.** Tun mode needs `NET_ADMIN` and
+  `/dev/net/tun`, and delivers tailnet traffic to whatever listens on the pod's addresses, the hub included. In the
+  hub's pod, userspace mode reaches the hub's port and the edge's through loopback.
 - **Trax's own sidecar on a cluster instead of the operator.** The user chose the operator, which holds its own
   credentials, so trax handles no Tailscale credential on a cluster.
 
@@ -67,8 +72,11 @@ or forwarded-for says, a duplicate or comma-joined login is refused, a tagged de
 not start unexposed or without a secret. `TailscalePartsTests` pins the constant-time comparison. `DeployTailnetTests`
 in `Trax.Cli/tests/Trax.Cli.Tests/` holds the deploy to it: the policies' shape, no LoadBalancer, NodePort or other
 Ingress, the edge, the secret given only to the hub and minted on every deploy, no published port under podman, and
-every refusal of the field and of the scheme.
+every refusal of the field and of the scheme, and under podman, a pod of their own for Tailscale and the edge with no
+TCP listener in it.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
+- **2026-11-25**: Under podman, Tailscale and the edge moved out of the hub's pod into one of their own, the edge onto
+  a Unix socket: userspace tailscaled forwards a tailnet connection serve does not take to loopback.

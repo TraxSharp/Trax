@@ -13,8 +13,8 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// <para>
 /// On a cluster: the Tailscale operator's Ingress (its proxy pod runs Tailscale serve) in front of the edge's
 /// Deployment and Service, a NetworkPolicy that admits only that proxy pod to the edge, and the edge to the hub. Under
-/// podman: Tailscale and the edge as sidecars in the hub's pod, the edge bound to 127.0.0.1, and no port published on
-/// the host.
+/// podman: Tailscale and the edge in a pod of their own beside the hub's, the edge listening only on a Unix socket in
+/// that pod, and no port published on the host.
 /// </para>
 /// </summary>
 internal static class KubernetesTailnet
@@ -57,6 +57,21 @@ internal static class KubernetesTailnet
     /// <summary>The user the edge runs as: not root, and owning nothing in the image.</summary>
     public const long EdgeUser = 65532;
 
+    /// <summary>
+    /// The user the podman Tailscale sidecar runs as: not root, not the edge's, and not the egress uid the egress
+    /// rules let out.
+    /// </summary>
+    public const long TailscaleUser = 65533;
+
+    /// <summary>
+    /// Where the podman edge listens: a Unix socket in a directory only its own pod mounts, which Tailscale serve
+    /// dials. The edge listens on no TCP port under podman, since tailscaled in userspace networking hands any tailnet
+    /// connection that serve does not take to 127.0.0.1 on the same port.
+    /// </summary>
+    public const string EdgeSocketDirectory = "/run/trax-edge";
+
+    public const string EdgeSocket = EdgeSocketDirectory + "/edge.sock";
+
     /// <summary>The Secret trax writes the proxy secret to: <c>&lt;app&gt;-&lt;env&gt;-tailnet</c>.</summary>
     public static string ProxySecretName(DeployFile file, string environment) =>
         $"{file.StackName(environment)}-{EdgeName}";
@@ -81,7 +96,7 @@ internal static class KubernetesTailnet
 
     /// <summary>
     /// The edge's Caddyfile: no admin endpoint, plain HTTP on <see cref="EdgePort"/> (on <paramref name="bind"/> only,
-    /// when given), every request to <paramref name="upstream"/> with the secret set from the environment, replacing any
+    /// when given, which may be a Caddy <c>unix/</c> address), every request to <paramref name="upstream"/> with the secret set from the environment, replacing any
     /// copy the caller sent, so the secret is in no file.
     /// </summary>
     public static string Caddyfile(string? bind, string upstream)
@@ -109,12 +124,12 @@ internal static class KubernetesTailnet
 
     /// <summary>
     /// The Tailscale serve configuration of the podman sidecar: HTTPS on 443 with the tailnet's certificate, to the
-    /// edge on 127.0.0.1. <c>${TS_CERT_DOMAIN}</c> is filled in by the container when it starts.
+    /// edge's Unix socket. <c>${TS_CERT_DOMAIN}</c> is filled in by the container when it starts.
     /// </summary>
     public static string ServeConfig() =>
         "{\"TCP\":{\"443\":{\"HTTPS\":true}},\"Web\":{\"${TS_CERT_DOMAIN}:443\":{\"Handlers\":{\"/\":"
-        + string.Create(
-            CultureInfo.InvariantCulture,
-            $"{{\"Proxy\":\"http://127.0.0.1:{EdgePort}\"}}}}}}}}}}\n"
-        );
+        + $"{{\"Proxy\":\"unix:{EdgeSocket}\"}}}}}}}}}}\n";
+
+    /// <summary>The Caddy listen address of the podman edge: its socket, writable by any user in its pod.</summary>
+    public const string EdgeSocketBind = "unix/" + EdgeSocket + "|0222";
 }

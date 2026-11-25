@@ -757,40 +757,118 @@ public class DeployTailnetTests
     }
 
     [Test]
-    public void Under_podman_the_hubs_pod_runs_the_edge_on_loopback_and_tailscale_beside_it()
+    public void Under_podman_tailscale_and_the_edge_run_in_a_pod_of_their_own_beside_the_hub()
     {
         var stack = Podman();
-        var hub = Files(stack)["orders-home-hub.yaml"];
+        var files = Files(stack);
+        var hub = files["orders-home-hub.yaml"];
+        var tailnet = files["orders-home-tailnet.yaml"];
 
-        hub.Should().Contain("kind: ConfigMap").And.Contain("kind: PersistentVolumeClaim");
-        hub.Should().Contain("bind 127.0.0.1").And.Contain("reverse_proxy 127.0.0.1:8080");
-        hub.Should().Contain("http://127.0.0.1:8081");
-        hub.Should().Contain($"image: {KubernetesTailnet.CaddyImage}");
-        hub.Should().Contain($"image: {KubernetesTailnet.TailscaleImage}");
-        hub.Should().Contain("TS_USERSPACE").And.Contain("TS_AUTHKEY");
-        hub.Should()
+        hub.Should().NotContain(KubernetesTailnet.CaddyImage);
+        hub.Should().NotContain(KubernetesTailnet.TailscaleImage);
+        tailnet.Should().Contain("kind: ConfigMap").And.Contain("kind: PersistentVolumeClaim");
+        tailnet.Should().Contain($"image: {KubernetesTailnet.CaddyImage}");
+        tailnet.Should().Contain($"image: {KubernetesTailnet.TailscaleImage}");
+        tailnet.Should().Contain("TS_USERSPACE").And.Contain("TS_AUTHKEY");
+        tailnet
+            .Should()
             .Contain($"container.seccomp.security.alpha.kubernetes.io/{KubernetesTailnet.EdgeName}")
             .And.Contain("container.seccomp.security.alpha.kubernetes.io/tailscale");
-        hub.Should().NotContain("NET_ADMIN").And.NotContain("/dev/net/tun");
+        tailnet.Should().NotContain("NET_ADMIN").And.NotContain("/dev/net/tun");
+        stack.Units.Should().ContainInOrder("orders-home-hub", "orders-home-tailnet");
+        stack.ServiceUnits.Should().NotContain("orders-home-tailnet");
         stack.SecretKeys.Should().Contain(KubernetesTailnet.AuthKeySecretKey);
         stack.ProxySecretName.Should().Be("orders-home-tailnet");
     }
 
     [Test]
-    public void Under_podman_only_the_hubs_unit_plays_the_proxy_secret()
+    public void Under_podman_nothing_in_tailscales_network_namespace_listens_on_tcp()
+    {
+        // In userspace networking tailscaled hands a tailnet connection that serve does not take to 127.0.0.1 on the
+        // same port. So the pod Tailscale runs in has no TCP listener at all: the edge listens on a Unix socket only
+        // serve dials, and the hub is in another pod, reached over the app's network.
+        var tailnet = Files(Podman())["orders-home-tailnet.yaml"];
+        var config = KubernetesYaml.LoadAllFromString(tailnet).OfType<V1ConfigMap>().Single();
+        var caddyfile = config.Data[KubernetesTarget.EdgeConfigFile];
+        var serve = config.Data[KubernetesTarget.TailscaleServeFile];
+
+        caddyfile
+            .Should()
+            .Contain($"bind unix/{KubernetesTailnet.EdgeSocket}|0222")
+            .And.Contain("reverse_proxy hub:8080");
+        caddyfile.Should().NotContain("127.0.0.1");
+        serve.Should().Contain($"\"Proxy\":\"unix:{KubernetesTailnet.EdgeSocket}\"");
+        serve.Should().NotContain("http://");
+        var pod = KubernetesYaml
+            .LoadAllFromString(tailnet)
+            .OfType<V1Deployment>()
+            .Single()
+            .Spec.Template.Spec;
+        pod.Containers.Select(c => c.Name)
+            .Should()
+            .BeEquivalentTo([KubernetesTailnet.EdgeName, "tailscale"]);
+        pod.Containers.Should().OnlyContain(c => c.Ports == null || c.Ports.Count == 0);
+        pod.Containers.Should()
+            .OnlyContain(c =>
+                c.VolumeMounts.Any(m =>
+                    string.Equals(
+                        m.MountPath,
+                        KubernetesTailnet.EdgeSocketDirectory,
+                        StringComparison.Ordinal
+                    )
+                )
+            );
+    }
+
+    [Test]
+    public void Under_podman_tailscale_runs_as_a_user_of_its_own()
+    {
+        var pod = KubernetesYaml
+            .LoadAllFromString(Files(Podman())["orders-home-tailnet.yaml"])
+            .OfType<V1Deployment>()
+            .Single()
+            .Spec.Template.Spec;
+        var tailscale = pod.Containers.Single(c =>
+            string.Equals(c.Name, "tailscale", StringComparison.Ordinal)
+        );
+
+        tailscale.SecurityContext.RunAsUser.Should().Be(KubernetesTailnet.TailscaleUser);
+        tailscale.SecurityContext.RunAsNonRoot.Should().BeTrue();
+        KubernetesTailnet
+            .TailscaleUser.Should()
+            .NotBe(DeployEgress.Uid)
+            .And.NotBe(KubernetesTailnet.EdgeUser);
+    }
+
+    [Test]
+    public void Under_podman_the_hub_and_the_tailnet_units_play_the_proxy_secret_and_no_other()
     {
         var files = Files(Podman());
         var proxySecret = PodmanTarget.ProxySecretPath(SecretPath);
+        string[] readers = ["orders-home-hub.kube", "orders-home-tailnet.kube"];
 
-        files["orders-home-hub.kube"].Should().Contain($"kube play --replace {proxySecret}");
+        foreach (var reader in readers)
+            files[reader].Should().Contain($"kube play --replace {proxySecret}");
         files
             .Where(f =>
                 f.Key.EndsWith(".kube", StringComparison.Ordinal)
-                && !string.Equals(f.Key, "orders-home-hub.kube", StringComparison.Ordinal)
+                && !readers.Contains(f.Key, StringComparer.Ordinal)
             )
             .Should()
             .OnlyContain(f => !f.Value.Contains(proxySecret, StringComparison.Ordinal));
         proxySecret.Should().Be("/home/u/.config/trax/orders-home/tailnet.yaml");
+    }
+
+    [Test]
+    public void Under_podman_the_tailnet_unit_restarts_with_the_hub_so_both_read_one_proxy_secret()
+    {
+        var unit = Files(Podman())["orders-home-tailnet.kube"];
+
+        // Requires= stops and restarts this unit with the hub's, and every deploy restarts the hub on its new image.
+        unit.Should()
+            .Contain("Requires=orders-home-hub.service")
+            .And.Contain("After=orders-home-hub.service");
+        unit.Should().NotContain("PublishPort");
     }
 
     [Test]

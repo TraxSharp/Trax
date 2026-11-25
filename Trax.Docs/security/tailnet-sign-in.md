@@ -48,9 +48,12 @@ On a cluster two things hold that together:
    secret, so its headers are ignored. A cluster whose network plugin does not enforce NetworkPolicy still has this
    half.
 
-On one host there are no network policies, so the edge and Tailscale run inside the hub's pod. The edge listens on the
-pod's loopback, which nothing outside the pod shares, and the hub is published on no host port. A container on the
-app's network can reach the hub directly, and has no secret.
+On one host there are no network policies, so the path is held by where things listen. Tailscale runs in userspace
+networking there, and in that mode tailscaled hands any tailnet connection that serve does not take to `127.0.0.1` on
+the same port. Anything listening on TCP in Tailscale's network namespace is therefore on the tailnet without serve's
+headers being stripped. So Tailscale and the edge get a pod of their own, the edge listens only on a Unix socket in a
+directory only that pod mounts, which serve dials, and the hub is in another pod, published on no host port. A
+container on the app's network can reach the hub directly, and has no secret.
 
 The secret is compared as two SHA-256 digests with a fixed-time comparison, so the time an answer takes says nothing
 about how close a guess was. It changes on every deploy, so one that leaked from an old pod's environment stops

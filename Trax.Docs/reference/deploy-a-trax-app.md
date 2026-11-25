@@ -144,7 +144,7 @@ database and secrets: the pods read their secrets from Secrets Manager with a ro
 The same environment runs on one host with no cluster: give it `"runtime": "podman"` and `trax deploy --env` writes
 pod YAML and Quadlet units for systemd to run, takes the secret values from the `.env` beside `trax.deploy.json` into
 a file only you can read under `~/.config/trax/`, and prints the commands that install and start the units. With
-`"exposure": "tailnet"` the hub's pod gets a Tailscale sidecar, which reads its auth key from `TAILSCALE_AUTH_KEY` in
+`"exposure": "tailnet"` a pod beside the hub's runs Tailscale, which reads its auth key from `TAILSCALE_AUTH_KEY` in
 the same `.env`, and no port is published on the host. The
 [CLI reference](/docs/reference/cli#on-one-host-under-podman) lists what differs from a cluster.
 
