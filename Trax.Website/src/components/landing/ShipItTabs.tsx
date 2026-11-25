@@ -1,9 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
-import ReachMap from "./ReachMap";
-import ReleaseStory from "./ReleaseStory";
 import WhatYouWrite from "./WhatYouWrite";
+
+// The second and third tabs read the deploy recordings, which are too big to load with the page; each loads when its
+// tab is first opened.
+const loading = () => <p className="text-sm text-text-muted">Loading the recording…</p>;
+const ReleaseStory = dynamic(() => import("./ReleaseStory"), { loading });
+const ReachMap = dynamic(() => import("./ReachMap"), { loading });
 
 // The deploy section's three tabs: what trax writes from your file, one release as it ran, and who can reach whom
 // once it is deployed. The first is open when the page loads; a tab is only drawn while it is open, so each one

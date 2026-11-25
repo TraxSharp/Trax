@@ -1,11 +1,12 @@
 import CodeFold from "./CodeFold";
 import DemoSection from "./DemoSection";
-import DeployReplay from "./DeployReplay";
+import LazyDeployReplay from "./LazyDeployReplay";
 import ShipItTabs from "./ShipItTabs";
 
 // Deploying with trax, in three tabs (ShipItTabs): what trax writes from your one file, one release while people use
 // the app, and who can reach whom once it runs, each read off generated or recorded data. Every recorded deploy, with
-// its file, its terminal and its checks, is in the fold under them (DeployReplay), and so is how they were made.
+// its file, its terminal and its checks, is in the fold under them (DeployReplay, loaded when the fold first opens), and
+// so is how they were made.
 export default function ShipIt() {
   return (
     <DemoSection
@@ -27,8 +28,8 @@ export default function ShipIt() {
             On Kubernetes, only the app&apos;s own services reach its database and each one reaches only the domains you name; on AWS,
             security groups keep the database to the app&apos;s tasks. Code a person or an agent wrote can run in a sandbox with no network.
           </p>
-          <CodeFold label="Every recorded deploy: each shape, Kubernetes and one machine, with the file, the terminal and the checks">
-            <DeployReplay />
+          <CodeFold lazy label="Every recorded deploy: each shape, Kubernetes and one machine, with the file, the terminal and the checks">
+            <LazyDeployReplay />
           </CodeFold>
           <CodeFold label="How these were recorded, and how to record them again">
             <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-text-secondary">
