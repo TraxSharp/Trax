@@ -92,7 +92,7 @@ Builds are deterministic: the same source and toolchain produce byte-for-byte id
 
 ## Gated releases
 
-A merge to `main` builds and tests but releases nothing; a release is a manual run of the release workflow, and the release job refuses any ref but `main`. Both the release and publish jobs run behind the protected `release` deployment environment, which restricts which refs may deploy and can require a human reviewer before a version is cut or a package leaves the pipeline. The environment also scopes the OIDC claim that the trusted-publishing policy checks, a claim a feature branch or pull request cannot forge.
+A merge to `main` builds and tests but releases nothing; a release is a manual run of the release workflow, and the release job refuses any ref but `main`. The release and publish jobs, and the job that pushes the egress image (the only one that may write to ghcr.io), run behind the protected `release` deployment environment, which restricts which refs may deploy and can require a human reviewer before a version is cut or a package leaves the pipeline. The environment also scopes the OIDC claim that the trusted-publishing policy checks, a claim a feature branch or pull request cannot forge.
 
 ## Runtime egress blocking
 

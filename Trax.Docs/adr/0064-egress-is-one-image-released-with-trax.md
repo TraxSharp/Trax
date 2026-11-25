@@ -47,8 +47,9 @@ domains, which is what an app that calls one model API and one package feed need
   A TCP entry passes plain TCP when the address dialled is one its name resolves to now, so the database is
   allowed by its Service, not by a range.
 - **Released by digest.** The Release workflow builds the image into an OCI archive in the read-only build job,
-  packs its manifest digest into Trax.Cli, and the publish job, behind the `release` environment, pushes the
-  archive unchanged to ghcr.io and checks the registry holds that digest before any NuGet package goes out. A
+  packs its manifest digest into Trax.Cli, and a job of its own, behind the `release` environment and the only
+  one holding `packages: write`, pushes the archive unchanged to ghcr.io and checks the registry holds that
+  digest; the publish job, which ships the NuGet packages, waits for it. A
   Trax.Cli of a version names exactly the image built with it; a development build names none and refuses
   `"egress"` unless the deploy file names an image by digest.
 - **On Kubernetes, a ValidatingAdmissionPolicy instead of PSA alone.** PSA baseline refuses NET_ADMIN on any
@@ -97,3 +98,4 @@ container adding `SYS_PTRACE`.
 - **2026-11-24**: Recorded.
 - **2026-11-24**: Proved on k3s v1.36: the rules init container's NET_ADMIN and the uid match both work in a pod
   with a user namespace of its own (`hostUsers: false`).
+- **2026-11-25**: The image is pushed by its own job, the only one with `packages: write`, before publish.

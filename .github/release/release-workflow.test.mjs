@@ -20,6 +20,7 @@ const workflow = yaml.load(workflowText);
 const release = workflow.jobs.release;
 const build = workflow.jobs.build;
 const publish = workflow.jobs.publish;
+const pushEgress = workflow.jobs['push-egress'];
 
 const step = (job, name) => {
   const found = job.steps.find((s) => s.name === name);
@@ -132,6 +133,27 @@ describe('build job', () => {
   });
 });
 
+describe('push-egress job', () => {
+  it('is the only job that may write packages, and it holds nothing else', () => {
+    assert.deepEqual(pushEgress.permissions, { packages: 'write' });
+    for (const [name, job] of Object.entries(workflow.jobs))
+      if (name !== 'push-egress') assert.equal(job.permissions?.packages, undefined, `${name} may write packages`);
+  });
+
+  it('runs after the build, behind the release environment, and before publish', () => {
+    assert.deepEqual(pushEgress.needs, ['release', 'build']);
+    assert.equal(pushEgress.if, "needs.release.outputs.released == 'true'");
+    assert.equal(pushEgress.environment, 'release');
+    assert.ok(publish.needs.includes('push-egress'));
+  });
+
+  it('pushes only the archive the build job built', () => {
+    const verify = step(pushEgress, 'Verify the egress image is the one build built');
+    assert.equal(verify.env.EGRESS_ARCHIVE, '${{ needs.build.outputs.egress-archive }}');
+    assert.ok(indexOf(pushEgress, 'Verify the egress image is the one build built') < indexOf(pushEgress, 'Push the egress image'));
+  });
+});
+
 describe('publish job', () => {
   it('holds no npm token: it publishes through OIDC', () => {
     assert.equal(publish.permissions['id-token'], 'write');
@@ -164,7 +186,7 @@ describe('publish job', () => {
 
   it('takes its digests from the build job', () => {
     const verify = step(publish, 'Verify the packages are the ones build built');
-    assert.deepEqual(publish.needs, ['release', 'build']);
+    assert.deepEqual(publish.needs, ['release', 'build', 'push-egress']);
     assert.equal(verify.env.DIGESTS, '${{ needs.build.outputs.digests }}');
     assert.equal(verify.env.NPM_DIGESTS, '${{ needs.build.outputs.npm-digests }}');
   });

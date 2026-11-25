@@ -18,9 +18,10 @@ name: Release
 # 2FA, while the publish job waits (see the "Stage on npm and wait for approval" step).
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
-# build (packs from the tag and builds the egress image, read-only) -> publish (verifies, attests,
-# publishes; the egress image to ghcr.io before NuGet). Publishing the
-# site is not part of a release: dispatch website.yml with the new tag afterwards.
+# build (packs from the tag and builds the egress image, read-only) -> push-egress (the egress
+# image to ghcr.io; the only packages token) -> publish (verifies, attests, publishes; NuGet only
+# once the image is there). Publishing the site is not part of a release: dispatch website.yml with
+# the new tag afterwards.
 on:
   workflow_dispatch:
 
@@ -220,7 +221,7 @@ jobs:
         # ghcr.io/traxsharp/trax-egress, the image trax deploy renders beside a service that names
         # "egress", built at the released version into an OCI archive. Its manifest digest is packed
         # into Trax.Cli below, so a trax of this version names exactly this image and nothing a tag
-        # could later point at. publish pushes the archive unchanged and checks the registry holds
+        # could later point at. push-egress pushes the archive unchanged and checks the registry holds
         # that digest before any NuGet package goes out.
         id: egress
         env:
@@ -303,13 +304,81 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
+  # Publish zone, for the egress image alone. The only job that may write packages, and it
+  # holds nothing else: no OIDC token, no attestation, no NuGet or npm credential. It runs
+  # before publish because the Trax.Cli package names the image by digest, so no trax of this
+  # version ships until the registry holds that digest. Gated behind the `release` environment.
+  # ---------------------------------------------------------------------------
+  push-egress:
+    needs: [release, build]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      packages: write       # push the egress image to ghcr.io/traxsharp
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+      - name: Download the egress image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: egress
+          path: egress
+      - name: Verify the egress image is the one build built
+        env:
+          EGRESS_ARCHIVE: ${{ needs.build.outputs.egress-archive }}
+        run: |
+          if [ "$(sha256sum egress/trax-egress.tar | cut -d ' ' -f 1)" != "$EGRESS_ARCHIVE" ]; then
+            echo "::error::The downloaded egress image is not the archive the build job built."
+            exit 1
+          fi
+      # skopeo pushes the archive as it is (--preserve-digests refuses any change to the manifest),
+      # and the digest is read back from the registry. A re-run pushes the same bytes again. The
+      # package ghcr.io/traxsharp/trax-egress must be public and linked to this repository, once, by
+      # an owner.
+      - name: Push the egress image
+        env:
+          PKG_VERSION: ${{ needs.release.outputs.version }}
+          EGRESS_DIGEST: ${{ needs.build.outputs.egress-digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          archive=oci-archive:egress/trax-egress.tar
+          image="docker://ghcr.io/traxsharp/trax-egress:$PKG_VERSION"
+          if [ "$(skopeo inspect --format '{{.Digest}}' "$archive")" != "$EGRESS_DIGEST" ]; then
+            echo "::error::The egress archive's manifest is not the digest Trax.Cli was packed with."
+            exit 1
+          fi
+          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
+          skopeo copy --preserve-digests "$archive" "$image"
+          pushed=$(skopeo inspect --format '{{.Digest}}' "$image")
+          skopeo logout ghcr.io
+          if [ "$pushed" != "$EGRESS_DIGEST" ]; then
+            echo "::error::ghcr.io holds trax-egress:$PKG_VERSION at $pushed, not $EGRESS_DIGEST. Nothing was published to NuGet."
+            exit 1
+          fi
+          echo "ghcr.io/traxsharp/trax-egress:$PKG_VERSION is $EGRESS_DIGEST."
+
+  # ---------------------------------------------------------------------------
   # Publish zone. Consumes the built artifacts and pushes them. Runs NO install /
   # build / test code: it downloads the SDK and Node.js toolchains and runs only
   # their own CLIs. Holds the only credentials that can publish to NuGet and npm.
   # Gated behind the protected `release` environment.
   # ---------------------------------------------------------------------------
   publish:
-    needs: [release, build]
+    needs: [release, build, push-egress]
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     # Most of it is the wait for a maintainer to approve the staged npm version (an hour at
@@ -320,7 +389,6 @@ jobs:
       contents: read
       id-token: write       # OIDC: keyless attestation signing, NuGet and npm trusted publishing
       attestations: write   # write the SLSA build-provenance attestation
-      packages: write       # push the egress image to ghcr.io/traxsharp
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
@@ -346,8 +414,6 @@ jobs:
             www.microsoft.com:80
             registry.npmjs.org:443
             www.nuget.org:443
-            ghcr.io:443
-            pkg-containers.githubusercontent.com:443
             fulcio.sigstore.dev:443
             rekor.sigstore.dev:443
             tuf-repo-cdn.sigstore.dev:443
@@ -489,34 +555,6 @@ jobs:
           done
           echo "::error::@traxsharp/state-machine@$PKG_VERSION was staged but not approved within $((NPM_APPROVAL_SECONDS / 60)) minutes. Nothing was published to NuGet. Approve it, then re-run this job."
           exit 1
-      # The egress image goes out before NuGet: the Trax.Cli package names it by digest, so no trax
-      # of this version ships until the registry holds that digest. skopeo pushes the archive as it
-      # is (--preserve-digests refuses any change to the manifest), and the digest is read back from
-      # the registry. A re-run pushes the same bytes again. The package ghcr.io/traxsharp/trax-egress
-      # must be public and linked to this repository, once, by an owner.
-      - name: Push the egress image
-        env:
-          PKG_VERSION: ${{ needs.release.outputs.version }}
-          EGRESS_DIGEST: ${{ needs.build.outputs.egress-digest }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eu
-          archive=oci-archive:egress/trax-egress.tar
-          image="docker://ghcr.io/traxsharp/trax-egress:$PKG_VERSION"
-          if [ "$(skopeo inspect --format '{{.Digest}}' "$archive")" != "$EGRESS_DIGEST" ]; then
-            echo "::error::The egress archive's manifest is not the digest Trax.Cli was packed with."
-            exit 1
-          fi
-          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
-          skopeo copy --preserve-digests "$archive" "$image"
-          pushed=$(skopeo inspect --format '{{.Digest}}' "$image")
-          skopeo logout ghcr.io
-          if [ "$pushed" != "$EGRESS_DIGEST" ]; then
-            echo "::error::ghcr.io holds trax-egress:$PKG_VERSION at $pushed, not $EGRESS_DIGEST. Nothing was published to NuGet."
-            exit 1
-          fi
-          echo "ghcr.io/traxsharp/trax-egress:$PKG_VERSION is $EGRESS_DIGEST."
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
