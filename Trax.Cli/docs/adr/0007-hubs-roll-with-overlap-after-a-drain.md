@@ -84,10 +84,12 @@ timeout unless it is cancelled or the deploy is forced.
 - `.github/ci/deploy/podman.sh`, in the same job, does the same under the podman runtime: the drain pod holds the
   restart until the run ends, and Postgres and RabbitMQ keep running.
 
-Not covered: a real ECS run. `.github/ci/deploy/compose.sh` runs the compose release over a live run the same way,
-but no CI job runs it yet.
+- `.github/ci/deploy/compose.sh`, in the same job, runs the printed compose release over a live run the same way.
+
+Not covered: a real ECS run.
 
 ## Changelog
+- **2026-11-25**: The compose release is proved in CI by `compose.sh` in the `deploy-cluster` job.
 
 - **2026-11-25**: Exemplars name the deploy proofs in `.github/ci/deploy/`.
 - **2026-11-25**: The podman install hint migrates before it drains. It drained first, so the new image's drain ran

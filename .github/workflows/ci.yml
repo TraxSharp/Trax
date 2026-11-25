@@ -1319,6 +1319,8 @@ jobs:
           set -euo pipefail
           sudo loginctl enable-linger "$USER"
           .github/ci/deploy/podman.sh
+      - name: Deploy with compose
+        run: .github/ci/deploy/compose.sh
 
   # The egress image, Trax.Egress (packages.json suite egress): the Go program, its Dockerfile, the
   # seccomp profile and the end-to-end test that runs the image in real network namespaces. The Go

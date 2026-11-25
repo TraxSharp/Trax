@@ -52,7 +52,7 @@ const run = (script) => {
   return { result, calls: made };
 };
 
-for (const script of ['cluster.sh', 'podman.sh'])
+for (const script of ['cluster.sh', 'podman.sh', 'compose.sh'])
   describe(script, () => {
     it('restores trax and the sample locked first, and stops when a lockfile has drifted', () => {
       const { result, calls } = run(script);

@@ -1,7 +1,7 @@
 # Deploy proof
 
 `trax deploy` run for real, not against a fake: `cluster.sh` on a Kubernetes cluster, `podman.sh` with the
-podman runtime under systemd and `compose.sh` as a compose stack. The first two are the `deploy-cluster` CI job, which installs k3s on the runner
+podman runtime under systemd and `compose.sh` as a compose stack. All three are the `deploy-cluster` CI job, which installs k3s on the runner
 (`K8S=k3s`). Elsewhere `cluster.sh` uses the current kubeconfig context and the registry in `TRAX_CI_REGISTRY`,
 which is how the same checks run against k3s in a VM.
 
@@ -58,7 +58,7 @@ What `compose.sh` proves (`ENGINE=docker` by default, `ENGINE=podman` for podman
    drain reports the run busy, then replaces them once it ends, leaves the run as it was ended, ends the drain, and
    leaves Postgres and RabbitMQ running.
 
-No CI job runs `compose.sh` yet.
+The `deploy-cluster` job runs it with the runner's docker compose.
 
 `podman kube play` runs one copy of a Deployment, so the sample's two workers are one under podman. The egress is not
 proved under podman here: the script builds no egress image into podman.
