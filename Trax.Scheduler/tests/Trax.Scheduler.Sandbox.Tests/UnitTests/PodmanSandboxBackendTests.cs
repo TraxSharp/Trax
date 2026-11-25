@@ -25,6 +25,8 @@ public class PodmanSandboxBackendTests
 
     private const string RunId = "0123456789abcdef0123456789abcdef";
 
+    private static readonly byte[] Request = "{\"train\":\"t\"}"u8.ToArray();
+
     private static SandboxJob Job(int timeout = 30) =>
         new(
             RunId,
@@ -32,7 +34,7 @@ public class PodmanSandboxBackendTests
             new SandboxLimits(500, 192, 8, timeout),
             new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
-                [SandboxPaths.RequestFile] = "{}"u8.ToArray(),
+                [SandboxPaths.RequestFile] = Request,
             }
         );
 
@@ -95,6 +97,33 @@ public class PodmanSandboxBackendTests
             .Calls.Should()
             .Contain($"PUT /v5.0.0/libpod/containers/trax-sbx-{RunId}-holder/archive?path=%2Fin");
         RemovedEverything(podman);
+    }
+
+    [Test]
+    public async Task RunAsync_TheInputGoesInThroughTheHolderBeforeTheSandboxStarts()
+    {
+        var podman = new FakePodman();
+
+        await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        var put = podman.Calls.IndexOf(
+            $"PUT /v5.0.0/libpod/containers/trax-sbx-{RunId}-holder/archive?path=%2Fin"
+        );
+        var start = podman.Calls.IndexOf($"POST /v5.0.0/libpod/containers/trax-sbx-{RunId}/start");
+        put.Should().BeGreaterThan(-1);
+        start.Should().BeGreaterThan(put, "the sandbox must find its request when it starts");
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        using var archive = new MemoryStream(podman.PutArchive ?? []);
+        var reader = new TarReader(archive);
+        while (await reader.GetNextEntryAsync(copyData: true) is { } entry)
+            if (entry.DataStream is { } data)
+            {
+                using var bytes = new MemoryStream();
+                await data.CopyToAsync(bytes);
+                files[entry.Name] = bytes.ToArray();
+            }
+        files.Keys.Should().Equal(SandboxPaths.RequestFile);
+        files[SandboxPaths.RequestFile].Should().Equal(Request);
     }
 
     [Test]

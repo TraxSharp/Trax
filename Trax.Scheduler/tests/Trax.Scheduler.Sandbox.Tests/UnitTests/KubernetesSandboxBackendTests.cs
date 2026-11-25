@@ -24,6 +24,7 @@ public class KubernetesSandboxBackendTests
     private const string Adr =
         "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md";
     private const string RunId = "0123456789abcdef0123456789abcdef";
+    private static readonly byte[] Request = "{\"train\":\"t\"}"u8.ToArray();
     private string _runs = "";
 
     [SetUp]
@@ -53,7 +54,7 @@ public class KubernetesSandboxBackendTests
             new SandboxLimits(500, 192, 8, 30),
             new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
-                [SandboxPaths.RequestFile] = "{}"u8.ToArray(),
+                [SandboxPaths.RequestFile] = Request,
             }
         );
         return await backend.RunAsync(job, CancellationToken.None).ConfigureAwait(false);
@@ -98,6 +99,9 @@ public class KubernetesSandboxBackendTests
 
         api.CreatedJob.Should().NotBeNull();
         api.Calls[0].Should().StartWith("POST ");
+        api.InputAtCreate.Keys.Should()
+            .Equal([SandboxPaths.RequestFile], "the sandbox reads its request from its input");
+        api.InputAtCreate[SandboxPaths.RequestFile].Should().Equal(Request);
     }
 
     [Test]

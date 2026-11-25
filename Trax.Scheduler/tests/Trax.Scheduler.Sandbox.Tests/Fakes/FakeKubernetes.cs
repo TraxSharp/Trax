@@ -26,6 +26,10 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
 
     public string? TerminatedReason { get; set; }
 
+    /// <summary>The run's input directory as it was when the Job was created, by file name.</summary>
+    public IDictionary<string, byte[]> InputAtCreate { get; } =
+        new Dictionary<string, byte[]>(StringComparer.Ordinal);
+
     /// <summary>The Job's condition: Complete, or Failed with a reason such as DeadlineExceeded.</summary>
     public (string Type, string? Reason) Condition { get; set; } = ("Complete", null);
 
@@ -92,6 +96,11 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
         CreatedJob = JsonNode.Parse(body)?.AsObject();
         var runId =
             CreatedJob?["metadata"]?["labels"]?["trax.sandbox/run"]?.GetValue<string>() ?? "";
+        var input = Path.Combine(runsPath, runId, "in");
+        if (Directory.Exists(input))
+            foreach (var file in Directory.EnumerateFiles(input))
+                InputAtCreate[Path.GetFileName(file)] = await File.ReadAllBytesAsync(file, ct)
+                    .ConfigureAwait(false);
         var output = Path.Combine(runsPath, runId, "out");
         foreach (var (name, content) in Output)
         {
