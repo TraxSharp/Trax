@@ -273,6 +273,38 @@ public class DrainTests : TestSetup
             .OnlyContain(b => string.Equals(b.Kind, "run", StringComparison.Ordinal));
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run no host is running, to read it back as busy.")]
+    [Test]
+    public async Task A_train_left_out_of_MaxActiveJobs_is_still_busy()
+    {
+        // ExcludeFromMaxActiveJobs is about concurrency. A replaced host cuts the run off all the same, and the
+        // deploy's drain (DrainCommand) waits on it, so the console and the API count it too.
+        var name = typeof(SchedulerTestTrain).FullName.NotNull();
+        var configuration = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        configuration.ExcludedTrainTypeNames.Add(name);
+        try
+        {
+            var run = await SaveRun(TrainState.InProgress);
+
+            var status = await Operations.GetDrainAsync(CancellationToken.None);
+
+            status.BusyTotal.Should().Be(1);
+            status
+                .Busy.Should()
+                .ContainSingle(b =>
+                    string.Equals(
+                        b.Id,
+                        run.Id.ToString(CultureInfo.InvariantCulture),
+                        StringComparison.Ordinal
+                    )
+                );
+        }
+        finally
+        {
+            configuration.ExcludedTrainTypeNames.Remove(name);
+        }
+    }
+
     [Test]
     public async Task A_starting_scheduler_host_ends_the_drain()
     {

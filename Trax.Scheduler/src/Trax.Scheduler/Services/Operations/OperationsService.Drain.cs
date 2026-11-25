@@ -102,10 +102,11 @@ public partial class OperationsService
         );
     }
 
+    // The same list the deploy's drain reads (DrainCommand.IgnoredTrains): the scheduler's own trains only. A train
+    // left out of MaxActiveJobs is still cut off when its host is replaced, so it is busy here too.
     private IReadOnlyCollection<string> DrainIgnoredTrainNames() =>
         (_services?.GetServices<DrainIgnoredTrains>() ?? [])
             .SelectMany(t => t.Names)
-            .Concat(_schedulerConfiguration.ExcludedTrainTypeNames)
             .Distinct(StringComparer.Ordinal)
             .ToList();
 }
