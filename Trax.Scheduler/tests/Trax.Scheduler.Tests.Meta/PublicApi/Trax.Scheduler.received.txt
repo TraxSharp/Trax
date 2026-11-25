@@ -97,7 +97,7 @@ namespace Trax.Scheduler.Configuration
     }
     public sealed class SandboxClientOptions
     {
-        public const long DefaultMaxResponseBodyBytes = 134217728;
+        public const long DefaultMaxResponseBodyBytes = 245825536;
         public SandboxClientOptions() { }
         public bool AllowInsecureTransport { get; set; }
         public Trax.Scheduler.Services.Sandbox.SandboxArchiveLimits Archive { get; set; }

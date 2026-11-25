@@ -7,6 +7,7 @@ namespace Trax.Scheduler.Sandbox.Launcher.Configuration
         public string NodeName { get; set; }
         public System.TimeSpan PollInterval { get; set; }
         public string RunsClaimName { get; set; }
+        public int RunsMinFreePercent { get; set; }
         public string RunsPath { get; set; }
         public string RuntimeClassName { get; set; }
     }
