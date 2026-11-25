@@ -87,8 +87,14 @@ kubectl version >/dev/null
 
 # The sample's file with this run's registry and namespace. Its services' egress is taken out here and put back for
 # the last check: the egress image has to be built and named first, and a development build of trax has none.
+# The CPU is halved to fit the CI runner's 4 CPUs. Every cpus value is a request as well as a limit, and a deploy
+# that drains runs a second hub and the migrate and drain Jobs (each the migrator's full cpus) beside the app: at
+# the sample's own numbers that asks for more than 4 CPUs and the migrate Job never schedules. The sample's file
+# keeps its numbers, which are what it needs on a real cluster.
 jq --arg r "$registry" --arg ns "$NS" \
-  '.environments.cluster.registry = $r | .environments.cluster.namespace = $ns | del(.services[].egress)' \
+  '.environments.cluster.registry = $r | .environments.cluster.namespace = $ns | del(.services[].egress)
+   | .services.hub.cpus = 0.5 | .services.worker.cpus = 0.25
+   | .environments.cluster.limits.database.cpus = 0.5 | .environments.cluster.limits.rabbitmq.cpus = 0.25' \
   "$DIR/trax.deploy.json" > "$DIR/trax.deploy.ci.json"
 
 say "the namespace and its Secret, which trax never writes"
@@ -138,8 +144,8 @@ for pod in $(kubectl -n "$NS" get pods -l 'app.kubernetes.io/name in (hub,worker
 done
 [ "$(kubectl -n "$NS" get deployment hub -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}')" = 512Mi ] ||
   fail "the hub is not held to its 512 MiB"
-[ "$(kubectl -n "$NS" get deployment worker -o jsonpath='{.spec.template.spec.containers[0].resources.limits.cpu}')" = 500m ] ||
-  fail "a worker is not held to its half a CPU"
+[ "$(kubectl -n "$NS" get deployment worker -o jsonpath='{.spec.template.spec.containers[0].resources.limits.cpu}')" = 250m ] ||
+  fail "a worker is not held to its quarter of a CPU (the CI copy's)"
 [ "$(kubectl -n "$NS" get statefulset database -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}')" = 768Mi ] ||
   fail "Postgres is not held to its limits.database"
 [ "$(kubectl -n "$NS" get deployment rabbitmq -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}')" = 512Mi ] ||

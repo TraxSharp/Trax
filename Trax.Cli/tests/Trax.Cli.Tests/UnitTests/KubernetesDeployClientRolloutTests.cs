@@ -165,6 +165,8 @@ public class KubernetesDeployClientRolloutTests
         clock.Elapsed.Should().BeGreaterThan(KubernetesDeployer.RolloutTimeout);
     }
 
+    private const string NoEvents = """{ "kind": "EventList", "apiVersion": "v1", "items": [] }""";
+
     private const string NoPods = """{ "kind": "PodList", "apiVersion": "v1", "items": [] }""";
 
     private const string RollingHub = """
@@ -228,6 +230,90 @@ public class KubernetesDeployClientRolloutTests
         clock
             .Elapsed.Should()
             .BeLessThan(TimeSpan.FromMinutes(1), "a pod that cannot start is not waited out");
+    }
+
+    [Test]
+    public async Task A_pod_no_node_can_take_ends_the_rollout_after_the_grace_with_the_schedulers_reason()
+    {
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                HttpStatusCode.OK,
+                RollingHub
+            )
+            .On(
+                "GET",
+                $"/api/v1/namespaces/{Ns}/pods",
+                HttpStatusCode.OK,
+                KubernetesDeployClientJobTests.Unscheduled("hub-7c-abc", "2026-11-17T12:00:00Z")
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/events", HttpStatusCode.OK, NoEvents);
+        var clock = new SteppingClock();
+
+        var act = () =>
+            api.Client(clock)
+                .WaitForRolloutAsync(
+                    Ns,
+                    "Deployment",
+                    "hub",
+                    KubernetesDeployer.RolloutTimeout,
+                    CancellationToken.None
+                );
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out: its pod cannot be scheduled: 0/1 nodes are available: 1 Insufficient "
+                + "cpu.*'kubectl describe pods -l app.kubernetes.io/name=hub -n orders-staging'*"
+        );
+        clock.Elapsed.Should().BeGreaterThanOrEqualTo(KubernetesDeployClient.UnschedulableGrace);
+        clock
+            .Elapsed.Should()
+            .BeLessThan(
+                TimeSpan.FromMinutes(3),
+                "a pod that will never fit is not waited out to the deadline"
+            );
+    }
+
+    [Test]
+    public void A_pod_within_the_grace_or_scheduled_is_not_reported()
+    {
+        var now = new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
+        V1Pod Pod(string status, string reason, DateTimeOffset since) =>
+            new()
+            {
+                Status = new V1PodStatus
+                {
+                    Conditions =
+                    [
+                        new V1PodCondition
+                        {
+                            Type = "PodScheduled",
+                            Status = status,
+                            Reason = reason,
+                            LastTransitionTime = since.UtcDateTime,
+                            Message = "0/1 nodes are available: 1 Insufficient memory.",
+                        },
+                    ],
+                },
+            };
+
+        KubernetesDeployClient
+            .Unschedulable([Pod("False", "Unschedulable", now.AddSeconds(-119))], now)
+            .Should()
+            .BeNull("an autoscaler gets two minutes to add a node");
+        KubernetesDeployClient
+            .Unschedulable([Pod("True", "", now.AddHours(-1))], now)
+            .Should()
+            .BeNull();
+        KubernetesDeployClient
+            .Unschedulable([Pod("False", "SchedulingGated", now.AddHours(-1))], now)
+            .Should()
+            .BeNull("a gated pod waits on purpose");
+        KubernetesDeployClient
+            .Unschedulable([Pod("False", "Unschedulable", now.AddMinutes(-2))], now)
+            .Should()
+            .Be("0/1 nodes are available: 1 Insufficient memory.");
+        KubernetesDeployClient.Unschedulable([new V1Pod()], now).Should().BeNull();
     }
 
     [Test]

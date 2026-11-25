@@ -7,7 +7,8 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <summary>
 /// The migrate Job is waited on until it ends. A pod that can never start (its image cannot be pulled) ends the wait
 /// at once instead of at the deadline, a container that has not started leaves a line in the log tail instead of an
-/// error, and a Job given up on is deleted so it does not go on retrying.
+/// error, and a Job given up on is deleted so it does not go on retrying. A pod no node can take ends the wait once it
+/// has been unschedulable for two minutes, with the scheduler's reason.
 /// </summary>
 public class KubernetesDeployClientJobTests
 {
@@ -91,5 +92,76 @@ public class KubernetesDeployClientJobTests
         result.LogTail.Should().Contain("no log (ContainerCreating");
         clock.Elapsed.Should().BeGreaterThan(KubernetesDeployer.MigrateTimeout);
         api.Requests.Should().Contain($"DELETE {JobPath}");
+    }
+
+    /// <summary>A pod the scheduler has not placed since <paramref name="since"/>, for want of CPU.</summary>
+    internal static string Unscheduled(string name, string since) =>
+        $$"""
+            {
+              "kind": "PodList", "apiVersion": "v1", "metadata": {},
+              "items": [{
+                "metadata": { "name": "{{name}}" },
+                "status": {
+                  "phase": "Pending",
+                  "conditions": [{
+                    "type": "PodScheduled", "status": "False", "reason": "Unschedulable",
+                    "lastTransitionTime": "{{since}}",
+                    "message": "0/1 nodes are available: 1 Insufficient cpu. preemption: 0/1 nodes are available."
+                  }]
+                }
+              }]
+            }
+            """;
+
+    private static StubKubernetesApi UnscheduledApi(string since) =>
+        new StubKubernetesApi()
+            .On("GET", $"{JobPath}/status", HttpStatusCode.OK, Running)
+            .On("GET", Pods, HttpStatusCode.OK, Unscheduled($"{Job}-x", since))
+            .On(
+                "GET",
+                $"{Pods}/{Job}-x/log",
+                HttpStatusCode.BadRequest,
+                StubKubernetesApi.Status(HttpStatusCode.BadRequest, "BadRequest", "pod is pending")
+            )
+            .On(
+                "DELETE",
+                JobPath,
+                HttpStatusCode.OK,
+                """{ "kind": "Status", "apiVersion": "v1", "status": "Success" }"""
+            );
+
+    [Test]
+    public async Task A_pod_no_node_can_take_ends_the_wait_after_the_grace_with_the_schedulers_reason()
+    {
+        // Unschedulable from the moment the clock starts: the wait gives a cluster autoscaler two minutes.
+        var api = UnscheduledApi("2026-11-17T12:00:00Z");
+        var clock = new SteppingClock();
+
+        var result = await api.Client(clock)
+            .WaitForJobAsync(Ns, Job, KubernetesDeployer.MigrateTimeout, CancellationToken.None);
+
+        result.Succeeded.Should().BeFalse();
+        result
+            .Reason.Should()
+            .Be(
+                "its pod cannot be scheduled: 0/1 nodes are available: 1 Insufficient cpu. preemption: 0/1 nodes "
+                    + "are available."
+            );
+        clock.Elapsed.Should().BeGreaterThanOrEqualTo(KubernetesDeployClient.UnschedulableGrace);
+        clock.Elapsed.Should().BeLessThan(TimeSpan.FromMinutes(3));
+        api.Requests.Should().Contain($"DELETE {JobPath}");
+    }
+
+    [Test]
+    public async Task A_pod_unschedulable_for_longer_than_the_grace_ends_the_wait_at_once()
+    {
+        var api = UnscheduledApi("2026-11-17T11:50:00Z");
+        var clock = new SteppingClock();
+
+        var result = await api.Client(clock)
+            .WaitForJobAsync(Ns, Job, KubernetesDeployer.MigrateTimeout, CancellationToken.None);
+
+        result.Reason.Should().StartWith("its pod cannot be scheduled: 0/1 nodes are available");
+        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
     }
 }

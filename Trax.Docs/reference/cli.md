@@ -1068,6 +1068,13 @@ What it applies, in this order:
 10. the resume Job `<app>-resume-<tag>` (`--trax-resume`), after a rollback too. If it fails the deploy still stands
    and says so: the new hub ended the drain when it started, and one left behind lapses on its own.
 
+A Job or a rollout whose pod can never start ends its wait at once rather than at its deadline, saying why: an image
+it cannot pull, a Secret key it cannot read, a node that cannot give it a user namespace of its own. So does a pod no
+node can take, once the scheduler has left it unplaced for two minutes (time enough for a cluster autoscaler to add
+a node), with the scheduler's reason: `its pod cannot be scheduled: 0/1 nodes are available: 1 Insufficient cpu`.
+The `cpus` and `memory` of every service are requests as well as limits, and a deploy briefly runs a second hub and
+the migrate and drain Jobs beside them, so a cluster needs room for those on top of what the app runs.
+
 When a service does not roll out, the deploy puts every service back as it was before it started, as ECS's circuit
 breaker does: each Deployment that existed gets its earlier spec applied again (the pod template, the copies and the
 strategy it had) and is waited on, and one this deploy created is deleted. The error names the service that failed

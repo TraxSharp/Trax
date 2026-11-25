@@ -515,8 +515,9 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     }
 
     /// <summary>
-    /// Why the Job's pod can never start, or null. A Job with no retries does not fail while its pod waits on an
-    /// image it cannot pull, so without this the wait would run to its deadline.
+    /// Why the Job's pod can never start, or null: no node can take it after <see cref="UnschedulableGrace"/>, or it
+    /// waits on an image it cannot pull. A Job with no retries does not fail while its pod waits, so without this the
+    /// wait would run to its deadline.
     /// </summary>
     private async Task<string?> StuckAsync(string ns, string job, CancellationToken ct)
     {
@@ -527,11 +528,47 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 cancellationToken: ct
             )
             .ConfigureAwait(false);
+        if (Unschedulable(pods.Items, _clock.GetUtcNow()) is { } unscheduled)
+            return $"{CannotBeScheduled}: {unscheduled}";
         return pods
             .Items.Select(Waiting)
             .Where(w => w?.Reason is { } reason && NeverStarts.Contains(reason))
             .Select(w => $"{w?.Reason}: {w?.Message}".TrimEnd(' ', ':'))
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// How long a pod may wait for a node before the wait ends: two minutes, so a cluster autoscaler has time to add
+    /// one. A pod still unscheduled after it is not going to fit, and waiting out the full deadline only hides why.
+    /// </summary>
+    internal static readonly TimeSpan UnschedulableGrace = TimeSpan.FromMinutes(2);
+
+    /// <summary>How a wait that ended on an unschedulable pod says so.</summary>
+    internal const string CannotBeScheduled = "its pod cannot be scheduled";
+
+    /// <summary>
+    /// The scheduler's reason for a pod it has not placed for <see cref="UnschedulableGrace"/> or longer
+    /// (<c>0/1 nodes are available: 1 Insufficient cpu</c>), or null when every pod is placed or still within the
+    /// grace period.
+    /// </summary>
+    internal static string? Unschedulable(IEnumerable<V1Pod> pods, DateTimeOffset now)
+    {
+        foreach (var pod in pods)
+        {
+            var scheduled = pod.Status?.Conditions?.FirstOrDefault(c =>
+                string.Equals(c.Type, "PodScheduled", StringComparison.Ordinal)
+                && string.Equals(c.Status, "False", StringComparison.Ordinal)
+                && string.Equals(c.Reason, "Unschedulable", StringComparison.Ordinal)
+            );
+            if (scheduled?.LastTransitionTime is not { } since)
+                continue;
+            var at = new DateTimeOffset(DateTime.SpecifyKind(since, DateTimeKind.Utc));
+            if (now - at >= UnschedulableGrace)
+                return string.IsNullOrWhiteSpace(scheduled.Message)
+                    ? "no node can take it"
+                    : scheduled.Message.Trim();
+        }
+        return null;
     }
 
     /// <summary>Reads the end of the Job's log, then deletes the Job so its pod stops retrying.</summary>
@@ -556,8 +593,9 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     }
 
     /// <summary>
-    /// Why a pod of the workload can never start, or null: a container waiting on something that does not fix itself
-    /// (an image it cannot pull, a Secret key it cannot read), or a sandbox the node has failed to create
+    /// Why a pod of the workload can never start, or null: a pod no node can take after
+    /// <see cref="UnschedulableGrace"/>, a container waiting on something that does not fix itself (an image it
+    /// cannot pull, a Secret key it cannot read), or a sandbox the node has failed to create
     /// <see cref="SandboxAttempts"/> times. The second is what a cluster that cannot give a pod a user namespace of
     /// its own (<c>hostUsers: false</c>) does with every Trax pod: kind, whose nodes are containers, is one. Without
     /// this the wait runs to its ten minutes and says only that the rollout did not finish.
@@ -567,6 +605,8 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         var pods = await _client
             .CoreV1.ListNamespacedPodAsync(ns, labelSelector: selector, cancellationToken: ct)
             .ConfigureAwait(false);
+        if (Unschedulable(pods.Items, _clock.GetUtcNow()) is { } unscheduled)
+            return $"{CannotBeScheduled}: {unscheduled}";
         var waiting = pods
             .Items.Select(Waiting)
             .Where(w => w?.Reason is { } reason && NeverStarts.Contains(reason))
@@ -697,8 +737,11 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 { } why
             )
                 throw new InvalidOperationException(
-                    $"{kind} {name} did not roll out: its pod cannot start ({why}). See "
-                        + $"'kubectl describe pods -l {KubernetesTarget.NameLabel}={name} -n {ns}'."
+                    (
+                        why.StartsWith(CannotBeScheduled, StringComparison.Ordinal)
+                            ? $"{kind} {name} did not roll out: {why}. See "
+                            : $"{kind} {name} did not roll out: its pod cannot start ({why}). See "
+                    ) + $"'kubectl describe pods -l {KubernetesTarget.NameLabel}={name} -n {ns}'."
                 );
             if (state.StartsWith(PastDeadline, StringComparison.Ordinal))
                 throw new InvalidOperationException(
