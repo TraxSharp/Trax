@@ -62,10 +62,14 @@ release is intended; describe a breaking change in the pull request instead.
 4. The same job restores the locked dependencies of every folder and runs
    `dotnet pack -p:Version=<version>` on each, so every package, `Trax.Samples.Templates` included,
    carries that one version. It uploads the packages as an artifact.
-5. The `publish` job, also gated on the `release` environment, attests the packages and pushes them
+5. The `push-egress` job, gated on the `release` environment, pushes the egress image,
+   `ghcr.io/traxsharp/trax-egress`, logs out and reads its digest back with no credentials. The
+   package must be public: if it is not (the first release that pushes it), the job fails before
+   anything reaches NuGet. Make the package public and link it to the repository, then re-run the job.
+6. The `publish` job, also gated on the `release` environment, attests the packages and pushes them
    to nuget.org with a short-lived Trusted Publishing key. See
    [Supply Chain Security](/docs/security/supply-chain).
-6. The site is not part of the release. Dispatch **Website** with the new tag (`v1.61.0`); its job,
+7. The site is not part of the release. Dispatch **Website** with the new tag (`v1.61.0`); its job,
    gated on the `website-deploy` environment, moves the `website` branch to the tag, which publishes
    the site for that release.
 

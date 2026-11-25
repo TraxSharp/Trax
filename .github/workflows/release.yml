@@ -344,9 +344,10 @@ jobs:
             exit 1
           fi
       # skopeo pushes the archive as it is (--preserve-digests refuses any change to the manifest),
-      # and the digest is read back from the registry. A re-run pushes the same bytes again. The
-      # package ghcr.io/traxsharp/trax-egress must be public and linked to this repository, once, by
-      # an owner.
+      # logs out, and reads the digest back with no credentials, as every user pulls it. A re-run
+      # pushes the same bytes again. The package ghcr.io/traxsharp/trax-egress must be public and
+      # linked to this repository, once, by an owner; until it is, the read-back fails and nothing
+      # reaches NuGet.
       - name: Push the egress image
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
@@ -363,8 +364,11 @@ jobs:
           fi
           printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
           skopeo copy --preserve-digests "$archive" "$image"
-          pushed=$(skopeo inspect --format '{{.Digest}}' "$image")
           skopeo logout ghcr.io
+          if ! pushed=$(skopeo inspect --no-creds --format '{{.Digest}}' "$image"); then
+            echo "::error::ghcr.io/traxsharp/trax-egress:$PKG_VERSION cannot be pulled without credentials. An owner makes the package public, once; then re-run this job. Nothing was published to NuGet."
+            exit 1
+          fi
           if [ "$pushed" != "$EGRESS_DIGEST" ]; then
             echo "::error::ghcr.io holds trax-egress:$PKG_VERSION at $pushed, not $EGRESS_DIGEST. Nothing was published to NuGet."
             exit 1

@@ -154,6 +154,75 @@ describe('push-egress job', () => {
   });
 });
 
+describe('the egress push', () => {
+  const pushStep = step(pushEgress, 'Push the egress image');
+  const digest = `sha256:${'a'.repeat(64)}`;
+
+  // A fake skopeo: the archive holds `digest`; the registry answers an inspect with it when the
+  // caller is logged in, or when the package is public. It logs every call.
+  const run = ({ isPublic, held = digest }) => {
+    const root = mkdtempSync(join(tmpdir(), 'trax-egress-push-'));
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, 'skopeo'),
+      `#!/bin/sh
+echo "$*" >> '${join(root, 'calls')}'
+case "$1" in
+  login) cat > /dev/null; touch '${join(root, 'session')}' ;;
+  logout) rm -f '${join(root, 'session')}' ;;
+  copy) ;;
+  inspect)
+    for a in "$@"; do last="$a"; done
+    case "$last" in
+      oci-archive:*) echo '${digest}' ;;
+      docker://*)
+        anonymous=; for a in "$@"; do [ "$a" = --no-creds ] && anonymous=1; done
+        if [ ${isPublic ? 1 : 0} = 1 ] || { [ -z "$anonymous" ] && [ -e '${join(root, 'session')}' ]; }; then
+          echo '${held}'
+        else
+          echo 'unauthorized' >&2; exit 1
+        fi ;;
+    esac ;;
+esac
+`,
+    );
+    chmodSync(join(bin, 'skopeo'), 0o755);
+    const result = runStep(pushStep.run, root, {
+      PATH: `${bin}:${process.env.PATH}`,
+      PKG_VERSION: '1.63.0',
+      EGRESS_DIGEST: digest,
+      GHCR_USER: 'bot',
+      GHCR_TOKEN: 'token',
+    });
+    return { result, calls: readFileSync(join(root, 'calls'), 'utf8').trim().split('\n') };
+  };
+
+  it('passes when anyone can pull the pushed digest', () => {
+    const { result } = run({ isPublic: true });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  it('fails, before NuGet, when the package cannot be pulled without credentials', () => {
+    const { result } = run({ isPublic: false });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /cannot be pulled without credentials/);
+  });
+
+  it('reads the digest back only after logging out', () => {
+    const { calls } = run({ isPublic: true });
+    const logout = calls.findIndex((c) => c.startsWith('logout'));
+    const readBack = calls.findIndex((c) => c.startsWith('inspect') && c.includes('docker://'));
+    assert.ok(logout >= 0 && logout < readBack, calls.join('\n'));
+  });
+
+  it('fails when the registry holds another digest', () => {
+    const { result } = run({ isPublic: true, held: `sha256:${'b'.repeat(64)}` });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /not sha256:a/);
+  });
+});
+
 describe('publish job', () => {
   it('holds no npm token: it publishes through OIDC', () => {
     assert.equal(publish.permissions['id-token'], 'write');
