@@ -825,6 +825,48 @@ public partial class DeployKubernetesTests
             .And.Contain("secretKeyRef:");
     }
 
+    [Test]
+    public async Task Plan_keeps_a_space_between_a_long_kind_and_its_name()
+    {
+        var file = File_();
+        file.Services["hub"].Egress = [];
+        file.EgressImage = "ghcr.io/traxsharp/trax-egress@sha256:" + new string('a', 64);
+        var path = await WriteAsync(file);
+        var stdout = new StringWriter();
+        DeployKubernetesCommands.Client = () =>
+            throw new InvalidOperationException("plan reached for a cluster");
+        try
+        {
+            (
+                await DeployAwsCommands.PlanAsync(
+                    path,
+                    "staging",
+                    new Exporter(Exports(), _dir),
+                    stdout,
+                    TextWriter.Null,
+                    CancellationToken.None
+                )
+            )
+                .Should()
+                .Be(0);
+        }
+        finally
+        {
+            DeployKubernetesCommands.Client = () =>
+                new KubernetesDeployClient(DeployKubernetesCommands.Clock);
+        }
+
+        var lines = stdout.ToString().ReplaceLineEndings("\n").Split('\n');
+        lines
+            .Should()
+            .Contain(l =>
+                l.StartsWith("  ValidatingAdmissionPolicyBinding ", StringComparison.Ordinal)
+            );
+        lines
+            .Should()
+            .Contain(l => l.StartsWith("  ValidatingAdmissionPolicy ", StringComparison.Ordinal));
+    }
+
     private async Task<string> WriteAsync(DeployFile file)
     {
         var path = Path.Combine(_dir, DeployFile.FileName);

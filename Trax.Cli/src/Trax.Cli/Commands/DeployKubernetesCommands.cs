@@ -254,8 +254,15 @@ internal static class DeployKubernetesCommands
             await File.WriteAllTextAsync(Path.Combine(dir, name), content, ct)
                 .ConfigureAwait(false);
         await stdout.WriteLineAsync($"Wrote {dir}:").ConfigureAwait(false);
+        // A column as wide as the longest kind, so a long one keeps a space before its name.
+        var width = Math.Max(
+            14,
+            manifests.All.Select(o => (o.Kind ?? "").Length + 1).DefaultIfEmpty(0).Max()
+        );
         foreach (var o in manifests.All)
-            await stdout.WriteLineAsync($"  {o.Kind, -14}{o.Metadata.Name}").ConfigureAwait(false);
+            await stdout
+                .WriteLineAsync($"  {(o.Kind ?? "").PadRight(width)}{o.Metadata.Name}")
+                .ConfigureAwait(false);
         if (manifests.SecretKeys.Count > 0)
             await stdout
                 .WriteLineAsync(
