@@ -41,8 +41,11 @@ under `settings` (an issuer, an origin) and `secrets` (an API key, a password), 
 ```bash
 trax deploy --target compose --build
 cp .env.example .env                      # fill in every value; never commit it
-podman compose up -d
+podman compose up -d migrate drain && podman compose wait drain && podman compose up -d
 ```
+
+The same three commands release every later version: the migration and the drain run while the old containers still
+serve, and only then are the services replaced. A plain `podman compose up -d` would stop the old containers first.
 
 The stack is Postgres, RabbitMQ when a host uses it, one `migrate` run of the new version, then each service. The
 API service answers on port 8080. Every service drops all Linux capabilities (Postgres and RabbitMQ get back the

@@ -805,7 +805,7 @@ The drain failed (BackoffLimitExceeded), so no service was moved to the new vers
 
 Let the work finish or cancel it, raise `drainTimeout`, or deploy with `--force`, which replaces the hosts anyway and
 keeps the drain until the new hub ends it. On Kubernetes, ECS and the podman runtime `--force` reaches the drain
-itself; compose's file is run by you, so there set `TRAX_DRAIN_FORCE=true` for that one `compose up`.
+itself; compose's file is run by you, so there set `TRAX_DRAIN_FORCE=true` for that one release.
 
 With the drain done, a hub's new copy can start beside the old one: dispatch already copes with two hubs (claims use
 `FOR UPDATE SKIP LOCKED`, the manifest manager an advisory lock), and the startup recovery finds nothing live to fail.
@@ -821,8 +821,7 @@ compose:
 - `rabbitmq`, only when a host connects to RabbitMQ;
 - `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
 - `drain`, the same image with `--trax-drain <drainTimeout>` after `migrate`, while the old containers still run.
-  Compose replaces a service only once its dependencies are met, so a drain that refuses stops the `compose up` with
-  every old container still running. `TRAX_DRAIN_FORCE` (in `.env.example`, `false`) forces it;
+  `TRAX_DRAIN_FORCE` (in `.env.example`, `false`) forces it;
 - each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` and `drain` to finish, and `count` becomes
   `deploy.replicas`. A hub (a service that serves HTTP and runs the `api` or `scheduler` role, so runs as one) is
   published on `127.0.0.1` only, on its `port` or the first port from 8080 no other service names. No other service
@@ -867,6 +866,18 @@ the sidecar. `migrate` joins the migrator's sidecar the same way. The sidecar is
 `tcp:rabbitmq:5672` when a host uses RabbitMQ, beside the service's domains. If the sidecar restarts, the service's
 namespace goes with it and the service has no network until it is restarted too, which compose does not do on its
 own: nothing leaves, but nothing arrives either. See [Egress](#egress).
+
+A release runs in three commands, which trax prints:
+
+```bash
+podman compose up -d migrate drain && podman compose wait drain && podman compose up -d
+```
+
+A plain `compose up` stops every container whose image changed before it starts any, so the old hub and workers
+would be gone before the drain began, and a run in progress on them would be cut off. The first command migrates and
+starts the drain while the old containers keep running; `compose wait` returns when the drain ends, with its exit
+code, so a drain that refuses stops the release with every old container still serving. The last replaces the
+services and runs `resume`.
 
 Nothing is reachable from other machines until something in front of the stack (a reverse proxy, `tailscale serve`)
 decides who may reach it.

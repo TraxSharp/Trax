@@ -412,7 +412,7 @@ internal static class ComposeTarget
             "# true replaces the services even when work is still busy when the drain times out. Leave it false, and"
         );
         env.AppendLine(
-            "# set it for one 'compose up' when you mean it: TRAX_DRAIN_FORCE=true podman compose up -d."
+            "# set it for one release when you mean it: TRAX_DRAIN_FORCE=true podman compose up -d migrate drain."
         );
         env.AppendLine($"{TraxDrain.ForceVariable}=false");
         env.AppendLine("# The tag of the images to run, as trax deploy --build tagged them.");

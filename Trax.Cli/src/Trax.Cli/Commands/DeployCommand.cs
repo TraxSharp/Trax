@@ -165,10 +165,18 @@ internal static class DeployCommand
         }
     }
 
+    /// <summary>
+    /// How a release is run on compose: the migration and the drain first, waited for, then the rest. A plain
+    /// <c>compose up</c> stops every container whose image changed before it starts any, so the old hosts would be
+    /// gone before the drain began; the first two commands leave them running until it has finished.
+    /// </summary>
+    internal static string ComposeRelease(string engine) =>
+        $"{engine} compose up -d migrate drain && {engine} compose wait drain && {engine} compose up -d";
+
     /// <summary>What <c>--force</c> means for compose, which trax writes rather than runs.</summary>
     internal const string ComposeForce =
-        "--force changes nothing in the compose file: the drain runs when you run compose up. To replace the "
-        + "services while work is still busy, run that once with TRAX_DRAIN_FORCE=true set.";
+        "--force changes nothing in the compose file: the drain runs when you start it with compose. To replace "
+        + "the services while work is still busy, run that release once with TRAX_DRAIN_FORCE=true set.";
 
     private static async Task<int> DispatchWithoutEnvironmentAsync(
         string path,
@@ -383,7 +391,7 @@ internal static class DeployCommand
 
             await stdout
                 .WriteLineAsync(
-                    $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then run '{engine} compose up -d' in {dir}."
+                    $"Copy {ComposeTarget.EnvExampleFile} to .env, fill it in, then in {dir} run:\n  {ComposeRelease(engine)}"
                 )
                 .ConfigureAwait(false);
             return 0;

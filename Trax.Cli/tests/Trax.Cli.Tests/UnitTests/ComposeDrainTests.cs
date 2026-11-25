@@ -7,7 +7,7 @@ namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
 /// A compose stack drains the running hosts after the migration and before any service is replaced, with the
-/// environment's drain timeout, forced only by <c>TRAX_DRAIN_FORCE</c> at <c>compose up</c>, and ends the drain once
+/// environment's drain timeout, forced only by <c>TRAX_DRAIN_FORCE</c> on the release, and ends the drain once
 /// every service has started. <c>--force</c> cannot reach a file trax writes and someone else runs, so it says how.
 /// </summary>
 public class ComposeDrainTests
@@ -84,6 +84,52 @@ public class ComposeDrainTests
             );
 
             stdout.ToString().Should().Contain("TRAX_DRAIN_FORCE=true");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task The_release_it_prints_waits_for_the_drain_before_replacing_a_service()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"trax-compose-release-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, DeployFile.FileName);
+            var file = DeployKubernetesTests.File_();
+            await File.WriteAllTextAsync(path, file.Write());
+            foreach (var service in file.Services.Values)
+            {
+                var project = Path.Combine(dir, service.Project);
+                Directory.CreateDirectory(Path.GetDirectoryName(project) ?? dir);
+                await File.WriteAllTextAsync(project, "<Project />");
+            }
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var exit = await DeployCommand.DispatchAsync(
+                path,
+                target: null,
+                environment: null,
+                outDir: null,
+                build: false,
+                new DeployKubernetesTests.Exporter(DeployKubernetesTests.Exports(), dir),
+                stdout,
+                stderr,
+                CancellationToken.None
+            );
+
+            // A plain compose up stops every container whose image changed before it starts any, so the old hosts
+            // would be gone while the drain waited. The migration and the drain go first, and are waited for.
+            exit.Should().Be(0, stderr.ToString());
+            stdout
+                .ToString()
+                .Should()
+                .Contain(
+                    "podman compose up -d migrate drain && podman compose wait drain && podman compose up -d"
+                );
         }
         finally
         {

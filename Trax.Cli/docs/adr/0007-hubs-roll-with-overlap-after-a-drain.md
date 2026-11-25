@@ -42,8 +42,9 @@ scale-down. The same order fixes ECS, whose overlapping roll had the hazard befo
   ECS stops a container within `StopTimeout`, at most 120 seconds, which every container now sets; the drain has to
   finish before the roll, not in the stop.
 - **Compose**: a `drain` one-shot after `migrate`, which every service depends on, and a `resume` one-shot once they
-  have started. Compose recreates a service only after its dependencies, so the old containers keep running while the
-  drain waits. `TRAX_DRAIN_FORCE=true` on the `compose up` forces it.
+  have started. Compose stops every container whose image changed before it starts any, so a release starts
+  `migrate` and `drain` first and waits for the drain (`compose up -d migrate drain && compose wait drain`), then
+  runs `compose up -d`; trax prints the three. `TRAX_DRAIN_FORCE=true` on the release forces it.
 - **Podman runtime**: systemd stops a unit before its `ExecStartPre` runs, so the drain cannot live in a unit. The
   install hint plays the drain pod and chains `systemctl --user restart` to it exiting 0, then plays the resume pod.
   A unit's restart still stops the old pod before the new one starts; there is no overlap on one host.
@@ -81,3 +82,5 @@ Not covered: a real cluster, ECS or compose run; none runs in CI.
 ## Changelog
 
 - **2026-11-24**: Recorded.
+- **2026-11-25**: Compose releases in three commands. A run of the stack under podman compose (docker-compose 2.26)
+  showed a plain `compose up` stops the old hub and workers before the drain starts.
