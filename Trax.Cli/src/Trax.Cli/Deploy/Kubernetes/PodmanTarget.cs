@@ -28,7 +28,10 @@ internal static class PodmanTarget
     /// <summary>How long a unit may take to start, the migration included: thirty minutes, as on a cluster.</summary>
     public const int StartTimeoutSeconds = 1800;
 
-    /// <summary>The kinds <c>podman kube play</c> runs (podman 6.2's man page).</summary>
+    /// <summary>
+    /// The kinds trax writes for <c>podman kube play</c>: the ones it runs from podman 4.9 (Ubuntu 24.04's) on. A Job
+    /// is left out, since it plays only from podman 5.
+    /// </summary>
     public static readonly string[] PlayableKinds =
     [
         "Pod",
@@ -37,7 +40,6 @@ internal static class PodmanTarget
         "ConfigMap",
         "Secret",
         "DaemonSet",
-        "Job",
     ];
 
     /// <summary>Where a deploy writes the files a host installs: <c>.trax/deploy/podman/&lt;app&gt;-&lt;env&gt;/</c>.</summary>
@@ -387,7 +389,7 @@ internal static class PodmanTarget
         var pod = o switch
         {
             V1Deployment d => d.Spec.Template.Spec,
-            V1Job j => j.Spec.Template.Spec,
+            V1Pod p => p.Spec,
             _ => null,
         };
         if (pod is not null)
@@ -448,14 +450,17 @@ internal static class PodmanTarget
             sidecar.SecurityContext.Capabilities.Add = ["NET_ADMIN", "SETGID", "SETUID"];
             pod.Containers.Add(sidecar);
         }
-        var template = o switch
+        var meta = o switch
         {
-            V1Deployment d => d.Spec.Template,
-            V1Job j => j.Spec.Template,
+            V1Deployment d => d.Spec.Template.Metadata,
+            V1Pod p => p.Metadata,
             _ => null,
         };
-        if (template is not null && pod.InitContainers.Count > 0)
-            template.Metadata.Annotations[InitContainerTypeAnnotation] = "always";
+        if (meta is not null && pod.InitContainers.Count > 0)
+        {
+            meta.Annotations ??= new Dictionary<string, string>(StringComparer.Ordinal);
+            meta.Annotations[InitContainerTypeAnnotation] = "always";
+        }
     }
 
     /// <summary>
@@ -469,7 +474,12 @@ internal static class PodmanTarget
             ? $"docker.io/library/{image}"
         : $"localhost/{image}";
 
-    /// <summary>The migrate, drain and resume pods, each a Job run once.</summary>
+    /// <summary>
+    /// The migrate, drain and resume pods, each run once. A cluster runs each as a Job; here each is a Pod that never
+    /// restarts, since <c>kube play</c> runs a Job only from podman 5 and a Pod on every version. The pod is named
+    /// <c>&lt;stack&gt;-&lt;kind&gt;-pod</c>, so its container is <c>&lt;stack&gt;-&lt;kind&gt;-pod-&lt;kind&gt;</c>,
+    /// the names a Job's pod gets and the units wait on.
+    /// </summary>
     private static IEnumerable<(string Path, string Content)> OneShots(
         KubernetesManifests cluster,
         string stack,
@@ -482,11 +492,25 @@ internal static class PodmanTarget
             (KubernetesTarget.ResumeName, cluster.Resume),
         }.Select(o => ($"{stack}-{o.Item1}.yaml", r.Yaml(OneShot(o.Item2, o.Item1, stack))));
 
-    private static V1Job OneShot(V1Job job, string kind, string stack)
+    private static V1Pod OneShot(V1Job job, string kind, string stack)
     {
-        job.Metadata.Name = kind;
-        job.Spec.TtlSecondsAfterFinished = null;
-        return Local(job, stack);
+        var template = job.Spec.Template;
+        template.Spec.RestartPolicy = "Never";
+        return Local(
+            new V1Pod
+            {
+                ApiVersion = "v1",
+                Kind = "Pod",
+                Metadata = new V1ObjectMeta
+                {
+                    Name = $"{kind}-pod",
+                    Labels = template.Metadata.Labels,
+                    Annotations = template.Metadata.Annotations,
+                },
+                Spec = template.Spec,
+            },
+            stack
+        );
     }
 
     /// <summary>

@@ -141,6 +141,28 @@ public partial class DeployPodmanTests
         files["orders-home-rabbitmq.yaml"].Should().Contain("image: docker.io/library/rabbitmq:4");
     }
 
+    [TestCase("migrate", "--trax-migrate")]
+    [TestCase("drain", "--trax-drain")]
+    [TestCase("resume", "--trax-resume")]
+    public void Each_one_shot_is_a_pod_that_never_restarts_so_podman_4_9_plays_it(
+        string kind,
+        string argument
+    )
+    {
+        var yaml = Files(Render())[$"orders-home-{kind}.yaml"];
+        var pod = k8s.KubernetesYaml.Deserialize<k8s.Models.V1Pod>(
+            yaml[yaml.IndexOf("apiVersion", StringComparison.Ordinal)..]
+        );
+
+        pod.Kind.Should().Be("Pod", "kube play runs a Job only from podman 5");
+        // kube play names the container <pod>-<container>: the name the units wait on.
+        pod.Metadata.Name.Should().Be($"orders-home-{kind}-pod");
+        pod.Spec.Containers.Single().Name.Should().Be(kind);
+        pod.Spec.RestartPolicy.Should().Be("Never");
+        pod.Spec.HostUsers.Should().BeNull();
+        yaml.Should().Contain(argument).And.NotContain("kind: Job");
+    }
+
     [Test]
     public void Every_document_separator_stands_on_a_line_of_its_own()
     {
