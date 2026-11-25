@@ -4,7 +4,7 @@
   "private": true,
   "description": "Release tooling for the Trax packages",
   "scripts": {
-    "test": "node --test '.github/release/*.test.mjs' '.github/scripts/*.test.mjs'"
+    "test": "node --test '.github/release/*.test.mjs' '.github/scripts/*.test.mjs' '.github/ci/deploy/*.test.mjs'"
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",

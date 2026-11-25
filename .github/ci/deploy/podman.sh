@@ -44,6 +44,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# trax and the sample's services restore from their committed lockfiles, as in every other CI job, so a lockfile that
+# drifted stops the run here rather than resolving afresh. The sample's library comes with the hub and the worker.
+for project in Trax.Cli/src/Trax.Cli/Trax.Cli.csproj \
+  "$DIR/Trax.Samples.EnergyHub.Hub/Trax.Samples.EnergyHub.Hub.csproj" \
+  "$DIR/Trax.Samples.EnergyHub.Worker/Trax.Samples.EnergyHub.Worker.csproj"; do
+  dotnet restore "$project" --locked-mode -v q
+done
+
 say "the .env the Secrets are filled from"
 {
   printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)"

@@ -1397,9 +1397,10 @@ jobs:
           [ "$(podman run --rm --platform linux/arm64 localhost/trax-egress:ci-arm64 version)" = ci ]
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
-  # that adds pull requests' release notes, and the tests of the change detection in .github/scripts.
-  # They take seconds and read no folder, so they run on every pull request rather than through the
-  # change detection.
+  # that adds pull requests' release notes, and the tests of the change detection in .github/scripts
+  # and of the deploy proof's scripts in .github/ci/deploy, all with their tools faked. They take
+  # seconds and read no folder, so they run on every pull request rather than through the change
+  # detection.
   release-tooling:
     runs-on: ubuntu-latest
     timeout-minutes: 5

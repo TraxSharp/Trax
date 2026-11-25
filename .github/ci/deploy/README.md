@@ -7,7 +7,8 @@ which is how the same checks run against k3s in a VM.
 
 The app is the DistributedWorkers sample, `Trax.Samples/samples/DistributedWorkers`: the EnergyHub hub (GraphQL and
 the scheduler, running no jobs), its workers (which claim the jobs from Postgres and publish their events to
-RabbitMQ), Postgres and RabbitMQ. It builds against the code in the same commit. Both scripts deploy the sample's own
+RabbitMQ), Postgres and RabbitMQ. It builds against the code in the same commit, and both scripts first restore trax and
+the sample in locked mode, so a lockfile that drifted stops the run. Both scripts deploy the sample's own
 `trax.deploy.json` (`cluster` and `home`), from a copy beside it that changes only what a run must: the registry and
 namespace, and the services' `egress`, which the copies leave out until the egress image is built.
 
