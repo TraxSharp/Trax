@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -81,6 +82,48 @@ public class TailscaleTrustStartupTests
     }
 
     [Test]
+    public async Task A_default_cors_policy_that_allows_any_origin_refuses_to_start()
+    {
+        var act = () =>
+            StartAsync(
+                DeployExposure.Tailnet,
+                Secret,
+                cors: c => c.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader())
+            );
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*CORS*any origin*");
+    }
+
+    [Test]
+    public async Task A_default_cors_policy_whose_predicate_admits_a_foreign_origin_refuses_to_start()
+    {
+        var act = () =>
+            StartAsync(
+                DeployExposure.Tailnet,
+                Secret,
+                cors: c => c.AddDefaultPolicy(p => p.SetIsOriginAllowed(_ => true).AllowAnyHeader())
+            );
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*CORS*any origin*");
+    }
+
+    [Test]
+    public async Task A_default_cors_policy_that_names_its_origins_starts()
+    {
+        var act = () =>
+            StartAsync(
+                DeployExposure.Tailnet,
+                Secret,
+                cors: c =>
+                    c.AddDefaultPolicy(p =>
+                        p.WithOrigins("https://shop.example.com").AllowAnyHeader()
+                    )
+            );
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
     public void A_scheme_that_admits_nobody_is_refused_at_registration()
     {
         var act = () => new ServiceCollection().AddTraxTailscaleAuth(_ => { });
@@ -92,7 +135,8 @@ public class TailscaleTrustStartupTests
         string? exposure,
         string? secret,
         string environment = "Production",
-        string? configureSecret = null
+        string? configureSecret = null,
+        Action<CorsOptions>? cors = null
     )
     {
         var settings = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -106,6 +150,8 @@ public class TailscaleTrustStartupTests
             .ConfigureServices(services =>
             {
                 services.AddLogging();
+                if (cors is not null)
+                    services.AddCors(cors);
                 services.AddTraxTailscaleAuth(
                     tailnet => tailnet.Login("admin@example.com", "Admin"),
                     configureSecret is null ? null : o => o.ProxySecret = configureSecret

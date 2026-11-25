@@ -38,6 +38,9 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
   exposed hub. The scheme refuses to start without it or without a secret of 32 characters, in every environment. The
   host reports the scheme in its deploy manifest, and `trax deploy` refuses it on compose, on AWS, on an unexposed
   kubernetes environment and on any service but the exposed hub. A deploy file may not set `Trax__Deploy__*` itself.
+- **The login is an ambient credential, so no origin is let in wholesale.** Serve names the user on every request
+  their device sends, whatever page sent it; SameSite and CORS's credential rules do not cover it. The scheme refuses
+  to start when the host's default CORS policy allows any origin or its origin predicate admits one nobody serves.
 - **Roles come from logins.** Tailscale sends no identity for a tagged device, so tags cannot carry roles. A login
   the host does not name is refused unless it admits every login.
 - **Exposure is `tailnet` only.** `public` is refused until it is built.
@@ -73,10 +76,13 @@ not start unexposed or without a secret. `TailscalePartsTests` pins the constant
 in `Trax.Cli/tests/Trax.Cli.Tests/` holds the deploy to it: the policies' shape, no LoadBalancer, NodePort or other
 Ingress, the edge, the secret given only to the hub and minted on every deploy, no published port under podman, and
 every refusal of the field and of the scheme, and under podman, a pod of their own for Tailscale and the edge with no
-TCP listener in it.
+TCP listener in it. `TailscaleTrustStartupTests` also holds the refusal of a default CORS policy that lets any
+origin in.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
 - **2026-11-25**: Under podman, Tailscale and the edge moved out of the hub's pod into one of their own, the edge onto
   a Unix socket: userspace tailscaled forwards a tailnet connection serve does not take to loopback.
+- **2026-11-25**: The scheme refuses a default CORS policy that lets any origin in, since the login is an ambient
+  credential.

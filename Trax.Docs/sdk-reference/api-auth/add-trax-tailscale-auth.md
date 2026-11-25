@@ -102,7 +102,10 @@ A host that registers the scheme refuses to start, in every environment includin
   `Trax__Deploy__Exposure`) only on the hub of a kubernetes environment with `"exposure": "tailnet"`, the one place it
   renders a proxy that proves itself to the host. The host cannot see from the inside whether it is on a public
   address, so it takes the deployment's word, and the deployment refuses to give it anywhere else; and
-- the proxy secret is configured and at least 32 characters. `trax deploy` mints a new one on every deploy.
+- the proxy secret is configured and at least 32 characters. `trax deploy` mints a new one on every deploy; and
+- the host's default CORS policy, if it has one, does not let any origin in: neither `AllowAnyOrigin()` nor an
+  origin predicate (`SetIsOriginAllowed`) that admits an origin no host serves. Name the origins with
+  `WithOrigins(...)`. See [The login is an ambient credential](#the-login-is-an-ambient-credential).
 
 ```
 AddTraxTailscaleAuth() trusts Tailscale identity headers, and this host's exposure is not set. It starts only where
@@ -141,6 +144,15 @@ decodes the login and the display name. The principal's id is the login, its dis
 absolute `https` or `http` address, the `picture` claim. Its qualified id is `TraxTailscale:<login>`. See
 [Qualified principal ids](/docs/migration-guides/qualified-principal-ids).
 
+### The login is an ambient credential
+
+Serve adds `Tailscale-User-Login` to every request the user's device sends to the hub, whatever page started it. A
+browser does not treat that as a credential: SameSite does not apply to it, and CORS's rule that `AllowAnyOrigin()`
+never carries credentials does not apply either, because the request needs none. So a page on any site a tailnet user
+opens could send the hub a mutation as that user, and with a default CORS policy that lets its origin in, read the
+answer. The startup check refuses a default policy that lets any origin in. It reads only the default policy: an
+endpoint given a named policy of its own (`RequireCors("name")`) is the host's to keep as narrow.
+
 ### Roles come from logins, not tags
 
 Tailscale's documentation says the identity headers are not populated for traffic from tagged devices, and serve's
@@ -165,7 +177,7 @@ authenticated like any other.
 | The admitted logins and their roles | Singleton |
 | `TailscalePolicy`, and `TraxTailscale` in `TraxAuthPolicy` | |
 | [`TraxPrincipal` and `TraxCaller`](/docs/sdk-reference/api-auth/add-trax-principal-accessor), through `AddTraxPrincipalAccessor()` | Scoped |
-| The startup check on the exposure and the secret, registered once | Hosted service |
+| The startup check on the exposure, the secret and the default CORS policy, registered once | Hosted service |
 
 ## Examples
 
