@@ -1,8 +1,9 @@
 namespace Trax.Scheduler.Services.Sandbox;
 
 /// <summary>
-/// Marks a train as one that runs in a sandbox of its own: a fresh, short-lived microVM per run,
-/// started by the sandbox launcher, with no network and no credentials. A sandbox runs only trains
+/// Marks a train as one that runs in a sandbox of its own: a fresh, short-lived one per run (a
+/// Kata microVM on a cluster, gVisor under podman on one host), started by the sandbox launcher,
+/// with no network and no credentials. A sandbox runs only trains
 /// that carry it, and a hub can send only these to a launcher.
 /// </summary>
 /// <remarks>

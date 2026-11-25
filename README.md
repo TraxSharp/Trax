@@ -137,8 +137,9 @@ own machine (podman, or k3s in a VM), to AWS (ECS or EKS) or to any Kubernetes c
   cluster, only the app's own services reach its database.
 - **Only where it needs to go.** Each service names the domains it may reach and nothing else gets
   out, with memory and CPU per service and a read-only filesystem for all of them.
-- **Untrusted code in a sandbox.** Code a person or an agent wrote runs in a fresh virtual machine
-  per run, with no network.
+- **Untrusted code in a sandbox.** Code a person or an agent wrote runs in a fresh sandbox per run,
+  with no network: a Kata virtual machine on Kubernetes (k3s on one machine will do), gVisor under
+  podman on one host.
 
 CI deploys a real app to a real cluster on every change to this code, measures a release for
 downtime and rolls a broken one back. [Deploy a Trax

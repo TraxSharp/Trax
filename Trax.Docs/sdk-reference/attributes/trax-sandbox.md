@@ -15,9 +15,10 @@ nav_order: 7
 
 # TraxSandbox
 
-Declares that a train runs in a sandbox of its own: a fresh, short-lived microVM per run, started
-by the [sandbox launcher](/docs/sdk-reference/scheduler-api/trax-sandbox-launcher), with no network
-and no credentials. The sandbox entry point runs only trains that carry it, and a hub's
+Declares that a train runs in a sandbox of its own: a fresh, short-lived one per run (a Kata
+microVM on a cluster, gVisor under podman on one host), started by the
+[sandbox launcher](/docs/sdk-reference/scheduler-api/trax-sandbox-launcher), with no network and no
+credentials. The sandbox entry point runs only trains that carry it, and a hub's
 [`ITraxSandbox`](/docs/sdk-reference/scheduler-api/add-trax-sandbox) reads the profile and limits
 from it. It ships in Trax.Scheduler, not Trax.Effect.
 
