@@ -85,6 +85,33 @@ public class DrainCommandTests : TestSetup
         (await Row()).Should().NotBeNull();
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run no host is running, standing for a claim in flight."
+    )]
+    [Test]
+    public async Task Work_that_commits_during_the_settle_is_waited_on()
+    {
+        // A host that read the row just before it was set may still be claiming; its claim commits moments later.
+        // Without the settle the drain would read nothing busy before it does and let the roll cut it off.
+        var drain = DrainCommand.DrainAsync(
+            Scope.ServiceProvider,
+            TimeSpan.FromSeconds(30),
+            force: false,
+            settle: TimeSpan.FromSeconds(1),
+            poll: Fast,
+            CancellationToken.None
+        );
+        await UntilRow();
+        var run = await Run(TrainState.InProgress);
+
+        // negative-wait: twice the settle, and the drain must still be waiting on the run.
+        await Task.Delay(TimeSpan.FromSeconds(2), TimeProvider.System);
+        drain.IsCompleted.Should().BeFalse("the run committed during the settle is busy");
+
+        await SetState(run.Id, TrainState.Completed);
+        await drain;
+    }
+
     [Test]
     public async Task Past_the_timeout_the_drain_is_ended_and_refused_naming_what_is_busy()
     {
@@ -258,6 +285,7 @@ public class DrainCommandTests : TestSetup
     public async Task RunTraxAsync_drains_from_the_process_arguments_without_starting_the_host()
     {
         var host = new UnstartedHost(Scope.ServiceProvider);
+        var started = TimeProvider.System.GetTimestamp();
 
         await host.RunTraxAsync(
             args: [],
@@ -270,6 +298,13 @@ public class DrainCommandTests : TestSetup
 
         host.Started.Should().BeFalse();
         (await Row()).Should().NotBeNull();
+        TimeProvider
+            .System.GetElapsedTime(started)
+            .Should()
+            .BeGreaterThanOrEqualTo(
+                DrainCommand.Settle,
+                "a deploy's drain waits the settle before it first reads what is busy"
+            );
     }
 
     [Test]
