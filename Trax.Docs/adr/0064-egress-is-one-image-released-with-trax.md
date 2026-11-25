@@ -81,6 +81,9 @@ domains, which is what an app that calls one model API and one package feed need
 - A ClientHello carrying ECH (or ESNI) is refused: its outer name is the client's choice, so deciding on it would
   let an app reach any name an allowed name's CDN serves. A client that sends GREASE ECH by default is refused with
   it.
+- A `tcp:` entry, and every host `TRAX_EGRESS_POSTGRES` names, is an address allowlist, the thing rejected above
+  for TLS. It is meant for single-tenant or private destinations; on a shared endpoint (a managed Postgres pooler,
+  a cloud API) it reaches every tenant behind the address.
 - The app must not run as uid 61000.
 - The image is built for amd64 only until the release builds more.
 
@@ -103,3 +106,4 @@ container adding `SYS_PTRACE`.
 - **2026-11-25**: The image is pushed by its own job, the only one with `packages: write`, before publish.
 - **2026-11-25**: Built for linux/arm64 as well as linux/amd64; Trax.Cli names the digest of the index of both.
 - **2026-11-25**: A ClientHello carrying ECH or ESNI is refused; the outer name was not a safe thing to decide on.
+- **2026-11-25**: Said that a `tcp:` entry is an address allowlist, for single-tenant destinations only.

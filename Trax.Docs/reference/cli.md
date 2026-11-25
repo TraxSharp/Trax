@@ -1109,7 +1109,9 @@ native sidecar (Kubernetes 1.29 and later): it starts before the app, the app st
 (`trax-egress ready`) passes, and it runs beside the app for the pod's life. Both read `TRAX_EGRESS_ALLOW`: the
 service's domains, then `tcp:database:5432` when Postgres runs in the cluster and `tcp:rabbitmq:5672` when RabbitMQ
 does. An existing database is allowed by the hosts of the connection string in its Secret, passed to both as
-`TRAX_EGRESS_POSTGRES` by `secretKeyRef`, so its address is written nowhere new. The migrate, drain and resume Jobs'
+`TRAX_EGRESS_POSTGRES` by `secretKeyRef`, so its address is written nowhere new. That allows the address, not the
+database: point it at a database on an address of its own, not a shared pooler that serves other customers
+([the egress image](/docs/reference/egress-image#the-list)). The migrate, drain and resume Jobs'
 pods are held to the migrator's egress the same way, so they still reach the database; the native sidecar stops
 when the Job's container does.
 

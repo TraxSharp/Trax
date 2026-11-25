@@ -60,7 +60,7 @@ Every command reads the list from the same places, so the rules, the sidecar and
 |---|---|
 | `TRAX_EGRESS_ALLOW` | Entries separated by spaces, commas or new lines. |
 | `TRAX_EGRESS_ALLOW_FILE` | A file of entries, one a line, `#` starting a comment. |
-| `TRAX_EGRESS_POSTGRES` | An Npgsql connection string. Its hosts (`Host`, with `Port` or a `:port` each) become `tcp:` entries; nothing else in it is kept. |
+| `TRAX_EGRESS_POSTGRES` | An Npgsql connection string. Its hosts (`Host`, with `Port` or a `:port` each) become `tcp:` entries; nothing else in it is kept. Each is an address allowlist, like any `tcp:` entry (see below). |
 
 An entry is one of:
 
@@ -70,6 +70,13 @@ An entry is one of:
 | `registry.example.com:8443` | TLS to that name on 8443. |
 | `tcp:database:5432` | Plain TCP to whatever `database` resolves to now, private addresses included. For the deployment's own services. |
 | `tcp:169.254.170.23:80` | Plain TCP to that one address and port. |
+
+A `tcp:` entry allows an address, not a destination. The proxy cannot see who is on the other side of plain TCP,
+so anything served at that address is reachable, with whatever credentials the app brings. Name only
+single-tenant or private destinations in one: the deployment's own services, a database on its own address. A
+shared endpoint (a managed Postgres pooler or proxy that serves many customers on one address, or a cloud API's
+public endpoint) lets the app reach every tenant behind it, its own accounts included. The same goes for every host
+in `TRAX_EGRESS_POSTGRES`.
 
 A name is lower case: letters, digits and dashes in labels of at most 63, at least two labels for a TLS entry. A
 wildcard, a scheme, a path, an address in place of a TLS name, and a port outside 1 to 65535 are refused, and `rules`
