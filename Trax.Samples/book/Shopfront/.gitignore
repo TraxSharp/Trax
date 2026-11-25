@@ -1,0 +1,5 @@
+# What trax deploy writes from trax.deploy.json, and the secrets beside it.
+compose.yaml
+.env.example
+.env
+.trax/

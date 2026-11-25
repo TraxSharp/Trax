@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "app": "shopfront",
+  "services": {
+    "hub": {
+      "project": "Shopfront.Hub/Shopfront.Hub.csproj",
+      "memory": 512,
+      "cpus": 1,
+      "egress": ["login.example.com"]
+    },
+    "worker": {
+      "project": "Shopfront.Worker/Shopfront.Worker.csproj",
+      "memory": 384,
+      "cpus": 0.5,
+      "egress": []
+    }
+  },
+  "connectionStrings": { "trax": "Shopfront", "rabbitMq": "RabbitMq" },
+  "settings": [
+    "Auth__Authority",
+    "Auth__Audience",
+    "Storefront__Origin",
+    "Broadcast__AllowInsecureTransport"
+  ],
+  "secrets": ["Broadcast__SigningKey"],
+  "environments": {
+    "local": { "target": "compose", "drainTimeout": "00:05:00" },
+    "cluster": {
+      "target": "kubernetes",
+      "profile": "try",
+      "registry": "localhost:5001",
+      "database": { "inCluster": true },
+      "counts": { "worker": 2 },
+      "drainTimeout": "00:05:00",
+      "settings": {
+        "Auth__Authority": "https://login.example.com/",
+        "Auth__Audience": "shopfront",
+        "Storefront__Origin": "https://shop.example.com",
+        "Broadcast__AllowInsecureTransport": "true"
+      }
+    }
+  }
+}
