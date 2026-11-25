@@ -10,8 +10,12 @@ namespace Trax.Cli.Tests.UnitTests;
 /// environment's drain timeout, forced only by <c>TRAX_DRAIN_FORCE</c> on the release, and ends the drain once
 /// every service has started. <c>--force</c> cannot reach a file trax writes and someone else runs, so it says how.
 /// </summary>
+[Property("adr", "docs/adr/0007-hubs-roll-with-overlap-after-a-drain.md")]
 public class ComposeDrainTests
 {
+    private const string Adr =
+        "see cli/0007 (docs/adr/0007-hubs-roll-with-overlap-after-a-drain.md)";
+
     private static string Compose(TimeSpan? timeout = null) =>
         ComposeTarget
             .Render(
@@ -28,7 +32,7 @@ public class ComposeDrainTests
     {
         Compose(TimeSpan.FromMinutes(3))
             .Should()
-            .Contain("  drain:\n")
+            .Contain("  drain:\n", Adr)
             .And.Contain($"command: [\"{TraxDrain.Argument}\", \"00:03:00\"]");
     }
 

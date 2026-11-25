@@ -10,8 +10,11 @@ namespace Trax.Cli.Tests.UnitTests;
 /// it restarts the app's units: the restart is chained to the drain exiting 0, and the resume pod runs after. A first
 /// release, and one that restarts only Postgres or RabbitMQ or nothing, does not drain.
 /// </summary>
+[Property("adr", "docs/adr/0007-hubs-roll-with-overlap-after-a-drain.md")]
 public class PodmanDrainTests
 {
+    private const string Adr =
+        "see cli/0007 (docs/adr/0007-hubs-roll-with-overlap-after-a-drain.md)";
     private const string Tag = "20261124-120000-abcdef123456";
     private const string Dir = "/src/.trax/deploy/podman/orders-home";
     private const string SecretPath = "/home/u/.config/trax/orders-home/secret.yaml";
@@ -37,7 +40,7 @@ public class PodmanDrainTests
 
         files["orders-home-drain.yaml"]
             .Should()
-            .Contain(TraxDrain.Argument)
+            .Contain(TraxDrain.Argument, Adr)
             .And.Contain("00:10:00")
             .And.Contain("name: orders-home-drain")
             .And.NotContain(TraxDrain.ForceVariable);

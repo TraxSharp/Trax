@@ -215,14 +215,15 @@ watcher=$!
 
 "${TRAX[@]}" deploy --env cluster --file "$DIR/trax.deploy.ci.json" > "$RUNNER_TEMP_DIR/drain-deploy.log" 2>&1 &
 deploy=$!
-# Wait until the drain Job reports the run busy, hold it a while longer, then end the run.
-for _ in $(seq 300); do
+# Wait until the drain Job reports the run busy, hold it a while longer, then end the run. The deploy builds both
+# images first, which on a fresh CI runner takes minutes before the drain starts.
+for _ in $(seq 900); do
   kubectl -n "$NS" logs -l app.kubernetes.io/name=drain --tail=20 2>/dev/null | grep -q 'still busy' && break
   kill -0 "$deploy" 2>/dev/null || { cat "$RUNNER_TEMP_DIR/drain-deploy.log"; fail "the deploy ended before it drained"; }
   sleep 1
 done
 kubectl -n "$NS" logs -l app.kubernetes.io/name=drain --tail=20 | grep 'still busy' | tail -n 2 ||
-  fail "the drain Job never reported the live run"
+  { tail -n 30 "$RUNNER_TEMP_DIR/drain-deploy.log"; fail "the drain Job never reported the live run"; }
 unrolled() { [ "$(image_of hub)" = "$hub_before" ] && [ "$(image_of worker)" = "$worker_before" ]; }
 unrolled || fail "a service rolled while a run was still busy"
 held=$(date +%s)

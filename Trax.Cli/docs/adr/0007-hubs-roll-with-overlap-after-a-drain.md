@@ -81,6 +81,6 @@ Not covered: a real cluster, ECS or compose run; none runs in CI.
 
 ## Changelog
 
-- **2026-11-24**: Recorded.
 - **2026-11-25**: Compose releases in three commands. A run of the stack under podman compose (docker-compose 2.26)
   showed a plain `compose up` stops the old hub and workers before the drain starts.
+- **2026-11-24**: Recorded.
