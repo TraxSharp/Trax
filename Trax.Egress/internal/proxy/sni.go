@@ -13,6 +13,8 @@ const (
 	recordHandshake      = 22
 	handshakeHello       = 1
 	extServerName        = 0
+	extECH               = 0xfe0d
+	extESNI              = 0xffce
 	maxRecord            = 16384 + 2048
 	maxHello             = 64 * 1024
 	sniHostName     byte = 0
@@ -22,7 +24,10 @@ var errNotHello = errors.New("not a TLS ClientHello")
 
 // ReadClientHello reads a TLS ClientHello from r, across as many records as it spans, and returns the name it asks
 // for (its SNI) with every byte read, which the proxy sends on unchanged. A hello with no name, two names, or a name
-// that is not a domain is refused: the proxy has nothing else to decide on.
+// that is not a domain is refused: the proxy has nothing else to decide on. So is a hello that carries an encrypted
+// hello (ECH, or the older ESNI): its SNI is only the outer name, which the client chooses, and a server that holds
+// the key answers for the inner name instead. A GREASE ECH extension cannot be told from a real one, so a client
+// that sends one by default (Chrome does) is refused too.
 func ReadClientHello(r io.Reader) (string, []byte, error) {
 	var raw, hs []byte
 	for {
@@ -78,6 +83,9 @@ func serverName(b []byte) (string, error) {
 	for len(e.b) > 0 && !e.bad {
 		typ := e.u16()
 		data := e.take(e.u16())
+		if typ == extECH || typ == extESNI {
+			return "", errors.New("the hello is encrypted (ECH)")
+		}
 		if typ != extServerName {
 			continue
 		}

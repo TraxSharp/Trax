@@ -92,11 +92,55 @@ func TestReadClientHelloRefuses(t *testing.T) {
 		"not hello":   append([]byte{22, 3, 1, 0, 4}, 2, 0, 0, 0),
 		"huge record": {22, 3, 1, 0xFF, 0xFF},
 		"ip as name":  hello(t, "1.1.1.1"),
+		"ech":         withExtension(t, raw, 0xfe0d),
+		"esni":        withExtension(t, raw, 0xffce),
 	} {
 		if n, _, err := ReadClientHello(bytes.NewReader(in)); err == nil {
 			t.Errorf("%s: accepted with name %q", name, n)
 		}
 	}
+}
+
+// withExtension returns the one-record hello raw with an extension of type typ added at the end of its list, its
+// three lengths grown to match.
+func withExtension(t *testing.T, raw []byte, typ uint16) []byte {
+	t.Helper()
+	body := raw[9:]
+	s := 2 + 32
+	s += 1 + int(body[s])
+	s += 2 + int(binary.BigEndian.Uint16(body[s:]))
+	s += 1 + int(body[s])
+	extLen := int(binary.BigEndian.Uint16(body[s:]))
+	if s+2+extLen != len(body) {
+		t.Fatal("the hello does not end with its extensions")
+	}
+	ext := binary.BigEndian.AppendUint16(nil, typ)
+	ext = binary.BigEndian.AppendUint16(ext, 4)
+	ext = append(ext, 1, 2, 3, 4)
+	out := append([]byte{}, raw[:5]...)
+	binary.BigEndian.PutUint16(out[3:5], uint16(len(raw)-5+len(ext)))
+	hs := len(body) + len(ext)
+	out = append(out, raw[5], byte(hs>>16), byte(hs>>8), byte(hs))
+	nb := append([]byte{}, body...)
+	binary.BigEndian.PutUint16(nb[s:], uint16(extLen+len(ext)))
+	out = append(out, nb...)
+	out = append(out, ext...)
+	if name, _, err := ReadClientHello(bytes.NewReader(withExtensionControl(out, typ))); err != nil || name != "api.anthropic.com" {
+		t.Fatalf("the rebuilt hello does not parse: %q %v", name, err)
+	}
+	return out
+}
+
+// withExtensionControl renames the added extension to an unassigned type, so the hello it is in must still parse:
+// the refusal is for the type, not for a broken hello.
+func withExtensionControl(b []byte, typ uint16) []byte {
+	c := append([]byte{}, b...)
+	i := len(c) - 8
+	if binary.BigEndian.Uint16(c[i:]) != typ {
+		panic("the added extension is not last")
+	}
+	binary.BigEndian.PutUint16(c[i:], 0x7a7a)
+	return c
 }
 
 type fakeNet struct {

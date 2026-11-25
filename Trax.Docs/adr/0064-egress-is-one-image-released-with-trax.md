@@ -78,7 +78,9 @@ domains, which is what an app that calls one model API and one package feed need
 
 - IPv6 egress is refused outright, and UDP other than DNS. QUIC falls back to TCP.
 - A TLS client that sends no SNI, or plain text to an outside host, is refused.
-- ECH hides the inner name; the proxy decides on the outer one, which the provider chooses.
+- A ClientHello carrying ECH (or ESNI) is refused: its outer name is the client's choice, so deciding on it would
+  let an app reach any name an allowed name's CDN serves. A client that sends GREASE ECH by default is refused with
+  it.
 - The app must not run as uid 61000.
 - The image is built for amd64 only until the release builds more.
 
@@ -100,3 +102,4 @@ container adding `SYS_PTRACE`.
   with a user namespace of its own (`hostUsers: false`).
 - **2026-11-25**: The image is pushed by its own job, the only one with `packages: write`, before publish.
 - **2026-11-25**: Built for linux/arm64 as well as linux/amd64; Trax.Cli names the digest of the index of both.
+- **2026-11-25**: A ClientHello carrying ECH or ESNI is refused; the outer name was not a safe thing to decide on.

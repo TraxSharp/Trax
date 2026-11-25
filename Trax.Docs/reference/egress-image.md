@@ -38,6 +38,7 @@ pod at all.
 | DNS to another resolver (`8.8.8.8:53`) | Sent to the egress resolver anyway. |
 | An address, with the SNI of a listed name | Connected to where the name resolves, not to the address dialled. |
 | An address, with any other SNI or none | Reset. |
+| A ClientHello with Encrypted Client Hello (or ESNI) | Reset, whatever its outer name. |
 | Instance metadata (`169.254.169.254`), EKS Pod Identity (`169.254.170.23`), the LAN, the tailnet | Reset, unless a `tcp:` entry names it. |
 | A listed name that resolves to a private or link-local address | Reset. A TLS entry reaches public addresses only. |
 | One of the deployment's own services (`tcp:database:5432`) | Passed through when the address dialled is one the name resolves to now. |
@@ -45,7 +46,11 @@ pod at all.
 
 What it does not do: it does not read inside TLS, so a client that sends one name in its SNI and another in its
 `Host` header reaches the first name's server with the second name's request (domain fronting). The server decides
-what to do with it. Encrypted Client Hello hides the inner name; the proxy decides on the outer one.
+what to do with it.
+
+A ClientHello carrying Encrypted Client Hello (or the older ESNI) is reset, like one with no SNI: the outer name is
+the client's choice, and a server holding the key answers for the inner one. A client that sends a GREASE ECH
+extension by default (Chrome and other BoringSSL clients) looks the same and is refused too; turn ECH off in it.
 
 ## The list
 
