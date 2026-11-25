@@ -25,6 +25,7 @@ script:
 | SignalRBroadcaster | `node signalr-broadcaster.mjs` | `SIGNALR_HOST`, default `localhost:5270` | the refused connection, sign-in, every kind of ping and the events the hub pushes, sign-out |
 | PersistedOperations | `node persisted-operations.mjs` | `PERSISTED_OPERATIONS_HOST`, default `localhost:5240` | every call and management action in each state the store can be in; the landing page no longer shows it |
 | Deploys | `deploy.sh <shape> <target>` in a throwaway VM, then `node deploy.mjs` | k3s or podman under systemd, set up as [deploy/README.md](deploy/README.md) says | real `trax deploy` runs of each shape an app can take: a first deploy, a release while a run is busy, a broken release, and who can reach what |
+| What trax writes | `deploy-generated.sh` in the .NET SDK container, then `node deploy-generated.mjs` | nothing: it plans, deploys nothing | what each DistributedWorkers host reports with `--trax-export-deploy`, the Kubernetes manifests and podman units `trax deploy plan` writes from the sample's file, and what compose and AWS refuse; its header says how to run it |
 | The dashboard | `node dashboard.mjs` | starts Scheduling, Recovery, PersistedOperations and CheckIn itself | every page, filter, row and write of the operations dashboard, from all four hosts |
 
 Each script writes its raw recording under `out/` (gitignored). Add `--copy-to ../../../Trax.Website/src/data` to

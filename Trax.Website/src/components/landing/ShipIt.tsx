@@ -1,19 +1,20 @@
 import CodeFold from "./CodeFold";
 import DemoSection from "./DemoSection";
 import DeployReplay from "./DeployReplay";
-import ReleaseStory from "./ReleaseStory";
+import ShipItTabs from "./ShipItTabs";
 
-// One release while people use the app, as a moving picture read off a recorded deploy (ReleaseStory). Every other
-// recorded deploy, with its file, its terminal and its checks, is in the fold under it (DeployReplay), and so is how
-// they were recorded.
+// Deploying with trax, in three tabs (ShipItTabs): what trax writes from your one file, one release while people use
+// the app, and who can reach whom once it runs, each read off generated or recorded data. Every recorded deploy, with
+// its file, its terminal and its checks, is in the fold under them (DeployReplay), and so is how they were made.
 export default function ShipIt() {
   return (
     <DemoSection
       title="Ship a new version without anyone noticing"
       intro={
         <p>
-          One command builds the new version, waits for the work still running, starts it beside the old one and moves
-          requests over once it is ready. A version that never gets ready is put back on its own.
+          You write one short file. <code className="font-mono text-[0.9em]">trax deploy</code> reads what your code needs, writes
+          what the cluster or the machine runs, and ships each new version beside the old one once the work in progress is done.
+          A version that never gets ready is put back on its own.
         </p>
       }
       links={[
@@ -38,6 +39,11 @@ export default function ShipIt() {
                 by hand. The picture above is the Hub + Workers release on Kubernetes, with its clock shortened.
               </p>
               <p>
+                The first tab&apos;s counts come from <span className="font-mono text-xs">Trax.Samples/scripts/recordings/deploy-generated.sh</span>,
+                which runs <span className="font-mono text-xs">trax deploy plan</span> on the DistributedWorkers sample in the .NET SDK container
+                and counts what it wrote.
+              </p>
+              <p>
                 For a release while busy, the recorder puts one finished run back to running so the deploy has something to wait for,
                 and ends it by hand. The broken release sets a web address every service refuses at start.
               </p>
@@ -60,7 +66,7 @@ export default function ShipIt() {
         </div>
       }
     >
-      <ReleaseStory />
+      <ShipItTabs />
     </DemoSection>
   );
 }
