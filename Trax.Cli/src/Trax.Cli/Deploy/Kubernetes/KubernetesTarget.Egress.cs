@@ -84,7 +84,7 @@ internal static partial class KubernetesTarget
             image,
             new ServiceHardening(
                 ["NET_ADMIN"],
-                MemoryMiB: null,
+                DeployEgress.MemoryMiB,
                 Pids: null,
                 Cpus: null,
                 ReadOnlyRoot: true
@@ -107,7 +107,13 @@ internal static partial class KubernetesTarget
         var sidecar = Renderer.Container(
             DeployEgress.SidecarContainer,
             image,
-            new ServiceHardening([], MemoryMiB: null, Pids: null, Cpus: null, ReadOnlyRoot: true),
+            new ServiceHardening(
+                [],
+                DeployEgress.MemoryMiB,
+                Pids: null,
+                Cpus: null,
+                ReadOnlyRoot: true
+            ),
             nonRoot: true,
             [.. vars]
         );

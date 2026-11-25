@@ -251,7 +251,7 @@ internal static class ComposeTarget
     /// </summary>
     private static readonly ServiceHardening EgressHardening = new(
         ["NET_ADMIN", "SETGID", "SETUID"],
-        MemoryMiB: null,
+        DeployEgress.MemoryMiB,
         Pids: 256,
         Cpus: null,
         ReadOnlyRoot: true

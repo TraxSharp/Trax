@@ -54,6 +54,14 @@ internal static partial class DeployEgress
     /// <summary>The assembly metadata the Release workflow writes the image's digest reference under.</summary>
     public const string ImageMetadataKey = "TraxEgressImage";
 
+    /// <summary>
+    /// The memory the rules container and the sidecar may each use, in MiB, whatever the service names. The proxy
+    /// holds at most 4096 connections, each a few goroutines and at most a 64 KiB ClientHello while it decides; the
+    /// limit keeps a held app from growing the sidecar into the node's memory. Past it the sidecar is killed and the
+    /// app has no network until it restarts.
+    /// </summary>
+    public const int MemoryMiB = 128;
+
     /// <summary>The most domains one service may name.</summary>
     public const int MaxEntries = 64;
 

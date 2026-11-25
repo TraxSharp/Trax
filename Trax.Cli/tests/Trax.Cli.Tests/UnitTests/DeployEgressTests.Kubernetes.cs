@@ -321,6 +321,21 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void Kubernetes_gives_the_rules_and_the_sidecar_a_fixed_memory_limit()
+    {
+        var pod = PodOf(Cluster(), "hub");
+
+        foreach (var c in pod.InitContainers)
+        {
+            c.Resources.Limits["memory"].ToString().Should().Be("128Mi", c.Name);
+            c.Resources.Requests["memory"].ToString().Should().Be("128Mi", c.Name);
+        }
+        pod.Containers.Single()
+            .Resources.Should()
+            .BeNull("the service names no memory, and gets no default");
+    }
+
+    [Test]
     public void The_policy_is_applied_before_any_pod_and_written_into_the_plan()
     {
         var m = Cluster();
@@ -384,6 +399,8 @@ public partial class DeployEgressTests
         sidecar.SecurityContext.RunAsUser.Should().Be(0);
         sidecar.SecurityContext.Capabilities.Add.Should().Equal("NET_ADMIN", "SETGID", "SETUID");
         pod.Containers[0].SecurityContext.Capabilities.Add.Should().BeNull();
+        sidecar.Resources.Limits["memory"].ToString().Should().Be("128Mi");
+        pod.InitContainers[0].Resources.Limits["memory"].ToString().Should().Be("128Mi");
         deployment
             .Spec.Template.Metadata.Annotations[PodmanTarget.InitContainerTypeAnnotation]
             .Should()

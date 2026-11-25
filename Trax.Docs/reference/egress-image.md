@@ -113,6 +113,8 @@ services:
     security_opt: ["no-new-privileges:true"]
     read_only: true
     pids_limit: 256
+    mem_limit: 128m
+    memswap_limit: 128m
     healthcheck:
       test: ["CMD", "/usr/local/bin/trax-egress", "ready"]
       interval: 2s

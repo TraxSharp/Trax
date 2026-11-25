@@ -49,6 +49,18 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void Compose_gives_the_sidecar_a_fixed_memory_limit_whatever_the_service_names()
+    {
+        var sidecar = Block(Compose(), "hub-egress");
+
+        sidecar
+            .Should()
+            .Contain($"mem_limit: {DeployEgress.MemoryMiB}m")
+            .And.Contain($"memswap_limit: {DeployEgress.MemoryMiB}m");
+        DeployEgress.MemoryMiB.Should().Be(128);
+    }
+
+    [Test]
     public void Compose_joins_the_held_service_to_its_sidecar_and_publishes_its_port_there()
     {
         var compose = Compose();
