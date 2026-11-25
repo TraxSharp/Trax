@@ -620,7 +620,8 @@ podman_who_can_reach_what() {
   begin who-can-reach-what "$file"
   watch_containers
   podman_release "$file" || fail "the held deploy failed"
-  for _ in $(seq 120); do healthy && break; sleep 1; done
+  # Five minutes: systemd starts the unit again when its first start fails, and the recording keeps both.
+  for _ in $(seq 300); do healthy && break; sleep 1; done
   healthy || fail "the held hub never answered"
   port=$(jq -r --arg s "$PROBE" '.services[$s].port' "$FILE")
 
