@@ -72,7 +72,10 @@ The environments:
 - **`cluster`**: a Kubernetes cluster, the `try` profile, Postgres and RabbitMQ in the cluster, images pushed to a
   registry on `localhost:5001`. This is the one CI deploys to k3s (`.github/ci/deploy/cluster.sh`).
 - **`home`**: the same manifests on one machine with no cluster, run by `podman kube play` under systemd
-  (`"runtime": "podman"`). trax writes the units and prints the commands that start them.
+  (`"runtime": "podman"`). trax writes the units and prints the commands that start them. Egress does not work on
+  the podman runtime yet: a held service fails to reach Postgres there, so the migration stops with "Resource
+  temporarily unavailable". Remove `egress` from both services in a copy of the file to deploy `home`; CI's podman
+  deploy does the same.
 - **`production`**: the shape of a real deployment, written down but not deployed by anything here. Postgres is one
   you run and back up (`database` names a Secret holding its connection string), three workers, a registry of yours,
   and `"exposure": "tailnet"`: the hub on your tailnet through the Tailscale operator and nowhere else. It keeps the
