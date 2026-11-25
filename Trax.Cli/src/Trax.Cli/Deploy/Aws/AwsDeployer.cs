@@ -419,8 +419,8 @@ internal sealed class AwsDeployer(
     }
 
     /// <summary>
-    /// Runs the resume task, so every host takes work again. A failure does not undo the deploy: a new hub ends the
-    /// drain when it starts, and one left behind lapses on its own. Returns a sentence saying so, or empty.
+    /// Runs the resume task, so every host takes work again. A failure does not undo the deploy: a drain left
+    /// behind lapses on its own. Returns a sentence saying so, or empty.
     /// </summary>
     private async Task<string> ResumeAsync(string stack, CancellationToken ct)
     {
@@ -440,13 +440,12 @@ internal sealed class AwsDeployer(
                 .ConfigureAwait(false);
             return resume.ExitCode == 0
                 ? ""
-                : " Ending the drain failed: a scheduler host ends it when it starts, and otherwise it lapses on its "
-                    + "own. End it from the console's scheduler page.";
+                : " Ending the drain failed: it lapses on its own. End it now from the console's scheduler page.";
         }
         catch (InvalidOperationException ex) when (!ct.IsCancellationRequested)
         {
-            return $" Ending the drain failed ({ex.Message}): a scheduler host ends it when it starts, and "
-                + "otherwise it lapses on its own.";
+            return $" Ending the drain failed ({ex.Message}): it lapses on its own. End it now from the "
+                + "console's scheduler page.";
         }
     }
 

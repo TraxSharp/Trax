@@ -222,8 +222,8 @@ internal sealed class KubernetesDeployer(
     }
 
     /// <summary>
-    /// Runs the resume Job, so every host takes work again. A failure does not undo the deploy: the new hub ended the
-    /// drain when it started, and a drain left behind lapses on its own. Returns a sentence saying so, or empty.
+    /// Runs the resume Job, so every host takes work again. A failure does not undo the deploy: a drain left behind
+    /// lapses on its own. Returns a sentence saying so, or empty.
     /// </summary>
     private async Task<string> ResumeAsync(KubernetesManifests manifests, CancellationToken ct)
     {
@@ -238,14 +238,14 @@ internal sealed class KubernetesDeployer(
                 .ConfigureAwait(false);
             if (resume.Succeeded)
                 return "";
-            return $" Ending the drain failed{(resume.Reason is null ? "" : $" ({resume.Reason})")}: a scheduler "
-                + "host ends it when it starts, and otherwise it lapses on its own. End it from the console's "
-                + $"scheduler page, or 'kubectl logs -n {ns} job/{job}' for why.";
+            return $" Ending the drain failed{(resume.Reason is null ? "" : $" ({resume.Reason})")}: it lapses on "
+                + "its own. End it now from the console's scheduler page, or see "
+                + $"'kubectl logs -n {ns} job/{job}' for why.";
         }
         catch (InvalidOperationException ex) when (!ct.IsCancellationRequested)
         {
-            return $" Ending the drain failed ({ex.Message}): a scheduler host ends it when it starts, and "
-                + "otherwise it lapses on its own.";
+            return $" Ending the drain failed ({ex.Message}): it lapses on its own. End it now from the "
+                + "console's scheduler page.";
         }
     }
 

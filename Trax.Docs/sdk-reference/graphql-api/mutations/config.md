@@ -79,7 +79,8 @@ until the drain lapses or [`resume`](#resume) ends it. Work already running carr
 that comes due meanwhile is a misfire once the drain ends, and its manifest's misfire policy decides
 whether it runs then. A drain replaces one in force, and records the caller (its Trax principal id,
 else the name it signed in with) as who set it. The console's **Drain** calls the same
-`IOperationsService.DrainAsync`. A scheduler host that starts ends a drain. See
+`IOperationsService.DrainAsync`. A scheduler host that starts while drained leaves the drain in place and fails no
+run at startup. See
 [TraxDrain](/docs/sdk-reference/configuration/trax-drain) for how a deploy drains before it replaces
 the hosts.
 

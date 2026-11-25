@@ -114,7 +114,7 @@ internal static class DrainCommand
         {
             logger?.LogWarning(
                 "Still busy after {Timeout}, rolling anyway ({Variable}=true); the drain stays until "
-                    + "{Until:u} or a scheduler host starts:\n{Busy}",
+                    + "{Until:u} or the deploy ends it after the roll:\n{Busy}",
                 timeout,
                 TraxDrain.ForceVariable,
                 until,

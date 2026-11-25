@@ -811,7 +811,8 @@ The drain failed (BackoffLimitExceeded), so no service was moved to the new vers
 ```
 
 Let the work finish or cancel it, raise `drainTimeout`, or deploy with `--force`, which replaces the hosts anyway and
-keeps the drain until the new hub ends it. On Kubernetes, ECS and the podman runtime `--force` reaches the drain
+keeps the drain until the deploy ends it after the roll. A new hub that starts while drained fails nothing at startup,
+so what the old hosts still run gets their stop grace to finish. On Kubernetes, ECS and the podman runtime `--force` reaches the drain
 itself; compose's file is run by you, so there set `TRAX_DRAIN_FORCE=true` for that one release.
 
 With the drain done, a hub's new copy can start beside the old one: dispatch already copes with two hubs (claims use

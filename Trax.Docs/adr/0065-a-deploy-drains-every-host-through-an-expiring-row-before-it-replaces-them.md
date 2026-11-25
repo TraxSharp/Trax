@@ -32,8 +32,8 @@ idle for good.
   caller queues is still written to the queue and waits. Postgres, SQLite and InMemory all keep the row.
 - **The row expires.** It holds while its `until` is ahead of the reading host's clock. A deploy sets it to its
   timeout plus a 10 minute margin for the roll; the console and the API set a duration, 20 minutes by default and at
-  most a day. A deploy ends it after the roll and when it refuses, a scheduler host ends it when it starts (after its
-  stuck-run recovery), and a crashed or interrupted deploy's row lapses.
+  most a day. A deploy ends it once every service has rolled and when it refuses, and a crashed or interrupted deploy's row
+  lapses. A scheduler host that starts while it holds leaves it in place and skips its stuck-run recovery.
 - **A schedule due while drained is a misfire.** Nothing is queued; when the drain ends, the manifest's misfire policy
   (or the scheduler's default) decides as it does for any late occurrence. No new setting.
 - **Busy is what a replaced host would cut off.** A run that is Pending or InProgress, except a Pending run whose job
@@ -62,9 +62,11 @@ idle for good.
 
 - During the deploy that brings the table in, hosts on the previous version do not read it; that first drain covers
   only the hosts already on the new version.
-- The roll starts the new hub beside the old one, which ends the drain at its start. Runs the old hub starts in the
-  moment before it stops began after the new hub started, so its recovery does not touch them; they end the way any
-  stopping host ends them. cli/0007 records the overlap.
+- The roll starts the new hub beside the old one while the drain still holds, so neither starts new work and the new
+  hub's recovery fails nothing, even after a forced drain left runs going. The drain ends only after every service has
+  rolled: a worker the roll has not replaced yet claims nothing it would be cut off in. A run a forced roll does cut
+  off is failed by the stale-run reaper. cli/0007 records the overlap.
+- A crashed deploy leaves the hosts drained until the row lapses or someone resumes, even if a hub restarts.
 - A train a request runs inline, a machine timer and a machine policy still run while drained. The drain waits for the
   runs they start like any other.
 - A drain compares times on each host's clock, so a host whose clock is far off honours it early or late by that much.
@@ -79,4 +81,7 @@ manifest manager, a worker, a lapsed row, misfire after the drain, the starting 
 
 ## Changelog
 
+- **2026-11-25**: A starting scheduler host no longer ends the drain, and skips its stuck-run recovery while one
+  holds. Ending it at the first new hub let workers not yet rolled claim work they were then cut off in, and a forced
+  roll's new hub failed the runs the old one was still finishing.
 - **2026-11-24**: Recorded.

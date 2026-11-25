@@ -239,8 +239,8 @@ info: Trax.Effect.Data.Services.Drain.DrainCommand[0]
       1 still busy, 00:04:54.2085802 left before the timeout.
 ```
 
-When the restock ends, the drain exits, the hub and the worker are replaced, and the new hub ends
-the drain as it starts. Work still busy after `drainTimeout` refuses the release: the drain fails,
+When the restock ends, the drain exits, the hub and the worker are replaced, and the `resume`
+one-shot ends the drain once they have started. Work still busy after `drainTimeout` refuses the release: the drain fails,
 naming it, `compose wait` returns its exit code, and nothing is replaced. `TRAX_DRAIN_FORCE=true` on the
 release replaces the services anyway.
 

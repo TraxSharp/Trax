@@ -76,8 +76,9 @@ A process started with `--trax-drain`:
    though drained, with the drain kept.
 
 Cancelled or killed, it leaves the drain to lapse at its time. A process started with `--trax-resume` deletes the row.
-A scheduler host (one that calls `AddScheduler`) ends a drain when it starts, after its stuck-run recovery, so a deploy
-that replaced the hosts and died before resuming does not leave them idle until it lapses. A worker host does not.
+A scheduler host (one that calls `AddScheduler`) that starts while a drain is in force skips its stuck-run recovery,
+since the hosts it replaces may still be finishing runs, and leaves the drain alone: the deploy ends it once every
+service has rolled, and a deploy that died leaves one that lapses at its time.
 
 Neither process migrates the database, whatever `TRAX_MIGRATIONS` says, and one started with both `--trax-migrate` and
 `--trax-drain` refuses to start. A host started with either argument that calls `app.Run()` rather than

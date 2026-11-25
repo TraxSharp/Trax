@@ -47,9 +47,9 @@ public static class TraxDrain
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// How long a drain set by a deploy outlives its timeout: 10 minutes, time for the deploy to roll the hosts. A
-    /// scheduler host that starts ends the drain, and the deploy ends it once the roll is done; a deploy that dies
-    /// leaves one that lapses at the timeout plus this.
+    /// How long a drain set by a deploy outlives its timeout: 10 minutes, time for the deploy to roll the hosts. The
+    /// deploy ends it once every service has rolled; a deploy that dies leaves one that lapses at the timeout plus
+    /// this.
     /// </summary>
     public static readonly TimeSpan Margin = TimeSpan.FromMinutes(10);
 

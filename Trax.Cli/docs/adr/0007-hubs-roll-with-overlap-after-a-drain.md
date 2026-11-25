@@ -24,10 +24,10 @@ other took. The one hazard is the startup recovery (`RecoverStuckJobsOnStartup`,
 fails every InProgress run that began before it started, wherever that run is, so a new hub starting beside a busy old
 one fails the old one's live runs.
 
-After the drain nothing is live. The new hub starts, its recovery finds nothing to fail, and it ends the drain. The
-old hub, still up until the cluster stops it, may start work again from that moment; anything it starts began after
-the new hub's start, so the recovery never touches it, and it ends with the old hub's own graceful stop as on any
-scale-down. The same order fixes ECS, whose overlapping roll had the hazard before.
+A host that starts while a drain is in force skips that recovery, and the drain holds until the deploy's resume runs
+after every service has rolled. So the new hub fails nothing, even after `--force` left runs going on the old one,
+and no old hub or worker starts work it would be cut off in during the stop. The same order fixes ECS, whose
+overlapping roll had the hazard before.
 
 ## What each target does
 
@@ -50,7 +50,7 @@ scale-down. The same order fixes ECS, whose overlapping roll had the hazard befo
   A unit's restart still stops the old pod before the new one starts; there is no overlap on one host.
 
 Past the timeout the drain ends itself and the deploy refuses with the end of its log, which lists what is busy;
-`--force` rolls anyway with the drain kept, and the new hub ends it.
+`--force` rolls anyway with the drain kept until the resume.
 
 ## Considered options
 
@@ -81,6 +81,8 @@ Not covered: a real cluster, ECS or compose run; none runs in CI.
 
 ## Changelog
 
+- **2026-11-25**: The drain holds through the whole roll. A scheduler host that starts while drained skips its
+  stuck-run recovery and no longer ends the drain; the resume after every service has rolled does.
 - **2026-11-25**: Compose releases in three commands. A run of the stack under podman compose (docker-compose 2.26)
   showed a plain `compose up` stops the old hub and workers before the drain starts.
 - **2026-11-24**: Recorded.

@@ -15,7 +15,7 @@ hub while the old one still runs a job would fail that job.
 So `trax deploy` drains first. A drain is one row in the database, `trax.drain`, that every host honours: the job
 dispatcher dispatches nothing, the manifest manager queues no scheduled run, and no worker claims a job. What is already
 running carries on. Once nothing is busy, nothing is live for the new hub's startup to fail, and the deploy replaces the
-hosts, the old hub and the new one overlapping for a moment.
+hosts, the old hub and the new one overlapping for a moment. The deploy ends the drain once every service has rolled.
 
 ## What a deploy does
 
@@ -24,9 +24,9 @@ On every target (compose, the podman runtime, Kubernetes and ECS) the order is t
 1. Migrate the database (`--trax-migrate`), as before.
 2. Drain: run the new version's image once with `--trax-drain <timeout>`. It sets the drain, then waits for the busy
    list to empty, up to the environment's `drainTimeout` (10 minutes unless `trax.deploy.json` says otherwise).
-3. Roll the services. The new hub ends the drain when it starts.
-4. Resume: run the image once more with `--trax-resume`, which ends the drain if anything is left of it, for instance
-   when no hub changed and none restarted.
+3. Roll the services. A new hub that starts while drained leaves the drain in place and fails no run at startup.
+4. Resume: once every service has rolled, run the image once more with `--trax-resume`, which ends the drain. Until
+   then a host the roll has not reached yet still starts nothing.
 
 A first deploy, with nothing running yet, skips the drain on the targets that can tell.
 
@@ -61,14 +61,15 @@ Still busy after the drain's timeout of 00:10:00, so the drain was ended and not
 ```
 
 Then either let the work finish and deploy again, cancel it from the console, or deploy with `--force`, which rolls
-with the work still running. A forced roll keeps the drain until the new hub starts, and the runs it cuts off end the
-way a host's shutdown ends them.
+with the work still running. A forced roll keeps the drain until the resume, so the new hub's startup does not fail
+what the old hosts still run; a run its host's stop cuts off is failed by the stale-run reaper once
+`StaleInProgressTimeout` passes.
 
 ## When a deploy dies
 
 A deploy that is interrupted or crashes after draining leaves a drain that lapses on its own: at the timeout plus 10
-minutes. A scheduler host that starts ends it sooner. Until then the hosts start nothing new; Resume in the console ends
-it at once.
+minutes. Until then the hosts start nothing new; Resume in the console ends it at once. A scheduler host that starts
+meanwhile leaves it in place.
 
 ## From the console or the API
 
@@ -87,8 +88,8 @@ Draining by hand is for the same reason a deploy does it: before you stop or rep
 
 During a roll the new hub and the old one both run for a moment. That is safe once drained: work is claimed with
 `FOR UPDATE SKIP LOCKED` and the manifest manager holds an advisory lock, so two hubs never take the same run or queue
-the same schedule twice, and the one hazard, the new hub's startup failing runs that are live on the old one, has
-nothing to fail. In steady state a hub still runs as one copy, because a copy that restarts on its own, with no drain
+the same schedule twice, and the one hazard, the new hub's startup failing runs that are live on the old one, does not
+arise: a scheduler host that starts while drained skips its stuck-run recovery. In steady state a hub still runs as one copy, because a copy that restarts on its own, with no drain
 before it, would fail the other's live runs.
 
 ## SDK Reference

@@ -745,8 +745,9 @@ lacks a newer policy does not drop the fires it owes. A row of a policy no host 
 CHECK holds `id = 1`) that stops every host sharing the database from starting new work until its `until`. While it
 holds, the job dispatcher dispatches nothing, the manifest manager queues no scheduled run and no local worker claims a
 job. `started_at` and `started_by` say when it was set and by whom (`deploy`, or the operator). A deploy sets it with
-`--trax-drain` before it replaces the hosts and ends it after; a scheduler host ends it when it starts, and a row whose
-`until` has passed holds nothing, so a deploy that dies does not leave the hosts paused. See
+`--trax-drain` before it replaces the hosts and ends it after every service has rolled; a scheduler host that starts
+while it holds fails no run at startup, and a row whose `until` has passed holds nothing, so a deploy that dies does not
+leave the hosts paused for good. See
 [TraxDrain](/docs/sdk-reference/configuration/trax-drain).
 
 The table is new and starts empty. A host on the previous version does not read it, so during the rolling deploy that

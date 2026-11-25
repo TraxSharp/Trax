@@ -36,8 +36,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// <summary>
 /// The drain (Trax.Docs/adr/0065) on Postgres: every part of the scheduler that starts work honours
 /// the row, the operations service sets, reads and ends it, a lapsed row holds nothing, a starting
-/// scheduler host ends it, a schedule due meanwhile is a misfire once it ends, and two hubs can
-/// overlap once nothing is busy.
+/// scheduler host neither ends it nor fails runs while it holds, a schedule due meanwhile is a
+/// misfire once it ends, and two hubs can overlap once nothing is busy.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -306,15 +306,56 @@ public class DrainTests : TestSetup
     }
 
     [Test]
-    public async Task A_starting_scheduler_host_ends_the_drain()
+    public async Task A_starting_scheduler_host_leaves_the_drain_to_the_deploys_resume()
     {
+        // A Kubernetes deploy rolls every Deployment at once: the new hub can be up while an old worker is still
+        // claiming. Only the resume, once every service has rolled, ends the deploy's drain.
         await Operations.DrainAsync(duration: null, TraxDrain.DeployActor, CancellationToken.None);
 
         await StartupService().StartAsync(CancellationToken.None);
 
         (await Operations.GetDrainAsync(CancellationToken.None))
             .Drained.Should()
-            .BeFalse("a new hub ends the drain the deploy set before replacing the old one");
+            .BeTrue("the hosts not yet replaced must not claim again before they are");
+    }
+
+    [LeavesStuckRuns(
+        "Seeds an in-progress run an old hub is still running when the new one starts."
+    )]
+    [Test]
+    public async Task A_scheduler_host_that_starts_while_drained_fails_no_run()
+    {
+        // A forced roll starts the new hub while the old one still runs what it had: the drain is still in force, so
+        // the new hub's recovery leaves that run alone. The stale-run reaper fails it if its host never ends it.
+        var stillRunning = await SaveRun(
+            TrainState.InProgress,
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
+        );
+        await Operations.DrainAsync(duration: null, TraxDrain.DeployActor, CancellationToken.None);
+
+        await StartupService().StartAsync(CancellationToken.None);
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.FirstAsync(m => m.Id == stillRunning.Id))
+            .TrainState.Should()
+            .Be(TrainState.InProgress, "a host that starts while drained does not recover");
+    }
+
+    [LeavesStuckRuns("Seeds an in-progress run no host is running, as a crash leaves one.")]
+    [Test]
+    public async Task A_scheduler_host_that_starts_undrained_still_recovers()
+    {
+        var orphaned = await SaveRun(
+            TrainState.InProgress,
+            startTime: TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-1)
+        );
+
+        await StartupService().StartAsync(CancellationToken.None);
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.FirstAsync(m => m.Id == orphaned.Id))
+            .TrainState.Should()
+            .Be(TrainState.Failed);
     }
 
     [Test]
@@ -330,14 +371,15 @@ public class DrainTests : TestSetup
         await SetState(oldHubRun.Id, TrainState.Completed);
         (await Operations.GetDrainAsync(CancellationToken.None)).BusyTotal.Should().Be(0);
 
-        // The new hub starts beside the old one: its recovery finds nothing live to fail, and it
-        // ends the drain.
+        // The new hub starts beside the old one and fails nothing; the deploy's resume ends the drain once every
+        // service has rolled.
         await StartupService().StartAsync(CancellationToken.None);
         DataContext.Reset();
         (await DataContext.Metadatas.CountAsync(m => m.TrainState == TrainState.Failed))
             .Should()
-            .Be(0, "nothing was live when the new hub's recovery ran");
-        (await Operations.GetDrainAsync(CancellationToken.None)).Drained.Should().BeFalse();
+            .Be(0, "nothing was live when the new hub started");
+        (await Operations.GetDrainAsync(CancellationToken.None)).Drained.Should().BeTrue();
+        await Operations.EndDrainAsync(CancellationToken.None);
 
         // Both hubs dispatch at once: the claim skips locked entries, so the entry runs once.
         var entry = await SaveQueuedEntry(await PlainManifest());
