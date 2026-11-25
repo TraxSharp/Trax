@@ -145,6 +145,12 @@ public class KubernetesDeployClientRolloutTests
                 }
                 """
             )
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                NoReplicaSets
+            )
             .On("GET", $"/api/v1/namespaces/{Ns}/pods", HttpStatusCode.OK, NoPods);
         var clock = new SteppingClock();
 
@@ -168,6 +174,9 @@ public class KubernetesDeployClientRolloutTests
     private const string NoEvents = """{ "kind": "EventList", "apiVersion": "v1", "items": [] }""";
 
     private const string NoPods = """{ "kind": "PodList", "apiVersion": "v1", "items": [] }""";
+
+    private const string NoReplicaSets =
+        """{ "kind": "ReplicaSetList", "apiVersion": "apps/v1", "items": [] }""";
 
     private const string RollingHub = """
         {
@@ -196,6 +205,12 @@ public class KubernetesDeployClientRolloutTests
                 $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
                 HttpStatusCode.OK,
                 RollingHub
+            )
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                NoReplicaSets
             )
             .On("GET", $"/api/v1/namespaces/{Ns}/pods", HttpStatusCode.OK, OnePod)
             .On(
@@ -241,6 +256,12 @@ public class KubernetesDeployClientRolloutTests
                 $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
                 HttpStatusCode.OK,
                 RollingHub
+            )
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                NoReplicaSets
             )
             .On(
                 "GET",
@@ -328,6 +349,12 @@ public class KubernetesDeployClientRolloutTests
             )
             .On(
                 "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                NoReplicaSets
+            )
+            .On(
+                "GET",
                 $"/api/v1/namespaces/{Ns}/pods",
                 HttpStatusCode.OK,
                 OnePod.Replace("ContainerCreating", "ImagePullBackOff", StringComparison.Ordinal)
@@ -347,6 +374,136 @@ public class KubernetesDeployClientRolloutTests
             "Deployment hub did not roll out: its pod cannot start (ImagePullBackOff)*"
         );
     }
+
+    [Test]
+    public async Task A_rollback_is_not_failed_by_the_broken_pods_of_the_spec_it_abandoned()
+    {
+        // The new spec's pod cannot pull its image; the rollback reapplies the old spec (revision 3 now), and the
+        // broken pod of revision 2 is still listed, not yet being deleted, when the wait first looks.
+        var reads = 0;
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                () =>
+                    StubKubernetesApi.Response(
+                        HttpStatusCode.OK,
+                        ++reads < 3
+                            ? RollingHub
+                                .Replace(
+                                    "\"generation\": 2",
+                                    "\"generation\": 3",
+                                    StringComparison.Ordinal
+                                )
+                                .Replace(
+                                    "\"observedGeneration\": 2",
+                                    "\"observedGeneration\": 3",
+                                    StringComparison.Ordinal
+                                )
+                            : RolledHub
+                    )
+            )
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                TwoReplicaSets
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/pods", HttpStatusCode.OK, PodsOfBothSpecs)
+            .On("GET", $"/api/v1/namespaces/{Ns}/events", HttpStatusCode.OK, NoEvents);
+
+        await api.Client(new SteppingClock())
+            .WaitForRolloutAsync(
+                Ns,
+                "Deployment",
+                "hub",
+                KubernetesDeployer.RolloutTimeout,
+                CancellationToken.None
+            );
+
+        reads.Should().Be(3);
+    }
+
+    [Test]
+    public async Task A_broken_pod_is_not_read_before_the_controller_has_seen_the_spec()
+    {
+        var reads = 0;
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                () =>
+                    StubKubernetesApi.Response(
+                        HttpStatusCode.OK,
+                        ++reads < 2
+                            ? RollingHub.Replace(
+                                "\"generation\": 2",
+                                "\"generation\": 3",
+                                StringComparison.Ordinal
+                            )
+                            : RolledHub
+                    )
+            )
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                NoReplicaSets
+            )
+            .On(
+                "GET",
+                $"/api/v1/namespaces/{Ns}/pods",
+                HttpStatusCode.OK,
+                OnePod.Replace("ContainerCreating", "ImagePullBackOff", StringComparison.Ordinal)
+            );
+
+        await api.Client(new SteppingClock())
+            .WaitForRolloutAsync(
+                Ns,
+                "Deployment",
+                "hub",
+                KubernetesDeployer.RolloutTimeout,
+                CancellationToken.None
+            );
+
+        reads.Should().Be(2);
+    }
+
+    private const string TwoReplicaSets = """
+        {
+          "kind": "ReplicaSetList", "apiVersion": "apps/v1",
+          "items": [
+            { "metadata": { "name": "hub-new", "uid": "rs-new", "annotations": { "deployment.kubernetes.io/revision": "2" } } },
+            { "metadata": { "name": "hub-old", "uid": "rs-old", "annotations": { "deployment.kubernetes.io/revision": "3" } } }
+          ]
+        }
+        """;
+
+    private const string PodsOfBothSpecs = """
+        {
+          "kind": "PodList", "apiVersion": "v1",
+          "items": [
+            { "metadata": { "name": "hub-new-abc", "ownerReferences": [ { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "hub-new", "uid": "rs-new" } ] },
+              "status": { "containerStatuses": [ { "name": "hub", "ready": false, "restartCount": 0, "image": "x", "imageID": "",
+                "state": { "waiting": { "reason": "ImagePullBackOff" } } } ] } },
+            { "metadata": { "name": "hub-terminating", "deletionTimestamp": "2026-11-25T12:00:00Z" },
+              "status": { "containerStatuses": [ { "name": "hub", "ready": false, "restartCount": 0, "image": "x", "imageID": "",
+                "state": { "waiting": { "reason": "ErrImagePull" } } } ] } },
+            { "metadata": { "name": "hub-old-def", "ownerReferences": [ { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "hub-old", "uid": "rs-old" } ] },
+              "status": { "containerStatuses": [ { "name": "hub", "ready": true, "restartCount": 0, "image": "x", "imageID": "",
+                "state": { "running": {} } } ] } }
+          ]
+        }
+        """;
+
+    private const string RolledHub = """
+        {
+          "kind": "Deployment", "apiVersion": "apps/v1",
+          "metadata": { "name": "hub", "generation": 3 },
+          "spec": { "replicas": 1, "selector": {}, "template": {} },
+          "status": { "observedGeneration": 3, "updatedReplicas": 1, "availableReplicas": 1, "replicas": 1 }
+        }
+        """;
 
     [TestCase(1, 0, false)]
     [TestCase(2, 0, false)]

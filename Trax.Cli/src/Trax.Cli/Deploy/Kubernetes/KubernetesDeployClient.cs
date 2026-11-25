@@ -611,11 +611,20 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     /// its own (<c>hostUsers: false</c>) does with every Trax pod: kind, whose nodes are containers, is one. Without
     /// this the wait runs to its ten minutes and says only that the rollout did not finish.
     /// </summary>
-    private async Task<string?> CannotStartAsync(string ns, string selector, CancellationToken ct)
+    private async Task<string?> CannotStartAsync(
+        string ns,
+        string selector,
+        CancellationToken ct,
+        Func<V1Pod, bool>? current = null
+    )
     {
-        var pods = await _client
+        var listed = await _client
             .CoreV1.ListNamespacedPodAsync(ns, labelSelector: selector, cancellationToken: ct)
             .ConfigureAwait(false);
+        var pods = new V1PodList
+        {
+            Items = listed.Items.Where(p => current?.Invoke(p) ?? true).ToList(),
+        };
         if (Unschedulable(pods.Items, _clock.GetUtcNow()) is { } unscheduled)
             return $"{CannotBeScheduled}: {unscheduled}";
         var waiting = pods
@@ -722,30 +731,15 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         var deadline = _clock.GetUtcNow() + timeout;
         while (true)
         {
-            var (done, state) = kind switch
-            {
-                "Deployment" => Rolled(
-                    await _client
-                        .AppsV1.ReadNamespacedDeploymentStatusAsync(name, ns, cancellationToken: ct)
-                        .ConfigureAwait(false)
-                ),
-                "StatefulSet" => Rolled(
-                    await _client
-                        .AppsV1.ReadNamespacedStatefulSetStatusAsync(
-                            name,
-                            ns,
-                            cancellationToken: ct
-                        )
-                        .ConfigureAwait(false)
-                ),
-                _ => throw new InvalidOperationException($"trax does not wait on a {kind}."),
-            };
+            var (done, state, current) = await RolloutStateAsync(ns, kind, name, ct)
+                .ConfigureAwait(false);
             if (done)
                 return;
             if (
-                await CannotStartAsync(ns, $"{KubernetesTarget.NameLabel}={name}", ct)
-                    .ConfigureAwait(false) is
-                { } why
+                current is not null
+                && await CannotStartAsync(ns, $"{KubernetesTarget.NameLabel}={name}", ct, current)
+                    .ConfigureAwait(false)
+                    is { } why
             )
                 throw new InvalidOperationException(
                     (
@@ -768,6 +762,111 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 );
             await Task.Delay(Poll, _clock, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Where a rollout is, and which of its pods count when asking whether one can never start: none until the
+    /// controller has seen the latest spec, then only the pods of that spec that are not being deleted. A rollback
+    /// reapplies the old spec while the broken pods of the abandoned one are still listed; those are not this
+    /// rollout's.
+    /// </summary>
+    private async Task<(bool Done, string State, Func<V1Pod, bool>? Current)> RolloutStateAsync(
+        string ns,
+        string kind,
+        string name,
+        CancellationToken ct
+    )
+    {
+        switch (kind)
+        {
+            case "Deployment":
+            {
+                var d = await _client
+                    .AppsV1.ReadNamespacedDeploymentStatusAsync(name, ns, cancellationToken: ct)
+                    .ConfigureAwait(false);
+                var (done, state) = Rolled(d);
+                if (done || !(d.Status?.ObservedGeneration >= d.Metadata.Generation))
+                    return (done, state, null);
+                var sets = await _client
+                    .AppsV1.ListNamespacedReplicaSetAsync(
+                        ns,
+                        labelSelector: $"{KubernetesTarget.NameLabel}={name}",
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return (false, state, CurrentReplicaSet(sets.Items));
+            }
+            case "StatefulSet":
+            {
+                var set = await _client
+                    .AppsV1.ReadNamespacedStatefulSetStatusAsync(name, ns, cancellationToken: ct)
+                    .ConfigureAwait(false);
+                var (done, state) = Rolled(set);
+                if (done || !(set.Status?.ObservedGeneration >= set.Metadata.Generation))
+                    return (done, state, null);
+                var revision = set.Status?.UpdateRevision;
+                return (
+                    false,
+                    state,
+                    p =>
+                        p.Metadata?.DeletionTimestamp is null
+                        && (
+                            revision is null
+                            || string.Equals(
+                                ValueOf(p.Metadata?.Labels, StatefulSetRevisionLabel),
+                                revision,
+                                StringComparison.Ordinal
+                            )
+                        )
+                );
+            }
+            default:
+                throw new InvalidOperationException($"trax does not wait on a {kind}.");
+        }
+    }
+
+    private static string? ValueOf(IDictionary<string, string>? values, string key) =>
+        values is not null && values.TryGetValue(key, out var value) ? value : null;
+
+    /// <summary>The label a StatefulSet's controller puts on each pod: the revision of the spec it was made from.</summary>
+    private const string StatefulSetRevisionLabel = "controller-revision-hash";
+
+    /// <summary>The annotation a Deployment's controller numbers each of its ReplicaSets with; the highest is current.</summary>
+    private const string RevisionAnnotation = "deployment.kubernetes.io/revision";
+
+    /// <summary>
+    /// Whether a pod belongs to the current ReplicaSet of <paramref name="sets"/> (the highest revision) and is not
+    /// being deleted. With no ReplicaSet listed, every pod not being deleted counts.
+    /// </summary>
+    internal static Func<V1Pod, bool> CurrentReplicaSet(IEnumerable<V1ReplicaSet> sets)
+    {
+        var uid = sets.Select(r =>
+                (
+                    r.Metadata?.Uid,
+                    Revision: long.TryParse(
+                        ValueOf(r.Metadata?.Annotations, RevisionAnnotation),
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var n
+                    )
+                        ? n
+                        : -1
+                )
+            )
+            .OrderByDescending(r => r.Revision)
+            .Select(r => r.Uid)
+            .FirstOrDefault();
+        return p =>
+            p.Metadata?.DeletionTimestamp is null
+            && (
+                uid is null
+                || (
+                    p.Metadata?.OwnerReferences?.Any(o =>
+                        string.Equals(o.Uid, uid, StringComparison.Ordinal)
+                    )
+                    ?? false
+                )
+            );
     }
 
     /// <summary>How <see cref="Rolled(V1Deployment)"/> starts the state of a Deployment past its progress deadline.</summary>
