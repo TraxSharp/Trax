@@ -27,6 +27,8 @@ const step = (job, name) => {
   return found;
 };
 const indexOf = (job, name) => job.steps.findIndex((s) => s.name === name);
+// The hosts a job's harden-runner step lets it reach.
+const allowedEndpoints = (job) => step(job, 'Harden runner').with['allowed-endpoints'].split(/\s+/).filter(Boolean);
 
 // sha256sum's output for every file in `folder`, base64-encoded, as the release job records it.
 const digestsOf = (folder) =>
@@ -108,6 +110,17 @@ describe('build job', () => {
     assert.ok(list.includes('Trax.Effect/Trax.Effect.slnx'));
     assert.ok(list.includes('Trax.StateMachine/dotnet/Trax.StateMachine.slnx'));
     assert.equal(new Set(list).size, list.length);
+  });
+
+  it('may reach every Docker Hub host the egress image\'s base images come from, as CI may', () => {
+    // Docker Hub redirects a layer to whichever of its blob hosts it likes; deploy-cluster in
+    // ci.yml lists the ones it has been seen to use. The release build and CI's egress job pull
+    // the same base images.
+    const ci = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8'));
+    const dockerHub = allowedEndpoints(ci.jobs['deploy-cluster']).filter((h) => /docker/.test(h));
+    assert.ok(dockerHub.length >= 6, dockerHub.join(' '));
+    for (const job of [build, ci.jobs.egress])
+      for (const host of dockerHub) assert.ok(allowedEndpoints(job).includes(host), `${host} is not allowed`);
   });
 
   it('hands publish the packages and their digests', () => {
