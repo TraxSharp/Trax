@@ -1,6 +1,10 @@
+using System.IO.Pipelines;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Trax.Scheduler.Sandbox.Launcher.Backends;
 using Trax.Scheduler.Sandbox.Launcher.Core;
 using Trax.Scheduler.Sandbox.Tests.Fakes;
@@ -239,5 +243,80 @@ public class LauncherEndpointTests
         await using var server = await LauncherServer.StartAsync();
 
         (await server.Client.GetStringAsync("/healthz")).Should().Be("ok");
+    }
+
+    private static (LauncherEndpoint Endpoint, FakeTimeProvider Time) Endpoint()
+    {
+        var options = LauncherOptions.Podman();
+        options.Caps.MaxConcurrent = 1;
+        var time = new FakeTimeProvider(TimeProvider.System.GetUtcNow());
+        var endpoint = new LauncherEndpoint(
+            options,
+            new NonceCache(time),
+            new SandboxRunner(
+                new FakeBackend(),
+                options,
+                new SandboxGate(options.Caps.MaxConcurrent),
+                NullLogger<SandboxRunner>.Instance
+            ),
+            time,
+            NullLogger<LauncherEndpoint>.Instance
+        );
+        return (endpoint, time);
+    }
+
+    /// <summary>A request whose signature has a fresh, well-formed header anyone could write, and whose body is <paramref name="body"/>.</summary>
+    private static DefaultHttpContext Unauthenticated(TimeProvider time, Stream body)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Body = body;
+        context.Request.Headers[SandboxChannelSignature.HeaderName] = SandboxChannelSignature.Sign(
+            new byte[32],
+            "{}"u8.ToArray(),
+            time
+        );
+        return context;
+    }
+
+    [Test]
+    public async Task Post_PastTheBodiesBeingRead_IsA503Unread()
+    {
+        var (endpoint, time) = Endpoint();
+        var pipes = Enumerable.Range(0, endpoint.MaxPendingReads).Select(_ => new Pipe()).ToList();
+        var held = pipes
+            .Select(p => endpoint.HandleAsync(Unauthenticated(time, p.Reader.AsStream())))
+            .ToList();
+
+        var refused = Unauthenticated(time, new MemoryStream("{}"u8.ToArray()));
+        await endpoint.HandleAsync(refused);
+
+        refused.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable, Adr);
+        foreach (var pipe in pipes)
+            await pipe.Writer.CompleteAsync();
+        await Task.WhenAll(held);
+        var next = Unauthenticated(time, new MemoryStream("{}"u8.ToArray()));
+        await endpoint.HandleAsync(next);
+        next.Response.StatusCode.Should()
+            .Be(StatusCodes.Status401Unauthorized, "a finished read gives its place back");
+    }
+
+    [Test]
+    public async Task Post_ABodyThatOutlastsTheFreshnessWindow_IsDroppedAndGivesItsPlaceBack()
+    {
+        var (endpoint, time) = Endpoint();
+        var pipe = new Pipe();
+        var slow = Unauthenticated(time, pipe.Reader.AsStream());
+        var handled = endpoint.HandleAsync(slow);
+
+        time.Advance(NonceCache.Window + TimeSpan.FromSeconds(1));
+        await handled.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            TimeProvider.System,
+            CancellationToken.None
+        );
+
+        slow.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized, Adr);
+        await pipe.Writer.CompleteAsync();
     }
 }

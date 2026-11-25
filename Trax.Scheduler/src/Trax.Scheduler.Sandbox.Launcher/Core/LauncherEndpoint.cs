@@ -9,18 +9,33 @@ namespace Trax.Scheduler.Sandbox.Launcher.Core;
 
 /// <summary>
 /// The launcher's one route. A request is checked in an order that costs an unauthenticated
-/// caller as little as possible: the signature's form and freshness before the body is read, the
+/// caller as little as it can: the signature's form and freshness before the body is read, the
 /// MAC before the body is parsed, the nonce before anything runs. Until the MAC verifies, the
 /// answer is a bare 401; from then on every answer is signed for the request it answers.
 /// </summary>
+/// <remarks>
+/// The form and freshness check costs a caller without the key nothing to pass, so it is not what
+/// bounds the body reads. That is <see cref="MaxPendingReads"/> bodies read at once, each up to
+/// <see cref="MaxBodyBytes"/> and each within the freshness window; past that a request gets a
+/// bare 503 unread.
+/// </remarks>
 internal sealed partial class LauncherEndpoint(
     SandboxLauncherOptions options,
     NonceCache nonces,
     SandboxRunner runner,
+    TimeProvider time,
     ILogger<LauncherEndpoint> logger
 )
 {
     public const string Route = "/trax/sandbox/run";
+
+    private readonly SemaphoreSlim _reads = new(
+        options.Caps.MaxConcurrent + 2,
+        options.Caps.MaxConcurrent + 2
+    );
+
+    /// <summary>How many bodies are read at once before their MAC is checked: the runs the launcher may take, and two more.</summary>
+    public int MaxPendingReads => options.Caps.MaxConcurrent + 2;
 
     /// <summary>The largest body read: the input cap as JSON-escaped text (six bytes a character at worst), plus the rest of the request.</summary>
     public long MaxBodyBytes => (long)options.Caps.MaxInputBytes * 6 + 64 * 1024;
@@ -40,12 +55,9 @@ internal sealed partial class LauncherEndpoint(
             return;
         }
 
-        var body = await ReadBodyAsync(context).ConfigureAwait(false);
+        var body = await ReadBoundedAsync(context).ConfigureAwait(false);
         if (body is null)
-        {
-            context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
             return;
-        }
 
         if (!SandboxChannelSignature.TryVerify(key, body, signature, out timestamp, out var nonce))
         {
@@ -75,26 +87,66 @@ internal sealed partial class LauncherEndpoint(
         await WriteAsync(context, key, signature, answer).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The body, read while holding one of <see cref="MaxPendingReads"/> places and within the
+    /// freshness window; null, with the status set, when there is no place, it is too large, or it
+    /// did not arrive in time.
+    /// </summary>
+    private async Task<byte[]?> ReadBoundedAsync(HttpContext context)
+    {
+        if (!await _reads.WaitAsync(TimeSpan.Zero, context.RequestAborted).ConfigureAwait(false))
+        {
+            logger.LogWarning(
+                "Refused a sandbox request unread: {Pending} bodies are already being read.",
+                MaxPendingReads
+            );
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return null;
+        }
+
+        try
+        {
+            var body = await ReadBodyAsync(context).ConfigureAwait(false);
+            if (body is null)
+                context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            return body;
+        }
+        catch (OperationCanceledException) when (!context.RequestAborted.IsCancellationRequested)
+        {
+            // Past the window the signature is stale anyway.
+            await UnauthorizedAsync(context, "body did not arrive within the freshness window")
+                .ConfigureAwait(false);
+            return null;
+        }
+        finally
+        {
+            _reads.Release();
+        }
+    }
+
     private async Task<byte[]?> ReadBodyAsync(HttpContext context)
     {
         if (context.Request.ContentLength is { } declared && declared > MaxBodyBytes)
             return null;
+        using var window = new CancellationTokenSource(NonceCache.Window, time);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+            context.RequestAborted,
+            window.Token
+        );
         using var buffer = new MemoryStream();
         var chunk = new byte[81920];
         int read;
         while (
             (
                 read = await context
-                    .Request.Body.ReadAsync(chunk, context.RequestAborted)
+                    .Request.Body.ReadAsync(chunk, deadline.Token)
                     .ConfigureAwait(false)
             ) > 0
         )
         {
             if (buffer.Length + read > MaxBodyBytes)
                 return null;
-            await buffer
-                .WriteAsync(chunk.AsMemory(0, read), context.RequestAborted)
-                .ConfigureAwait(false);
+            await buffer.WriteAsync(chunk.AsMemory(0, read), deadline.Token).ConfigureAwait(false);
         }
         return buffer.ToArray();
     }
