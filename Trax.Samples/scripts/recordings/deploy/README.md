@@ -12,7 +12,9 @@ can take, on a Kubernetes cluster (k3s) and on one machine with the podman runti
 | Just the scheduler | `scheduler/` | the `trax-scheduler` template |
 
 Ephemeral dispatch (Lambda) has no folder: `trax deploy` does not deploy a Lambda function, and the page says so. AWS
-has no recording either: there is no account to record against, and the page says that too.
+has no recording either: there is no account to record against. The page's release picture shows AWS anyway, marked
+simulated: the Kubernetes recording's timing with the steps the ECS deploy takes, listed with where they are in the code
+in `../deploy-simulated.mjs`, which `deploy.mjs` copies into the website's file under `simulated`. It counts no requests.
 
 Each scenario, in order, starting from what the one before left running:
 
@@ -24,10 +26,11 @@ Each scenario, in order, starting from what the one before left running:
 | `who-can-reach-what` | deploys with the probed service held to `"egress": ["api.github.com"]` and the egress image built from the same commit | the deploy, the NetworkPolicy (or, on podman, what is published) checks and `trax-egress check` run in the held pod as the app |
 
 A shape whose file holds its services to their egress (DistributedWorkers: `"egress": []`) gets the egress image built
-from the same commit named in it, since a development build of trax names none. Under podman its first three
-scenarios deploy it without the egress, as `.github/ci/deploy/podman.sh` does: a first deploy held to its egress did
-not get its migration to Postgres there when this was recorded (the migration exited on "Resource temporarily
-unavailable"). `who-can-reach-what` then deploys it held, onto the Postgres already running.
+from the same commit named in it, since a development build of trax names none. Under podman it is deployed without
+the egress in every scenario, as `.github/ci/deploy/podman.sh` deploys it: held to its egress there, its migration
+exited on "Resource temporarily unavailable" connecting to Postgres, on a first deploy and onto a running Postgres
+alike (2026-11-24 and 2026-11-25). Its `who-can-reach-what` under podman therefore has the published and network
+checks but no egress check, and the page says so.
 
 The copies of the file a scenario changes are made by editing its text (so the page shows it as written) and are
 checked against the same change made with `jq` before they are deployed. The page says, under the file, what a

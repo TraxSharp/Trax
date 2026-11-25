@@ -12,6 +12,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { simulated } from "./deploy-simulated.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "out", "deploy");
@@ -158,20 +159,36 @@ function scenario(dir) {
     const [ms, group, who, what, result, want] = l.split("\t");
     return { t: Number(ms) - start, group, who, what, result, want };
   });
+  const processes = meta.target === "kubernetes" ? kubernetesProcesses(dir, start) : podmanProcesses(dir, start, stack);
+  const probed = probes(dir, start);
+  const jobs = jobLines(dir, start);
+  const egressed = egress(dir, start);
+  // The watchers are stopped just after the end is taken, so the last probe can land a moment after it: the
+  // recording lasts until its last line.
+  const last = Math.max(
+    meta.end - start,
+    ...cli.map((l) => l.t),
+    ...probed.map(([t]) => t),
+    ...processes.flatMap((p) => p.events.map((e) => e.t)),
+    ...jobs.map((j) => j.t),
+    ...egressed.map((e) => e.t),
+    ...checks.map((c) => c.t),
+    ...run.map((r) => r.t),
+  );
   return {
-    duration: meta.end - start,
+    duration: last,
     probe: meta.probe,
     file: read(join(dir, "trax.deploy.json")),
     change: read(join(dir, "change.txt")).trim() || null,
     cli,
-    processes: meta.target === "kubernetes" ? kubernetesProcesses(dir, start) : podmanProcesses(dir, start, stack),
-    probes: probes(dir, start),
+    processes,
+    probes: probed,
     run: meta.run
       ? { id: meta.run.id, name: meta.run.name, busySeen: meta.run.busySeen - start, ended: meta.run.endedByRecorder - start, states: run }
       : null,
-    jobs: jobLines(dir, start),
+    jobs,
     checks,
-    egress: egress(dir, start),
+    egress: egressed,
     before: meta.before ? tagOf(meta.before) : null,
     after: meta.after ? tagOf(meta.after) : null,
     exitCode: meta.exitCode ?? meta.installExit ?? null,
@@ -194,6 +211,7 @@ for (const shape of readdirSync(out).sort()) {
 }
 
 mkdirSync(copyTo, { recursive: true });
-const result = { recorder: "Trax.Samples/scripts/recordings/deploy.sh", shapes };
+// AWS is not recorded; the page's simulated AWS picture says what it is built from (deploy-simulated.mjs).
+const result = { recorder: "Trax.Samples/scripts/recordings/deploy.sh", shapes, simulated };
 writeFileSync(join(copyTo, "deploy-recordings.json"), JSON.stringify(result) + "\n");
 console.log(`wrote ${join(copyTo, "deploy-recordings.json")}`);

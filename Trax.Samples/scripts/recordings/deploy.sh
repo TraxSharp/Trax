@@ -327,8 +327,8 @@ with_egress_image() {
 }
 # What first-deploy, release-while-busy and broken-release deploy: the shape's own file, with the egress image named
 # when it holds a service to its egress. Under podman, a file that holds services to their egress is deployed without
-# it, as .github/ci/deploy/podman.sh deploys it: a first deploy held to its egress did not get its migration to
-# Postgres there (recorded 2026-11-24); who-can-reach-what deploys it held, onto a running Postgres.
+# it, as .github/ci/deploy/podman.sh deploys it: deployed held to its egress there, its migration did not reach
+# Postgres (recorded 2026-11-24 and 2026-11-25).
 base_file() {
   if ! holds_egress; then
     echo "$FILE"
@@ -341,6 +341,12 @@ base_file() {
 # What who-can-reach-what deploys: the file's own egress, or, when it names none, the probed service held to
 # api.github.com; the egress image named either way.
 held_file() {
+  # Under podman a file that holds its services deploys without the egress here too: deployed held, its migration did
+  # not reach Postgres (recorded 2026-11-25, twice), so there is no held deploy to check. The page says so.
+  if holds_egress && [ "$TARGET" = podman ]; then
+    base_file
+    return
+  fi
   if holds_egress; then
     with_egress_image
     return
@@ -638,6 +644,11 @@ podman_who_can_reach_what() {
   if podman run --rm --network podman "$BUSYBOX" nc -z -w 3 "$db_ip" 5432 >/dev/null 2>&1; then r=open; else r=refused; fi
   check network "a container outside the app's network" "Postgres, $db_ip:5432" "$r" refused
 
+  if ! jq -e --arg s "$PROBE" '.services[$s].egress != null' "$file" >/dev/null; then
+    EXTRA='{}'
+    finish who-can-reach-what
+    return
+  fi
   say "egress: the check, run in the held pod as the app"
   local pod allow
   pod=$(podman ps --filter "name=^$STACK-$PROBE-pod-$PROBE\$" --format '{{.Pod}}')
