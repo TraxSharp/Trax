@@ -68,6 +68,31 @@ export function needsOf(host: HostExport): string[] {
 /** The last line a refused run printed: why trax refused. */
 export const refusalOf = (log: string[]): string => log[log.length - 1] ?? "";
 
+/** What the Kubernetes plan does to every container, each claim counted on its own. */
+export function hardeningOf(k: DeployGenerated["targets"]["kubernetes"]): string {
+  const h = k.hardening;
+  const of = (x: number) => (x === h.containers ? `all ${h.containers}` : `${x} of ${h.containers}`);
+  const names = k.writableRoot.map((f) => SERVICE_NAMES[f.service] ?? f.service);
+  return (
+    (h.dropAll === h.containers && h.noPrivilegeEscalation === h.containers
+      ? `Every one of its ${h.containers} containers drops every capability and cannot gain privileges`
+      : `Of its containers, ${of(h.dropAll)} drop every capability and ${of(h.noPrivilegeEscalation)} cannot gain privileges`) +
+    `; ${h.readOnlyRoot} have a read-only root` +
+    (names.length > 0 ? ` (${names.join(" and ")} keep theirs writable)` : "") +
+    "." +
+    (h.secretReferences > 0 ? " Passwords and keys come from a Secret by reference, never written into the files." : "")
+  );
+}
+
+const SERVICE_NAMES: Record<string, string> = { database: "Postgres", rabbitmq: "RabbitMQ" };
+
+/** What the AWS card says: refused, in the run's own last line, only when the recorded run refused. */
+export function awsOutcomeOf(aws: DeployGenerated["targets"]["aws"]): { refused: boolean; headline: string; detail: string } {
+  return aws.bare.exit !== 0
+    ? { refused: true, headline: "Refused, before anything is created.", detail: refusalOf(aws.bare.log) }
+    : { refused: false, headline: "Planned, with nothing refused.", detail: "" };
+}
+
 /** The Kubernetes objects in the order trax applies them, one entry per kind with how many. */
 export function kindsInOrder(g: DeployGenerated): { kind: string; count: number }[] {
   const seen: string[] = [];

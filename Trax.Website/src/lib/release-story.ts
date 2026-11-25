@@ -157,6 +157,10 @@ export function storyOf(rec: DeployRecordings, kind: StoryKind, target: StoryTar
       dots.push({ at: clock.to(t), to, ok: ok === 1 });
     });
 
+  // The closing claims (nobody waited, it kept answering) only stand when no recorded request failed. A simulated
+  // picture measured nothing, so it makes neither.
+  const failed = s.probes.filter(([, ok]) => ok !== 1).length;
+  const outcome = simulated ? "" : failed === 0 ? (kind === "normal" ? " Nobody had to wait." : " It never stopped answering.") : ` ${failed} requests failed.`;
   const captions: { at: number; text: string }[] =
     kind === "normal"
       ? [
@@ -165,13 +169,13 @@ export function storyOf(rec: DeployRecordings, kind: StoryKind, target: StoryTar
           ...(jobTo != null ? [{ at: clock.to(jobTo), text: "The job is done, so the release goes ahead." }] : []),
           { at: clock.to(v2From), text: "The new version starts beside the old one. Requests still go to the old one." },
           ...(v2Ready != null ? [{ at: clock.to(v2Ready), text: "The new version is ready, so requests move over to it." }] : []),
-          ...(v1Gone != null ? [{ at: clock.to(v1Gone), text: "The old version is gone. Nobody had to wait." }] : []),
+          ...(v1Gone != null ? [{ at: clock.to(v1Gone), text: `The old version is gone.${outcome}` }] : []),
         ]
       : [
           { at: 0, text: "People are using the app." },
           { at: clock.to(v2From), text: "A new version starts beside the old one, but it fails as it starts." },
           ...(crashes[0] != null ? [{ at: clock.to(crashes[0]), text: "It never gets ready, so requests stay on the old version." }] : []),
-          ...(v2Gone != null ? [{ at: clock.to(v2Gone), text: "The deploy puts the old version back on its own. It never stopped answering." }] : []),
+          ...(v2Gone != null ? [{ at: clock.to(v2Gone), text: `The deploy puts the old version back on its own.${outcome}` }] : []),
         ];
 
   const aws = target === "aws";

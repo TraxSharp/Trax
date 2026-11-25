@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import generated from "../src/data/deploy-generated.json" with { type: "json" };
 import recorded from "../src/data/deploy-recordings.json" with { type: "json" };
-import { kindsInOrder, needsOf, refusalOf, type DeployGenerated } from "../src/lib/deploy-generated.ts";
+import { awsOutcomeOf, hardeningOf, kindsInOrder, needsOf, refusalOf, type DeployGenerated } from "../src/lib/deploy-generated.ts";
 import { reachEdges, reachScenario } from "../src/lib/reach-map.ts";
 import type { DeployRecordings } from "../src/lib/deploy-replay.ts";
 
@@ -75,6 +75,35 @@ test("what trax refused, it refused before writing anything, and the page quotes
     .filter((t) => !/&&|=>|===|\?\?/.test(t))
     .join(" ");
   assert.ok(!/\d/.test(prose.replace(/--trax-export-deploy/g, "")), `a number is typed into the page: ${prose.match(/[^.]*\d[^.]*/)?.[0]}`);
+});
+
+test("the hardening sentence counts capabilities and privilege escalation each on its own", () => {
+  const k = structuredClone(g.targets.kubernetes);
+  assert.match(hardeningOf(k), new RegExp(`^Every one of its ${k.hardening.containers} containers drops every capability and cannot gain privileges`));
+  k.hardening.noPrivilegeEscalation = k.hardening.containers - 1;
+  const text = hardeningOf(k);
+  assert.doesNotMatch(text, /Every one/, text);
+  assert.match(text, new RegExp(`${k.hardening.containers - 1} of ${k.hardening.containers} cannot gain privileges`), text);
+  assert.match(text, new RegExp(`all ${k.hardening.containers} drop every capability`), text);
+  k.hardening.secretReferences = 0;
+  assert.doesNotMatch(hardeningOf(k), /Secret/);
+});
+
+test("the AWS card says refused only when the recorded run refused, in the run's own words", () => {
+  const aws = structuredClone(g.targets.aws);
+  const refused = awsOutcomeOf(aws);
+  assert.ok(refused.refused);
+  assert.equal(refused.detail, refusalOf(aws.bare.log));
+  aws.bare.log = [...aws.bare.log.slice(0, -1), "Service 'hub' wants something else."];
+  assert.equal(awsOutcomeOf(aws).detail, "Service 'hub' wants something else.");
+  aws.bare.exit = 0;
+  const planned = awsOutcomeOf(aws);
+  assert.ok(!planned.refused);
+  assert.doesNotMatch(`${planned.headline} ${planned.detail}`, /Refused|RabbitMQ|wants something/);
+  const page = readFileSync(new URL("../src/components/landing/WhatYouWrite.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /RabbitMQ, which ECS/, "the AWS card has its reason typed in");
+  assert.match(page, /awsOutcomeOf\(aws\)/);
+  assert.match(page, /hardeningOf\(k8s\)/);
 });
 
 test("the map's edges are the recorded checks: green where they opened, red where they were refused", () => {

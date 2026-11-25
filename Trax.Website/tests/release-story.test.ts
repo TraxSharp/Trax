@@ -56,6 +56,29 @@ test("a broken release: v2 never gets ready, requests stay on v1, and v2 is take
   assert.ok(source("broken-release").cli.some((l) => /rolled back to the version it ran before this deploy/.test(l.text)));
 });
 
+test("the closing captions claim nobody waited only when the recording failed no request", () => {
+  const claims = /Nobody had to wait|never stopped answering/;
+  for (const kind of ["normal", "broken"] as const) {
+    const clean = storyOf(recordings, kind, "kubernetes");
+    assert.ok(clean);
+    assert.match(clean.captions.map((c) => c.text).join(" "), claims, `${kind}: the clean recording lost its claim`);
+    const sim = storyOf(recordings, kind, "aws");
+    assert.ok(sim);
+    assert.doesNotMatch(sim.captions.map((c) => c.text).join(" "), claims, `${kind}: the simulated picture claims what nothing measured`);
+
+    const dropped = structuredClone(recordings);
+    const s = dropped.shapes[STORY_SOURCE.shape].targets[STORY_SOURCE.target]?.scenarios[kind === "normal" ? "release-while-busy" : "broken-release"];
+    assert.ok(s);
+    s.probes[Math.floor(s.probes.length / 2)][1] = 0;
+    s.probes[Math.floor(s.probes.length / 3)][1] = 0;
+    const story = storyOf(dropped, kind, "kubernetes");
+    assert.ok(story);
+    const text = story.captions.map((c) => c.text).join(" ");
+    assert.doesNotMatch(text, claims, `${kind}: ${text}`);
+    assert.match(text, /2 requests failed/, `${kind}: ${text}`);
+  }
+});
+
 test("AWS is simulated: marked in the data, never counted, never in the recorded shapes", () => {
   const sim = recordings.simulated?.aws;
   assert.ok(sim && sim.simulated === true && sim.reason.length > 0 && sim.basis.length >= 3);

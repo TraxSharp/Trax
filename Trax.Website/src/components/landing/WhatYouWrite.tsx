@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import CodeFold from "./CodeFold";
 import data from "@/data/deploy-generated.json";
-import { kindsInOrder, n, needsOf, refusalOf, type DeployGenerated } from "@/lib/deploy-generated";
+import { awsOutcomeOf, hardeningOf, kindsInOrder, n, needsOf, refusalOf, type DeployGenerated } from "@/lib/deploy-generated";
 import { HUE, alpha } from "@/lib/hue";
 
 // What you write and what trax writes from it, for the DistributedWorkers sample: each host's report of what it needs,
@@ -15,12 +15,11 @@ const k8s = g.targets.kubernetes;
 const podman = g.targets.podman;
 const aws = g.targets.aws;
 const kinds = kindsInOrder(g);
-const h = k8s.hardening;
+const awsOutcome = awsOutcomeOf(aws);
 
 // When each part appears, in milliseconds from the start of the loop.
 const T = { hosts: 300, need: 350, file: 3800, deploy: 5600, kind: 380, podman: 10200, aws: 11400, point: 12600, end: 17000 };
 const needs = g.hosts.map(needsOf);
-const NAMES: Record<string, string> = { database: "Postgres", rabbitmq: "RabbitMQ" };
 // Where each host's needs start in the sequence of chips.
 const needStart = needs.map((_, i) => needs.slice(0, i).reduce((sum, list) => sum + list.length, 0));
 
@@ -133,10 +132,7 @@ export default function WhatYouWrite() {
               ))}
             </ul>
             <p className={`mt-2 text-xs leading-relaxed transition-opacity duration-500 ${shown(T.deploy + 600 + kinds.length * T.kind) ? "opacity-100" : "opacity-0"} text-text-secondary`}>
-              {h.dropAll === h.containers && h.noPrivilegeEscalation === h.containers ? `Every one of its ${h.containers}` : `${h.dropAll} of its ${h.containers}`}{" "}
-              containers drops every capability and cannot gain privileges; {h.readOnlyRoot} have a read-only root
-              {k8s.writableRoot.length > 0 && ` (${k8s.writableRoot.map((f) => NAMES[f.service] ?? f.service).join(" and ")} keep theirs writable)`}. Passwords and keys
-              come from a Secret by reference, never written into the files.
+              {hardeningOf(k8s)}
             </p>
           </Target>
           <Target name="Your machine (podman)" on={shown(T.podman)} color={HUE.green}>
@@ -145,9 +141,8 @@ export default function WhatYouWrite() {
               lines
             </p>
           </Target>
-          <Target name="AWS" on={shown(T.aws)} color={HUE.redSoft}>
-            <p className="text-sm text-text-primary">Refused, before anything is created.</p>
-            <p className="mt-1 text-xs leading-relaxed text-text-secondary">The hub&apos;s code connects to RabbitMQ, which ECS cannot run for it yet.</p>
+          <Target name="AWS" on={shown(T.aws)} color={awsOutcome.refused ? HUE.redSoft : HUE.green}>
+            <p className="text-sm text-text-primary">{awsOutcome.headline}</p>
           </Target>
         </Column>
       </div>
@@ -160,12 +155,14 @@ export default function WhatYouWrite() {
           You wrote {n(g.file.lines)} lines. trax wrote {n(k8s.lines)} for Kubernetes and {n(podman.lines)} for one machine, from what your
           code says it needs, so the file and the code cannot disagree.
         </p>
-        <p className="mt-2 text-sm text-text-secondary">
-          When they would, trax stops before it changes anything. Ask for AWS and it says:
-        </p>
-        <p className="mt-1 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]" style={{ color: HUE.redSoft }}>
-          {refusalOf(aws.bare.log)}
-        </p>
+        {awsOutcome.refused && (
+          <>
+            <p className="mt-2 text-sm text-text-secondary">When they would, trax stops before it changes anything. Ask for AWS and it says:</p>
+            <p className="mt-1 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]" style={{ color: HUE.redSoft }}>
+              {awsOutcome.detail}
+            </p>
+          </>
+        )}
       </div>
 
       <CodeFold label="Every file trax wrote for this sample, and what it refused">
@@ -173,9 +170,9 @@ export default function WhatYouWrite() {
           <FileList title={`Kubernetes: ${k8s.command}`} files={k8s.files} total={k8s.lines} />
           <FileList title={`Your machine: ${podman.command}`} files={podman.files} total={podman.lines} />
           <div className="space-y-3 lg:col-span-2">
-            <Refusal title={`compose: ${g.targets.compose.command}`} text={refusalOf(g.targets.compose.log)} />
-            <Refusal title={`AWS: ${aws.command} (${aws.change.toLowerCase()})`} text={refusalOf(aws.log)} />
-            <Refusal title={`AWS again (${aws.bare.change.toLowerCase()})`} text={refusalOf(aws.bare.log)} />
+            {g.targets.compose.exit !== 0 && <Refusal title={`compose: ${g.targets.compose.command}`} text={refusalOf(g.targets.compose.log)} />}
+            {aws.exit !== 0 && <Refusal title={`AWS: ${aws.command} (${aws.change.toLowerCase()})`} text={refusalOf(aws.log)} />}
+            {aws.bare.exit !== 0 && <Refusal title={`AWS again (${aws.bare.change.toLowerCase()})`} text={refusalOf(aws.bare.log)} />}
             <p className="text-xs text-text-muted">
               Written by <span className="font-mono">{g.generator}</span> from commit {g.commit.slice(0, 12)} with .NET {g.dotnet}. The plans
               name a placeholder egress image, since a development build of trax names none; it changes no count. Run it again in the .NET
