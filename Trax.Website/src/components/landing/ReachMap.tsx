@@ -5,6 +5,7 @@ import data from "@/data/deploy-recordings.json";
 import type { DeployRecordings } from "@/lib/deploy-replay";
 import { reachEdges, reachScenario, type NodeKey, type ReachEdge } from "@/lib/reach-map";
 import { HUE, NEUTRAL, alpha } from "@/lib/hue";
+import { useMediaQuery, useOnScreen } from "./useOnScreen";
 
 // Who can talk to whom once the DistributedWorkers sample is deployed on Kubernetes: each line lights green or red
 // as the recorded checks found it (src/lib/reach-map.ts reads them off deploy-recordings.json), in the order they ran.
@@ -57,33 +58,27 @@ export default function ReachMap() {
   const [shownCount, setShownCount] = useState(edges.length);
   const [playing, setPlaying] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  // Where the loop is, for it to carry on from when it stops off screen.
+  const step = useRef(0);
+  // Plays the first time it is on screen, unless the reader prefers less motion, and stops while it is not.
+  const onScreen = useOnScreen(root, () => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    step.current = 0;
+    setShownCount(0);
+    setPlaying(true);
+  });
+  const running = playing && onScreen;
+  // One map, laid out for the screen it is on; both, hidden by width, only before the page knows it.
+  const wide = useMediaQuery("(min-width: 640px)");
 
   useEffect(() => {
-    if (!playing) return;
-    let i = 0;
+    if (!running) return;
     const timer = setInterval(() => {
-      i = (i + 1) % (edges.length + Math.ceil(HOLD / STEP) + 1);
-      setShownCount(Math.min(i, edges.length));
+      step.current = (step.current + 1) % (edges.length + Math.ceil(HOLD / STEP) + 1);
+      setShownCount(Math.min(step.current, edges.length));
     }, STEP);
     return () => clearInterval(timer);
-  }, [playing, edges.length]);
-
-  useEffect(() => {
-    const node = root.current;
-    if (!node || typeof IntersectionObserver === "undefined") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        observer.disconnect();
-        setShownCount(0);
-        setPlaying(true);
-      },
-      { threshold: 0.3 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  }, [running, edges.length]);
 
   if (!scenario) return null;
   const latest = shownCount > 0 ? edges[shownCount - 1] : null;
@@ -100,6 +95,7 @@ export default function ReachMap() {
               setPlaying(false);
               setShownCount(edges.length);
             } else {
+              step.current = 0;
               setShownCount(0);
               setPlaying(true);
             }
@@ -110,12 +106,18 @@ export default function ReachMap() {
         </button>
       </div>
       <div className="rounded-lg border border-border bg-bg-secondary p-2">
-        <div className="hidden sm:block">
-          <Map edges={edges} shown={shownCount} l={WIDE} />
-        </div>
-        <div className="sm:hidden">
-          <Map edges={edges} shown={shownCount} l={TALL} />
-        </div>
+        {wide === null ? (
+          <>
+            <div className="hidden sm:block">
+              <Map edges={edges} shown={shownCount} l={WIDE} />
+            </div>
+            <div className="sm:hidden">
+              <Map edges={edges} shown={shownCount} l={TALL} />
+            </div>
+          </>
+        ) : (
+          <Map edges={edges} shown={shownCount} l={wide ? WIDE : TALL} />
+        )}
       </div>
       <p className="min-h-[3em] text-sm text-text-primary sm:min-h-[1.5em]" aria-live="polite">
         {latest ? describe(latest) : " "}

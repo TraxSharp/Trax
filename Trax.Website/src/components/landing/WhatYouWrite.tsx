@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import CodeFold from "./CodeFold";
+import { useOnScreen } from "./useOnScreen";
 import data from "@/data/deploy-generated.json";
 import { awsOutcomeOf, hardeningOf, kindsInOrder, n, needsOf, refusalOf, type DeployGenerated } from "@/lib/deploy-generated";
 import { HUE, alpha } from "@/lib/hue";
@@ -26,32 +27,26 @@ const needStart = needs.map((_, i) => needs.slice(0, i).reduce((sum, list) => su
 export default function WhatYouWrite() {
   const [at, setAt] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const base = useRef(0);
+  // Where the loop is, for the clock to carry on from when it stops off screen or on Pause.
+  const clock = useRef(0);
   const root = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!playing) return;
-    const timer = setInterval(() => setAt((performance.now() - base.current) % T.end), 60);
-    return () => clearInterval(timer);
-  }, [playing]);
-
-  // Plays, and loops, once it is on screen; with less motion asked for, it shows everything at once.
-  useEffect(() => {
-    const node = root.current;
-    if (!node || typeof IntersectionObserver === "undefined") return;
+  // Plays the first time it is on screen, unless the reader prefers less motion, and stops while it is not.
+  const onScreen = useOnScreen(root, () => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        observer.disconnect();
-        base.current = performance.now();
-        setPlaying(true);
-      },
-      { threshold: 0.3 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    clock.current = 0;
+    setPlaying(true);
+  });
+  const running = playing && onScreen;
+
+  useEffect(() => {
+    if (!running) return;
+    const base = performance.now() - clock.current;
+    const timer = setInterval(() => {
+      clock.current = (performance.now() - base) % T.end;
+      setAt(clock.current);
+    }, 60);
+    return () => clearInterval(timer);
+  }, [running]);
 
   // Before it first plays (and for a reader who prefers less motion) the whole picture shows.
   const now = playing ? at : T.end - 1;
@@ -70,7 +65,7 @@ export default function WhatYouWrite() {
           onClick={() => {
             if (playing) setPlaying(false);
             else {
-              base.current = performance.now() - (at >= T.end - 1 ? 0 : at);
+              clock.current = at >= T.end - 1 ? 0 : at;
               setPlaying(true);
             }
           }}

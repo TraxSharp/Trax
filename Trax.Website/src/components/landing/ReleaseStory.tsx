@@ -17,6 +17,7 @@ import {
   type StoryTarget,
 } from "@/lib/release-story";
 import { HUE, NEUTRAL, alpha } from "@/lib/hue";
+import { useMediaQuery, useOnScreen } from "./useOnScreen";
 
 // One release, as a moving picture: requests flowing to the running version, a job the release waits for, the new
 // version starting beside the old one and taking over. Read off the recorded Kubernetes run of the DistributedWorkers
@@ -83,46 +84,43 @@ export default function ReleaseStory() {
   const [target, setTarget] = useState<StoryTarget>("kubernetes");
   const [at, setAt] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // Where the loop is, for the clock to carry on from when it stops off screen or on Pause, and when it started.
+  const clock = useRef(0);
   const base = useRef(0);
   const story = useMemo(() => storyOf(recordings, kind, target), [kind, target]);
+  const root = useRef<HTMLDivElement>(null);
+  // Plays the first time it is on screen, unless the reader prefers less motion, and stops while it is not.
+  const onScreen = useOnScreen(root, () => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    clock.current = 0;
+    setPlaying(true);
+  });
+  const running = playing && onScreen;
+  // One picture, laid out for the screen it is on; both, hidden by width, only before the page knows it.
+  const wide = useMediaQuery("(min-width: 640px)");
 
   useEffect(() => {
-    if (!playing) return;
+    if (!running) return;
+    base.current = performance.now() - clock.current;
     const timer = setInterval(() => {
       const t = (performance.now() - base.current) % (STORY_MS + HOLD);
+      clock.current = t;
       setAt(Math.min(t, STORY_MS));
     }, 40);
     return () => clearInterval(timer);
-  }, [playing]);
+  }, [running]);
 
   const play = (from: number) => {
+    clock.current = from;
     base.current = performance.now() - from;
     setPlaying(true);
   };
   const choose = (apply: () => void) => {
     apply();
     setAt(0);
+    clock.current = 0;
     base.current = performance.now();
   };
-
-  // Plays, and keeps looping, once it is on screen, unless the reader prefers less motion.
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const node = root.current;
-    if (!node || typeof IntersectionObserver === "undefined") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        observer.disconnect();
-        base.current = performance.now();
-        setPlaying(true);
-      },
-      { threshold: 0.3 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   if (!story) return null;
   const counter = counterAt(story, at);
@@ -168,12 +166,18 @@ export default function ReleaseStory() {
             </span>
           )}
         </div>
-        <div className="hidden sm:block">
-          <Picture story={story} at={at} labels={labels} l={WIDE} />
-        </div>
-        <div className="sm:hidden">
-          <Picture story={story} at={at} labels={labels} l={TALL} />
-        </div>
+        {wide === null ? (
+          <>
+            <div className="hidden sm:block">
+              <Picture story={story} at={at} labels={labels} l={WIDE} />
+            </div>
+            <div className="sm:hidden">
+              <Picture story={story} at={at} labels={labels} l={TALL} />
+            </div>
+          </>
+        ) : (
+          <Picture story={story} at={at} labels={labels} l={wide ? WIDE : TALL} />
+        )}
         <Steps story={story} at={at} />
         <div className="h-0.5 bg-border">
           <div className="h-full bg-accent/70" style={{ width: `${(at / STORY_MS) * 100}%` }} />
