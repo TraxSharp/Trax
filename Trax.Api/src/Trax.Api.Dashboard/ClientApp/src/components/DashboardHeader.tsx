@@ -1,11 +1,13 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { usePollSeconds } from "../lib/poll";
 import { useRefreshStatus } from "../lib/refreshStatus";
 import { useNow } from "../lib/useNow";
 import { ENVIRONMENT_BADGE, environmentTone } from "../lib/environment";
 import { schedulerPaused } from "../lib/scheduler";
-import { drainMark } from "../lib/drain";
+import { drainMark, drainRecheckDelay } from "../lib/drain";
 import { useAnswers } from "../lib/answerable";
+import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { Search } from "./Search";
 import { CirclePause, CircleStop, Clock, RotateCw, TriangleAlert } from "lucide-react";
 import { useTraxQuery } from "../lib/consoleClient";
@@ -24,8 +26,19 @@ export function DashboardHeader() {
   const paused = schedulerPaused(scheduler?.operations?.config?.scheduler ?? null);
   // A drain stops every host starting work, so it shows on every page too. The demo does not offer it.
   const drainAnswered = useAnswers("Drain");
-  const [{ data: drain }] = useTraxQuery(drainDocument, { ignoreRefreshStatus: true, pause: !drainAnswered });
+  const [{ data: drain }, refetchDrain] = useTraxQuery(drainDocument, { ignoreRefreshStatus: true, pause: !drainAnswered });
   const drained = drainAnswered ? drainMark(drain?.operations?.config?.drain) : null;
+  // A drain set or ended anywhere (a deploy, another console, the API) reaches the hub as a scheduler
+  // change, and one that lapses sends nothing, so the mark reads again at its until.
+  useRefetchOnChange("SCHEDULER_CONFIG", () => {
+    if (drainAnswered) refetchDrain();
+  });
+  const lapsesAt = drained ? drain?.operations?.config?.drain?.until : null;
+  useEffect(() => {
+    if (!lapsesAt) return;
+    const t = setTimeout(refetchDrain, drainRecheckDelay(lapsesAt, Date.now()));
+    return () => clearTimeout(t);
+  }, [lapsesAt, refetchDrain]);
   const { lastRefreshAt, lastError } = useRefreshStatus();
   const pollSeconds = usePollSeconds();
   const now = useNow(500);

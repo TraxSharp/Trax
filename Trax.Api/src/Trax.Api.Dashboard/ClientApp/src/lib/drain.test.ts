@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { DEFAULT_DRAIN_MINUTES, drainMark, drainSetBy, parseDrainMinutes } from "./drain";
+import { DEFAULT_DRAIN_MINUTES, drainMark, drainRecheckDelay, drainSetBy, parseDrainMinutes } from "./drain";
 
 describe("drainMark", () => {
   test("says Drained only while a drain is in force", () => {
@@ -7,6 +7,19 @@ describe("drainMark", () => {
     expect(drainMark({ drained: false })).toBeNull();
     expect(drainMark(null)).toBeNull();
     expect(drainMark(undefined)).toBeNull();
+  });
+});
+
+describe("drainRecheckDelay", () => {
+  test("reads again a second past the until, at once when it has passed", () => {
+    const now = Date.parse("2026-11-25T12:00:00Z");
+    expect(drainRecheckDelay("2026-11-25T12:10:00Z", now)).toBe(601_000);
+    expect(drainRecheckDelay("2026-11-25T11:00:00Z", now)).toBe(1000);
+  });
+
+  test("caps the wait at what a browser timer holds, and guesses a minute for an unreadable until", () => {
+    expect(drainRecheckDelay("2099-01-01T00:00:00Z", 0)).toBe(2_147_483_647);
+    expect(drainRecheckDelay("soon", 0)).toBe(60_000);
   });
 });
 

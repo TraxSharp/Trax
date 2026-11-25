@@ -18,6 +18,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.Drain;
@@ -238,6 +239,72 @@ public class DrainTests : TestSetup
         {
             await worker.StopAsync(CancellationToken.None);
         }
+    }
+
+    [Test]
+    public async Task The_dispatcher_signals_a_scheduler_change_when_the_drain_begins_or_ends()
+    {
+        // A deploy drains and resumes from processes that serve nothing, so the hub's console learns of it from the
+        // dispatcher, which reads the row every cycle.
+        var signals = new RecordingChangeSignal();
+        var monitor = new SchedulerLivenessMonitor(TimeProvider.System);
+        var wake = new DispatcherWake();
+        var service = new JobDispatcherPollingService(
+            new SignalOverride(Scope.ServiceProvider, signals),
+            Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>(),
+            monitor,
+            wake,
+            Scope.ServiceProvider.GetRequiredService<ILogger<JobDispatcherPollingService>>()
+        );
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            (await WaitUntil(() => Task.FromResult(monitor.LastDispatchCompletedAt is not null)))
+                .Should()
+                .BeTrue();
+            signals.Count.Should().Be(0, "nothing changed yet");
+
+            await Operations.DrainAsync(
+                duration: null,
+                TraxDrain.DeployActor,
+                CancellationToken.None
+            );
+            wake.Signal();
+            (await WaitUntil(() => Task.FromResult(signals.Count == 1)))
+                .Should()
+                .BeTrue("the drain began");
+
+            await Operations.EndDrainAsync(CancellationToken.None);
+            wake.Signal();
+            (await WaitUntil(() => Task.FromResult(signals.Count == 2)))
+                .Should()
+                .BeTrue("the drain ended");
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private sealed class RecordingChangeSignal : ITraxChangeSignal
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public void Notify(ChangeDomain domain)
+        {
+            if (domain == ChangeDomain.SchedulerConfig)
+                Interlocked.Increment(ref _count);
+        }
+    }
+
+    /// <summary>The test container, with <paramref name="signal"/> as its change signal.</summary>
+    private sealed class SignalOverride(IServiceProvider inner, ITraxChangeSignal signal)
+        : IServiceProvider
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(ITraxChangeSignal) ? signal : inner.GetService(serviceType);
     }
 
     [LeavesStuckRuns("Seeds in-progress runs no host is running, to read them back as busy.")]

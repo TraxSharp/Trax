@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Functional;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Drain;
 using Trax.Scheduler.Services.SchedulerLiveness;
@@ -39,6 +40,9 @@ internal sealed class JobDispatcherPollingService(
 
     // When the last cycle started, as a timestamp of the clock.
     private long _cycleStarted;
+
+    // Whether the last cycle found the hosts drained; null before the first.
+    private bool? _drained;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -106,6 +110,18 @@ internal sealed class JobDispatcherPollingService(
         return true;
     }
 
+    /// <summary>
+    /// Sends the scheduler change signal when the drain this cycle read differs from the last
+    /// cycle's. A drain set or ended in another process (a deploy's drain or resume) and one that
+    /// lapses send nothing themselves; the console's Drained mark learns of them this way.
+    /// </summary>
+    private void SignalDrainChange(bool drained)
+    {
+        if (_drained is { } was && was != drained)
+            serviceProvider.GetService<ITraxChangeSignal>()?.Notify(ChangeDomain.SchedulerConfig);
+        _drained = drained;
+    }
+
     private async Task RunJobDispatcher(CancellationToken cancellationToken)
     {
         _cycleStarted = Clock.GetTimestamp();
@@ -126,11 +142,11 @@ internal sealed class JobDispatcherPollingService(
 
             // A drain stops every host dispatching (Trax.Docs/adr/0065). The loop stays alive and
             // stamped, as when the dispatcher is switched off, so the health check stays green.
-            if (
-                await SchedulerDrain
-                    .IsDrainedAsync(scope.ServiceProvider, cancellationToken)
-                    .ConfigureAwait(false)
-            )
+            var drained = await SchedulerDrain
+                .IsDrainedAsync(scope.ServiceProvider, cancellationToken)
+                .ConfigureAwait(false);
+            SignalDrainChange(drained);
+            if (drained)
             {
                 livenessMonitor.RecordDispatchCycle();
                 logger.LogDebug("Drained: the JobDispatcher dispatches nothing this cycle");

@@ -13,6 +13,16 @@ export function drainMark(d: { drained: boolean } | null | undefined): string | 
 }
 
 /**
+ * How long to wait before reading a drain again once it lapses at `until`: a second past it, so the
+ * host's clock has passed it too, and never longer than a browser timer holds.
+ */
+export function drainRecheckDelay(until: string, now: number): number {
+  const at = Date.parse(until);
+  if (Number.isNaN(at)) return 60_000;
+  return Math.min(Math.max(0, at - now) + 1000, 2_147_483_647);
+}
+
+/**
  * Reads the minutes an operator typed: a whole number from 1 to 1440. Returns the number, or the
  * sentence that says what is wrong with it.
  */
