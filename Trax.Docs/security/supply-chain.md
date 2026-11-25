@@ -44,6 +44,7 @@ The release workflow (`.github/workflows/release.yml`) is split into jobs, becau
 - **coverage** uploads the test coverage to Codecov. It holds the Codecov token, and runs no restore, build or project code.
 - **release** runs only for a manual dispatch of `main`. It runs semantic-release with a token that can write tags and GitHub releases, and tags the commit build / test validated. It builds and packs nothing: the only code it runs is the release tooling itself, installed with `npm ci --ignore-scripts` from its lockfile. It does not hold a publish credential.
 - **build** checks out the tag, confirms it is the commit build / test validated, and packs every package at the released version with a read-only token: `dotnet restore --locked-mode` and `dotnet pack` for the NuGet packages, and `npm ci --ignore-scripts` and `npm pack` for the TypeScript engine, `@traxsharp/state-machine`. Before packing, it installs the dashboard's app with `npm ci --ignore-scripts`, which packing `Trax.Api.Dashboard` compiles into the package. It records the SHA-256 digest of every package as a job output and uploads the packages. It holds no write token and no publish credential.
+- **push-egress** pushes the egress image, `ghcr.io/traxsharp/trax-egress`, which the build job built into an OCI archive and whose manifest digest it packed into Trax.Cli. It checks the archive is the one build built, pushes it unchanged, logs out and reads the digest back with no credentials, as a user pulls it. It holds `packages: write` and nothing else, and publish waits for it.
 - **publish** downloads those artifacts, checks that the set of packages and every digest match what the build job recorded, then attests and publishes them unchanged: npm first, then NuGet, so no NuGet package of a version ships unless npm holds that version's engine live and it is the one this run built. It stages the engine with `npm stage publish`, using the npm bundled in an exact Node.js version, and waits up to an hour for a maintainer to approve the staged version (see *Keyless publishing*). It then pushes with `dotnet nuget push`, using the exact SDK version in `global.json`, and installs, restores, builds and tests nothing. It holds the only credentials that can publish. A re-run is safe: NuGet skips a package it already has, and npm accepts a version already live, but only when the registry's integrity (SHA-512) and shasum for that version are those of the tarball in hand. A version holding other bytes, such as one someone else published first under a scope they registered, fails the job before anything reaches NuGet.
 
 The publish credential is therefore never present in a job that executes dependency code, and publish refuses any package that is not byte-for-byte what the build job built. Nor is the write token: the dependency code that packing runs (MSBuild targets, analyzers, source generators, the engine's bundler, the dashboard's build) runs in the build job, which can write nothing. What it can still do is shape the packages that publish attests.
@@ -84,6 +85,12 @@ nuget.org adds its own repository signature to a package after it is pushed, as 
 cp trax.core.1.61.0.nupkg verify.nupkg
 zip -d verify.nupkg .signature.p7s
 gh attestation verify verify.nupkg --repo TraxSharp/Trax
+```
+
+The egress image is attested by the manifest digest Trax.Cli names, the one ghcr.io serves, so it is verified as pulled:
+
+```bash
+gh attestation verify oci://ghcr.io/traxsharp/trax-egress@sha256:<digest> --repo TraxSharp/Trax
 ```
 
 ## Deterministic builds

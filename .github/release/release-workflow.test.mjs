@@ -270,6 +270,15 @@ describe('publish job', () => {
     assert.match(publish.steps[attest].with['subject-path'], /^npm\/\*\.tgz$/m);
   });
 
+  it('attests the egress image by the digest users pull, not the archive it came in', () => {
+    const attest = step(publish, 'Attest the egress image (SLSA)');
+    assert.equal(attest.uses, step(publish, 'Attest build provenance (SLSA)').uses);
+    assert.equal(attest.with['subject-name'], 'ghcr.io/traxsharp/trax-egress');
+    assert.equal(attest.with['subject-digest'], '${{ needs.build.outputs.egress-digest }}');
+    assert.doesNotMatch(step(publish, 'Attest build provenance (SLSA)').with['subject-path'], /egress/);
+    assert.ok(indexOf(publish, 'Attest the egress image (SLSA)') < indexOf(publish, 'Push to NuGet'));
+  });
+
   it('publishes to npm before NuGet, so no NuGet package ships unless npm holds our engine', () => {
     const npmPublish = indexOf(publish, 'Stage on npm and wait for approval');
     assert.ok(npmPublish >= 0);

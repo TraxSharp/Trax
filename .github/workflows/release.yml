@@ -431,16 +431,10 @@ jobs:
         with:
           name: npm
           path: npm
-      - name: Download the egress image
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
-        with:
-          name: egress
-          path: egress
       - name: Verify the packages are the ones build built
         env:
           DIGESTS: ${{ needs.build.outputs.digests }}
           NPM_DIGESTS: ${{ needs.build.outputs.npm-digests }}
-          EGRESS_ARCHIVE: ${{ needs.build.outputs.egress-archive }}
         run: |
           # verify <folder> <extension> <base64 sha256sum output>
           verify() {
@@ -453,17 +447,21 @@ jobs:
           }
           verify nupkg nupkg "$DIGESTS"
           verify npm tgz "$NPM_DIGESTS"
-          if [ "$(sha256sum egress/trax-egress.tar | cut -d ' ' -f 1)" != "$EGRESS_ARCHIVE" ]; then
-            echo "::error::The downloaded egress image is not the archive the build job built."
-            exit 1
-          fi
       - name: Attest build provenance (SLSA)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
           subject-path: |
             nupkg/*.nupkg
             npm/*.tgz
-            egress/trax-egress.tar
+      - name: Attest the egress image (SLSA)
+        # By the manifest digest Trax.Cli names and ghcr.io serves, which push-egress has already
+        # checked the registry holds, so `gh attestation verify oci://ghcr.io/traxsharp/trax-egress@<digest>`
+        # finds it. The attestation is kept by GitHub, not pushed beside the image: that would need
+        # packages: write here.
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ghcr.io/traxsharp/trax-egress
+          subject-digest: ${{ needs.build.outputs.egress-digest }}
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
