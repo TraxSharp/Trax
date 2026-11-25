@@ -47,8 +47,10 @@ the person whose keys are on the machine.
 - `PodmanEscapeTests.cs` is the escape suite: hostile trains that try to reach the hub, the
   launcher, the metadata endpoints and a domain, write outside their directory, fork-bomb, exceed
   memory, disk and the timeout, and leave links and too many files; and the canary refusing crun
-  and a missing runtime on a real podman. It needs a podman socket, which CI and trax-test do not
-  have, so it skips there and runs by hand.
+  and a missing runtime on a real podman. CI's `sandbox-escape` job runs it on the runner's
+  rootless podman under crun, with the canary told to accept crun, which proves the mechanics and
+  not the isolation; there a missing socket or image fails rather than skips. trax-test has no
+  podman socket, so it skips there.
 - The [sandbox threat model](/docs/security/sandbox-threat-model) says what is proven and what is
   not.
 
@@ -57,11 +59,13 @@ the person whose keys are on the machine.
   node 6.12) and refused one named `kata-runc` that maps to runc, and refused when the deny-all
   NetworkPolicy was removed (the sandbox then reached the API server, the hub and the internet).
 
-Not covered: CI. Its runners have no podman socket, no cluster and no known nested
-virtualisation, so both suites skip there and run by hand.
+Not covered in CI: the isolation itself. Its runners have no cluster and no known nested
+virtualisation, so the podman suite runs under crun and the cluster suite skips and runs by hand.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
 - **2026-11-24**: Podman cannot run Kata 4, so one machine with Kata is k3s with the Kubernetes
   backend, and the podman backend says so when told to use Kata. Proved on k3s with Kata.
+- **2026-11-25**: CI runs the podman escape suite under crun, failing rather than skipping when
+  its socket or image is missing.

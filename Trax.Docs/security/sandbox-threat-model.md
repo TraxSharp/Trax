@@ -81,5 +81,7 @@ admission policies still refuse any that do not look like the launcher's.
   kills every run on it. The claim's size is a ceiling only where its storage class enforces
   capacity; k3s's default `local-path` does not, so there the volume is the node's disk and the
   floor is all that keeps the node's disk from filling.
-- **CI.** GitHub's runners and the `runner-personal` VM have no podman socket, no cluster and no known
-  nested virtualisation, so CI runs the unit tests and both escape suites skip, saying so.
+- **Isolation in CI.** GitHub's runners have no cluster and no known nested virtualisation. CI runs
+  `PodmanEscapeTests` on the runner's rootless podman under crun, with the canary told to accept it,
+  so it proves the mechanics on every change and not the isolation; `KubernetesEscapeTests` skips
+  and runs by hand. The `runner-personal` VM has no podman socket, so both skip there.

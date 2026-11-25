@@ -16,12 +16,13 @@ namespace Trax.Scheduler.Sandbox.Tests.EscapeTests;
 
 /// <summary>
 /// A real launcher over a real podman, for the escape suite. Read from the environment, since
-/// neither CI nor trax-test has a podman socket to give it:
+/// trax-test has no podman socket to give it and CI's <c>sandbox-escape</c> job starts its own:
 /// <c>TRAX_SANDBOX_PODMAN_SOCKET</c>, <c>TRAX_SANDBOX_IMAGE</c> and <c>TRAX_SANDBOX_HOLDER_IMAGE</c>
 /// (both pinned by digest; <c>build-escape-image.sh</c> prints them), and <c>TRAX_SANDBOX_OCI_RUNTIME</c>
 /// (<c>kata</c> unless set). With <c>TRAX_SANDBOX_ASSUME_ISOLATED=1</c> the launcher takes any kernel
 /// as a guest's, which is how the mechanics are proved under crun on a host without Kata; it is
-/// a test seam only, never an option of the launcher.
+/// a test seam only, never an option of the launcher. With <c>TRAX_SANDBOX_ESCAPE_REQUIRED=1</c>, as
+/// CI sets it, a missing socket or image fails the suite instead of skipping it.
 /// </summary>
 internal sealed class PodmanEscape : IAsyncDisposable
 {
@@ -51,20 +52,31 @@ internal sealed class PodmanEscape : IAsyncDisposable
 
     public PodmanApi Api { get; } = new(TraxSandboxLauncher.PodmanClient(Socket ?? ""));
 
-    /// <summary>Skips the test unless a podman socket and an escape image were provided.</summary>
+    public static bool Required =>
+        string.Equals(
+            Environment.GetEnvironmentVariable("TRAX_SANDBOX_ESCAPE_REQUIRED"),
+            "1",
+            StringComparison.Ordinal
+        );
+
+    /// <summary>Skips the test unless a podman socket and an escape image were provided; fails it instead when <see cref="Required"/>.</summary>
     public static void RequireEnvironment()
     {
         if (
-            string.IsNullOrEmpty(Socket)
-            || !File.Exists(Socket)
-            || string.IsNullOrEmpty(Image)
-            || string.IsNullOrEmpty(Holder)
+            !string.IsNullOrEmpty(Socket)
+            && File.Exists(Socket)
+            && !string.IsNullOrEmpty(Image)
+            && !string.IsNullOrEmpty(Holder)
         )
-            Assert.Ignore(
-                "The escape suite needs a podman socket and the escape image: set TRAX_SANDBOX_PODMAN_SOCKET, "
-                    + "TRAX_SANDBOX_IMAGE and TRAX_SANDBOX_HOLDER_IMAGE (build-escape-image.sh prints the last two). "
-                    + "CI and trax-test have no podman socket, so this suite runs by hand."
-            );
+            return;
+        const string Missing =
+            "The escape suite needs a podman socket and the escape image: set TRAX_SANDBOX_PODMAN_SOCKET, "
+            + "TRAX_SANDBOX_IMAGE and TRAX_SANDBOX_HOLDER_IMAGE (build-escape-image.sh prints the last two).";
+        if (Required)
+            Assert.Fail(Missing + " TRAX_SANDBOX_ESCAPE_REQUIRED is set, so it may not skip.");
+        Assert.Ignore(
+            Missing + " trax-test has no podman socket; CI's sandbox-escape job runs it under crun."
+        );
     }
 
     public static SandboxLauncherOptions DefaultOptions()
