@@ -172,6 +172,17 @@ updates:
     cooldown: { default-days: 7 }
     groups:
       egress-images: { patterns: ["*"] }
+  # The images the deploy proof pulls and the k3s release it installs, pinned in a Dockerfile that is
+  # never built (.github/ci/deploy/Dockerfile). k3s on its own: its bump fails deploy-cluster until
+  # K3S_INSTALL_SHA256 in cluster.sh is bumped with it, and should not hold the images back.
+  - package-ecosystem: "docker"
+    directory: "/.github/ci/deploy"
+    schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }
+    groups:
+      deploy-proof-images:
+        patterns: ["*"]
+        exclude-patterns: ["*k3s*"]
   - package-ecosystem: "docker-compose"
     directories: ["/Trax.Effect", "/Trax.Effect/.devcontainer", "/Trax.Scheduler", "/Trax.Samples"]
     schedule: { interval: "weekly" }

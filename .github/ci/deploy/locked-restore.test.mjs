@@ -23,7 +23,7 @@ const run = (script) => {
   const bin = join(root, 'bin');
   mkdirSync(bin);
   mkdirSync(join(root, '.github', 'ci', 'deploy'), { recursive: true });
-  copyFileSync(join(here, script), join(root, '.github', 'ci', 'deploy', script));
+  for (const file of [script, 'pins.sh', 'Dockerfile']) copyFileSync(join(here, file), join(root, '.github', 'ci', 'deploy', file));
   const calls = join(root, 'dotnet-calls');
   writeFileSync(join(bin, 'dotnet'), `#!/bin/sh\necho "$*" >> '${calls}'\ncase "$*" in *--locked-mode*) exit 1 ;; esac\n`);
   for (const tool of ['kubectl', 'docker', 'sudo', 'podman', 'systemctl', 'journalctl', 'curl'])

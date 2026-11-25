@@ -53,5 +53,9 @@ What `podman.sh` proves:
 `podman kube play` runs one copy of a Deployment, so the sample's two workers are one under podman. The egress is not
 proved under podman here: the script builds no egress image into podman.
 
+The images `cluster.sh` pulls (the local registry, busybox for the probes) and the k3s release it installs are
+pinned in `Dockerfile` here, which is never built: Dependabot's docker ecosystem watches it, and `pins.sh` reads the
+pins for the script. A k3s bump also needs `K3S_INSTALL_SHA256` in `cluster.sh`; the job fails until it has it.
+
 Not kind: a kind node is a container, so a pod there cannot have a user namespace of its own, and every Trax pod asks
 for one (`hostUsers: false`). The pods never start; `trax deploy` says so at once.

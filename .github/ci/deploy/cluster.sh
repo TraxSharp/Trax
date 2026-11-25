@@ -14,10 +14,13 @@
 set -euo pipefail
 
 K8S=${K8S:-existing}
-K3S_VERSION=v1.36.6+k3s1
+# REGISTRY_IMAGE, BUSYBOX and K3S_VERSION, from the Dockerfile beside this script, where Dependabot sees them.
+# shellcheck source=pins.sh
+. "$(dirname "$0")/pins.sh"
+# The k3s installer at K3S_VERSION's tag. Dependabot bumps the version and not this, so a k3s bump fails the
+# installer check below until this is bumped with it.
 K3S_INSTALL_SHA256=46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad
 REGISTRY_NAME=trax-deploy-registry
-REGISTRY_IMAGE=docker.io/library/registry:3@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c
 # The sample's own trax.deploy.json. The copies this script makes sit beside it, since its projects are named
 # relative to it.
 DIR=Trax.Samples/samples/DistributedWorkers
@@ -25,7 +28,6 @@ APP=energyhub
 NS=${TRAX_CI_NAMESPACE:-energyhub-cluster}
 # The app's Secret is named after the app and environment, wherever the namespace is.
 SECRET=$APP-cluster
-BUSYBOX=docker.io/library/busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
 # The local port the hub is forwarded to for the probes; another run on the same machine may hold 18080.
 PORT=${TRAX_CI_PORT:-18080}
 RUNNER_TEMP_DIR=${RUNNER_TEMP:-$(mktemp -d)}
@@ -72,8 +74,8 @@ if [ "$K8S" = k3s ]; then
   sudo mkdir -p /etc/rancher/k3s
   printf 'mirrors:\n  "localhost:5001":\n    endpoint: ["http://127.0.0.1:5001"]\n' |
     sudo tee /etc/rancher/k3s/registries.yaml >/dev/null
-  # The installer at the release's tag, checked against the digest pinned here; it checks the k3s binary it
-  # downloads against the release's own sums. Bump K3S_VERSION and the digest together.
+  # The installer at the release's tag, checked against the digest pinned above; it checks the k3s binary it
+  # downloads against the release's own sums. Bump the k3s line in the Dockerfile and the digest together.
   curl -sSfL -o "$RUNNER_TEMP_DIR/k3s-install.sh" \
     "https://raw.githubusercontent.com/k3s-io/k3s/${K3S_VERSION/+/%2B}/install.sh"
   echo "$K3S_INSTALL_SHA256  $RUNNER_TEMP_DIR/k3s-install.sh" | sha256sum -c -
