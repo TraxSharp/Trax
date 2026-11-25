@@ -34,9 +34,6 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString =
     builder.Configuration.GetConnectionString("Shopfront")
     ?? throw new InvalidOperationException("ConnectionStrings:Shopfront is not set.");
-var rabbitMq =
-    builder.Configuration.GetConnectionString("RabbitMq")
-    ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 
 // The key the hub and the workers sign their events with. A process drops any event not signed
 // with it. appsettings.Development.json holds a key printed in the book, for Development only.
@@ -54,18 +51,19 @@ builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
-                // The runs this worker executes reach the hub's subscriptions over RabbitMQ.
+                // The runs this worker executes reach the hub's subscriptions over RabbitMQ, read
+                // from configuration as the hub reads it.
                 .UseBroadcaster(broadcaster =>
                     broadcaster.UseRabbitMq(
-                        rabbitMq,
+                        builder.Configuration,
                         rabbit =>
                         {
                             rabbit.SigningKey = broadcastKey;
-                            // Set by compose.yaml, whose broker is reached by name on its own
-                            // network. A broker anywhere else is reached over amqps://.
-                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
-                                "Broadcast:AllowInsecureTransport",
-                                defaultValue: false
+                            // As on the hub: plain amqp:// only where the deployment says so.
+                            rabbit.AllowInsecureTransport = string.Equals(
+                                builder.Configuration["Broadcast:AllowInsecureTransport"],
+                                "true",
+                                StringComparison.OrdinalIgnoreCase
                             );
                         }
                     )
@@ -91,15 +89,28 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 app.MapHealthChecks("/health/live");
-await app.RunAsync().ConfigureAwait(false);
+
+// Serves; or reports what the worker needs from its deployment (--trax-export-deploy) and exits.
+await app.RunTraxAsync(args).ConfigureAwait(false);
 ```
 
 The worker publishes the events of every run it executes, signed with the same
-`Broadcast:SigningKey` as the hub. Run locally, it reads the Development key only with
-`--environment Development`, since no launch profile sets its environment. Trax has no health check for a worker,
-so `/health/live` says only that the process answers. A worker that is stopped finishes the run it
-is in, for up to 30 seconds, then gives up on it; a worker that dies leaves its run for the hub to
-fail, as chapter 11 showed.
+`Broadcast:SigningKey` as the hub, and reads the broker from configuration the same way. It ends
+with `RunTraxAsync` in place of `app.RunAsync()`: started with `--trax-export-deploy`, it reports
+what it needs from its deployment and exits, and a worker that called `app.RunAsync()` would serve
+instead, so `trax deploy` could not ask it.
+
+Its connection strings and key moved to `appsettings.Development.json`, as the hub's did. No launch
+profile sets the worker's environment, so run it locally in Development:
+
+```bash
+dotnet run --project Shopfront.Worker --urls http://localhost:5081 --environment Development
+```
+
+Trax has no health check for a worker, so `/health/live` says only that the process answers. A
+worker that is stopped finishes the run it is in, for up to 30 seconds, then gives up on it; a
+worker that dies leaves its run for the hub to fail, as chapter 11 showed. A release does not stop
+it mid-run: it drains first (19.7).
 
 `Shopfront.Worker/Shopfront.Worker.csproj`:
 
@@ -130,10 +141,6 @@ fail, as chapter 11 showed.
 
 ```json file=Shopfront.Worker/appsettings.json
 {
-  "ConnectionStrings": {
-    "Shopfront": "Host=localhost;Database=shopfront;Username=postgres;Password=shopfront",
-    "RabbitMq": "amqp://guest:guest@localhost:5672"
-  },
   "Logging": {
     "LogLevel": {
       "Default": "Information",
@@ -147,6 +154,10 @@ fail, as chapter 11 showed.
 
 ```json file=Shopfront.Worker/appsettings.Development.json
 {
+  "ConnectionStrings": {
+    "Shopfront": "Host=localhost;Database=shopfront;Username=postgres;Password=shopfront",
+    "RabbitMq": "amqp://guest:guest@localhost:5672"
+  },
   "Broadcast": {
     "SigningKey": "c2hvcGZyb250LWRldmVsb3BtZW50LWJyb2FkY2FzdC1rZXktcHJpbnRlZC1pbi10aGUtYm9vaw=="
   }

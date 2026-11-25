@@ -24,9 +24,24 @@ docker run -d --name shopfront-postgres -p 5432:5432 \
 docker run -d --name shopfront-rabbitmq -p 5672:5672 \
   -e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='-rabbit loopback_users []' rabbitmq:4
 dotnet run --project Shopfront.Hub --urls http://localhost:5080
-dotnet run --project Shopfront.Worker --urls http://localhost:5081
+dotnet run --project Shopfront.Worker --urls http://localhost:5081 --environment Development
 cd web && npm install && npm run dev
 ```
+
+## Deploy it
+
+`trax.deploy.json` deploys it with `trax deploy`, as chapter 19 does: the `local` environment as a
+compose stack under rootless podman, `cluster` on a Kubernetes cluster.
+
+```bash
+dotnet trax deploy --env local --build
+# fill in .env, then:
+podman compose up -d migrate drain && podman compose wait drain && podman compose up -d
+```
+
+A development build of `trax` (one built from this repository) names no egress image, so it refuses
+the services' `egress` until the file names one by digest (`"egressImage"`), built from
+`Trax.Egress/`. A released `trax` carries it.
 
 ## Test it
 

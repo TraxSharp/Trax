@@ -34,9 +34,6 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString =
     builder.Configuration.GetConnectionString("Shopfront")
     ?? throw new InvalidOperationException("ConnectionStrings:Shopfront is not set.");
-var rabbitMq =
-    builder.Configuration.GetConnectionString("RabbitMq")
-    ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 var development = builder.Environment.IsDevelopment();
 
 // The key the hub and the workers sign their events with. A process drops any event not signed
@@ -79,18 +76,25 @@ builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
+                // A deploy's migrate step brings the shop's schema up to date too.
+                .MigrateOnDeploy<ShopfrontDbContext>()
                 // What the worker runs reaches the hub's subscriptions, and the other way round.
+                // The broker is ConnectionStrings:RabbitMq in Development; deployed, its host, user
+                // and password come apart, as RabbitMq:Host, RabbitMq:UserName and
+                // RabbitMq:Password, so no password sits inside a URI.
                 .UseBroadcaster(broadcaster =>
                     broadcaster.UseRabbitMq(
-                        rabbitMq,
+                        builder.Configuration,
                         rabbit =>
                         {
                             rabbit.SigningKey = broadcastKey;
-                            // Set by compose.yaml, whose broker is reached by name on its own
-                            // network. A broker anywhere else is reached over amqps://.
-                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
-                                "Broadcast:AllowInsecureTransport",
-                                defaultValue: false
+                            // Set where trax deploy runs the broker beside the hub, reached by name
+                            // on the app's own network. Anything but the text true keeps plain
+                            // amqp:// refused; a broker anywhere else is reached over amqps://.
+                            rabbit.AllowInsecureTransport = string.Equals(
+                                builder.Configuration["Broadcast:AllowInsecureTransport"],
+                                "true",
+                                StringComparison.OrdinalIgnoreCase
                             );
                         }
                     )
@@ -189,8 +193,10 @@ builder
 
 var app = builder.Build();
 
-// The shop's schema is migrated before the hub serves. An export opens no database.
-if (!TraxClientExport.Requested)
+// In Development the hub migrates the shop's schema before it serves. Deployed, the deploy's
+// migrate step does it (MigrateOnDeploy), once, before any process of the new version starts.
+// An export opens no database.
+if (development && !TraxClientExport.Requested)
 {
     var scope = app.Services.CreateAsyncScope();
     await using (scope.ConfigureAwait(false))
@@ -237,5 +243,7 @@ if (development)
         .AllowAnonymous();
 }
 
-// Serves, or with --trax-export-client writes the client manifest and exits.
+// Serves; or writes the client manifest (--trax-export-client), reports what the hub needs from
+// its deployment (--trax-export-deploy), migrates (--trax-migrate), or drains and resumes the
+// hosts (--trax-drain, --trax-resume), and exits.
 await app.RunTraxAsync(args).ConfigureAwait(false);
