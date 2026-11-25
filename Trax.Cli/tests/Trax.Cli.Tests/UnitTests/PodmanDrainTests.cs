@@ -74,6 +74,17 @@ public class PodmanDrainTests
             .And.Contain(
                 "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && systemctl --user restart "
             );
+        var migrated = drain.IndexOf(
+            "test \"$(/usr/bin/podman wait orders-home-migrate-pod-migrate)\" = 0 && ",
+            StringComparison.Ordinal
+        );
+        migrated
+            .Should()
+            .BePositive("the migration runs before the drain, as on every other target, " + Adr);
+        migrated
+            .Should()
+            .BeGreaterThan(drain.IndexOf("orders-home-migrate.yaml", StringComparison.Ordinal))
+            .And.BeLessThan(drain.IndexOf("orders-home-drain.yaml", StringComparison.Ordinal));
         var resume = Array.FindIndex(
             lines,
             l => l.Contains("orders-home-resume.yaml", StringComparison.Ordinal)
@@ -81,7 +92,10 @@ public class PodmanDrainTests
         resume.Should().BeGreaterThan(Array.IndexOf(lines, drain));
         drain
             .Should()
-            .EndWith("; /usr/bin/podman pod stop --ignore -t 10 orders-home-drain-pod >/dev/null");
+            .EndWith(
+                "; /usr/bin/podman pod stop --ignore -t 10 orders-home-migrate-pod >/dev/null; "
+                    + "/usr/bin/podman pod stop --ignore -t 10 orders-home-drain-pod >/dev/null"
+            );
         lines[resume]
             .Should()
             .EndWith(

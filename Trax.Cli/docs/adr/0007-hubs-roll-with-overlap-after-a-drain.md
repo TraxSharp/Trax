@@ -46,7 +46,9 @@ overlapping roll had the hazard before.
   `migrate` and `drain` first and waits for the drain (`compose up -d migrate drain && compose wait drain`), then
   runs `compose up -d`; trax prints the three. `TRAX_DRAIN_FORCE=true` on the release forces it.
 - **Podman runtime**: systemd stops a unit before its `ExecStartPre` runs, so the drain cannot live in a unit. The
-  install hint plays the drain pod and chains `systemctl --user restart` to it exiting 0, then plays the resume pod.
+  install hint plays the migrate pod, then the drain pod, and chains `systemctl --user restart` to both exiting 0,
+  then plays the resume pod. The migration comes first, as on the other targets, so the drain runs on the schema it
+  was built for; the migrator unit's own migration then has nothing left to do.
   A unit's restart still stops the old pod before the new one starts; there is no overlap on one host.
 
 Past the timeout the drain ends itself and the deploy refuses with the end of its log, which lists what is busy;
@@ -88,6 +90,8 @@ but no CI job runs it yet.
 ## Changelog
 
 - **2026-11-25**: Exemplars name the deploy proofs in `.github/ci/deploy/`.
+- **2026-11-25**: The podman install hint migrates before it drains. It drained first, so the new image's drain ran
+  against the old schema, and failed outright on the release that brings `trax.drain` in.
 - **2026-11-25**: The drain holds through the whole roll. A scheduler host that starts while drained skips its
   stuck-run recovery and no longer ends the drain; the resume after every service has rolled does.
 - **2026-11-25**: Compose releases in three commands. A run of the stack under podman compose (docker-compose 2.26)

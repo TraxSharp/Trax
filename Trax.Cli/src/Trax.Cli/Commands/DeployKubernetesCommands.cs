@@ -612,11 +612,15 @@ internal static class DeployKubernetesCommands
     }
 
     /// <summary>
-    /// The lines of a release that restarts one of the app's own units: the drain pod, the restart once it exits 0,
-    /// then the resume pod, and what to do when the drain refuses.
+    /// The lines of a release that restarts one of the app's own units: the migrate pod, the drain pod once the
+    /// migration exits 0, the restart once the drain exits 0, then the resume pod, and what to do when either
+    /// refuses. The migration runs first, as on every other target, so the drain runs on the schema it was built
+    /// for; the migrator unit's own migration then finds nothing to do.
     /// </summary>
     private static List<string> DrainLines(PodmanStack stack, string dir, string restart)
     {
+        var migrate =
+            $"{stack.Name}-{KubernetesTarget.MigrateName}-pod-{KubernetesTarget.MigrateName}";
         var drain = $"{stack.Name}-{KubernetesTarget.DrainName}-pod-{KubernetesTarget.DrainName}";
         var resume =
             $"{stack.Name}-{KubernetesTarget.ResumeName}-pod-{KubernetesTarget.ResumeName}";
@@ -629,13 +633,15 @@ internal static class DeployKubernetesCommands
             $"{PodmanTarget.Podman} pod stop --ignore -t 10 {stack.Name}-{kind}-pod >/dev/null";
         return
         [
-            $"  {PodmanTarget.Podman} kube play --replace {stack.SecretPath} && {Play(KubernetesTarget.DrainName)} "
+            $"  {PodmanTarget.Podman} kube play --replace {stack.SecretPath} && {Play(KubernetesTarget.MigrateName)} "
+                + $"&& test \"$({PodmanTarget.Podman} wait {migrate})\" = 0 && {Play(KubernetesTarget.DrainName)} "
                 + $"&& test \"$({PodmanTarget.Podman} wait {drain})\" = 0 && {restart}; "
-                + Stop(KubernetesTarget.DrainName),
+                + $"{Stop(KubernetesTarget.MigrateName)}; {Stop(KubernetesTarget.DrainName)}",
             $"  {Play(KubernetesTarget.ResumeName)} && {PodmanTarget.Podman} wait {resume} >/dev/null; "
                 + Stop(KubernetesTarget.ResumeName),
-            "The drain stops every host starting new work and waits for what is busy; the restart runs only "
-                + $"once it exits 0. Past its timeout it ends itself and '{PodmanTarget.Podman} logs {drain}' "
+            "The migration runs first, then the drain stops every host starting new work and waits for what is "
+                + "busy; the restart runs only once both exit 0. A failed migration stops there: "
+                + $"'{PodmanTarget.Podman} logs {migrate}' says why. Past its timeout it ends itself and '{PodmanTarget.Podman} logs {drain}' "
                 + "lists what was still busy: let it finish, or deploy again with --force to restart anyway.",
         ];
     }
