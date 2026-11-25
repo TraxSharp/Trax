@@ -156,13 +156,24 @@ internal static partial class KubernetesTarget
     /// refuses a privileged container and the host's network, PID and IPC namespaces, as baseline does, and
     /// <c>runAsUser</c> 61000 (the uid the rules let out) on the pod or on any container but the egress sidecar. It
     /// applies to every pod created or changed in the namespace, an ephemeral container added for debugging included.
+    /// <paramref name="previous"/> are egress images the services ran before this deploy: their pods are still
+    /// created while the services roll and when they roll back, so the deployer allows them until the roll succeeds.
     /// </summary>
     public static IReadOnlyList<IKubernetesObject<V1ObjectMeta>> EgressAdmission(
         DeployFile file,
         string ns,
-        string image
+        string image,
+        IEnumerable<string>? previous = null
     )
     {
+        List<string> images =
+        [
+            image,
+            .. (previous ?? [])
+                .Where(p => !string.Equals(p, image, StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal),
+        ];
         var name = EgressAdmissionName(ns);
         var labels = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -175,7 +186,7 @@ internal static partial class KubernetesTarget
             ApiVersion = "admissionregistration.k8s.io/v1",
             Kind = "ValidatingAdmissionPolicy",
             Metadata = new V1ObjectMeta { Name = name, Labels = labels },
-            Spec = AdmissionPolicySpec(image),
+            Spec = AdmissionPolicySpec(images),
         };
         var binding = new V1ValidatingAdmissionPolicyBinding
         {
@@ -205,7 +216,9 @@ internal static partial class KubernetesTarget
         return [policy, binding];
     }
 
-    private static V1ValidatingAdmissionPolicySpec AdmissionPolicySpec(string image) =>
+    private static V1ValidatingAdmissionPolicySpec AdmissionPolicySpec(
+        IReadOnlyList<string> images
+    ) =>
         new V1ValidatingAdmissionPolicySpec
         {
             FailurePolicy = "Fail",
@@ -239,18 +252,56 @@ internal static partial class KubernetesTarget
                 },
                 new V1Variable
                 {
+                    Name = "egressImages",
+                    Expression = $"[{string.Join(", ", images.Select(i => $"'{i}'"))}]",
+                },
+                new V1Variable
+                {
                     Name = "baseline",
                     Expression =
                         $"[{string.Join(", ", BaselineCapabilities.Select(c => $"'{c}'"))}]",
                 },
             ],
-            Validations = AdmissionValidations(image),
+            Validations = AdmissionValidations(images[0]),
         };
 
     /// <summary>A container's added capabilities in CEL, or an empty list when it adds none.</summary>
     private const string Adds =
         "(has(c.securityContext) && has(c.securityContext.capabilities) && "
         + "has(c.securityContext.capabilities.add) ? c.securityContext.capabilities.add : [])";
+
+    /// <summary>
+    /// The egress images <paramref name="deployments"/> run their rules with, as they were before a deploy. The
+    /// deployer allows them beside the new one while the services roll.
+    /// </summary>
+    public static IReadOnlyList<string> EgressImagesOf(IEnumerable<V1Deployment?> deployments) =>
+        [
+            .. deployments
+                .SelectMany(d => d?.Spec?.Template?.Spec?.InitContainers ?? [])
+                .Where(c =>
+                    string.Equals(c.Name, DeployEgress.RulesContainer, StringComparison.Ordinal)
+                    && !string.IsNullOrEmpty(c.Image)
+                )
+                .Select(c => c.Image)
+                .Distinct(StringComparer.Ordinal),
+        ];
+
+    /// <summary>
+    /// The admission objects to apply before the services roll: <paramref name="manifests"/>' own, or, when the
+    /// services ran another egress image before, the same policy allowing that image too.
+    /// </summary>
+    public static IReadOnlyList<IKubernetesObject<V1ObjectMeta>> EgressAdmissionWhileRolling(
+        DeployFile file,
+        KubernetesManifests manifests,
+        IReadOnlyList<string> previous
+    )
+    {
+        if (manifests.Admission.Count == 0 || EgressImageOf(file) is not { } image)
+            return manifests.Admission;
+        return previous.All(p => string.Equals(p, image, StringComparison.Ordinal))
+            ? manifests.Admission
+            : EgressAdmission(file, manifests.NamespaceName, image, previous);
+    }
 
     /// <summary>The egress uid, as the policy writes it.</summary>
     private static string EgressUid => DeployEgress.Uid.ToString(CultureInfo.InvariantCulture);
@@ -273,7 +324,7 @@ internal static partial class KubernetesTarget
             {
                 Expression =
                     $"variables.inits.all(c, {Adds}.all(a, a in variables.baseline) || "
-                    + $"(c.name == '{DeployEgress.RulesContainer}' && c.image == '{image}' && "
+                    + $"(c.name == '{DeployEgress.RulesContainer}' && c.image in variables.egressImages && "
                     + $"!has(c.command) && has(c.args) && c.args == ['{DeployEgress.RulesCommand}'] && "
                     + $"!has(c.restartPolicy) && {Adds} == ['NET_ADMIN']))",
                 Message =
@@ -304,7 +355,7 @@ internal static partial class KubernetesTarget
                     + $"object.spec.securityContext.runAsUser != {EgressUid}) && "
                     + $"variables.containers.all(c, {NotEgressUid}) && "
                     + $"variables.inits.all(c, {NotEgressUid} || "
-                    + $"(c.name == '{DeployEgress.SidecarContainer}' && c.image == '{image}' && "
+                    + $"(c.name == '{DeployEgress.SidecarContainer}' && c.image in variables.egressImages && "
                     + $"!has(c.command) && has(c.args) && c.args == ['{DeployEgress.ServeCommand}'] && "
                     + "has(c.restartPolicy) && c.restartPolicy == 'Always'))",
                 Message =

@@ -1131,7 +1131,10 @@ to create them; Kubernetes 1.30 or later). On every pod created or changed there
 - a container or ephemeral container that adds a capability outside the `baseline` set (`NET_ADMIN` among them);
 - an init container that adds one, unless it is named `egress-rules`, runs exactly the egress image trax rendered
   (by digest) with its own entrypoint and the one argument `rules`, is not a sidecar, and adds `NET_ADMIN` and
-  nothing else;
+  nothing else. When the services ran another egress image before (after a trax upgrade or an `egressImage`
+  change), the deploy allows that one too until the services have rolled, so the old version's pods can still be
+  created during the roll and on a rollback. A roll that succeeds narrows it to the new image; one that rolls back
+  leaves both until the next deploy;
 - a privileged container, and a pod on the node's network, PID or IPC namespace;
 - a pod or container that sets `runAsUser: 61000`, the uid the egress rules let out, other than the `egress`
   sidecar trax rendered.

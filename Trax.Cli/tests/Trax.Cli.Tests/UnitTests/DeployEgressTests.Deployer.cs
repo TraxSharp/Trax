@@ -1,4 +1,6 @@
 using AwesomeAssertions;
+using k8s.Models;
+using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Kubernetes;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -61,6 +63,100 @@ public partial class DeployEgressTests
                     c.StartsWith("apply NetworkPolicy/", StringComparison.Ordinal)
                 )
             );
+    }
+
+    private const string PreviousImage =
+        "ghcr.io/traxsharp/trax-egress@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+
+    /// <summary>The hub as an earlier deploy left it: held by the egress image <paramref name="image"/>.</summary>
+    private static V1Deployment HeldBefore(string image) =>
+        new()
+        {
+            ApiVersion = "apps/v1",
+            Kind = "Deployment",
+            Metadata = new V1ObjectMeta
+            {
+                Name = "hub",
+                NamespaceProperty = "orders-staging",
+                Labels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [KubernetesTarget.AppLabel] = "orders",
+                },
+            },
+            Spec = new V1DeploymentSpec
+            {
+                Replicas = 1,
+                Template = new V1PodTemplateSpec
+                {
+                    Spec = new V1PodSpec
+                    {
+                        InitContainers =
+                        [
+                            new V1Container { Name = DeployEgress.RulesContainer, Image = image },
+                            new V1Container { Name = DeployEgress.SidecarContainer, Image = image },
+                        ],
+                        Containers = [new V1Container { Name = "hub", Image = "orders-hub:old" }],
+                    },
+                },
+            },
+        };
+
+    private static string EgressImages(V1ValidatingAdmissionPolicy policy) =>
+        policy
+            .Spec.Variables.Single(v =>
+                string.Equals(v.Name, "egressImages", StringComparison.Ordinal)
+            )
+            .Expression;
+
+    [Test]
+    public async Task The_deployer_allows_the_previous_egress_image_while_the_services_roll_then_narrows()
+    {
+        var (deployer, cluster) = Deployer();
+        cluster.Deployments["hub"] = HeldBefore(PreviousImage);
+
+        await Deploy(deployer);
+
+        var policies = cluster.Applied.OfType<V1ValidatingAdmissionPolicy>().ToList();
+        policies.Should().HaveCount(2);
+        EgressImages(policies[0])
+            .Should()
+            .Contain(Image)
+            .And.Contain(PreviousImage, "the old pods are still created while the roll runs");
+        EgressImages(policies[1]).Should().Be($"['{Image}']");
+        var calls = cluster.Calls;
+        calls
+            .LastIndexOf("apply ValidatingAdmissionPolicy/trax-egress-orders-staging")
+            .Should()
+            .BeGreaterThan(calls.LastIndexOf("wait Deployment/hub"));
+    }
+
+    [Test]
+    public async Task A_rolled_back_deploy_leaves_the_previous_egress_image_allowed()
+    {
+        var (deployer, cluster) = Deployer();
+        cluster.Deployments["hub"] = HeldBefore(PreviousImage);
+        cluster.FailRollout = "Deployment/hub";
+
+        await FluentActions
+            .Awaiting(() => Deploy(deployer))
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*rolled back*");
+
+        EgressImages(cluster.Applied.OfType<V1ValidatingAdmissionPolicy>().Last())
+            .Should()
+            .Contain(PreviousImage);
+    }
+
+    [Test]
+    public async Task A_deploy_on_the_same_egress_image_applies_the_policy_once()
+    {
+        var (deployer, cluster) = Deployer();
+        cluster.Deployments["hub"] = HeldBefore(Image);
+
+        await Deploy(deployer);
+
+        cluster.Applied.OfType<V1ValidatingAdmissionPolicy>().Should().ContainSingle();
     }
 
     [Test]

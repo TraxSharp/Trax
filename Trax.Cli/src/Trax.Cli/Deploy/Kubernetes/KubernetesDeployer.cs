@@ -56,8 +56,7 @@ internal sealed class KubernetesDeployer(
             await PublishImagesAsync(file, filePath, env, tag).ConfigureAwait(false);
 
         // Before any pod: the admission policy is what refuses NET_ADMIN to every container but the egress rules.
-        await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Admission, ct)
-            .ConfigureAwait(false);
+        var admission = await ApplyEgressAdmissionAsync(file, manifests, ct).ConfigureAwait(false);
         // The network policies go first, so the in-cluster database and broker are never up without them.
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Policies, ct)
             .ConfigureAwait(false);
@@ -86,12 +85,52 @@ internal sealed class KubernetesDeployer(
             var resumed = drained ? await ResumeAsync(manifests, ct).ConfigureAwait(false) : "";
             throw new InvalidOperationException($"{failed.Message} {rolledBack}{resumed}", failed);
         }
+        if (!ReferenceEquals(admission, manifests.Admission))
+            await NarrowEgressAdmissionAsync(manifests, ct).ConfigureAwait(false);
         if (drained)
         {
             var resumed = await ResumeAsync(manifests, ct).ConfigureAwait(false);
             if (resumed.Length > 0)
                 say(resumed.Trim());
         }
+    }
+
+    /// <summary>
+    /// Applies the egress admission policy. Until the services have rolled it also allows the egress image they ran
+    /// before, whose pods a roll and a rollback still create; <see cref="NarrowEgressAdmissionAsync"/> takes that
+    /// away once they are up. Returns what it applied.
+    /// </summary>
+    private async Task<
+        IReadOnlyList<k8s.IKubernetesObject<V1ObjectMeta>>
+    > ApplyEgressAdmissionAsync(
+        DeployFile file,
+        KubernetesManifests manifests,
+        CancellationToken ct
+    )
+    {
+        var admission = manifests.Admission;
+        if (admission.Count > 0)
+        {
+            var before = await DeploymentsBeforeAsync(manifests, ct).ConfigureAwait(false);
+            admission = KubernetesTarget.EgressAdmissionWhileRolling(
+                file,
+                manifests,
+                KubernetesTarget.EgressImagesOf(before.Values)
+            );
+        }
+        await ApplyAndWaitAsync(manifests.NamespaceName, admission, ct).ConfigureAwait(false);
+        return admission;
+    }
+
+    /// <summary>Puts the egress admission policy back to this deploy's image alone, once the services are up.</summary>
+    private async Task NarrowEgressAdmissionAsync(
+        KubernetesManifests manifests,
+        CancellationToken ct
+    )
+    {
+        say("Allowing only this deploy's egress image...");
+        await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Admission, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>

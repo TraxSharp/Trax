@@ -244,7 +244,7 @@ public partial class DeployEgressTests
         inits
             .Should()
             .Contain("c.name == 'egress-rules'")
-            .And.Contain($"c.image == '{Image}'")
+            .And.Contain("c.image in variables.egressImages")
             .And.Contain("!has(c.command)")
             .And.Contain("c.args == ['rules']")
             .And.Contain("!has(c.restartPolicy)")
@@ -256,6 +256,31 @@ public partial class DeployEgressTests
             .Expression.Should()
             .Contain("hostNetwork")
             .And.Contain("hostPID");
+    }
+
+    [Test]
+    public void The_policy_names_the_egress_images_it_allows_this_one_first()
+    {
+        var images = (V1ValidatingAdmissionPolicy policy) =>
+            policy
+                .Spec.Variables.Single(v =>
+                    string.Equals(v.Name, "egressImages", StringComparison.Ordinal)
+                )
+                .Expression;
+        const string previous =
+            "ghcr.io/traxsharp/trax-egress@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+
+        images(Cluster().Admission.OfType<V1ValidatingAdmissionPolicy>().Single())
+            .Should()
+            .Be($"['{Image}']");
+        images(
+                KubernetesTarget
+                    .EgressAdmission(Held(), "orders-staging", Image, [previous, Image])
+                    .OfType<V1ValidatingAdmissionPolicy>()
+                    .Single()
+            )
+            .Should()
+            .Be($"['{Image}', '{previous}']");
     }
 
     [Test]
@@ -272,7 +297,7 @@ public partial class DeployEgressTests
             .And.Contain("variables.containers.all(c, ")
             .And.Contain("variables.inits.all(c, ")
             .And.Contain("c.name == 'egress'")
-            .And.Contain($"c.image == '{Image}'")
+            .And.Contain("c.image in variables.egressImages")
             .And.Contain("c.args == ['serve']")
             .And.Contain("c.restartPolicy == 'Always'");
         uid.Message.Should().Contain("61000");

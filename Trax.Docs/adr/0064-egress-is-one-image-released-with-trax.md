@@ -56,7 +56,9 @@ domains, which is what an app that calls one model API and one package feed need
   container, init containers included, so a namespace with egress cannot be held by PSA. The policy allows
   NET_ADMIN only on an init container named `egress-rules` running this image's digest with no command and the
   argument `rules`, and refuses it (and any capability outside the baseline set) everywhere else. It refuses
-  `runAsUser: 61000` to every container but the egress sidecar.
+  `runAsUser: 61000` to every container but the egress sidecar. While a deploy that changes the egress image rolls
+  the services, the policy allows the image they ran before as well, since a roll and a rollback still create the
+  old version's pods; a roll that succeeds narrows it to the new image.
 - **ECS refuses `"egress"`.** Fargate allows no NET_ADMIN, so the rules cannot be applied; the Kubernetes target
   on EKS is the way to limit a service on AWS.
 
@@ -110,3 +112,4 @@ container adding `SYS_PTRACE`.
 - **2026-11-25**: A ClientHello carrying ECH or ESNI is refused; the outer name was not a safe thing to decide on.
 - **2026-11-25**: Said that a `tcp:` entry is an address allowlist, for single-tenant destinations only.
 - **2026-11-25**: The admission policy refuses the egress uid to every container but the sidecar.
+- **2026-11-25**: The admission policy allows the previous egress image while the services roll.
