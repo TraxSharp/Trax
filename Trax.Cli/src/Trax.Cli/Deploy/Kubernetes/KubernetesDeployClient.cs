@@ -107,6 +107,17 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         );
     }
 
+    public async Task<string?> ProxySecretAsync(string ns, string name, CancellationToken ct)
+    {
+        var secret = await OrNull(() =>
+                _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct)
+            )
+            .ConfigureAwait(false);
+        return secret?.Data?.TryGetValue(KubernetesTailnet.ProxySecretKey, out var value) is true
+            ? System.Text.Encoding.UTF8.GetString(value)
+            : null;
+    }
+
     public async Task<IReadOnlyList<KubernetesObjectState>> ListAsync(
         string ns,
         CancellationToken ct

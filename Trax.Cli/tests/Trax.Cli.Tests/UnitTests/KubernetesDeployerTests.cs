@@ -248,7 +248,7 @@ public class KubernetesDeployerTests
         cluster.Calls.Should().NotContain("wait Deployment/reports");
     }
 
-    private static V1Deployment Running(string name, string image) =>
+    internal static V1Deployment Running(string name, string image) =>
         new()
         {
             ApiVersion = "apps/v1",
@@ -548,6 +548,15 @@ public class KubernetesDeployerTests
             return Task.FromResult<IReadOnlyDictionary<string, string>?>(
                 SecretLabels.GetValueOrDefault(name)
             );
+        }
+
+        /// <summary>The value of each tailnet proxy Secret by name, as an earlier deploy wrote it.</summary>
+        public Dictionary<string, string> ProxySecrets { get; } = new(StringComparer.Ordinal);
+
+        public Task<string?> ProxySecretAsync(string ns, string name, CancellationToken ct)
+        {
+            Calls.Add($"read-proxy-secret {name}");
+            return Task.FromResult(ProxySecrets.GetValueOrDefault(name));
         }
 
         public Task<IReadOnlyList<KubernetesObjectState>> ListAsync(string ns, CancellationToken ct)

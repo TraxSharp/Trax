@@ -63,7 +63,8 @@ internal sealed class KubernetesDeployer(
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Backing, ct)
             .ConfigureAwait(false);
         await MigrateAsync(environment, manifests, ct).ConfigureAwait(false);
-        await RotateProxySecretAsync(file, manifests, ct).ConfigureAwait(false);
+        var proxySecretBefore = await RotateProxySecretAsync(file, manifests, ct)
+            .ConfigureAwait(false);
 
         var before = await DeploymentsBeforeAsync(manifests, ct).ConfigureAwait(false);
         // A first deploy has nothing running to drain.
@@ -80,7 +81,10 @@ internal sealed class KubernetesDeployer(
         }
         catch (InvalidOperationException failed) when (!ct.IsCancellationRequested)
         {
-            var rolledBack = await RollBackAsync(manifests.NamespaceName, before, ct)
+            var proxySecret = proxySecretBefore is null
+                ? null
+                : ProxySecret(file, manifests, proxySecretBefore);
+            var rolledBack = await RollBackAsync(manifests.NamespaceName, before, proxySecret, ct)
                 .ConfigureAwait(false);
             var resumed = drained ? await ResumeAsync(manifests, ct).ConfigureAwait(false) : "";
             throw new InvalidOperationException($"{failed.Message} {rolledBack}{resumed}", failed);
@@ -195,44 +199,53 @@ internal sealed class KubernetesDeployer(
 
     /// <summary>
     /// On a tailnet exposure, writes a new proxy secret to its Secret, which the hub and the edge both restart onto
-    /// in this rollout. <see cref="PrepareNamespaceAsync"/> has refused a Secret of that name trax did not write.
+    /// in this rollout, and returns the value it replaced, or null. <see cref="PrepareNamespaceAsync"/> has refused a
+    /// Secret of that name trax did not write.
     /// </summary>
-    private async Task RotateProxySecretAsync(
+    private async Task<string?> RotateProxySecretAsync(
         DeployFile file,
         KubernetesManifests manifests,
         CancellationToken ct
     )
     {
         if (manifests.ProxySecretName is not { } name)
-            return;
-        var ns = manifests.NamespaceName;
+            return null;
+        var previous = await cluster
+            .ProxySecretAsync(manifests.NamespaceName, name, ct)
+            .ConfigureAwait(false);
         say($"Rotating the tailnet proxy's secret ({name})...");
         await cluster
-            .ApplyAsync(
-                new V1Secret
-                {
-                    ApiVersion = "v1",
-                    Kind = "Secret",
-                    Type = "Opaque",
-                    Metadata = new V1ObjectMeta
-                    {
-                        Name = name,
-                        NamespaceProperty = ns,
-                        Labels = new Dictionary<string, string>(StringComparer.Ordinal)
-                        {
-                            [KubernetesTarget.ManagedByLabel] = KubernetesTarget.ManagedBy,
-                            [KubernetesTarget.AppLabel] = file.App,
-                        },
-                    },
-                    StringData = new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        [KubernetesTailnet.ProxySecretKey] = _mintProxySecret(),
-                    },
-                },
-                ct
-            )
+            .ApplyAsync(ProxySecret(file, manifests, _mintProxySecret()), ct)
             .ConfigureAwait(false);
+        return previous;
     }
+
+    /// <summary>The tailnet proxy's Secret holding <paramref name="value"/>.</summary>
+    private static V1Secret ProxySecret(
+        DeployFile file,
+        KubernetesManifests manifests,
+        string value
+    ) =>
+        new()
+        {
+            ApiVersion = "v1",
+            Kind = "Secret",
+            Type = "Opaque",
+            Metadata = new V1ObjectMeta
+            {
+                Name = manifests.ProxySecretName,
+                NamespaceProperty = manifests.NamespaceName,
+                Labels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [KubernetesTarget.ManagedByLabel] = KubernetesTarget.ManagedBy,
+                    [KubernetesTarget.AppLabel] = file.App,
+                },
+            },
+            StringData = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [KubernetesTailnet.ProxySecretKey] = value,
+            },
+        };
 
     /// <summary>
     /// The Deployment each rendered service had before this deploy changes it, by name, or null for one this deploy
@@ -255,11 +268,14 @@ internal sealed class KubernetesDeployer(
     /// Puts every service back as it was before this deploy: a Deployment that existed gets its earlier spec (its pod
     /// template, copies and strategy) applied again and is waited on; one this deploy created is deleted. A first deploy,
     /// with nothing to go back to, is left as it is. The migration is not undone: a migration must leave the version
-    /// before it working, since that version serves while it runs. Returns the sentence the failure ends with.
+    /// before it working, since that version serves while it runs. On a tailnet exposure the proxy secret this deploy
+    /// replaced, <paramref name="proxySecret"/>, goes back first: the old hub still holds it, and the edge restored
+    /// beside it reads the Secret as it starts. Returns the sentence the failure ends with.
     /// </summary>
     private async Task<string> RollBackAsync(
         string ns,
         IReadOnlyDictionary<string, V1Deployment?> before,
+        V1Secret? proxySecret,
         CancellationToken ct
     )
     {
@@ -268,6 +284,8 @@ internal sealed class KubernetesDeployer(
         say("Rolling the services back to the version before this deploy...");
         try
         {
+            if (proxySecret is not null)
+                await cluster.ApplyAsync(proxySecret, ct).ConfigureAwait(false);
             foreach (var (name, previous) in before)
                 if (previous is null)
                     await cluster

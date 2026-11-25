@@ -614,6 +614,76 @@ public class DeployTailnetTests
     }
 
     [Test]
+    public async Task A_rollback_puts_back_the_proxy_secret_the_old_hub_was_started_with()
+    {
+        var cluster = RollingBackCluster();
+        cluster.ProxySecrets["orders-staging-tailnet"] = "old-secret";
+        var deployer = new KubernetesDeployer(
+            cluster,
+            new KubernetesDeployerTests.FakeImages(),
+            _ => { },
+            () => "new-secret"
+        );
+
+        var act = () => Deploy(deployer);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*rolled back*");
+        cluster
+            .Applied.OfType<V1Secret>()
+            .Select(s => s.StringData[KubernetesTailnet.ProxySecretKey])
+            .Should()
+            .Equal("new-secret", "old-secret");
+        var calls = cluster.Calls;
+        var restored = calls.LastIndexOf("apply Secret/orders-staging-tailnet");
+        restored
+            .Should()
+            .BeGreaterThan(calls.IndexOf("wait Deployment/hub"))
+            .And.BeLessThan(calls.LastIndexOf("apply Deployment/tailnet"))
+            .And.BeLessThan(calls.LastIndexOf("apply Deployment/hub"));
+    }
+
+    [Test]
+    public async Task A_rollback_with_no_earlier_proxy_secret_leaves_the_new_one()
+    {
+        var cluster = RollingBackCluster();
+        var deployer = new KubernetesDeployer(
+            cluster,
+            new KubernetesDeployerTests.FakeImages(),
+            _ => { },
+            () => "new-secret"
+        );
+
+        var act = () => Deploy(deployer);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*rolled back*");
+        cluster
+            .Applied.OfType<V1Secret>()
+            .Select(s => s.StringData[KubernetesTailnet.ProxySecretKey])
+            .Should()
+            .Equal("new-secret");
+    }
+
+    /// <summary>A cluster running the hub and the edge from an earlier deploy, where the new hub never rolls out.</summary>
+    private static KubernetesDeployerTests.FakeCluster RollingBackCluster()
+    {
+        var cluster = new KubernetesDeployerTests.FakeCluster
+        {
+            SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"],
+            FailRollout = "Deployment/hub",
+        };
+        cluster.SecretLabels["orders-staging-tailnet"] = new(StringComparer.Ordinal)
+        {
+            ["trax/app"] = "orders",
+        };
+        cluster.Deployments["hub"] = KubernetesDeployerTests.Running("hub", "orders-hub:old");
+        cluster.Deployments[KubernetesTailnet.EdgeName] = KubernetesDeployerTests.Running(
+            KubernetesTailnet.EdgeName,
+            KubernetesTailnet.CaddyImage
+        );
+        return cluster;
+    }
+
+    [Test]
     public void Two_minted_secrets_differ_and_are_long_enough()
     {
         var a = KubernetesTailnet.MintSecret();

@@ -63,7 +63,9 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
 
 - A cluster needs the Tailscale operator in its standalone mode; its HA `ProxyGroup` labels pods differently and the
   edge's policy would admit nothing.
-- A deploy rotates the secret and restarts the hub and the edge; requests in the seconds between are anonymous.
+- A deploy rotates the secret and restarts the hub and the edge; requests in the seconds between are anonymous. A
+  deploy that rolls back writes the replaced value back first, so the old hub and the restored edge agree; trax reads
+  that one value back from the cluster, since nothing else holds it.
 - A subscription socket sees the tailnet caller only when the host makes the scheme its default.
 - Every kubernetes environment now runs under default-deny ingress, exposed or not.
 
@@ -86,3 +88,4 @@ origin in.
   a Unix socket: userspace tailscaled forwards a tailnet connection serve does not take to loopback.
 - **2026-11-25**: The scheme refuses a default CORS policy that lets any origin in, since the login is an ambient
   credential.
+- **2026-11-25**: A rollback writes the replaced proxy secret back before it restores the Deployments.

@@ -1208,7 +1208,9 @@ Beside the app it renders:
 
 trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the migration
 and before the services; the hub and the edge both restart onto it in the same rollout, so for those seconds a
-signed-in request is anonymous. A Secret of that name that trax did not write is refused. Workers and the migrate
+signed-in request is anonymous. A deploy that rolls back writes the value it replaced back before it restores the
+Deployments, so the old hub and the edge put back beside it hold the same one. A Secret of that name that trax did
+not write is refused. Workers and the migrate
 Job never see it.
 
 A hub that signs people in by tailnet identity

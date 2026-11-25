@@ -39,6 +39,13 @@ internal interface IKubernetesDeployClient
     );
 
     /// <summary>
+    /// The tailnet proxy secret an earlier deploy wrote (the <see cref="KubernetesTailnet.ProxySecretKey"/> of
+    /// <paramref name="name"/>), or null when there is none. The one Secret value trax reads back: one it minted
+    /// itself, so a rollback can give it back to the hub that still holds it.
+    /// </summary>
+    Task<string?> ProxySecretAsync(string ns, string name, CancellationToken ct);
+
+    /// <summary>
     /// The Deployments, StatefulSets, Services, Jobs, ServiceAccounts, SecurityGroupPolicies, PersistentVolumeClaims,
     /// NetworkPolicies, ConfigMaps and Ingresses in the namespace.
     /// </summary>

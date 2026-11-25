@@ -120,7 +120,8 @@ Each step is where it is for a reason:
 - **A rollback** happens when a service does not roll out: a pod that can never start, or a Deployment that makes no
   progress for five minutes (`progressDeadlineSeconds: 300`). Every Deployment that existed gets its earlier spec
   back, and one this deploy created is deleted, as ECS's circuit breaker does. A first deploy has nothing to go back
-  to.
+  to. On a tailnet exposure the proxy secret this deploy replaced is written back first, since the old hub still
+  holds it and the edge put back beside it reads the Secret as it starts.
 - **The resume Job** ends the drain, after a rollback too. A hub that starts ends it as well, so a resume that fails
   does not undo the deploy, and a drain a deploy left behind (Ctrl-C, a crash) lapses on its own after its timeout
   plus ten minutes.
