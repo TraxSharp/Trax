@@ -76,11 +76,18 @@ timeout unless it is cancelled or the deploy is forced.
 - `AwsDrainTests` pins the same order on ECS, the task overrides and the 120-second `StopTimeout`.
 - `ComposeDrainTests` and `PodmanDrainTests` pin the compose services and the podman install order.
 - [CLI](/docs/reference/cli#drain-before-a-rollout) states it for users.
+- `.github/ci/deploy/cluster.sh`, in the `deploy-cluster` CI job, deploys to k3s: the drain Job holds the roll over
+  a run InProgress, the hub then rolls with two pods at once while a probe through the Service never fails, the run
+  is left as it was ended and the drain row is gone.
+- `.github/ci/deploy/podman.sh`, in the same job, does the same under the podman runtime: the drain pod holds the
+  restart until the run ends, and Postgres and RabbitMQ keep running.
 
-Not covered: a real cluster, ECS or compose run; none runs in CI.
+Not covered: a real ECS run. `.github/ci/deploy/compose.sh` runs the compose release over a live run the same way,
+but no CI job runs it yet.
 
 ## Changelog
 
+- **2026-11-25**: Exemplars name the deploy proofs in `.github/ci/deploy/`.
 - **2026-11-25**: The drain holds through the whole roll. A scheduler host that starts while drained skips its
   stuck-run recovery and no longer ends the drain; the resume after every service has rolled does.
 - **2026-11-25**: Compose releases in three commands. A run of the stack under podman compose (docker-compose 2.26)
