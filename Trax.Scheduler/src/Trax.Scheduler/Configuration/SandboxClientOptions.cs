@@ -14,8 +14,27 @@ namespace Trax.Scheduler.Configuration;
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-sandbox">SDK reference</seealso>
 public sealed class SandboxClientOptions
 {
-    /// <summary>The default most bytes of an answer: 128 MiB, room for the default archive in base64.</summary>
-    public const long DefaultMaxResponseBodyBytes = 128L * 1024 * 1024;
+    private const long DefaultArchiveBytes = 64L * 1024 * 1024;
+    private const int DefaultArchiveFiles = 10_000;
+
+    /// <summary>The launcher's default <c>MaxResultBytes</c>.</summary>
+    private const long LauncherResultBytes = 16L * 1024 * 1024;
+
+    /// <summary>
+    /// The default most bytes of an answer, about 234 MiB: room for the largest answer the
+    /// launcher's default caps allow. That is the tar of its files, framing included, in base64,
+    /// plus its result, which the wire's JSON may escape to six bytes for one, plus a MiB.
+    /// </summary>
+    public const long DefaultMaxResponseBodyBytes =
+        (
+            DefaultArchiveBytes
+            + (DefaultArchiveFiles + 4L) * SandboxArchiveLimits.OverheadPerEntry
+            + 2
+        )
+            / 3
+            * 4
+        + 6 * LauncherResultBytes
+        + 1024 * 1024;
 
     /// <summary>
     /// The launcher's Unix socket, on one host. The socket's file permissions decide which local
@@ -46,7 +65,8 @@ public sealed class SandboxClientOptions
     /// The most file bytes, and files, accepted from a sandbox's output, checked again here after
     /// the launcher checked them. Keep them at or above the launcher's.
     /// </summary>
-    public SandboxArchiveLimits Archive { get; set; } = new(64L * 1024 * 1024, 10_000);
+    public SandboxArchiveLimits Archive { get; set; } =
+        new(DefaultArchiveBytes, DefaultArchiveFiles);
 
     /// <summary>
     /// How long past the train's own timeout the hub waits for the launcher's answer: the time to

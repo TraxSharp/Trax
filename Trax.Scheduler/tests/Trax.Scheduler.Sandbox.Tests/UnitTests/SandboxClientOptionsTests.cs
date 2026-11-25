@@ -1,4 +1,7 @@
+using System.Text.Json;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Sandbox.Launcher.Configuration;
+using Trax.Scheduler.Services.Sandbox;
 
 namespace Trax.Scheduler.Sandbox.Tests.UnitTests;
 
@@ -164,5 +167,41 @@ public class SandboxClientOptionsTests
             .Should()
             .Throw<InvalidOperationException>()
             .WithMessage("*ResponseGrace*");
+    }
+
+    [Test]
+    public void DefaultMaxResponseBodyBytes_FitsTheLargestAnswerTheLaunchersDefaultsAllow()
+    {
+        var caps = new SandboxCaps();
+        // The launcher's tar of the files it returns, framing and all, in base64.
+        var tar = new SandboxArchiveLimits(
+            caps.MaxArchiveBytes,
+            caps.MaxArchiveFiles + 2
+        ).MaxRawBytes;
+        var archive = (tar + 2) / 3 * 4;
+        // A result's every character can come out of the wire's JSON as a six-byte escape.
+        var result = "\"" + new string('<', 1000) + "\"";
+        var escaped = JsonSerializer
+            .SerializeToUtf8Bytes(
+                new SandboxRunResponse(
+                    new string('0', 32),
+                    SandboxOutcome.Completed,
+                    Reason: null,
+                    ResultJson: result,
+                    Archive: null
+                ),
+                SandboxJson.Options
+            )
+            .Length;
+        escaped
+            .Should()
+            .BeLessThanOrEqualTo(6 * result.Length + 256, "the escape factor below is six");
+
+        SandboxClientOptions
+            .DefaultMaxResponseBodyBytes.Should()
+            .BeGreaterThanOrEqualTo(archive + 6L * caps.MaxResultBytes + 1024);
+        new SandboxClientOptions()
+            .Archive.Should()
+            .Be(new SandboxArchiveLimits(caps.MaxArchiveBytes, caps.MaxArchiveFiles));
     }
 }

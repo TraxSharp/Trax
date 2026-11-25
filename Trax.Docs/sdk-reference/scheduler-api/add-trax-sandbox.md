@@ -62,7 +62,7 @@ public interface ITraxSandbox
 | `LauncherUrl` | `string?` | | The launcher's base URL, on a cluster. `https://` unless its host is loopback or `AllowInsecureTransport` is set. |
 | `AllowInsecureTransport` | `bool` | `false` | Accepts `http://` to a host that is not loopback. Answers are signed either way; the input and output cross in cleartext. |
 | `SigningKey` | `byte[]?` | | The key shared with the launcher, at least 32 bytes. Required. |
-| `MaxResponseBodyBytes` | `long` | `DefaultMaxResponseBodyBytes` (128 MiB) | The most bytes of an answer read; a larger one fails the run unread. |
+| `MaxResponseBodyBytes` | `long` | `DefaultMaxResponseBodyBytes` (about 234 MiB) | The most bytes of an answer read; a larger one fails the run unread. The default fits the largest answer the launcher's default caps allow: its files as a base64 tar and its result, which the wire may escape to six bytes for one. Raise it with the launcher's `MaxArchiveBytes`, `MaxArchiveFiles` or `MaxResultBytes`. |
 | `Archive` | `SandboxArchiveLimits` | 64 MiB, 10000 entries | The caps the hub checks the returned files against again. Keep them at or above the launcher's. |
 | `ResponseGrace` | `TimeSpan` | 2 minutes | How long past the train's own timeout the hub waits, for starting and collecting the sandbox. At most a day. |
 
