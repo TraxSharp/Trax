@@ -33,17 +33,8 @@ public class DrainBrowserTests : ConsoleTest
                 .ConfigureAwait(false);
 
             await panel.GetByLabel("Drain for (minutes)").FillAsync("3").ConfigureAwait(false);
-            await panel
-                .GetByRole(AriaRole.Button, new() { Name = "Drain", Exact = true })
-                .ClickAsync()
+            await ConfirmAsync(panel, "Drain", "Drain every host", "DrainHosts")
                 .ConfigureAwait(false);
-            var drained = Console.SendsAsync("DrainHosts");
-            await Console
-                .Dialog("Drain every host")
-                .GetByRole(AriaRole.Button, new() { Name = "Drain", Exact = true })
-                .ClickAsync()
-                .ConfigureAwait(false);
-            await drained.ConfigureAwait(false);
 
             await Assertions
                 .Expect(panel.GetByText("Drained", new() { Exact = true }))
@@ -60,17 +51,8 @@ public class DrainBrowserTests : ConsoleTest
                     "a drain lasts the minutes it was given"
                 );
 
-            await panel
-                .GetByRole(AriaRole.Button, new() { Name = "Resume", Exact = true })
-                .ClickAsync()
+            await ConfirmAsync(panel, "Resume", "Resume every host", "ResumeHosts")
                 .ConfigureAwait(false);
-            var resumed = Console.SendsAsync("ResumeHosts");
-            await Console
-                .Dialog("Resume every host")
-                .GetByRole(AriaRole.Button, new() { Name = "Resume", Exact = true })
-                .ClickAsync()
-                .ConfigureAwait(false);
-            await resumed.ConfigureAwait(false);
 
             await Assertions
                 .Expect(panel.GetByText("Taking work"))
@@ -89,6 +71,22 @@ public class DrainBrowserTests : ConsoleTest
                     .EndDrainAsync(CancellationToken.None)
                     .ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Clicks the panel's button, confirms it in the console's dialog, and waits for the operation it sends.</summary>
+    private async Task ConfirmAsync(ILocator panel, string button, string dialog, string operation)
+    {
+        await panel
+            .GetByRole(AriaRole.Button, new() { Name = button, Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        var sent = Console.SendsAsync(operation);
+        await Console
+            .Dialog(dialog)
+            .GetByRole(AriaRole.Button, new() { Name = button, Exact = true })
+            .ClickAsync()
+            .ConfigureAwait(false);
+        await sent.ConfigureAwait(false);
     }
 
     private static async Task<DrainStatus> DrainAsync()
