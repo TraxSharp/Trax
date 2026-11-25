@@ -1259,7 +1259,8 @@ jobs:
   # systemd --user, with the DistributedWorkers sample as the app: a hub, workers, Postgres and RabbitMQ
   # (.github/ci/deploy/README.md says what each proves).
   # Not kind: its nodes are containers and cannot run pods with hostUsers: false, which every Trax pod has.
-  # It runs when the deploy code or the fixture changes, and on every push and release.
+  # On a pull request it runs when the deploy code, the drain it proves or the fixture changes
+  # (its paths in packages.json); a release or a dispatch always runs it.
   deploy-cluster:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'deploy-cluster')
@@ -1396,8 +1397,9 @@ jobs:
           [ "$(podman run --rm --platform linux/arm64 localhost/trax-egress:ci-arm64 version)" = ci ]
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
-  # that adds pull requests' release notes. Its tests take seconds and read no folder, so they
-  # run on every pull request rather than through the change detection.
+  # that adds pull requests' release notes, and the tests of the change detection in .github/scripts.
+  # They take seconds and read no folder, so they run on every pull request rather than through the
+  # change detection.
   release-tooling:
     runs-on: ubuntu-latest
     timeout-minutes: 5

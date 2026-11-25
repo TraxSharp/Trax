@@ -134,6 +134,15 @@
         "Trax.Samples/samples/DistributedWorkers/",
         "Trax.Effect/src/Trax.Effect.Broadcaster.RabbitMQ/",
         "Trax.Effect/src/Trax.Effect/Configuration/Deploy/",
+        "Trax.Effect/src/Trax.Effect/Models/Drain/",
+        "Trax.Effect/src/Trax.Effect.Data/Services/Drain/",
+        "Trax.Effect/src/Trax.Effect.Data/Models/Drain/",
+        "Trax.Effect/src/Trax.Effect.Data/Extensions/TraxDeployExtensions.cs",
+        "Trax.Effect/src/Trax.Effect.Data.Postgres/Migrations/091_drain.sql",
+        "Trax.Scheduler/src/Trax.Scheduler/Services/Drain/",
+        "Trax.Scheduler/src/Trax.Scheduler/Services/Operations/DrainBusyWork.cs",
+        "Trax.Scheduler/src/Trax.Scheduler/Services/LocalWorkerService/",
+        "Trax.Scheduler/src/Trax.Scheduler/Services/SchedulerStartupService/",
         "Trax.Api/src/Trax.Api.GraphQL/Deploy/"
       ]
     }
