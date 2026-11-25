@@ -287,6 +287,7 @@ internal static partial class KubernetesTarget
         );
 
         var services = Services(file, env, exports, tag, r, rabbit, timeout);
+        var canary = tailnet && !onPodman ? r.TailnetCanary() : null;
         if (tailnet && !onPodman)
             services.AddRange(
                 r.TailnetEdge(KubernetesTailnet.Hostname(file, environment, env), hub.NotNull())
@@ -305,7 +306,8 @@ internal static partial class KubernetesTarget
             drain,
             services,
             resume,
-            r.ProxySecret
+            r.ProxySecret,
+            canary
         );
     }
 
@@ -731,6 +733,93 @@ internal static partial class KubernetesTarget
                 },
             };
             return [config, deployment, service, ingress];
+        }
+
+        /// <summary>
+        /// What a tailnet deploy proves the network plugin with: a listener in the edge's image labelled as the edge, so
+        /// the edge's policy selects it and admits only the operator's proxy; its Service; and a Job, one of the app's
+        /// own pods (the most the policies admit anywhere), that must not reach it. Neither holds a secret.
+        /// </summary>
+        public KubernetesTailnetCanary TailnetCanary()
+        {
+            const string name = KubernetesTailnet.CanaryName;
+            var listen = CanaryContainer(name);
+            listen.Args =
+            [
+                "caddy",
+                "respond",
+                "--listen",
+                string.Create(CultureInfo.InvariantCulture, $":{KubernetesTailnet.EdgePort}"),
+                "--body",
+                "canary",
+            ];
+            listen.Ports =
+            [
+                new V1ContainerPort { Name = "edge", ContainerPort = KubernetesTailnet.EdgePort },
+            ];
+            listen.ReadinessProbe = new V1Probe
+            {
+                TcpSocket = new V1TCPSocketAction { Port = KubernetesTailnet.EdgePort },
+                PeriodSeconds = 2,
+            };
+            var template = Pod(name, listen);
+            template.Metadata.Labels[KubernetesTailnet.RoleLabel] = KubernetesTailnet.EdgeRole;
+            var listener = new V1Deployment
+            {
+                ApiVersion = "apps/v1",
+                Kind = "Deployment",
+                Metadata = Meta(name),
+                Spec = new V1DeploymentSpec
+                {
+                    Replicas = 1,
+                    ProgressDeadlineSeconds = RolloutProgressDeadlineSeconds,
+                    Selector = new V1LabelSelector { MatchLabels = Selector(name) },
+                    Template = template,
+                },
+            };
+            var probe = CanaryContainer(KubernetesTailnet.ProbeKind);
+            probe.Command = ["/bin/sh", "-c", KubernetesTailnet.ProbeScript];
+            var meta = Meta(JobName(file, KubernetesTailnet.ProbeKind, tag));
+            meta.Labels[NameLabel] = KubernetesTailnet.ProbeKind;
+            var job = new V1Job
+            {
+                ApiVersion = "batch/v1",
+                Kind = "Job",
+                Metadata = meta,
+                Spec = new V1JobSpec
+                {
+                    BackoffLimit = 0,
+                    ActiveDeadlineSeconds = 300,
+                    TtlSecondsAfterFinished = MigrateJobTtlSeconds,
+                    Template = Pod(KubernetesTailnet.ProbeKind, probe, restart: "Never"),
+                },
+            };
+            return new KubernetesTailnetCanary(
+                listener,
+                Service(name, KubernetesTailnet.EdgePort),
+                job
+            );
+        }
+
+        /// <summary>A container in the edge's image, hardened as the edge is, holding nothing.</summary>
+        private static V1Container CanaryContainer(string name)
+        {
+            var container = Container(
+                name,
+                KubernetesTailnet.CaddyImage,
+                new ServiceHardening(
+                    [],
+                    ServiceHardening.MinimumMemoryMiB,
+                    ServiceHardening.DefaultPids,
+                    Cpus: null,
+                    ReadOnlyRoot: true
+                ),
+                nonRoot: true,
+                [Value("XDG_CONFIG_HOME", "/tmp/config"), Value("XDG_DATA_HOME", "/tmp/data")]
+            );
+            container.SecurityContext.RunAsUser = KubernetesTailnet.EdgeUser;
+            container.SecurityContext.RunAsGroup = KubernetesTailnet.EdgeUser;
+            return container;
         }
 
         /// <summary>

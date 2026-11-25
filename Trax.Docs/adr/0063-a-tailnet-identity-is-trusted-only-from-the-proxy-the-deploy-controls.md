@@ -31,7 +31,10 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
   namespace listens on TCP and the hub is not in it.
 - **On a cluster, both a network policy and the secret.** Every namespace trax deploys gets a default-deny ingress
   policy; the app's pods reach each other, the edge accepts only the operator's proxy pod for its Ingress, and the hub
-  accepts the edge. A plugin that ignores NetworkPolicy leaves the secret.
+  accepts the edge. The secret does not stand in for the policy: the edge adds it to whatever reaches it, so on a
+  plugin that ignores NetworkPolicy any pod could sign in as anyone. So a tailnet deploy first proves the plugin
+  enforces it: a listener labelled as the edge, and a probe from one of the app's own pods that must not reach it,
+  before anything the policies protect runs. The secret keeps a pod that reaches the hub directly anonymous.
 - **The secret is minted by `trax deploy` on every deploy** and held in a Secret (`<app>-<env>-tailnet`) or, under
   podman, a 0600 file only the hub's unit and the tailnet unit play. Only the hub and the edge read it.
 - **Exposure is a deployment fact the host is told.** `trax deploy` sets `Trax__Deploy__Exposure=tailnet` only on the
@@ -68,6 +71,8 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
   that one value back from the cluster, since nothing else holds it.
 - A subscription socket sees the tailnet caller only when the host makes the scheme its default.
 - Every kubernetes environment now runs under default-deny ingress, exposed or not.
+- A tailnet deploy on a cluster runs a canary and a probe Job before anything else, some seconds each time, and
+  refuses a cluster whose network plugin lets the probe through.
 
 ## Exemplars
 
@@ -79,7 +84,7 @@ in `Trax.Cli/tests/Trax.Cli.Tests/` holds the deploy to it: the policies' shape,
 Ingress, the edge, the secret given only to the hub and minted on every deploy, no published port under podman, and
 every refusal of the field and of the scheme, and under podman, a pod of their own for Tailscale and the edge with no
 TCP listener in it. `TailscaleTrustStartupTests` also holds the refusal of a default CORS policy that lets any
-origin in.
+origin in, and `DeployTailnetTests` the canary a cluster deploy proves the edge's policy with.
 
 ## Changelog
 
@@ -89,3 +94,5 @@ origin in.
 - **2026-11-25**: The scheme refuses a default CORS policy that lets any origin in, since the login is an ambient
   credential.
 - **2026-11-25**: A rollback writes the replaced proxy secret back before it restores the Deployments.
+- **2026-11-25**: A tailnet deploy proves the network plugin enforces the edge's policy before it goes on; the secret
+  was never a stand-in for it.

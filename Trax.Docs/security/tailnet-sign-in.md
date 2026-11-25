@@ -45,8 +45,12 @@ On a cluster two things hold that together:
    other, the edge reaches only the hub, and the edge accepts only the operator's proxy pod for its Ingress. Nothing
    else in the cluster can hand the edge a forged login and have it signed.
 2. **The secret.** A pod that reaches the hub directly, which the policies allow for the app's own workers, has no
-   secret, so its headers are ignored. A cluster whose network plugin does not enforce NetworkPolicy still has this
-   half.
+   secret, so its headers are ignored.
+
+The secret does not stand in for the path. The edge adds it to whatever reaches it, so on a network plugin that
+accepts NetworkPolicy and ignores it, any pod in the cluster could hand the edge a login and be signed in. So before
+anything else runs, a tailnet deploy proves the plugin enforces the edge's policy: it starts a listener labelled as
+the edge, runs a probe from one of the app's own pods against it, and refuses to go on if the probe gets through.
 
 On one host there are no network policies, so the path is held by where things listen. Tailscale runs in userspace
 networking there, and in that mode tailscaled hands any tailnet connection that serve does not take to `127.0.0.1` on
@@ -86,8 +90,9 @@ organization, which is why a login the host did not name is refused unless it ch
 - **The operator's Service mode** in place of its Ingress. It forwards TCP and adds no headers at all.
 - **Only a network policy**, without the secret. It holds only where the network plugin enforces it, and says
   nothing on one that silently does not.
-- **Only the secret**, without the policies. The policies also keep the rest of the cluster away from the in-cluster
-  database and broker, which carried no such protection before.
+- **Only the secret**, without the policies. The edge adds the secret to every request it passes on, so anything that
+  reaches the edge has it. The policies also keep the rest of the cluster away from the in-cluster database and
+  broker, which carried no such protection before.
 - **Roles from tags.** The headers do not exist for tagged devices.
 
 ## See also

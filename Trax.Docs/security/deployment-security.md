@@ -22,7 +22,7 @@ the [sandbox threat model](/docs/security/sandbox-threat-model). How the deploy 
 | A read-only root | A compromised process changing its own binaries or leaving a file that survives a restart. A Trax container writes only to a scratch `/tmp`. | Every target, for every Trax container and Job. Postgres and RabbitMQ keep a writable root. |
 | A user namespace | An escape landing as root on the machine. Root in the container maps to an unprivileged uid outside it; under podman, `nomap` also leaves your own uid out, so an escape does not land as you. | `hostUsers: false` on a cluster, `nomap` under podman. Not under docker compose, which refuses `nomap`, and not on ECS. |
 | No token, no service links | A compromised pod calling the Kubernetes API as a ServiceAccount, or reading other services' addresses from its environment. | Every pod on a cluster. On EKS a pod gets a role through Pod Identity that reads only its environment's secrets. |
-| Network policies | Other pods in the cluster reaching the hub, Postgres or RabbitMQ. A deny-all policy selects every pod in the namespace, and one more admits the app's pods to each other. They limit what comes in, not what goes out. | Every cluster deploy, before anything they protect. Only on a network plugin that enforces NetworkPolicy; on one that does not, they are accepted and do nothing. |
+| Network policies | Other pods in the cluster reaching the hub, Postgres or RabbitMQ. A deny-all policy selects every pod in the namespace, and one more admits the app's pods to each other. They limit what comes in, not what goes out. | Every cluster deploy, before anything they protect. Only on a network plugin that enforces NetworkPolicy; on one that does not, they are accepted and do nothing. A tailnet deploy proves the plugin enforces them first and stops if it does not. |
 | No published address | Anything outside the cluster or the host reaching the app. Without an exposure, nothing does: `kubectl port-forward` on a cluster, `127.0.0.1` on one host. | Every kubernetes and compose deploy. ECS and its load balancer are public by design. |
 | Tailnet exposure and the proxy secret | Anyone but your tailnet's people and devices reaching the hub, and anyone who reaches it some other way signing in as someone. See [Tailnet sign-in](/docs/security/tailnet-sign-in). | `"exposure": "tailnet"` on a kubernetes environment. |
 | Secrets kept out of manifests | A secret value in a file that is committed, logged or applied for anyone to read. Values come from a Secret you create (by `secretKeyRef`), from Secrets Manager on EKS and ECS, or from a 0600 file under `~/.config/trax/` under podman. The passwords of the Postgres and RabbitMQ trax runs reach the hosts as values of their own, never inside a connection string it writes. | Every target. |
@@ -82,7 +82,7 @@ the [threat model](/docs/security/sandbox-threat-model#hostile-work-in-a-sandbox
   tests, not by a deploy.
 - **NetworkPolicy and `hostUsers: false` beyond k3s.** Both were proved on k3s's own network policy controller and a
   VM kernel of 6.3 or later. A network plugin that does not enforce NetworkPolicy accepts the policies and ignores
-  them, and nothing says so.
+  them, and nothing says so, except on a tailnet deploy, whose probe refuses it.
 - **A kernel escape against Kata.** The suite shows a sandbox runs on a guest kernel, not that the guest cannot be
   broken out of.
 - **ECS egress.** It is refused, not built, so there is nothing to prove; a service that needs it goes to EKS.

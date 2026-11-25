@@ -1170,7 +1170,7 @@ selects every pod and admits nothing, and `<app>-within`, which lets the app's o
 each other: the hubs, Postgres and RabbitMQ accept only the app's pods, not any other pod in the cluster. The
 policies limit what comes in, not what goes out. They need a network plugin that enforces NetworkPolicy (Calico,
 Cilium, the VPC CNI with its network policy agent on EKS, kindnet on recent kind); on one that does not, they are
-accepted and ignored, and nothing says so.
+accepted and ignored, and nothing says so, except on a tailnet deploy, which refuses it (below).
 
 Without an `exposure`, reach a hub with `kubectl port-forward -n orders-staging service/hub 8080`.
 
@@ -1205,6 +1205,14 @@ Beside the app it renders:
   nothing else;
 - on the hub only: `Trax__Deploy__Exposure=tailnet`, and `Trax__Deploy__ProxySecret` read from the Secret
   `<app>-<env>-tailnet`.
+
+Before anything else runs, right after the policies, a tailnet deploy proves the network plugin enforces them: it
+starts `tailnet-canary`, Caddy answering on 8081 with the edge's labels, so `<app>-tailnet` admits only the operator's
+proxy to it, and runs the Job `<app>-tailnet-probe-<tag>` from one of the app's own pods, which must fail to reach
+it three times in a row within a minute. If the probe gets through, the deploy stops, nothing is exposed, and the
+error ends with the probe's log: the edge vouches for whoever reaches it, so a plugin that ignores NetworkPolicy
+would let any pod in the cluster sign in as anyone. The canary and its Service are deleted either way; the Job is
+kept a day.
 
 trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the migration
 and before the services; the hub and the edge both restart onto it in the same rollout, so for those seconds a

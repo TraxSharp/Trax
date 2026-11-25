@@ -9,7 +9,9 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// policies, the in-cluster Postgres and RabbitMQ when the environment runs them, the migrate Job, the drain Job, each
 /// service's Service and Deployment and a tailnet exposure's proxy, then the resume Job. <see cref="ProxySecretName"/>
 /// names the Secret the deployer writes a freshly minted proxy secret to before the services, when the environment is
-/// exposed on a tailnet. The deployer runs the drain only when services ran before the deploy.
+/// exposed on a tailnet, and <see cref="TailnetCanary"/> what proves the edge's NetworkPolicy is enforced before the
+/// backing comes up; neither is in <see cref="All"/>. The deployer runs the drain only when services ran before the
+/// deploy.
 /// </summary>
 internal sealed record KubernetesManifests(
     V1Namespace Namespace,
@@ -23,7 +25,8 @@ internal sealed record KubernetesManifests(
     V1Job Drain,
     IReadOnlyList<IKubernetesObject<V1ObjectMeta>> Services,
     V1Job Resume,
-    string? ProxySecretName
+    string? ProxySecretName,
+    KubernetesTailnetCanary? TailnetCanary = null
 )
 {
     public string NamespaceName => Namespace.Metadata.Name;

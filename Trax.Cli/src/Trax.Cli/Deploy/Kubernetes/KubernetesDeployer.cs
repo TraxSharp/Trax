@@ -60,6 +60,7 @@ internal sealed class KubernetesDeployer(
         // The network policies go first, so the in-cluster database and broker are never up without them.
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Policies, ct)
             .ConfigureAwait(false);
+        await ProveTailnetPolicyAsync(manifests, ct).ConfigureAwait(false);
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Backing, ct)
             .ConfigureAwait(false);
         await MigrateAsync(environment, manifests, ct).ConfigureAwait(false);
@@ -135,6 +136,57 @@ internal sealed class KubernetesDeployer(
         say("Allowing only this deploy's egress image...");
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Admission, ct)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// On a tailnet exposure, proves the cluster enforces the edge's NetworkPolicy before anything it protects runs:
+    /// the edge adds the proxy secret to whatever reaches it, so on a plugin that ignores the policy any pod in the
+    /// cluster could sign in as anyone. Starts a listener labelled as the edge, runs a probe from one of the app's own
+    /// pods against it, and refuses the deploy unless the probe was kept out. The listener and its Service are deleted
+    /// either way; the Job is kept a day for its log.
+    /// </summary>
+    private async Task ProveTailnetPolicyAsync(KubernetesManifests manifests, CancellationToken ct)
+    {
+        if (manifests.TailnetCanary is not { } canary)
+            return;
+        var ns = manifests.NamespaceName;
+        var job = canary.Probe.Metadata.Name;
+        say($"Proving the cluster enforces the tailnet edge's network policy (job {job})...");
+        KubernetesJobResult result;
+        try
+        {
+            await ApplyAndWaitAsync(ns, [canary.Listener, canary.Service], ct)
+                .ConfigureAwait(false);
+            await cluster.CreateJobAsync(canary.Probe, ct).ConfigureAwait(false);
+            result = await cluster
+                .WaitForJobAsync(ns, job, TimeSpan.FromMinutes(5), ct)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (
+                var o in new k8s.IKubernetesObject<V1ObjectMeta>[]
+                {
+                    canary.Listener,
+                    canary.Service,
+                }
+            )
+                await cluster
+                    .DeleteAsync(
+                        ns,
+                        new KubernetesObjectState(o.Kind, o.Metadata.Name, App: null),
+                        ct
+                    )
+                    .ConfigureAwait(false);
+        }
+        if (!result.Succeeded)
+            throw new InvalidOperationException(
+                "The cluster does not enforce NetworkPolicy, or the probe could not tell: a pod of the app reached a "
+                    + "listener labelled as the tailnet edge, whose policy admits only the Tailscale operator's proxy. "
+                    + "The edge vouches for whoever reaches it, so nothing was exposed. Use a network plugin that "
+                    + "enforces NetworkPolicy (Calico, Cilium, the VPC CNI's network policy agent on EKS). The end of "
+                    + $"the probe's log:\n{result.LogTail}\nAll of it: 'kubectl logs -n {ns} job/{job}'."
+            );
     }
 
     /// <summary>

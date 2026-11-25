@@ -4,6 +4,7 @@ using k8s.Models;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
 using Trax.Cli.Deploy.Kubernetes;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -92,6 +93,51 @@ public class DeployTailnetTests
         m.All.OfType<V1Deployment>()
             .Should()
             .OnlyContain(d => d.Spec.Template.Spec.HostNetwork != true);
+    }
+
+    [Test]
+    public void A_tailnet_exposure_renders_a_canary_under_the_edges_policy_and_a_probe_it_does_not_admit()
+    {
+        var m = Render();
+        var canary = m.TailnetCanary.NotNull();
+        var listener = canary.Listener.Spec.Template;
+        var probe = canary.Probe.Spec.Template;
+        var edgePolicy = m.Policies.Single(p =>
+            string.Equals(p.Metadata.Name, "orders-tailnet", StringComparison.Ordinal)
+        );
+
+        foreach (var (key, value) in edgePolicy.Spec.PodSelector.MatchLabels)
+            listener.Metadata.Labels.Should().Contain(key, value);
+        probe.Metadata.Labels.Should().NotContainKey(KubernetesTailnet.RoleLabel);
+        probe.Metadata.Labels[KubernetesTarget.AppLabel].Should().Be("orders");
+        foreach (var (key, value) in canary.Service.Spec.Selector)
+            listener.Metadata.Labels.Should().Contain(key, value);
+        canary
+            .Service.Spec.Selector[KubernetesTarget.NameLabel]
+            .Should()
+            .NotBe(KubernetesTailnet.EdgeName, "the canary must not take the edge's traffic");
+        string.Join(' ', probe.Spec.Containers.Single().Command)
+            .Should()
+            .Contain($"{KubernetesTailnet.CanaryName}:{KubernetesTailnet.EdgePort}");
+        new[] { listener, probe }
+            .SelectMany(t => t.Spec.Containers)
+            .SelectMany(c => c.Env ?? [])
+            .Should()
+            .OnlyContain(v => v.ValueFrom == null, "neither holds a secret");
+        m.All.Should().NotContain(o => o.Metadata.Name.Contains(KubernetesTailnet.CanaryName));
+    }
+
+    [Test]
+    public void Without_an_exposure_there_is_no_canary()
+    {
+        var m = KubernetesTarget.Render(
+            DeployKubernetesTests.File_(),
+            "staging",
+            DeployKubernetesTests.Exports(),
+            Tag
+        );
+
+        m.TailnetCanary.Should().BeNull();
     }
 
     [Test]
@@ -681,6 +727,76 @@ public class DeployTailnetTests
             KubernetesTailnet.CaddyImage
         );
         return cluster;
+    }
+
+    [Test]
+    public async Task A_tailnet_deploy_proves_the_edges_policy_is_enforced_before_the_backing_comes_up()
+    {
+        var cluster = new KubernetesDeployerTests.FakeCluster
+        {
+            SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"],
+        };
+        var deployer = new KubernetesDeployer(
+            cluster,
+            new KubernetesDeployerTests.FakeImages(),
+            _ => { }
+        );
+
+        await Deploy(deployer);
+
+        var calls = cluster.Calls;
+        var probe = calls.Single(c =>
+            c.StartsWith("create-job", StringComparison.Ordinal)
+            && c.Contains("-tailnet-probe-", StringComparison.Ordinal)
+        );
+        calls
+            .IndexOf($"apply Deployment/{KubernetesTailnet.CanaryName}")
+            .Should()
+            .BeGreaterThan(calls.IndexOf("apply NetworkPolicy/orders-tailnet"));
+        calls
+            .IndexOf(probe)
+            .Should()
+            .BeGreaterThan(calls.IndexOf($"wait Deployment/{KubernetesTailnet.CanaryName}"))
+            .And.BeLessThan(calls.IndexOf("apply Service/database"));
+        calls
+            .IndexOf($"delete Deployment/{KubernetesTailnet.CanaryName}")
+            .Should()
+            .BeGreaterThan(calls.IndexOf(probe))
+            .And.BeLessThan(calls.IndexOf("apply Service/database"));
+        calls.Should().Contain($"delete Service/{KubernetesTailnet.CanaryName}");
+    }
+
+    [Test]
+    public async Task A_cluster_that_lets_the_probe_reach_the_canary_is_refused_before_anything_runs()
+    {
+        var cluster = new KubernetesDeployerTests.FakeCluster
+        {
+            SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"],
+        };
+        cluster.JobResults["-tailnet-probe-"] = new KubernetesJobResult(
+            Succeeded: false,
+            Reason: "BackoffLimitExceeded",
+            "reached the canary"
+        );
+        var deployer = new KubernetesDeployer(
+            cluster,
+            new KubernetesDeployerTests.FakeImages(),
+            _ => { }
+        );
+
+        var act = () => Deploy(deployer);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*does not enforce NetworkPolicy*reached the canary*");
+        cluster.Calls.Should().NotContain("apply Service/database");
+        cluster.Applied.OfType<V1Secret>().Should().BeEmpty();
+        cluster
+            .Calls.Should()
+            .Contain([
+                $"delete Deployment/{KubernetesTailnet.CanaryName}",
+                $"delete Service/{KubernetesTailnet.CanaryName}",
+            ]);
     }
 
     [Test]

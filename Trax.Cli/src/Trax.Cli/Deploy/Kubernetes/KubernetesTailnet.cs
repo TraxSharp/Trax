@@ -22,6 +22,33 @@ internal static class KubernetesTailnet
     /// <summary>The edge's name: its Deployment, Service, ConfigMap and Ingress on a cluster, its container under podman.</summary>
     public const string EdgeName = "tailnet";
 
+    /// <summary>The name of the listener, and its Service, a deploy proves the edge's NetworkPolicy against.</summary>
+    public const string CanaryName = "tailnet-canary";
+
+    /// <summary>The kind of the Job that must not reach the canary, in its name.</summary>
+    public const string ProbeKind = "tailnet-probe";
+
+    /// <summary>
+    /// What the probe runs, in the edge's image (busybox's <c>sh</c>, <c>nslookup</c> and <c>wget</c>). It exits 0
+    /// once three tries in a row fail to reach the canary, so a policy the plugin programs a moment late still passes;
+    /// 1 when every try for a minute reaches it; 2 when the canary's name does not resolve, which proves nothing.
+    /// </summary>
+    public static readonly string ProbeScript = string.Join(
+        '\n',
+        $"nslookup {CanaryName} >/dev/null 2>&1 || {{ echo \"{CanaryName} does not resolve\"; exit 2; }}",
+        "blocked=0",
+        "for i in $(seq 30); do",
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"  if wget -q -T 3 -O /dev/null http://{CanaryName}:{EdgePort}/; then blocked=0; else blocked=$((blocked + 1)); fi"
+        ),
+        "  [ \"$blocked\" -ge 3 ] && { echo \"refused, as the policy says\"; exit 0; }",
+        "  sleep 2",
+        "done",
+        $"echo \"reached the canary on every try, from a pod the edge's policy does not admit\"",
+        "exit 1"
+    );
+
     /// <summary>The port the edge listens on.</summary>
     public const int EdgePort = 8081;
 
