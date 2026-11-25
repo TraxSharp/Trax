@@ -171,6 +171,17 @@ test("who can reach what: every check came out as it should, and the outside is 
   });
 });
 
+test("who can reach what: a failed egress check is named as not as it should be", () => {
+  const s = structuredClone(scenario("hub-workers", "kubernetes", "who-can-reach-what"));
+  const row = s.egress.find((e) => e.target === "169.254.169.254:80");
+  assert.ok(row);
+  row.ok = false;
+  row.got = "open";
+  const text = summaryOf(s, "who-can-reach-what", "kubernetes");
+  assert.match(text, /Not as it should: .*169\.254\.169\.254:80, open/, text);
+  assert.doesNotMatch(text, /Nothing outside the app reached it/, text);
+});
+
 test("the section's copy keeps to the home page's rules", () => {
   for (const file of ["src/components/landing/ShipIt.tsx", "src/components/landing/DeployReplay.tsx"]) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");

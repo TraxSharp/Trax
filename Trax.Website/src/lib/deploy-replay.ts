@@ -293,18 +293,19 @@ export function summaryOf(scenario: DeployScenario, scenarioKey: ScenarioKey, ta
       const all = [...scenario.checks.map((c) => c.result === c.want), ...scenario.egress.map((e) => e.ok)];
       const listed = egressOf(scenario);
       const held = listed.length === 0 ? "may reach nothing outside the app" : `may reach ${listed.join(", ")} and nothing else outside the app`;
-      const wrong = scenario.checks.filter((c) => c.result !== c.want);
-      const egressOk = scenario.egress.every((e) => e.ok);
+      // Both lists: a check from outside the app that got in, and an egress check from inside that got out.
+      const wrong = [
+        ...scenario.checks.filter((c) => c.result !== c.want).map((c) => `${c.who} to ${c.what}, ${c.result}`),
+        ...scenario.egress.filter((e) => !e.ok).map((e) => `the ${probe} to ${e.target}, ${e.got}`),
+      ];
       text =
         `${all.filter(Boolean).length} of ${all.length} checks came out as they should.` +
         (scenario.egress.length === 0
           ? " The egress was not checked: this run deployed without it."
-          : egressOk
+          : scenario.egress.every((e) => e.ok)
             ? ` From inside, the ${probe} ${held}.`
             : "") +
-        (wrong.length === 0
-          ? " Nothing outside the app reached it."
-          : ` Not as it should: ${wrong.map((c) => `${c.who} to ${c.what}, ${c.result}`).join("; ")}.`);
+        (wrong.length === 0 ? " Nothing outside the app reached it." : ` Not as it should: ${wrong.join("; ")}.`);
       break;
     }
   }
