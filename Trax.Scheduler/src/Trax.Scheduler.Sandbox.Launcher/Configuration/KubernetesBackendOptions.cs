@@ -25,4 +25,12 @@ public sealed class KubernetesBackendOptions
 
     /// <summary>How often a running sandbox's status and output size are checked. Two seconds by default.</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// The share of the runs volume's filesystem, in percent, that must stay free. Below it no run
+    /// starts, and every running one is killed at its next poll. The filesystem's own count sees
+    /// what a walk of the output does not, such as a file deleted while still open. 15 by default,
+    /// above the kubelet's default eviction threshold of 10.
+    /// </summary>
+    public int RunsMinFreePercent { get; set; } = 15;
 }

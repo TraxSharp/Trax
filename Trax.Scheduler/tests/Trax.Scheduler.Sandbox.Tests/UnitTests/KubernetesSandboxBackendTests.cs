@@ -30,12 +30,14 @@ public class KubernetesSandboxBackendTests
     private static readonly byte[] Request = "{\"train\":\"t\"}"u8.ToArray();
     private string _runs = "";
     private ShiftedClock _clock = new();
+    private long _available = 100;
 
     [SetUp]
     public void SetUp()
     {
         _runs = Directory.CreateTempSubdirectory("trax-sbx-runs-").FullName;
         _clock = new ShiftedClock();
+        _available = 100;
     }
 
     [TearDown]
@@ -59,7 +61,8 @@ public class KubernetesSandboxBackendTests
             client,
             options,
             _clock,
-            NullLogger<KubernetesSandboxBackend>.Instance
+            NullLogger<KubernetesSandboxBackend>.Instance,
+            _ => (_available, 100)
         );
         var job = new SandboxJob(
             RunId,
@@ -263,5 +266,48 @@ public class KubernetesSandboxBackendTests
             .ThrowAsync<OperationCanceledException>();
 
         KilledAndRemoved(api);
+    }
+
+    [Test]
+    public async Task RunAsync_RunsVolumeBelowItsFloor_StartsNothing()
+    {
+        var api = new FakeKubernetes(_runs);
+        _available = 10;
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.Failed);
+        execution.Detail.Should().Be("the runs volume has less than 15% free");
+        api.CreatedJob.Should().BeNull(Adr);
+    }
+
+    [Test]
+    public async Task RunAsync_RunsVolumeFallsBelowItsFloorWhileRunning_IsKilled()
+    {
+        // A file deleted while still open is not in any walk of the output; the filesystem's
+        // free space still counts it.
+        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
+        api.OnPoll = poll =>
+        {
+            if (poll == 1)
+                _available = 14;
+            return Task.CompletedTask;
+        };
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.Failed, Adr);
+        execution.Detail.Should().Be("the runs volume has less than 15% free");
+        execution.Output.Should().BeEmpty();
+        KilledAndRemoved(api);
+    }
+
+    [Test]
+    public void FreeSpace_IsTheFilesystemsOwnCount()
+    {
+        var (available, total) = KubernetesSandboxBackend.FreeSpace(_runs);
+
+        total.Should().BePositive();
+        available.Should().BeInRange(0, total);
     }
 }

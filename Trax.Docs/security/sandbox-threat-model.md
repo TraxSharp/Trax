@@ -39,7 +39,7 @@ cannot run Kata, so it proves the mechanics and not the microVM.
 | Write outside its directory | A read-only root, the input read-only, every capability dropped, no new privileges, a non-root user. | k3s, Kata, and podman, crun: every write refused. |
 | Fork-bomb | Podman: a pids limit (512 by default). Cluster: the kubelet's `podPidsLimit` if set, the VM's memory under Kata; then the timeout. | k3s, Kata, and podman, crun: held, killed at the timeout, the launcher and the next run unaffected. |
 | Exhaust memory | The declared memory limit; the kernel kills it and the run fails. Podman reports it `OutOfMemory`; Kata sometimes does, and otherwise only shows exit 137, which the run's reason then says. | k3s, Kata: killed, reported as `OutOfMemory` or exit 137 on different runs. Podman, crun: killed and reported. |
-| Exhaust disk | One host: the output and scratch are tmpfs of the declared size. Cluster: the scratch is a sized in-memory emptyDir; the output is polled and the run killed past its size, with the claim's size as the hard ceiling. | k3s, Kata, and podman, crun: the run is killed or its write fails, and it fails. On a cluster polling is not a hard cap: between polls it can write as fast as the node's disk takes it. |
+| Exhaust disk | One host: the output and scratch are tmpfs of the declared size. Cluster: the scratch is a sized in-memory emptyDir; the output is walked every poll and the run killed past its size, and no run starts, and every running one is killed, while the runs volume's filesystem has less than `RunsMinFreePercent` free (15% by default). | k3s, Kata, and podman, crun: the run is killed or its write fails, and it fails. On a cluster neither check is a hard cap per run: see below. |
 | Run forever | The launcher, or the Job's deadline, kills it at its timeout and the run fails `TimedOut`. | k3s, Kata, and podman, crun. |
 | Smuggle something out through its output | The launcher reads the output after the sandbox has stopped, never follows a link or opens anything but a regular file, refuses it whole for a link, a device, a pipe, a path outside it, a duplicate, or more files or bytes than the caps, and writes a fresh tar the hub checks again. Only files under `files/` go back. | Unit tests on hostile tars and directories; k3s, Kata, and podman, crun: a link and too many files refused. |
 | Run a train it was not declared for | The entry point runs only a train whose class carries `[TraxSandbox]`, by its exact name. | Unit tests; k3s, Kata, and podman, crun. |
@@ -74,7 +74,12 @@ admission policies still refuse any that do not look like the launcher's.
   backend ran under crun with the canary told to accept it, so it proves the mechanics only; its
   isolating runtime would be gVisor, which was not run.
 - **Managed clusters.** Only k3s was used. AKS, EKS with Kata nodes and GKE with gVisor were not.
-- **A hard disk cap on a cluster.** The output is polled, so a sandbox can overshoot by what it
-  writes between polls; the runs claim's size is the hard ceiling.
+- **A hard disk cap per run on a cluster.** The output is walked every poll, so a sandbox can
+  overshoot by what it writes between polls, and a walk does not see a file it deleted while still
+  holding it open. The free-space floor reads the filesystem's own count, which does see such a
+  file, but it is shared: one hostile run can use the volume down to the floor, and the floor then
+  kills every run on it. The claim's size is a ceiling only where its storage class enforces
+  capacity; k3s's default `local-path` does not, so there the volume is the node's disk and the
+  floor is all that keeps the node's disk from filling.
 - **CI.** GitHub's runners and the `runner-personal` VM have no podman socket, no cluster and no known
   nested virtualisation, so CI runs the unit tests and both escape suites skip, saying so.

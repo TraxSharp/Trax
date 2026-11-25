@@ -44,9 +44,18 @@ starts; the output comes out through it, as podman's tar of the directory, after
 that run's `in` read-only and its `out` writable, by subPath, and is pinned to the launcher's node.
 The launcher reads the directory after the Job's pod is gone, walking it without following a link
 and letting the tar writer read each entry's type with lstat, so a link or a named pipe is recorded
-as one and never opened. The output directory has no size of its own there, so the launcher checks
-its size while the sandbox runs and kills a run that goes over; the claim's size is the hard
-ceiling behind that.
+as one and never opened. The output directory has no size of its own there, so the launcher walks
+it while the sandbox runs and kills a run that goes over. A walk misses a file the sandbox deleted
+while still holding it open, so the launcher also reads the volume's free space from the filesystem,
+whose count includes such a file: below `RunsMinFreePercent` no run starts and every running one is
+killed. That floor is shared by every run on the volume, not a limit per run. The claim's size is a
+ceiling only where its storage class enforces capacity, and k3s's default `local-path` does not, so
+on k3s the volume is the node's disk and the floor is what keeps it from filling.
+
+A per-run limit the kernel enforces, as the tmpfs is on one host, is not done on a cluster yet. A
+memory-backed emptyDir with a size would be one, but it is gone with the pod, before the launcher
+can read it, and getting it out needs something trusted in the pod that outlives the sandbox. A
+per-run volume needs a storage class that enforces capacity, which k3s does not ship.
 
 ## Exemplars
 
@@ -63,12 +72,18 @@ ceiling behind that.
 - `KubernetesSandboxBackendTests` pins the cluster path against an API that refuses every
   subresource, as the launcher's Role does.
 
+- `KubernetesSandboxBackendTests` also pins the watch loop: the disk kill, the entry kill, the
+  start timeout, the free-space floor before a start and while a run goes on, and the cleanup after
+  a caller gives up.
+
 On k3s with Kata the subPath mounts, the size polling (a run filling its output was killed) and the
-entry polling (a run leaving too many files was killed and refused) worked. Not covered: polling is
-not a hard cap. Between two polls a sandbox can write as fast as the node's disk takes it; the runs
-claim's size is the hard ceiling.
+entry polling (a run leaving too many files was killed and refused) worked. Not covered: neither
+check is a hard cap per run. Between two polls a sandbox can write as fast as the node's disk takes
+it, and a deleted file it holds open is seen only by the shared free-space floor.
 
 ## Changelog
 
 - **2026-11-24**: Recorded.
 - **2026-11-24**: Too many files is its own refusal on a cluster, not a disk overrun.
+- **2026-11-25**: The claim's size is not a ceiling on `local-path`; a free-space floor on the runs
+  volume stands in until a cluster has a per-run limit.

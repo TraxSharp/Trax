@@ -17,18 +17,24 @@ namespace Trax.Scheduler.Sandbox.Launcher.Backends;
 /// Input and output go through a volume the launcher's own pod mounts: each run gets a directory
 /// on it, whose input directory the sandbox mounts read-only and whose output directory it mounts writable,
 /// each by subPath, so it sees nothing of other runs. The launcher writes the input before
-/// creating the Job, and reads the output only after the pod is gone. The output volume has no
-/// size of its own here, so the launcher checks its size while the sandbox runs and kills a run
-/// that goes over; the volume's own size is the hard limit behind that. See scheduler/0021.
+/// creating the Job, and reads the output only after the pod is gone. The output directory has no
+/// size of its own here, so the launcher walks it while the sandbox runs and kills a run that goes
+/// over. A walk misses a file deleted while still open, so the launcher also reads the volume's
+/// free space from the filesystem, refuses to start a run below
+/// <see cref="KubernetesBackendOptions.RunsMinFreePercent"/> and kills every running one that
+/// finds it there. Neither is a per-run kernel limit. See scheduler/0021.
 /// </remarks>
 internal sealed class KubernetesSandboxBackend(
     IKubernetes client,
     SandboxLauncherOptions options,
     TimeProvider time,
-    ILogger<KubernetesSandboxBackend> logger
+    ILogger<KubernetesSandboxBackend> logger,
+    Func<string, (long Available, long Total)>? space = null
 ) : ISandboxBackend
 {
     private const long MiB = 1024 * 1024;
+
+    private readonly Func<string, (long Available, long Total)> _space = space ?? FreeSpace;
 
     /// <summary>How long past its timeout a Job may take to be scheduled, pulled and started before the launcher gives up on it.</summary>
     internal static readonly TimeSpan StartGrace = TimeSpan.FromMinutes(5);
@@ -65,6 +71,8 @@ internal sealed class KubernetesSandboxBackend(
         var name = KubernetesJobSpec.JobName(job.RunId);
         try
         {
+            if (LowOnSpace() is { } low)
+                return SandboxExecution.Failure(low);
             await PrepareAsync(run, job, ct).ConfigureAwait(false);
             await client
                 .BatchV1.CreateNamespacedJobAsync(
@@ -74,16 +82,21 @@ internal sealed class KubernetesSandboxBackend(
                 )
                 .ConfigureAwait(false);
 
-            var (end, code) = await WatchAsync(name, run, job.Limits, ct).ConfigureAwait(false);
+            var (end, code, detail) = await WatchAsync(name, run, job.Limits, ct)
+                .ConfigureAwait(false);
             await DeleteAndWaitAsync(name, ct).ConfigureAwait(false);
             if (end is SandboxEnd.Failed or SandboxEnd.DiskExceeded or SandboxEnd.TooManyEntries)
+            {
+                if (detail is not null)
+                    logger.LogError("Sandbox run {RunId} was killed: {Detail}.", job.RunId, detail);
                 return new SandboxExecution(
                     end,
                     code,
                     Output: [],
                     OutputRefused: null,
-                    Detail: end == SandboxEnd.Failed ? "the Job did not start in time" : null
+                    Detail: detail
                 );
+            }
 
             var (files, refused) = await DirectoryOutput
                 .ReadAsync(
@@ -142,8 +155,33 @@ internal sealed class KubernetesSandboxBackend(
             File.SetUnixFileMode(output.FullName, (UnixFileMode)0b111_111_111);
     }
 
-    /// <summary>Polls the Job until it ends, killing it when its output grows past its disk limit.</summary>
-    private async Task<(SandboxEnd, int?)> WatchAsync(
+    /// <summary>
+    /// Why no run may start or go on, when the runs volume's filesystem has less than
+    /// <see cref="KubernetesBackendOptions.RunsMinFreePercent"/> free; null otherwise.
+    /// </summary>
+    private string? LowOnSpace()
+    {
+        var (available, total) = _space(Kube.RunsPath);
+        return total > 0 && available * 100 >= total * Kube.RunsMinFreePercent
+            ? null
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"the runs volume has less than {Kube.RunsMinFreePercent}% free"
+            );
+    }
+
+    /// <summary>The filesystem's own count of what is free under <paramref name="path"/>, which includes blocks held by deleted files still open.</summary>
+    internal static (long Available, long Total) FreeSpace(string path)
+    {
+        var drive = new DriveInfo(path);
+        return (drive.AvailableFreeSpace, drive.TotalSize);
+    }
+
+    /// <summary>
+    /// Polls the Job until it ends, killing it when its output grows past its disk limit or the
+    /// runs volume falls below its free-space floor.
+    /// </summary>
+    private async Task<(SandboxEnd End, int? Code, string? Detail)> WatchAsync(
         string name,
         string run,
         SandboxLimits limits,
@@ -160,16 +198,21 @@ internal sealed class KubernetesSandboxBackend(
                 .BatchV1.ReadNamespacedJobAsync(name, Kube.Namespace, cancellationToken: ct)
                 .ConfigureAwait(false);
             if (Ended(job) is { } ended)
-                return await EndOfAsync(name, ended, ct).ConfigureAwait(false);
+            {
+                var (end, code) = await EndOfAsync(name, ended, ct).ConfigureAwait(false);
+                return (end, code, null);
+            }
 
             var (bytes, tooMany) = DirectoryOutput.Size(output, options.Caps.MaxArchiveFiles + 2);
             if (tooMany)
-                return (SandboxEnd.TooManyEntries, null);
+                return (SandboxEnd.TooManyEntries, null, null);
             if (bytes > limits.DiskMiB * MiB)
-                return (SandboxEnd.DiskExceeded, null);
+                return (SandboxEnd.DiskExceeded, null, null);
+            if (LowOnSpace() is { } low)
+                return (SandboxEnd.Failed, null, low);
 
             if (time.GetUtcNow() > giveUp)
-                return (SandboxEnd.Failed, null);
+                return (SandboxEnd.Failed, null, "the Job did not start in time");
         }
     }
 

@@ -232,6 +232,9 @@ public class KubernetesSandboxManifestsTests
                 e.Name == "Trax__SandboxLauncher__CanaryProbes__0" && e.Value == "10.0.0.9:5432"
             );
         env.Select(e => e.Name).Should().Contain("Trax__SandboxLauncher__Kubernetes__PollInterval");
+        env.Select(e => e.Name)
+            .Should()
+            .Contain("Trax__SandboxLauncher__Kubernetes__RunsMinFreePercent");
     }
 
     [Test]

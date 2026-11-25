@@ -64,12 +64,12 @@ error rather than a default left in place.
 | `Profiles` | | By name (lowercase letters, digits, `-`): each a `SandboxProfile` with `Image` (`name@sha256:<digest>`; a tag alone is refused), an optional `Command`, and `User` (`uid:gid`, never 0, `65532:65532` by default). |
 | `Caps` | | A `SandboxCaps`, below. |
 | `Podman` | | A `PodmanBackendOptions`: `SocketPath`, the podman API socket only the launcher holds; `HolderImage`, pinned by digest; `HolderCommand`, when the holder image's own command does not block. |
-| `Kubernetes` | | A `KubernetesBackendOptions`: `Namespace` (`trax-sandbox`), `RuntimeClassName` (`kata`), `RunsClaimName` (`trax-sandbox-runs`), `RunsPath` (`/runs`), `NodeName` (from `NODE_NAME` when not set) and `PollInterval` (2 seconds). |
+| `Kubernetes` | | A `KubernetesBackendOptions`: `Namespace` (`trax-sandbox`), `RuntimeClassName` (`kata`), `RunsClaimName` (`trax-sandbox-runs`), `RunsPath` (`/runs`), `NodeName` (from `NODE_NAME` when not set), `PollInterval` (2 seconds) and `RunsMinFreePercent` (15, the share of the runs volume's filesystem that must stay free). |
 | `CanaryProbes` | | More `host:port` pairs the startup canary must fail to reach: the hub, the database. |
 
 `Validate()` throws `InvalidOperationException`, naming the first problem, for a missing or short
 key, no listener or two, a socket path not ending in `.sock`, a listen URL that is not an address and a port, no profile, an unpinned image, a root user, an unpinned holder, a relative
-socket, a cluster backend with no node name or a runs path at the root, or a cap that is not positive.
+socket, a cluster backend with no node name, a runs path at the root or a `RunsMinFreePercent` outside 1 to 90, or a cap that is not positive.
 
 ### SandboxCaps
 
@@ -148,7 +148,11 @@ capability dropped and a read-only root, and mounts only its own run's `in` (rea
 the runs claim, by subPath, and an in-memory emptyDir as `/tmp`. The Job dies at the timeout and is
 never retried. The launcher reads the output directory after the pod is gone, without following a
 link or opening anything but a regular file, and checks its size every `PollInterval` while the
-sandbox runs.
+sandbox runs. A walk does not see a file the sandbox deleted while still holding it open, so the
+launcher also reads the runs volume's free space from its filesystem: below `RunsMinFreePercent` no
+run starts, and every running one is killed and fails, its log saying why. Neither check is a
+per-run limit. The claim's size is a ceiling only where its storage class enforces capacity; k3s's
+default `local-path` does not, so there the floor is what keeps the node's disk from filling.
 
 `KubernetesSandboxManifests.Render` writes everything the namespace needs, from the same options,
 as one multi-document YAML, and so does the launcher itself when run with

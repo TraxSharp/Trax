@@ -31,7 +31,11 @@ public static class KubernetesSandboxManifests
     /// <param name="options">The launcher's options, with <see cref="SandboxBackendKind.Kubernetes"/>.</param>
     /// <param name="launcherImage">The launcher's image, pinned by digest.</param>
     /// <param name="hubNamespace">The namespace of the hub, the one place the launcher accepts connections from.</param>
-    /// <param name="runsStorage">The runs volume's size, such as <c>20Gi</c>: the hard ceiling on every running sandbox's output together.</param>
+    /// <param name="runsStorage">
+    /// The runs volume's size, such as <c>20Gi</c>. It is a ceiling on every running sandbox's
+    /// output together only where the claim's storage class enforces capacity; k3s's default
+    /// <c>local-path</c> does not, and the launcher's free-space floor is what holds there.
+    /// </param>
     public static string Render(
         SandboxLauncherOptions options,
         string launcherImage,
@@ -287,6 +291,12 @@ public static class KubernetesSandboxManifests
             Value(
                 "Trax__SandboxLauncher__Kubernetes__PollInterval",
                 kube.PollInterval.ToString("c", CultureInfo.InvariantCulture)
+            )
+        );
+        env.Add(
+            Value(
+                "Trax__SandboxLauncher__Kubernetes__RunsMinFreePercent",
+                kube.RunsMinFreePercent.ToString(CultureInfo.InvariantCulture)
             )
         );
         for (var i = 0; i < options.CanaryProbes.Count; i++)

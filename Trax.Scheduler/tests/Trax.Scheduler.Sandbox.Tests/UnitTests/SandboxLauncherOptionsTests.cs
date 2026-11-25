@@ -77,6 +77,15 @@ public class SandboxLauncherOptionsTests
     public void Validate_RunsPathRootOrRelative_IsRefused(string path) =>
         Refused(o => o.Kubernetes.RunsPath = path, "RunsPath", LauncherOptions.Kubernetes());
 
+    [TestCase(0)]
+    [TestCase(91)]
+    public void Validate_RunsMinFreePercentOutOfRange_IsRefused(int percent) =>
+        Refused(
+            o => o.Kubernetes.RunsMinFreePercent = percent,
+            "RunsMinFreePercent",
+            LauncherOptions.Kubernetes()
+        );
+
     [Test]
     public void Validate_NoProfile_IsRefused() => Refused(o => o.Profiles.Clear(), "no profile");
 

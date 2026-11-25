@@ -141,5 +141,7 @@ public sealed class SandboxLauncherOptions
         : string.IsNullOrEmpty(Kubernetes.NodeName)
             ? "Kubernetes:NodeName is required (set NODE_NAME from spec.nodeName)"
         : Kubernetes.PollInterval <= TimeSpan.Zero ? "Kubernetes:PollInterval must be positive"
+        : Kubernetes.RunsMinFreePercent is < 1 or > 90
+            ? "Kubernetes:RunsMinFreePercent must be from 1 to 90"
         : null;
 }
