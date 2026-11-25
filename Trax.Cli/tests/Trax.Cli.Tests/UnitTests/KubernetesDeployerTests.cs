@@ -588,8 +588,12 @@ public class KubernetesDeployerTests
             return Task.FromResult(Deployments.GetValueOrDefault(name));
         }
 
+        /// <summary>Called with each Job before it is created; throws to stand for the API refusing it.</summary>
+        public Action<V1Job>? OnCreateJob { get; set; }
+
         public Task CreateJobAsync(V1Job body, CancellationToken ct)
         {
+            OnCreateJob?.Invoke(body);
             Calls.Add($"create-job {body.Metadata.Name}");
             Jobs.Add(body);
             return Task.CompletedTask;

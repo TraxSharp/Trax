@@ -353,7 +353,10 @@ internal sealed class AwsDeployer(
             await aws.DeployAsync(stack, template, parameters, tags, AnyReplaced, say, ct)
                 .ConfigureAwait(false);
         }
-        catch (InvalidOperationException failed) when (drained && !ct.IsCancellationRequested)
+        // Any failure, the AWS API's own included: the hosts are drained either way.
+        catch (Exception failed)
+            when (drained && failed is not OperationCanceledException && !ct.IsCancellationRequested
+            )
         {
             throw new InvalidOperationException(
                 failed.Message + await ResumeAsync(stack, ct).ConfigureAwait(false),
@@ -442,7 +445,8 @@ internal sealed class AwsDeployer(
                 ? ""
                 : " Ending the drain failed: it lapses on its own. End it now from the console's scheduler page.";
         }
-        catch (InvalidOperationException ex) when (!ct.IsCancellationRequested)
+        catch (Exception ex)
+            when (ex is not OperationCanceledException && !ct.IsCancellationRequested)
         {
             return $" Ending the drain failed ({ex.Message}): it lapses on its own. End it now from the "
                 + "console's scheduler page.";

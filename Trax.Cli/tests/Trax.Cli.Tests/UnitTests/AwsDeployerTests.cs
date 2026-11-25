@@ -1219,6 +1219,8 @@ public class AwsDeployerTests
             Stacks.Add(stack);
             Deploys.Add(parameters);
             Templates.Add(template);
+            if (Deploys.Count == FailDeployNumber && FailDeployWith is { } failure)
+                throw failure;
             if (Deploys.Count == FailDeployNumber)
                 throw new InvalidOperationException(
                     $"{stack} ended UPDATE_ROLLBACK_COMPLETE: the circuit breaker rolled it back"
@@ -1228,6 +1230,12 @@ public class AwsDeployerTests
 
         /// <summary>Which deploy (1 for the first, the foundation's included) fails as a rolled-back update.</summary>
         public int? FailDeployNumber { get; set; }
+
+        /// <summary>What the deploy <see cref="FailDeployNumber"/> names throws instead of a rolled-back update.</summary>
+        public Exception? FailDeployWith { get; set; }
+
+        /// <summary>What a task of each label throws instead of running, standing for the API refusing it.</summary>
+        public Dictionary<string, Exception> TaskFailures { get; } = new(StringComparer.Ordinal);
 
         public Task<AwsTaskResult> RunTaskAsync(
             AwsTaskRequest request,
@@ -1240,6 +1248,8 @@ public class AwsDeployerTests
                     ? "run-task"
                     : $"run-task {request.Label}"
             );
+            if (TaskFailures.TryGetValue(request.Label, out var failure))
+                throw failure;
             Task = request;
             Tasks.Add(request);
             return System.Threading.Tasks.Task.FromResult(

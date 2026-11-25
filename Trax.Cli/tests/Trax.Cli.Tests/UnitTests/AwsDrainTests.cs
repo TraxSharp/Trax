@@ -127,6 +127,35 @@ public class AwsDrainTests
     }
 
     [Test]
+    public async Task An_AWS_error_during_the_roll_still_ends_the_drain()
+    {
+        var (deployer, aws, _) = Deployer(running: true);
+        aws.FailDeployNumber = 3;
+        aws.FailDeployWith = new HttpRequestException("the connection was reset");
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "the connection was reset*"
+        );
+        aws.Calls[^1].Should().Be("run-task resume");
+    }
+
+    [Test]
+    public async Task A_resume_task_the_API_refuses_leaves_the_deploy_done_and_says_the_drain_lapses()
+    {
+        var (deployer, aws, said) = Deployer(running: true);
+        aws.TaskFailures["resume"] = new HttpRequestException("throttled");
+
+        await Deploy(deployer);
+
+        said.Should()
+            .Contain(s =>
+                s.Contains("Ending the drain failed (throttled)", StringComparison.Ordinal)
+            );
+    }
+
+    [Test]
     public async Task A_resume_that_fails_leaves_the_deploy_done_and_says_the_drain_lapses()
     {
         var (deployer, aws, said) = Deployer(running: true);

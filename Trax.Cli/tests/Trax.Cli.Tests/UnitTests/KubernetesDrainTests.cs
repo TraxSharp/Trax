@@ -311,6 +311,55 @@ public class KubernetesDrainTests
     }
 
     [Test]
+    public async Task A_cluster_error_during_the_roll_still_rolls_back_and_ends_the_drain()
+    {
+        var (deployer, cluster, _) = Deployer();
+        Running(cluster);
+        var failed = false;
+        cluster.OnWait = target =>
+        {
+            if (!failed && string.Equals(target, "Deployment/hub", StringComparison.Ordinal))
+            {
+                failed = true;
+                throw new HttpRequestException("the connection was reset");
+            }
+            return Task.CompletedTask;
+        };
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "the connection was reset Every service was rolled back*"
+        );
+        cluster
+            .Calls[^1]
+            .Should()
+            .Be($"wait-job orders-resume-{Tag}", "the hosts are not left drained");
+    }
+
+    [Test]
+    public async Task A_resume_Job_the_API_refuses_leaves_the_deploy_done_and_says_the_drain_lapses()
+    {
+        var (deployer, cluster, said) = Deployer();
+        Running(cluster);
+        cluster.OnCreateJob = job =>
+        {
+            if (job.Metadata.Name.Contains("-resume-", StringComparison.Ordinal))
+                throw new HttpRequestException("the API server is unavailable");
+        };
+
+        await Deploy(deployer);
+
+        said.Should()
+            .Contain(s =>
+                s.Contains(
+                    "Ending the drain failed (the API server is unavailable)",
+                    StringComparison.Ordinal
+                )
+            );
+    }
+
+    [Test]
     public async Task A_resume_that_fails_leaves_the_deploy_done_and_says_the_drain_lapses()
     {
         var (deployer, cluster, said) = Deployer();

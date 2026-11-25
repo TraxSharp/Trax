@@ -80,7 +80,10 @@ internal sealed class KubernetesDeployer(
             await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Services, ct)
                 .ConfigureAwait(false);
         }
-        catch (InvalidOperationException failed) when (!ct.IsCancellationRequested)
+        // Any failure, the API's own (a 5xx, a refusal, a dropped connection) included: the services may be half
+        // rolled and the hosts drained, so both are put right before the failure is reported.
+        catch (Exception failed)
+            when (failed is not OperationCanceledException && !ct.IsCancellationRequested)
         {
             var proxySecret = proxySecretBefore is null
                 ? null
@@ -88,7 +91,10 @@ internal sealed class KubernetesDeployer(
             var rolledBack = await RollBackAsync(manifests.NamespaceName, before, proxySecret, ct)
                 .ConfigureAwait(false);
             var resumed = drained ? await ResumeAsync(manifests, ct).ConfigureAwait(false) : "";
-            throw new InvalidOperationException($"{failed.Message} {rolledBack}{resumed}", failed);
+            throw new InvalidOperationException(
+                $"{Described(failed)} {rolledBack}{resumed}",
+                failed
+            );
         }
         if (!ReferenceEquals(admission, manifests.Admission))
             await NarrowEgressAdmissionAsync(manifests, ct).ConfigureAwait(false);
@@ -242,12 +248,19 @@ internal sealed class KubernetesDeployer(
                 + "its own. End it now from the console's scheduler page, or see "
                 + $"'kubectl logs -n {ns} job/{job}' for why.";
         }
-        catch (InvalidOperationException ex) when (!ct.IsCancellationRequested)
+        catch (Exception ex)
+            when (ex is not OperationCanceledException && !ct.IsCancellationRequested)
         {
-            return $" Ending the drain failed ({ex.Message}): it lapses on its own. End it now from the "
+            return $" Ending the drain failed ({Described(ex)}): it lapses on its own. End it now from the "
                 + "console's scheduler page.";
         }
     }
+
+    /// <summary>A failure in a sentence: what the API server answered when it refused, or the message.</summary>
+    private static string Described(Exception ex) =>
+        ex is k8s.Autorest.HttpOperationException http
+            ? $"The cluster refused: {http.Response.StatusCode} {http.Response.Content}".TrimEnd()
+            : ex.Message;
 
     /// <summary>
     /// On a tailnet exposure, writes a new proxy secret to its Secret, which the hub and the edge both restart onto
@@ -355,9 +368,10 @@ internal sealed class KubernetesDeployer(
                         .WaitForRolloutAsync(ns, "Deployment", name, RolloutTimeout, ct)
                         .ConfigureAwait(false);
         }
-        catch (InvalidOperationException rollback)
+        catch (Exception rollback)
+            when (rollback is not OperationCanceledException && !ct.IsCancellationRequested)
         {
-            return $"Rolling back failed too, so the services are in between versions: {rollback.Message}";
+            return $"Rolling back failed too, so the services are in between versions: {Described(rollback)}";
         }
         return "Every service was rolled back to the version it ran before this deploy; the migration stays.";
     }
