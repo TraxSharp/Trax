@@ -50,7 +50,7 @@ public sealed class SandboxClientOptions
 
     /// <summary>
     /// How long past the train's own timeout the hub waits for the launcher's answer: the time to
-    /// start the sandbox and collect its output. Two minutes by default.
+    /// start the sandbox and collect its output. Two minutes by default, at most a day.
     /// </summary>
     public TimeSpan ResponseGrace { get; set; } = TimeSpan.FromMinutes(2);
 
@@ -104,9 +104,9 @@ public sealed class SandboxClientOptions
             throw new InvalidOperationException(
                 "SandboxClientOptions.Archive must have positive limits."
             );
-        if (ResponseGrace <= TimeSpan.Zero)
+        if (ResponseGrace <= TimeSpan.Zero || ResponseGrace > TimeSpan.FromDays(1))
             throw new InvalidOperationException(
-                "SandboxClientOptions.ResponseGrace must be positive."
+                "SandboxClientOptions.ResponseGrace must be positive and at most a day."
             );
     }
 }

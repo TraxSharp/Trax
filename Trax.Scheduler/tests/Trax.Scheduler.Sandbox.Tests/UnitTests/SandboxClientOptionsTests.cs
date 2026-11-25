@@ -156,5 +156,13 @@ public class SandboxClientOptionsTests
             .Invoking(() => options.Validate())
             .Should()
             .Throw<InvalidOperationException>();
+
+        options = Valid();
+        options.ResponseGrace = TimeSpan.MaxValue;
+        FluentActions
+            .Invoking(() => options.Validate())
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*ResponseGrace*");
     }
 }

@@ -1,7 +1,12 @@
 using System.Formats.Tar;
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Sandbox.Image;
 using Trax.Scheduler.Sandbox.Tests.Fakes;
 using Trax.Scheduler.Services.RunExecutor;
@@ -380,5 +385,69 @@ public class TraxSandboxClientTests
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*does not carry [TraxSandbox]*");
         launcher.RequestBodies.Should().BeEmpty();
+    }
+
+    private static async Task<SandboxRunException> RefusedBeforeSendingAsync<TTrain>(
+        FakeLauncher launcher,
+        SandboxClientOptions? options = null
+    )
+        where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<HostileInput, HostileOutput>
+    {
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddTrax(trax =>
+                trax.AddEffects(effects => effects.UseInMemory())
+                    .AddMediator(
+                        typeof(HostileTrain).Assembly,
+                        typeof(BadlyDeclaredTrains.ZeroCpuTrain).Assembly
+                    )
+            );
+        var hub = services.BuildServiceProvider();
+        await using (hub.ConfigureAwait(false))
+        {
+            var thrown = (
+                await FluentActions
+                    .Awaiting(() =>
+                        SandboxHosts
+                            .Client(hub, launcher, options)
+                            .RunAsync<TTrain, HostileInput, HostileOutput>(Echo)
+                    )
+                    .Should()
+                    .ThrowAsync<SandboxRunException>()
+                    .ConfigureAwait(false)
+            ).Which;
+            launcher
+                .RequestBodies.Should()
+                .BeEmpty("nothing is sent for a declaration that cannot run");
+            return thrown;
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_ALimitThatIsNotPositive_IsRefusedNamingIt()
+    {
+        var thrown = await RefusedBeforeSendingAsync<BadlyDeclaredTrains.IZeroCpuTrain>(
+            new FakeLauncher(SandboxHosts.Key)
+        );
+
+        thrown.Outcome.Should().Be(SandboxOutcome.Refused);
+        thrown
+            .Message.Should()
+            .Contain(typeof(BadlyDeclaredTrains.ZeroCpuTrain).FullName)
+            .And.Contain("CpuMillicores");
+    }
+
+    [Test]
+    public async Task RunAsync_ATimeoutLongerThanTheHubCanWait_IsRefused()
+    {
+        var thrown = await RefusedBeforeSendingAsync<BadlyDeclaredTrains.IForeverTrain>(
+            new FakeLauncher(SandboxHosts.Key)
+        );
+
+        thrown.Outcome.Should().Be(SandboxOutcome.Refused);
+        thrown
+            .Message.Should()
+            .Contain(typeof(BadlyDeclaredTrains.ForeverTrain).FullName)
+            .And.Contain("timeout");
     }
 }

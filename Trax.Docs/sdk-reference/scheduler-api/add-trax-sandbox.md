@@ -64,10 +64,11 @@ public interface ITraxSandbox
 | `SigningKey` | `byte[]?` | | The key shared with the launcher, at least 32 bytes. Required. |
 | `MaxResponseBodyBytes` | `long` | `DefaultMaxResponseBodyBytes` (128 MiB) | The most bytes of an answer read; a larger one fails the run unread. |
 | `Archive` | `SandboxArchiveLimits` | 64 MiB, 10000 entries | The caps the hub checks the returned files against again. Keep them at or above the launcher's. |
-| `ResponseGrace` | `TimeSpan` | 2 minutes | How long past the train's own timeout the hub waits, for starting and collecting the sandbox. |
+| `ResponseGrace` | `TimeSpan` | 2 minutes | How long past the train's own timeout the hub waits, for starting and collecting the sandbox. At most a day. |
 
 `Validate()` throws `InvalidOperationException` for no launcher or two, no key or a short one, a
-relative socket path, a cleartext URL off loopback, or a cap that is not positive.
+relative socket path, a cleartext URL off loopback, a cap that is not positive, or a
+`ResponseGrace` that is not positive or is over a day.
 `AddTraxSandbox` calls it, so a hub with a bad setting does not start.
 
 ### RunAsync
@@ -89,6 +90,9 @@ checked by the launcher and again by the hub.
 - The request carries the run id (32 random hex characters), the profile and the limits from the
   train's class, the train's interface name and the input as JSON. Nothing else: no image, command,
   environment, mount or runtime. See [The wire](#the-wire).
+- A declaration with a limit that is not positive, or a timeout longer than the hub can wait for
+  (about 49 days with the grace), is refused before anything is sent: `SandboxRunException` with
+  `Refused`, naming the train's class.
 - The answer is read only when it carries the launcher's signature for this request; any other
   answer, whatever its status code, fails the run.
 - A run that did not complete throws `SandboxRunException`, a `TrainException` whose `Outcome` says

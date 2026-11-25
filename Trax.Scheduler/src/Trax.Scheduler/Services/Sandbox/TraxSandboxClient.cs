@@ -35,7 +35,12 @@ internal sealed class TraxSandboxClient(
         where TInput : notnull
     {
         ArgumentNullException.ThrowIfNull(input);
-        var declared = Declaration(typeof(TTrain));
+        var declared = Declaration(typeof(TTrain), out var implementation);
+        if (Undeliverable(declared.Limits) is { } why)
+            throw new SandboxRunException(
+                SandboxOutcome.Refused,
+                $"{implementation.FullName} declares [TraxSandbox] limits that cannot run: {why}"
+            );
         var request = new SandboxRunRequest(
             Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
             declared.Profile,
@@ -66,8 +71,23 @@ internal sealed class TraxSandboxClient(
         return new SandboxRun<TOutput>(output is TOutput typed ? typed : default, files);
     }
 
+    /// <summary>The longest a hub can wait for an answer: the most a cancellation timer takes.</summary>
+    internal static readonly TimeSpan MaxWait = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
+    /// <summary>Why <paramref name="limits"/> cannot be sent, or null when they can.</summary>
+    private string? Undeliverable(SandboxLimits limits) =>
+        limits.Invalid()
+        ?? (
+            TimeSpan.FromSeconds(limits.TimeoutSeconds) + options.ResponseGrace > MaxWait
+                ? string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"its timeout of {limits.TimeoutSeconds} seconds is longer than the hub can wait for an answer."
+                )
+                : null
+        );
+
     /// <summary>The declaration on the class registered for <paramref name="train"/>.</summary>
-    private TraxSandboxAttribute Declaration(Type train)
+    private TraxSandboxAttribute Declaration(Type train, out Type implementation)
     {
         var registration =
             discovery.DiscoverTrains().FirstOrDefault(r => r.ServiceType == train)
@@ -76,6 +96,7 @@ internal sealed class TraxSandboxClient(
                     + "declaration cannot be read."
             );
 
+        implementation = registration.ImplementationType;
         return registration.ImplementationType.GetCustomAttribute<TraxSandboxAttribute>()
             ?? throw new InvalidOperationException(
                 $"{registration.ImplementationType.FullName} does not carry [TraxSandbox], so it "
