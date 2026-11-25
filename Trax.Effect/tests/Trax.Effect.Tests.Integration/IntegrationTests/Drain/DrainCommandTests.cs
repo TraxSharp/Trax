@@ -154,6 +154,71 @@ public class DrainCommandTests : TestSetup
     }
 
     [Test]
+    public async Task A_drain_ended_while_it_waits_refuses_rather_than_report_the_hosts_drained()
+    {
+        // Resumed from the console mid-wait: the hosts take work again, so nothing busy now says nothing about what
+        // the roll would cut off.
+        var run = await Run(TrainState.InProgress);
+        var drain = DrainCommand.DrainAsync(
+            Scope.ServiceProvider,
+            TimeSpan.FromSeconds(30),
+            force: false,
+            settle: TimeSpan.Zero,
+            poll: Fast,
+            CancellationToken.None
+        );
+        await UntilRow();
+
+        await DrainCommand.ResumeAsync(Scope.ServiceProvider, CancellationToken.None);
+        await SetState(run.Id, TrainState.Completed);
+
+        await FluentActions
+            .Awaiting(() => drain)
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*drain was ended or replaced while it waited*");
+    }
+
+    [Test]
+    public async Task A_drain_replaced_while_it_waits_refuses_and_leaves_the_new_one()
+    {
+        var run = await Run(TrainState.InProgress);
+        var drain = DrainCommand.DrainAsync(
+            Scope.ServiceProvider,
+            TimeSpan.FromSeconds(30),
+            force: false,
+            settle: TimeSpan.Zero,
+            poll: Fast,
+            CancellationToken.None
+        );
+        await UntilRow();
+
+        var context = (IDataContext)DataContextFactory.Create();
+        await using (context.ConfigureAwait(false))
+        {
+            var now = TimeProvider.System.GetUtcNow();
+            await DrainStore.SetAsync(
+                context,
+                now + TimeSpan.FromMinutes(5),
+                now + TimeSpan.FromSeconds(1),
+                "operator:bob",
+                CancellationToken.None
+            );
+        }
+        await SetState(run.Id, TrainState.Completed);
+
+        await FluentActions
+            .Awaiting(() => drain)
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*drain was ended or replaced while it waited*");
+        (await Row())
+            .NotNull()
+            .StartedBy.Should()
+            .Be("operator:bob", "the drain in force is someone else's");
+    }
+
+    [Test]
     public async Task Resume_ends_the_drain()
     {
         await DrainCommand.DrainAsync(
@@ -227,6 +292,28 @@ public class DrainCommandTests : TestSetup
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*TRAX_DRAIN_FORCE*");
         (await Row()).Should().BeNull();
+    }
+
+    private async Task UntilRow()
+    {
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(30);
+        while (
+            await Row().ConfigureAwait(false) is null && TimeProvider.System.GetUtcNow() < deadline
+        )
+            // allowed-delay: waits for the drain under test to set its row, bounded by 30 s.
+            await Task.Delay(TimeSpan.FromMilliseconds(10), TimeProvider.System)
+                .ConfigureAwait(false);
+        (await Row().ConfigureAwait(false)).Should().NotBeNull("the drain sets its row first");
+    }
+
+    private async Task SetState(long id, TrainState state)
+    {
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var disposal = context.ConfigureAwait(false);
+        await context
+            .Metadatas.Where(m => m.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, state))
+            .ConfigureAwait(false);
     }
 
     private async Task<Models.Drain.Drain?> Row()

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using DrainRow = Trax.Effect.Models.Drain.Drain;
 
 namespace Trax.Effect.Data.Services.Drain;
 
@@ -25,6 +26,7 @@ internal static class DrainCommand
     /// Sets the drain to lapse after <paramref name="timeout"/> plus <see cref="TraxDrain.Margin"/>, then waits for
     /// nothing to be busy. Returns once nothing is, leaving the drain in place. Past the timeout it ends the drain and
     /// throws, naming what is busy, or with <paramref name="force"/> logs the list and returns with the drain kept.
+    /// Throws when its drain is ended or replaced while it waits, since the hosts may be taking work again.
     /// Cancelled, it leaves the drain to lapse.
     /// </summary>
     public static async Task DrainAsync(
@@ -44,12 +46,7 @@ internal static class DrainCommand
         var started = clock.GetUtcNow();
         var deadline = started + timeout;
         var until = deadline + TraxDrain.Margin;
-        await WithContextAsync(
-                factory,
-                c => DrainStore.SetAsync(c, until, started, TraxDrain.DeployActor, ct),
-                ct
-            )
-            .ConfigureAwait(false);
+        var mine = await SetAsync(factory, clock, until, started, ct).ConfigureAwait(false);
         logger?.LogInformation(
             "Drained: no host starts new work until {Until:u}. Waiting up to {Timeout} for what is busy.",
             until,
@@ -59,6 +56,7 @@ internal static class DrainCommand
         await Task.Delay(Min(settle, timeout), clock, ct).ConfigureAwait(false);
         while (true)
         {
+            await StillMineAsync(factory, clock, mine, ct).ConfigureAwait(false);
             var (items, total) = await WithContextAsync(
                     factory,
                     c => DrainStore.BusyAsync(c, ignored, ct),
@@ -94,6 +92,63 @@ internal static class DrainCommand
             );
             await Task.Delay(Min(poll, deadline - now), clock, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Sets the deploy's drain and returns it read back as stored: a provider may keep the time at a coarser
+    /// precision than the clock gives, and <see cref="StillMineAsync"/> compares against the stored one.
+    /// </summary>
+    private static async Task<DrainRow?> SetAsync(
+        IDataContextProviderFactory factory,
+        TimeProvider clock,
+        DateTimeOffset until,
+        DateTimeOffset started,
+        CancellationToken ct
+    )
+    {
+        await WithContextAsync(
+                factory,
+                c => DrainStore.SetAsync(c, until, started, TraxDrain.DeployActor, ct),
+                ct
+            )
+            .ConfigureAwait(false);
+        return await WithContextAsync(
+                factory,
+                c => DrainStore.ReadAsync(c, clock.GetUtcNow(), ct),
+                ct
+            )
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Throws unless the drain in force is still the one this process set: resumed from the console, ended by another
+    /// deploy's resume or replaced by another drain, the hosts may already be taking work, and nothing busy would not
+    /// mean the roll cuts nothing off. A drain it does not own is left as it is.
+    /// </summary>
+    private static async Task StillMineAsync(
+        IDataContextProviderFactory factory,
+        TimeProvider clock,
+        DrainRow? mine,
+        CancellationToken ct
+    )
+    {
+        var now = await WithContextAsync(
+                factory,
+                c => DrainStore.ReadAsync(c, clock.GetUtcNow(), ct),
+                ct
+            )
+            .ConfigureAwait(false);
+        if (
+            mine is not null
+            && now is not null
+            && now.StartedAt == mine.StartedAt
+            && string.Equals(now.StartedBy, mine.StartedBy, StringComparison.Ordinal)
+        )
+            return;
+        throw new InvalidOperationException(
+            "The drain was ended or replaced while it waited, so the hosts may be taking work again and nothing "
+                + "should be replaced. Deploy again to drain afresh."
+        );
     }
 
     /// <summary>
