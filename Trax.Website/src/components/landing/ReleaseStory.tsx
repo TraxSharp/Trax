@@ -3,15 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import data from "@/data/deploy-recordings.json";
 import type { DeployRecordings } from "@/lib/deploy-replay";
-import { LABELS, SIMULATED_CAPTION, STORY_MS, captionAt, counterAt, storyOf, type Story, type StoryKind, type StoryTarget } from "@/lib/release-story";
+import {
+  LABELS,
+  SIMULATED_CAPTION,
+  STORY_MS,
+  captionAt,
+  counterAt,
+  sourceLabel,
+  stepAt,
+  storyOf,
+  type Story,
+  type StoryKind,
+  type StoryTarget,
+} from "@/lib/release-story";
 import { HUE, NEUTRAL, alpha } from "@/lib/hue";
 
 // One release, as a moving picture: requests flowing to the running version, a job the release waits for, the new
 // version starting beside the old one and taking over. Read off the recorded Kubernetes run of the DistributedWorkers
 // sample (src/lib/release-story.ts says how); AWS is simulated and says so.
 const recordings = data as unknown as DeployRecordings;
-// Out and back again, in story time.
-const TRIP = 1400;
+// Out and back again, in story time: about a second and a half each way, slow enough to follow one dot.
+const TRIP = 3000;
 const HOLD = 2500;
 
 type Point = { x: number; y: number };
@@ -29,6 +41,10 @@ interface Layout {
   V2: Point;
   /** The status goes beside the name, or on the line under it. */
   inline: boolean;
+  /** Where "request" and "answer" are written, beside their lanes. */
+  inLabel: Point;
+  outLabel: Point;
+  id: string;
 }
 // Left to right on a wide screen; top to bottom on a phone, so the words stay readable.
 const WIDE: Layout = {
@@ -42,6 +58,9 @@ const WIDE: Layout = {
   V1: { x: 590, y: 82 },
   V2: { x: 590, y: 218 },
   inline: true,
+  inLabel: { x: 225, y: 135 },
+  outLabel: { x: 225, y: 175 },
+  id: "wide",
 };
 const TALL: Layout = {
   view: "0 0 360 400",
@@ -54,6 +73,9 @@ const TALL: Layout = {
   V1: { x: 91, y: 280 },
   V2: { x: 269, y: 280 },
   inline: false,
+  inLabel: { x: 218, y: 108 },
+  outLabel: { x: 142, y: 108 },
+  id: "tall",
 };
 
 export default function ReleaseStory() {
@@ -138,17 +160,21 @@ export default function ReleaseStory() {
       </div>
 
       <div className="relative overflow-hidden rounded-lg border border-border bg-bg-secondary">
-        {story.simulated && (
-          <span className="absolute left-3 top-3 z-10 rounded border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: HUE.amber, color: HUE.amber }}>
-            Simulated
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-3 text-xs">
+          <span className="font-mono text-text-secondary">{sourceLabel(story)}</span>
+          {story.simulated && (
+            <span className="rounded border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: HUE.amber, color: HUE.amber }}>
+              Simulated
+            </span>
+          )}
+        </div>
         <div className="hidden sm:block">
           <Picture story={story} at={at} labels={labels} l={WIDE} />
         </div>
         <div className="sm:hidden">
           <Picture story={story} at={at} labels={labels} l={TALL} />
         </div>
+        <Steps story={story} at={at} />
         <div className="h-0.5 bg-border">
           <div className="h-full bg-accent/70" style={{ width: `${(at / STORY_MS) * 100}%` }} />
         </div>
@@ -175,7 +201,7 @@ export default function ReleaseStory() {
           <span style={{ color: HUE.amber }}>{SIMULATED_CAPTION}</span>
         ) : (
           <>
-            Recorded on Kubernetes (k3s) with the DistributedWorkers sample: a request to the app every 0.2 seconds, one dot drawn for every{" "}
+            Recorded with trax deploy on Kubernetes (k3s) and the DistributedWorkers sample: a request to the app every 0.2 seconds, one dot drawn for every{" "}
             {story.perDot}, and about {Math.round((story.scenario?.duration ?? 0) / 1000)} seconds shown in {STORY_MS / 1000}.
             {story.job && " The running job is a finished run the recorder marked as running, then ended by hand."}
           </>
@@ -211,6 +237,75 @@ function along(points: { x: number; y: number }[], f: number) {
   return points[points.length - 1];
 }
 
+// How far each lane sits from the line between two boxes.
+const LANE = -9;
+
+/** A path moved sideways by `d`, to the left of the way it runs: going one way and coming back sit on either side. */
+function offset(points: Point[], d: number): Point[] {
+  const shifted = points.slice(1).map((b, i) => {
+    const a = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const nx = (-(b.y - a.y) / len) * d;
+    const ny = ((b.x - a.x) / len) * d;
+    return [
+      { x: a.x + nx, y: a.y + ny },
+      { x: b.x + nx, y: b.y + ny },
+    ];
+  });
+  const out = [shifted[0][0]];
+  for (let i = 0; i < shifted.length - 1; i++)
+    out.push({ x: (shifted[i][1].x + shifted[i + 1][0].x) / 2, y: (shifted[i][1].y + shifted[i + 1][0].y) / 2 });
+  out.push(shifted[shifted.length - 1][1]);
+  return out;
+}
+
+/** One lane: requests toward the app, or answers back to the people, with an arrow at its end. */
+function Lane({ points, kind, id, opacity = 1, dashed = false }: { points: Point[]; kind: "in" | "out"; id: string; opacity?: number; dashed?: boolean }) {
+  const lane = offset(kind === "in" ? points : [...points].reverse(), LANE);
+  return (
+    <polyline
+      points={lane.map((p) => `${p.x},${p.y}`).join(" ")}
+      fill="none"
+      stroke={alpha(kind === "in" ? HUE.blue : HUE.green, 45)}
+      strokeWidth={1.5}
+      strokeDasharray={dashed ? "4 5" : undefined}
+      markerEnd={`url(#${id}-${kind})`}
+      opacity={opacity}
+    />
+  );
+}
+
+/** The deploy's steps, each lit from the moment the recording shows it start, with a line under the current one. */
+function Steps({ story, at }: { story: Story; at: number }) {
+  const current = stepAt(story, at);
+  return (
+    <div className="border-t border-border px-3 py-2.5">
+      <ol className="flex flex-wrap gap-1.5" aria-label="The deploy's steps">
+        {story.steps.map((step, i) => {
+          const state = i < current ? "done" : i === current ? "now" : "ahead";
+          const bad = step.key === "never" || step.key === "back";
+          const color = bad ? HUE.redSoft : HUE.green;
+          return (
+            <li
+              key={step.key}
+              className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors duration-300"
+              style={
+                state === "ahead"
+                  ? { borderColor: NEUTRAL.line, color: NEUTRAL.muted }
+                  : { borderColor: alpha(color, state === "now" ? 80 : 40), color, background: state === "now" ? alpha(color, 14) : undefined }
+              }
+            >
+              <span className="font-mono text-[10px] opacity-70">{i + 1}</span>
+              {step.label}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-1.5 min-h-[1.5em] text-xs text-text-secondary">{current >= 0 ? story.steps[current].line : ""}</p>
+    </div>
+  );
+}
+
 const between = (at: number, from: number | null, to: number | null) => from != null && at >= from && (to == null || at < to);
 
 function Picture({ story, at, labels, l }: { story: Story; at: number; labels: (typeof LABELS)[StoryTarget]; l: Layout }) {
@@ -239,8 +334,24 @@ function Picture({ story, at, labels, l }: { story: Story; at: number; labels: (
 
   return (
     <svg viewBox={l.view} className="mx-auto block h-auto w-full max-w-[860px]" role="img" aria-label="Requests going to the running version while a new version takes over">
-      <path d={`M${P.x} ${P.y} L${R.x} ${R.y} L${V1.x} ${V1.y}`} fill="none" stroke={NEUTRAL.line} strokeWidth={1.5} opacity={v1Opacity} />
-      {v2Shown && <path d={`M${R.x} ${R.y} L${V2.x} ${V2.y}`} fill="none" stroke={NEUTRAL.line} strokeWidth={1.5} strokeDasharray={v2Ready ? undefined : "4 5"} />}
+      <defs>
+        {(["in", "out"] as const).map((k) => (
+          <marker key={k} id={`${l.id}-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill={k === "in" ? HUE.blue : HUE.green} />
+          </marker>
+        ))}
+      </defs>
+      {/* Requests go in on one lane and answers come back on the other, each with its arrow. */}
+      <Lane points={[P, R, V1]} kind="in" id={l.id} opacity={v1Opacity} />
+      <Lane points={[P, R, V1]} kind="out" id={l.id} opacity={v1Opacity} />
+      {v2Shown && <Lane points={[P, R, V2]} kind="in" id={l.id} dashed={!v2Ready} />}
+      {v2Shown && <Lane points={[P, R, V2]} kind="out" id={l.id} dashed={!v2Ready} />}
+      <text x={l.inLabel.x} y={l.inLabel.y} fontSize={11} textAnchor="middle" style={{ fill: HUE.blue }}>
+        request
+      </text>
+      <text x={l.outLabel.x} y={l.outLabel.y} fontSize={11} textAnchor="middle" style={{ fill: HUE.green }}>
+        answer
+      </text>
 
       <Node box={l.people} title="People" sub="using the app" />
       <Node box={l.router} title="Traffic" sub={labels.router} />
@@ -287,9 +398,9 @@ function Picture({ story, at, labels, l }: { story: Story; at: number; labels: (
         const f = (at - (d.at - TRIP / 2)) / TRIP;
         if (f < 0 || f > 1) return null;
         const target = d.to === "v1" ? V1 : V2;
-        const out = f < 0.5;
-        const p = out ? along([P, R, target], f * 2) : along([target, R, P], (f - 0.5) * 2);
-        return <circle key={i} cx={p.x} cy={p.y} r={4.5} fill={out ? NEUTRAL.muted : d.ok ? HUE.green : HUE.redSoft} />;
+        const going = f < 0.5;
+        const p = going ? along(offset([P, R, target], LANE), f * 2) : along(offset([target, R, P], LANE), (f - 0.5) * 2);
+        return <circle key={i} cx={p.x} cy={p.y} r={5} fill={going ? HUE.blue : d.ok ? HUE.green : HUE.redSoft} />;
       })}
     </svg>
   );

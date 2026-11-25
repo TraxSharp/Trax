@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import data from "../src/data/deploy-recordings.json" with { type: "json" };
 import { healthAt, type DeployRecordings } from "../src/lib/deploy-replay.ts";
-import { SIMULATED_CAPTION, STORY_MS, STORY_SOURCE, captionAt, counterAt, storyOf } from "../src/lib/release-story.ts";
+import { DOTS_PER_SECOND, SIMULATED_CAPTION, STORY_MS, STORY_SOURCE, captionAt, counterAt, sourceLabel, stepAt, storyOf } from "../src/lib/release-story.ts";
 
 const recordings = data as unknown as DeployRecordings;
 const source = (key: "release-while-busy" | "broken-release") => {
@@ -22,7 +22,7 @@ test("a normal release: the job finishes, then v2 starts, gets ready, and v1 goe
   assert.ok(story.waiting.from < story.job.to, "the release did not wait on the job");
   assert.ok(story.v2.readyAt != null && story.v2.readyAt < (story.v1.goneAt ?? Infinity), "v1 went before v2 was ready");
   assert.ok(story.v1.goneAt != null && story.v1.goneAt <= STORY_MS);
-  assert.ok(story.dots.length > 50 && story.dots.every((d) => d.ok));
+  assert.ok(story.dots.every((d) => d.ok));
   assert.ok(story.dots.some((d) => d.to === "v2") && story.dots.some((d) => d.to === "v1"));
 });
 
@@ -84,4 +84,61 @@ test("the picture's copy keeps to the home page's rules", () => {
     assert.ok(!prose.includes("—"), `${file} has an em dash`);
     assert.ok(!/\b(trains?|junctions?|TypeScript)\b/i.test(prose), `${file}: ${prose.match(/.*\b(trains?|junctions?|TypeScript)\b.*/i)?.[0]}`);
   }
+});
+
+test("each dot is a recorded request, sampled sparsely enough to follow", () => {
+  for (const [kind, key] of [["normal", "release-while-busy"], ["broken", "broken-release"]] as const) {
+    const story = storyOf(recordings, kind, "kubernetes");
+    assert.ok(story);
+    const s = source(key);
+    // Every perDot-th recorded request, in order, at the story time of its own recorded moment.
+    const sampled = s.probes.filter((_, i) => i % story.perDot === 0);
+    assert.equal(story.dots.length, sampled.length, kind);
+    story.dots.forEach((d, i) => {
+      assert.equal(d.ok, sampled[i][1] === 1);
+      assert.ok(Math.abs(story.recordedAt(d.at) - sampled[i][0]) < 2, `${kind}: dot ${i} is not at its request's time`);
+    });
+    const perSecond = story.dots.length / (STORY_MS / 1000);
+    assert.ok(perSecond <= DOTS_PER_SECOND * 1.5 && perSecond >= DOTS_PER_SECOND / 2, `${kind}: ${perSecond.toFixed(1)} dots a second`);
+    // A handful on screen at once: a dot is drawn for three seconds.
+    let most = 0;
+    for (let at = 0; at <= STORY_MS; at += 100) most = Math.max(most, story.dots.filter((d) => Math.abs(d.at - at) <= 1500).length);
+    assert.ok(most <= 8, `${kind}: ${most} dots on screen at once`);
+  }
+});
+
+test("the deploy's steps light in the order the recording shows them", () => {
+  const expect = {
+    normal: ["build", "migrate", "drain", "start", "move", "stop", "resume"],
+    broken: ["build", "migrate", "drain", "start", "never", "back", "resume"],
+  };
+  for (const target of ["kubernetes", "aws"] as const)
+    for (const kind of ["normal", "broken"] as const) {
+      const story = storyOf(recordings, kind, target);
+      assert.ok(story);
+      assert.deepEqual(story.steps.map((s) => s.key), expect[kind], `${kind} on ${target}`);
+      const recorded = story.steps.map((s) => s.recorded);
+      assert.deepEqual(recorded, [...recorded].sort((a, b) => a - b), `${kind} on ${target}: a step starts before the one before it`);
+      assert.ok(story.steps.every((s, i) => i === 0 || s.at >= story.steps[i - 1].at));
+      assert.equal(stepAt(story, STORY_MS), story.steps.length - 1);
+      for (const s of story.steps) assert.ok(s.label.split(" ").length <= 3 && s.line.length < 70, s.label);
+    }
+  // The CLI's own lines are where the recorded steps start.
+  const s = source("release-while-busy");
+  const story = storyOf(recordings, "normal", "kubernetes");
+  assert.ok(story);
+  const t = (re: RegExp) => s.cli.find((l) => re.test(l.text))?.t;
+  assert.equal(story.steps.find((x) => x.key === "migrate")?.recorded, t(/^Migrating the database/));
+  assert.equal(story.steps.find((x) => x.key === "drain")?.recorded, t(/^Draining:/));
+  assert.equal(story.steps.find((x) => x.key === "resume")?.recorded, t(/^Ending the drain/));
+  const broken = storyOf(recordings, "broken", "kubernetes");
+  assert.equal(broken?.steps.find((x) => x.key === "back")?.recorded, source("broken-release").cli.find((l) => /^Rolling the services back/.test(l.text))?.t);
+});
+
+test("the picture names where it ran: trax deploy on Kubernetes, recorded, or on AWS, simulated", () => {
+  const k8s = storyOf(recordings, "normal", "kubernetes");
+  const aws = storyOf(recordings, "normal", "aws");
+  assert.ok(k8s && aws);
+  assert.equal(sourceLabel(k8s), "trax deploy on Kubernetes (k3s), recorded");
+  assert.equal(sourceLabel(aws), "trax deploy on AWS (ECS), simulated");
 });

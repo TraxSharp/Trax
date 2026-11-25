@@ -9,7 +9,10 @@
 // requests and no counts, so nothing it shows can be mistaken for, or added to, a measured number.
 import { lanesOf, type DeployRecordings, type DeployScenario, type RecordedProcess } from "./deploy-replay.ts";
 
-export const STORY_MS = 20000;
+export const STORY_MS = 24000;
+
+/** About how many recorded requests are drawn per second of the picture: few enough to follow each one. */
+export const DOTS_PER_SECOND = 1.2;
 
 /** The shape and target the story is recorded from. */
 export const STORY_SOURCE = { shape: "hub-workers", target: "kubernetes" } as const;
@@ -35,6 +38,18 @@ export interface StoryDot {
   ok: boolean;
 }
 
+/** One step of the deploy, lit from the moment the recording shows it start. */
+export interface StoryStep {
+  key: string;
+  label: string;
+  /** A short line under the step while it is the current one. */
+  line: string;
+  /** Story time it starts. */
+  at: number;
+  /** Recorded time it starts, from the CLI's line or the pod that shows it. */
+  recorded: number;
+}
+
 export interface Story {
   kind: StoryKind;
   target: StoryTarget;
@@ -50,6 +65,7 @@ export interface Story {
   /** One dot stands for this many recorded requests. */
   perDot: number;
   captions: { at: number; text: string }[];
+  steps: StoryStep[];
   /** Maps story time back to recorded time, for the counter. */
   recordedAt: (storyMs: number) => number;
   /** The recorded scenario this story reads its counts from, or null when simulated. */
@@ -114,13 +130,23 @@ export function storyOf(rec: DeployRecordings, kind: StoryKind, target: StoryTar
   const v1Stop = firstAt(old, ["stopping"]);
   const v1Gone = firstAt(old, ["gone"]);
 
-  const keys = [drainFrom, drainTo, jobTo, v2From, v2Ready, v1Stop, v1Gone, v2Gone, crashes[0]].filter((t): t is number => t != null);
+  // The CLI's own lines mark the steps it takes; the hub's pods mark the ones the cluster takes.
+  const line = (re: RegExp) => s.cli.find((l) => l.from === "trax" && re.test(l.text))?.t ?? null;
+  const built = line(/^(Asking|Building|Pushing)/);
+  const migrated = line(/^Migrating the database/);
+  const drained = line(/^Draining:/);
+  const rolledBack = line(/^Rolling the services back/);
+  const resumed = line(/^Ending the drain/);
+
+  const keys = [drainFrom, drainTo, jobTo, v2From, v2Ready, v1Stop, v1Gone, v2Gone, crashes[0], migrated, drained, rolledBack, resumed].filter(
+    (t): t is number => t != null,
+  );
   const clock = compress(keys, s.duration);
   const at = (t: number | null) => (t == null ? null : clock.to(t));
 
-  // A sample of the recorded requests: about six a second of story time, each going to a copy that was ready when
+  // A sample of the recorded requests: about DOTS_PER_SECOND a second of story time, each going to a copy that was ready when
   // it was sent, taking turns when two were.
-  const perDot = simulated ? 0 : Math.max(1, Math.round(s.probes.length / ((STORY_MS / 1000) * 6)));
+  const perDot = simulated ? 0 : Math.max(1, Math.round(s.probes.length / ((STORY_MS / 1000) * DOTS_PER_SECOND)));
   const dots: StoryDot[] = [];
   if (!simulated)
     s.probes.forEach(([t, ok], i) => {
@@ -148,10 +174,31 @@ export function storyOf(rec: DeployRecordings, kind: StoryKind, target: StoryTar
           ...(v2Gone != null ? [{ at: clock.to(v2Gone), text: "The deploy puts the old version back on its own. It never stopped answering." }] : []),
         ];
 
+  const aws = target === "aws";
+  const step = (key: string, label: string, line: string, t: number | null): StoryStep[] =>
+    t == null ? [] : [{ key, label, line, at: clock.to(t), recorded: t }];
+  const steps: StoryStep[] = [
+    ...step("build", "Build", aws ? "Builds the images and pushes them to ECR." : "Builds the images and pushes them to the registry.", built ?? 0),
+    ...step("migrate", "Migrate", aws ? "Runs the migration as an ECS task." : "Runs the migration as a Kubernetes Job.", migrated),
+    ...step("drain", "Drain", aws ? "A drain task waits for the work still running." : "A drain Job waits for the work still running.", drained),
+    ...step("start", "Start v2", aws ? "The rolling update starts a new task beside the old one." : "The new pod starts beside the old one.", v2From),
+    ...(kind === "normal"
+      ? [
+          ...step("move", "Move requests", aws ? "The load balancer sends requests to the healthy new task." : "The Service sends requests to the ready new pod.", v2Ready),
+          ...step("stop", "Stop v1", aws ? "The old task stops." : "The old pod stops.", v1Stop),
+        ]
+      : [
+          ...step("never", "Never ready", aws ? "The new task never passes its health check." : "The new pod never passes its readiness check.", crashes[0] ?? null),
+          ...step("back", "Put v1 back", aws ? "The circuit breaker rolls the service back." : "The deploy puts every service back as it was.", rolledBack ?? v2Gone),
+        ]),
+    ...step("resume", "Resume", aws ? "A task ends the drain." : "A Job ends the drain.", resumed),
+  ];
+
   return {
     kind,
     target,
     simulated,
+    steps,
     job: jobFrom != null && jobTo != null ? { from: clock.to(jobFrom), to: clock.to(jobTo) } : null,
     waiting: drainFrom != null && drainTo != null ? { from: clock.to(drainFrom), to: clock.to(drainTo) } : null,
     v1: { readyUntil: at(v1Stop) ?? STORY_MS, goneAt: at(v1Gone) },
@@ -193,3 +240,17 @@ export const LABELS: Record<StoryTarget, { copy: string; router: string; job: st
   kubernetes: { copy: "a pod", router: "the Service", job: "a running job", wait: "the drain Job waits" },
   aws: { copy: "an ECS task", router: "the load balancer", job: "a running job", wait: "the drain task waits" },
 };
+
+/** The step under way at a story time: the last one started, or -1 before the first. */
+export function stepAt(story: Story, at: number): number {
+  let current = -1;
+  story.steps.forEach((step, i) => {
+    if (step.at <= at) current = i;
+  });
+  return current;
+}
+
+/** What the picture is of, named for the target. */
+export function sourceLabel(story: Story): string {
+  return story.simulated ? "trax deploy on AWS (ECS), simulated" : "trax deploy on Kubernetes (k3s), recorded";
+}
