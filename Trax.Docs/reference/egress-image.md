@@ -13,7 +13,8 @@ source:
 `ghcr.io/traxsharp/trax-egress` limits what a container may reach to a list of domains. `trax deploy` puts it beside
 every service that names `"egress"` in `trax.deploy.json` ([the CLI reference](/docs/reference/cli#egress)), and any
 other container stack can run it the same way. It is released with Trax, at the Trax version, and a trax of a
-version names the image of the same version by digest.
+version names the image of the same version by digest. It is built for `linux/amd64` and `linux/arm64`, and the
+digest is that of the index holding both, so the same digest pulls the right one on either architecture.
 
 ## What it does
 

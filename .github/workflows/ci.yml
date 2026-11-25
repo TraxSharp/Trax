@@ -1331,7 +1331,7 @@ jobs:
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'egress')
     name: egress
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     defaults:
@@ -1355,6 +1355,11 @@ jobs:
             docker-images-prod.s3.dualstack.us-east-1.amazonaws.com:443
             docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
             dl-cdn.alpinelinux.org:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            esm.ubuntu.com:80
+            esm.ubuntu.com:443
+            packages.microsoft.com:443
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -1376,6 +1381,19 @@ jobs:
         run: podman build --build-arg VERSION=ci -t localhost/trax-egress:ci .
       - name: Run the image in real network namespaces
         run: test/e2e.sh localhost/trax-egress:ci api.github.com
+      - name: Install qemu for the arm64 build
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-user-static
+      - name: Build the image for arm64, and run it
+        # A release builds linux/amd64 and linux/arm64 into one index. The arm64 half is built here
+        # under qemu, the way the release builds it, so a break shows on the pull request and not
+        # after a tag is cut.
+        run: |
+          set -eu
+          podman build --platform linux/arm64 --build-arg VERSION=ci -t localhost/trax-egress:ci-arm64 .
+          [ "$(podman image inspect --format '{{.Architecture}}' localhost/trax-egress:ci-arm64)" = arm64 ]
+          [ "$(podman run --rm --platform linux/arm64 localhost/trax-egress:ci-arm64 version)" = ci ]
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
   # that adds pull requests' release notes. Its tests take seconds and read no folder, so they

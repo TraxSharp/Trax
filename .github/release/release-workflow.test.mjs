@@ -124,6 +124,86 @@ describe('build job', () => {
       for (const host of dockerHub) assert.ok(allowedEndpoints(job).includes(host), `${host} is not allowed`);
   });
 
+  describe('the egress image', () => {
+    const buildStep = step(build, 'Build the egress image');
+    const index = (platforms) =>
+      JSON.stringify({
+        schemaVersion: 2,
+        mediaType: 'application/vnd.oci.image.index.v1+json',
+        manifests: platforms.map((p) => {
+          const [os, architecture] = p.split('/');
+          return { mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: `sha256:${'c'.repeat(64)}`, size: 1, platform: { os, architecture } };
+        }),
+      });
+
+    // A fake podman that logs its calls and writes the archive, and a fake skopeo that reads
+    // `raw` back as the archive's top-level manifest.
+    const run = (raw) => {
+      const root = mkdtempSync(join(tmpdir(), 'trax-egress-build-'));
+      const bin = join(root, 'bin');
+      mkdirSync(bin);
+      mkdirSync(join(root, 'tmp'));
+      writeFileSync(join(root, 'raw'), raw);
+      writeFileSync(
+        join(bin, 'podman'),
+        `#!/bin/sh
+echo "podman $*" >> '${join(root, 'calls')}'
+for a in "$@"; do case "$a" in oci-archive:*) printf archive > "\${a#oci-archive:}" ;; esac; done
+`,
+      );
+      writeFileSync(join(bin, 'skopeo'), `#!/bin/sh\necho "skopeo $*" >> '${join(root, 'calls')}'\ncat '${join(root, 'raw')}'\n`);
+      writeFileSync(join(bin, 'sudo'), `#!/bin/sh\necho "sudo $*" >> '${join(root, 'calls')}'\n`);
+      for (const f of ['podman', 'skopeo', 'sudo']) chmodSync(join(bin, f), 0o755);
+      const result = runStep(buildStep.run, root, {
+        PATH: `${bin}:${process.env.PATH}`,
+        PKG_VERSION: '1.63.0',
+        RUNNER_TEMP: join(root, 'tmp'),
+        GITHUB_OUTPUT: join(root, 'output'),
+      });
+      let output = '';
+      try {
+        output = readFileSync(join(root, 'output'), 'utf8');
+      } catch {
+        // The step failed before writing it.
+      }
+      return { result, output, calls: readFileSync(join(root, 'calls'), 'utf8') };
+    };
+
+    it('builds amd64 and arm64 into one index, and hands on the index digest', () => {
+      const raw = index(['linux/amd64', 'linux/arm64']);
+      const { result, output, calls } = run(raw);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(calls, /podman build .*--platform linux\/amd64,linux\/arm64 .*--manifest /);
+      assert.match(calls, /podman manifest push --all --format oci .* oci-archive:egress\/trax-egress\.tar/);
+      assert.match(output, new RegExp(`^digest=sha256:${createHash('sha256').update(raw).digest('hex')}$`, 'm'));
+      assert.match(output, new RegExp(`^archive=${createHash('sha256').update('archive').digest('hex')}$`, 'm'));
+    });
+
+    it('refuses an index without arm64', () => {
+      const { result } = run(index(['linux/amd64']));
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /not linux\/amd64 and linux\/arm64/);
+    });
+
+    it('refuses a single image where an index belongs', () => {
+      const { result } = run(JSON.stringify({ schemaVersion: 2, mediaType: 'application/vnd.oci.image.manifest.v1+json' }));
+      assert.notEqual(result.status, 0);
+    });
+
+    it('builds and runs on arm64 in CI too, so an arm64 break shows before a tag is cut', () => {
+      const egress = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress;
+      assert.ok(allowedEndpoints(egress).includes('azure.archive.ubuntu.com:80'));
+      assert.match(step(egress, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-static/);
+      assert.match(step(egress, 'Build the image for arm64, and run it').run, /--platform linux\/arm64/);
+    });
+
+    it('may reach the Ubuntu archive, for the qemu the arm64 build runs under', () => {
+      assert.ok(allowedEndpoints(build).includes('azure.archive.ubuntu.com:80'));
+      assert.match(step(build, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-static/);
+      assert.ok(indexOf(build, 'Install qemu for the arm64 build') < indexOf(build, 'Build the egress image'));
+    });
+  });
+
   it('hands publish the packages and their digests', () => {
     assert.equal(build.outputs.digests, '${{ steps.digests.outputs.digests }}');
     assert.equal(build.outputs['npm-digests'], '${{ steps.npm-digests.outputs.digests }}');
@@ -156,14 +236,18 @@ describe('push-egress job', () => {
 
 describe('the egress push', () => {
   const pushStep = step(pushEgress, 'Push the egress image');
-  const digest = `sha256:${'a'.repeat(64)}`;
+  const raw = '{"mediaType":"application/vnd.oci.image.index.v1+json"}';
+  const digest = `sha256:${createHash('sha256').update(raw).digest('hex')}`;
 
-  // A fake skopeo: the archive holds `digest`; the registry answers an inspect with it when the
-  // caller is logged in, or when the package is public. It logs every call.
-  const run = ({ isPublic, held = digest }) => {
+  // A fake skopeo: the archive's top-level manifest is `raw`; the registry answers an inspect with
+  // `held` when the caller is logged in, or when the package is public. It logs every call.
+  const run = ({ isPublic, held = raw }) => {
     const root = mkdtempSync(join(tmpdir(), 'trax-egress-push-'));
     const bin = join(root, 'bin');
     mkdirSync(bin);
+    mkdirSync(join(root, 'tmp'));
+    writeFileSync(join(root, 'raw'), raw);
+    writeFileSync(join(root, 'held'), held);
     writeFileSync(
       join(bin, 'skopeo'),
       `#!/bin/sh
@@ -175,11 +259,11 @@ case "$1" in
   inspect)
     for a in "$@"; do last="$a"; done
     case "$last" in
-      oci-archive:*) echo '${digest}' ;;
+      oci-archive:*) cat '${join(root, 'raw')}' ;;
       docker://*)
         anonymous=; for a in "$@"; do [ "$a" = --no-creds ] && anonymous=1; done
         if [ ${isPublic ? 1 : 0} = 1 ] || { [ -z "$anonymous" ] && [ -e '${join(root, 'session')}' ]; }; then
-          echo '${held}'
+          cat '${join(root, 'held')}'
         else
           echo 'unauthorized' >&2; exit 1
         fi ;;
@@ -194,6 +278,7 @@ esac
       EGRESS_DIGEST: digest,
       GHCR_USER: 'bot',
       GHCR_TOKEN: 'token',
+      RUNNER_TEMP: join(root, 'tmp'),
     });
     return { result, calls: readFileSync(join(root, 'calls'), 'utf8').trim().split('\n') };
   };
@@ -217,9 +302,14 @@ esac
   });
 
   it('fails when the registry holds another digest', () => {
-    const { result } = run({ isPublic: true, held: `sha256:${'b'.repeat(64)}` });
+    const { result } = run({ isPublic: true, held: '{"other":true}' });
     assert.notEqual(result.status, 0);
-    assert.match(result.stdout, /not sha256:a/);
+    assert.match(result.stdout, new RegExp(`not ${digest}`));
+  });
+
+  it('pushes every platform in the index, keeping its digest', () => {
+    const { calls } = run({ isPublic: true });
+    assert.ok(calls.some((c) => /^copy --all --preserve-digests oci-archive:/.test(c)), calls.join('\n'));
   });
 });
 

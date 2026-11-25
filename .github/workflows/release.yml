@@ -139,7 +139,7 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     outputs:
@@ -178,6 +178,11 @@ jobs:
             docker-images-prod.s3.dualstack.us-east-1.amazonaws.com:443
             docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
             dl-cdn.alpinelinux.org:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            esm.ubuntu.com:80
+            esm.ubuntu.com:443
+            packages.microsoft.com:443
       - name: Checkout the tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -217,25 +222,40 @@ jobs:
             echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../../npm)"
             exit 1
           fi
+      - name: Install qemu for the arm64 build
+        # The arm64 half of the egress image runs its build steps under qemu. The Ubuntu archive hosts
+        # above are the ones apt-get update reaches on the runner.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-user-static
       - name: Build the egress image
         # ghcr.io/traxsharp/trax-egress, the image trax deploy renders beside a service that names
-        # "egress", built at the released version into an OCI archive. Its manifest digest is packed
-        # into Trax.Cli below, so a trax of this version names exactly this image and nothing a tag
-        # could later point at. push-egress pushes the archive unchanged and checks the registry holds
-        # that digest before any NuGet package goes out.
+        # "egress", built at the released version for linux/amd64 and linux/arm64 into one OCI index,
+        # saved as an OCI archive. The index's digest is packed into Trax.Cli below, so a trax of this
+        # version names exactly this image on either architecture, and nothing a tag could later point
+        # at. push-egress pushes the archive unchanged and checks the registry holds that digest before
+        # any NuGet package goes out.
         id: egress
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
           set -eu
-          podman build --build-arg VERSION="$PKG_VERSION" -t "localhost/trax-egress:$PKG_VERSION" Trax.Egress
+          image="localhost/trax-egress:$PKG_VERSION"
+          podman build --platform linux/amd64,linux/arm64 --manifest "$image" --build-arg VERSION="$PKG_VERSION" Trax.Egress
           mkdir -p egress
-          podman save --format oci-archive -o egress/trax-egress.tar "localhost/trax-egress:$PKG_VERSION"
-          digest=$(skopeo inspect --format '{{.Digest}}' oci-archive:egress/trax-egress.tar)
-          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
-            echo "::error::The egress archive's digest is '$digest', not a sha256 digest."
+          podman manifest push --all --format oci "$image" oci-archive:egress/trax-egress.tar
+          # The digest is the sha256 of the index's bytes, as a registry serves it.
+          skopeo inspect --raw oci-archive:egress/trax-egress.tar > "$RUNNER_TEMP/egress-index.json"
+          if [ "$(jq -r '.mediaType' "$RUNNER_TEMP/egress-index.json")" != application/vnd.oci.image.index.v1+json ]; then
+            echo "::error::The egress archive does not hold an OCI image index."
             exit 1
           fi
+          platforms=$(jq -r '[.manifests[].platform | .os + "/" + .architecture] | sort | join(" ")' "$RUNNER_TEMP/egress-index.json")
+          if [ "$platforms" != "linux/amd64 linux/arm64" ]; then
+            echo "::error::The egress index holds '$platforms', not linux/amd64 and linux/arm64."
+            exit 1
+          fi
+          digest="sha256:$(sha256sum "$RUNNER_TEMP/egress-index.json" | cut -d ' ' -f 1)"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "archive=$(sha256sum egress/trax-egress.tar | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - name: Upload the egress image
@@ -343,11 +363,11 @@ jobs:
             echo "::error::The downloaded egress image is not the archive the build job built."
             exit 1
           fi
-      # skopeo pushes the archive as it is (--preserve-digests refuses any change to the manifest),
-      # logs out, and reads the digest back with no credentials, as every user pulls it. A re-run
-      # pushes the same bytes again. The package ghcr.io/traxsharp/trax-egress must be public and
-      # linked to this repository, once, by an owner; until it is, the read-back fails and nothing
-      # reaches NuGet.
+      # skopeo pushes the archive as it is, every platform in its index (--preserve-digests refuses any
+      # change to a manifest), logs out, and reads the digest back with no credentials, as every user
+      # pulls it. A re-run pushes the same bytes again. The package ghcr.io/traxsharp/trax-egress must
+      # be public and linked to this repository, once, by an owner; until it is, the read-back fails
+      # and nothing reaches NuGet.
       - name: Push the egress image
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
@@ -358,17 +378,20 @@ jobs:
           set -eu
           archive=oci-archive:egress/trax-egress.tar
           image="docker://ghcr.io/traxsharp/trax-egress:$PKG_VERSION"
-          if [ "$(skopeo inspect --format '{{.Digest}}' "$archive")" != "$EGRESS_DIGEST" ]; then
-            echo "::error::The egress archive's manifest is not the digest Trax.Cli was packed with."
+          # A digest is the sha256 of the top-level manifest's bytes: here the index of both platforms.
+          skopeo inspect --raw "$archive" > "$RUNNER_TEMP/egress-index.json"
+          if [ "sha256:$(sha256sum "$RUNNER_TEMP/egress-index.json" | cut -d ' ' -f 1)" != "$EGRESS_DIGEST" ]; then
+            echo "::error::The egress archive's index is not the digest Trax.Cli was packed with."
             exit 1
           fi
           printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
-          skopeo copy --preserve-digests "$archive" "$image"
+          skopeo copy --all --preserve-digests "$archive" "$image"
           skopeo logout ghcr.io
-          if ! pushed=$(skopeo inspect --no-creds --format '{{.Digest}}' "$image"); then
+          if ! skopeo inspect --no-creds --raw "$image" > "$RUNNER_TEMP/egress-pushed.json"; then
             echo "::error::ghcr.io/traxsharp/trax-egress:$PKG_VERSION cannot be pulled without credentials. An owner makes the package public, once; then re-run this job. Nothing was published to NuGet."
             exit 1
           fi
+          pushed="sha256:$(sha256sum "$RUNNER_TEMP/egress-pushed.json" | cut -d ' ' -f 1)"
           if [ "$pushed" != "$EGRESS_DIGEST" ]; then
             echo "::error::ghcr.io holds trax-egress:$PKG_VERSION at $pushed, not $EGRESS_DIGEST. Nothing was published to NuGet."
             exit 1

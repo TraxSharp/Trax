@@ -46,11 +46,11 @@ domains, which is what an app that calls one model API and one package feed need
   reaches only that name, and a record pointing an allowed name at the LAN or at instance metadata opens nothing.
   A TCP entry passes plain TCP when the address dialled is one its name resolves to now, so the database is
   allowed by its Service, not by a range.
-- **Released by digest.** The Release workflow builds the image into an OCI archive in the read-only build job,
-  packs its manifest digest into Trax.Cli, and a job of its own, behind the `release` environment and the only
-  one holding `packages: write`, pushes the archive unchanged to ghcr.io and checks the registry holds that
-  digest; the publish job, which ships the NuGet packages, waits for it. A
-  Trax.Cli of a version names exactly the image built with it; a development build names none and refuses
+- **Released by digest.** The Release workflow builds the image for linux/amd64 and linux/arm64 into one OCI index,
+  saved as an OCI archive, in the read-only build job, packs the index's digest into Trax.Cli, and a job of its own,
+  behind the `release` environment and the only one holding `packages: write`, pushes the archive unchanged to
+  ghcr.io and checks the registry holds that digest; the publish job, which ships the NuGet packages, waits for it.
+  A Trax.Cli of a version names exactly the image built with it; a development build names none and refuses
   `"egress"` unless the deploy file names an image by digest.
 - **On Kubernetes, a ValidatingAdmissionPolicy instead of PSA alone.** PSA baseline refuses NET_ADMIN on any
   container, init containers included, so a namespace with egress cannot be held by PSA. The policy allows
@@ -99,3 +99,4 @@ container adding `SYS_PTRACE`.
 - **2026-11-24**: Proved on k3s v1.36: the rules init container's NET_ADMIN and the uid match both work in a pod
   with a user namespace of its own (`hostUsers: false`).
 - **2026-11-25**: The image is pushed by its own job, the only one with `packages: write`, before publish.
+- **2026-11-25**: Built for linux/arm64 as well as linux/amd64; Trax.Cli names the digest of the index of both.
