@@ -8,12 +8,14 @@ namespace Trax.Scheduler.Sandbox.Tests.Fakes;
 /// The Kubernetes API as far as the sandbox backend uses it, answering as RBAC would for the
 /// launcher's Role: Jobs and pods only, no subresource. When a Job is created it plays the
 /// sandbox, writing <see cref="Output"/> into the run's output directory, then reports the Job
-/// complete with <see cref="ExitCode"/>. A delegating handler that never delegates, since the
-/// Kubernetes client chains its own handler under whatever it is given.
+/// running for <see cref="RunningPolls"/> reads and complete with <see cref="ExitCode"/> after. A
+/// delegating handler that never delegates, since the Kubernetes client chains its own handler
+/// under whatever it is given.
 /// </summary>
 public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
 {
     private bool _deleted;
+    private int _polls;
 
     public IList<string> Calls { get; } = [];
 
@@ -29,6 +31,12 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
     /// <summary>The run's input directory as it was when the Job was created, by file name.</summary>
     public IDictionary<string, byte[]> InputAtCreate { get; } =
         new Dictionary<string, byte[]>(StringComparer.Ordinal);
+
+    /// <summary>How many reads of the Job answer it as still running before it reports <see cref="Condition"/>.</summary>
+    public int RunningPolls { get; set; }
+
+    /// <summary>Called on each read of the Job with its count from 1, before the answer: the sandbox's writes while it runs.</summary>
+    public Func<int, Task>? OnPoll { get; set; }
 
     /// <summary>The Job's condition: Complete, or Failed with a reason such as DeadlineExceeded.</summary>
     public (string Type, string? Reason) Condition { get; set; } = ("Complete", null);
@@ -68,7 +76,12 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
             request.Method == HttpMethod.Get
             && string.Equals(resource[^2], "jobs", StringComparison.Ordinal)
         )
-            return Json(HttpStatusCode.OK, JobJson());
+        {
+            var poll = Interlocked.Increment(ref _polls);
+            if (OnPoll is { } onPoll)
+                await onPoll(poll).ConfigureAwait(false);
+            return Json(HttpStatusCode.OK, poll <= RunningPolls ? RunningJson() : JobJson());
+        }
 
         if (request.Method == HttpMethod.Delete)
         {
@@ -116,6 +129,9 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
         var reason = Condition.Reason is null ? "" : $",\"reason\":\"{Condition.Reason}\"";
         return $"{{\"kind\":\"Job\",\"apiVersion\":\"batch/v1\",\"metadata\":{{\"name\":\"x\"}},\"status\":{{\"conditions\":[{{\"type\":\"{Condition.Type}\",\"status\":\"True\"{reason}}}]}}}}";
     }
+
+    private static string RunningJson() =>
+        "{\"kind\":\"Job\",\"apiVersion\":\"batch/v1\",\"metadata\":{\"name\":\"x\"},\"status\":{\"active\":1}}";
 
     private string PodsJson()
     {

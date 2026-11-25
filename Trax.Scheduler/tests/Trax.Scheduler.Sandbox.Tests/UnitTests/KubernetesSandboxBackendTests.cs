@@ -1,6 +1,8 @@
+using System.Globalization;
 using k8s;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Scheduler.Sandbox.Launcher.Backends;
+using Trax.Scheduler.Sandbox.Launcher.Configuration;
 using Trax.Scheduler.Sandbox.Tests.Fakes;
 using Trax.Scheduler.Services.Sandbox;
 
@@ -24,20 +26,31 @@ public class KubernetesSandboxBackendTests
     private const string Adr =
         "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md";
     private const string RunId = "0123456789abcdef0123456789abcdef";
+    private const int DiskMiB = 8;
     private static readonly byte[] Request = "{\"train\":\"t\"}"u8.ToArray();
     private string _runs = "";
+    private ShiftedClock _clock = new();
 
     [SetUp]
-    public void SetUp() => _runs = Directory.CreateTempSubdirectory("trax-sbx-runs-").FullName;
+    public void SetUp()
+    {
+        _runs = Directory.CreateTempSubdirectory("trax-sbx-runs-").FullName;
+        _clock = new ShiftedClock();
+    }
 
     [TearDown]
     public void TearDown() => Directory.Delete(_runs, recursive: true);
 
-    private async Task<SandboxExecution> RunAsync(FakeKubernetes api)
+    private async Task<SandboxExecution> RunAsync(
+        FakeKubernetes api,
+        Action<SandboxLauncherOptions>? configure = null,
+        CancellationToken ct = default
+    )
     {
         var options = LauncherOptions.Kubernetes();
         options.Kubernetes.RunsPath = _runs;
         options.Kubernetes.PollInterval = TimeSpan.FromMilliseconds(10);
+        configure?.Invoke(options);
         using var client = new Kubernetes(
             new KubernetesClientConfiguration { Host = "http://cluster" },
             api
@@ -45,19 +58,39 @@ public class KubernetesSandboxBackendTests
         var backend = new KubernetesSandboxBackend(
             client,
             options,
-            TimeProvider.System,
+            _clock,
             NullLogger<KubernetesSandboxBackend>.Instance
         );
         var job = new SandboxJob(
             RunId,
             options.Profiles["escape"],
-            new SandboxLimits(500, 192, 8, 30),
+            new SandboxLimits(500, 192, DiskMiB, 30),
             new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
                 [SandboxPaths.RequestFile] = Request,
             }
         );
-        return await backend.RunAsync(job, CancellationToken.None).ConfigureAwait(false);
+        return await backend.RunAsync(job, ct).ConfigureAwait(false);
+    }
+
+    private string OutputOf(string path) => Path.Combine(_runs, RunId, SandboxPaths.Output, path);
+
+    private static async Task WriteAsync(string file, long bytes)
+    {
+        Directory.CreateDirectory(
+            Path.GetDirectoryName(file) ?? throw new ArgumentException("no directory", nameof(file))
+        );
+        await File.WriteAllBytesAsync(file, new byte[bytes]).ConfigureAwait(false);
+    }
+
+    private void KilledAndRemoved(FakeKubernetes api)
+    {
+        api.Calls.Should()
+            .Contain(
+                c => c.StartsWith("DELETE ", StringComparison.Ordinal),
+                "a run the launcher gives up on is deleted"
+            );
+        Directory.Exists(Path.Combine(_runs, RunId)).Should().BeFalse("its directory goes too");
     }
 
     [Test]
@@ -137,5 +170,98 @@ public class KubernetesSandboxBackendTests
         var execution = await RunAsync(api);
 
         execution.OutputRefused.Should().Contain("symbolic link");
+    }
+
+    [Test]
+    public async Task RunAsync_OutputPastItsDiskWhileRunning_IsKilled()
+    {
+        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
+        api.OnPoll = async poll =>
+        {
+            if (poll == 1)
+                await WriteAsync(OutputOf("files/big"), (DiskMiB + 1) * 1024L * 1024)
+                    .ConfigureAwait(false);
+        };
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.DiskExceeded, Adr);
+        execution.Output.Should().BeEmpty("a killed run hands nothing back");
+        KilledAndRemoved(api);
+    }
+
+    [Test]
+    public async Task RunAsync_OutputWithinItsDisk_RunsToTheEnd()
+    {
+        var api = new FakeKubernetes(_runs) { RunningPolls = 3 };
+        api.OnPoll = async poll =>
+        {
+            if (poll == 1)
+                await WriteAsync(OutputOf("files/big"), (DiskMiB - 1) * 1024L * 1024)
+                    .ConfigureAwait(false);
+        };
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.Exited, "the disk is counted in MiB");
+        execution.Output.Select(f => f.Path).Should().Equal("files/big");
+    }
+
+    [Test]
+    public async Task RunAsync_TooManyEntriesWhileRunning_IsKilled()
+    {
+        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
+        api.OnPoll = async poll =>
+        {
+            if (poll == 1)
+                for (var i = 0; i < 20; i++)
+                    await WriteAsync(
+                            OutputOf("files/" + i.ToString(CultureInfo.InvariantCulture)),
+                            0
+                        )
+                        .ConfigureAwait(false);
+        };
+
+        var execution = await RunAsync(api, o => o.Caps.MaxArchiveFiles = 10);
+
+        execution.End.Should().Be(SandboxEnd.TooManyEntries, Adr);
+        KilledAndRemoved(api);
+    }
+
+    [Test]
+    public async Task RunAsync_AJobThatNeverStarts_IsGivenUpOn()
+    {
+        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
+        api.OnPoll = poll =>
+        {
+            if (poll == 2)
+                _clock.Shift = KubernetesSandboxBackend.StartGrace + TimeSpan.FromHours(2);
+            return Task.CompletedTask;
+        };
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.Failed);
+        execution.Detail.Should().Be("the Job did not start in time");
+        KilledAndRemoved(api);
+    }
+
+    [Test]
+    public async Task RunAsync_CallerGivesUp_StillDeletesTheJobAndTheDirectory()
+    {
+        using var cancel = new CancellationTokenSource();
+        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
+        api.OnPoll = async poll =>
+        {
+            if (poll == 1)
+                await cancel.CancelAsync().ConfigureAwait(false);
+        };
+
+        await FluentActions
+            .Awaiting(() => RunAsync(api, ct: cancel.Token))
+            .Should()
+            .ThrowAsync<OperationCanceledException>();
+
+        KilledAndRemoved(api);
     }
 }
