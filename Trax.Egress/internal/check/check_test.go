@@ -3,7 +3,10 @@ package check
 import (
 	"bytes"
 	"context"
+	"net"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/allow"
@@ -87,6 +90,25 @@ func TestParseDeny(t *testing.T) {
 	for _, bad := range []string{"203.0.113.9", ":80", "host:0", "host:x"} {
 		if _, err := ParseDeny(bad); err == nil {
 			t.Errorf("%q was accepted", bad)
+		}
+	}
+}
+
+func TestTheControlCountsAResetAsIntercepted(t *testing.T) {
+	cases := map[string]struct {
+		err  error
+		want string
+	}{
+		"connected":    {nil, Intercepted},
+		"reset":        {&net.OpError{Op: "dial", Err: os.NewSyscallError("connect", syscall.ECONNRESET)}, Intercepted},
+		"timeout":      {context.DeadlineExceeded, "not " + Intercepted},
+		"refused":      {&net.OpError{Op: "dial", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}, "not " + Intercepted},
+		"unreachable":  {&net.OpError{Op: "dial", Err: os.NewSyscallError("connect", syscall.ENETUNREACH)}, "not " + Intercepted},
+		"host unreach": {&net.OpError{Op: "dial", Err: os.NewSyscallError("connect", syscall.EHOSTUNREACH)}, "not " + Intercepted},
+	}
+	for name, c := range cases {
+		if got := Control(c.err); !strings.HasPrefix(got, c.want) || (c.want == Intercepted && got != c.want) {
+			t.Errorf("%s: got %q, want %q", name, got, c.want)
 		}
 	}
 }

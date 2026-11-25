@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/allow"
@@ -67,11 +68,10 @@ func Probes(list allow.List, deny []string) []Probe {
 	// running behind the egress, and every "blocked" it reported would mean nothing.
 	probes = append(probes, Probe{"control", "192.0.2.1:9", Intercepted, func(ctx context.Context) string {
 		c, err := dialTimeout(ctx, "tcp4", "192.0.2.1:9", 3*time.Second)
-		if err != nil {
-			return "not " + Intercepted
+		if c != nil {
+			c.Close()
 		}
-		c.Close()
-		return Intercepted
+		return Control(err)
 	}})
 	for _, e := range list.Entries {
 		e := e
@@ -258,4 +258,17 @@ func nft(ctx context.Context, args ...string) string {
 		return Blocked
 	}
 	return Open
+}
+
+// Control reads the control probe's dial. A connection that completed was intercepted, and so was one reset: a reset
+// comes only after the handshake, and the proxy accepts and resets what it refuses, so on a fast loopback the reset
+// can reach the socket before the dial has looked at it (seen on podman 4.9, where Go's connect then reports
+// ECONNRESET). Anything else (a timeout, an unreachable network, a refusal) means nothing answered for the
+// address, so the check is not behind the egress.
+func Control(err error) string {
+	if err == nil || errors.Is(err, syscall.ECONNRESET) {
+		return Intercepted
+	}
+	// The error is kept in the line, so a failure says what the dial met.
+	return "not " + Intercepted + " (" + err.Error() + ")"
 }
