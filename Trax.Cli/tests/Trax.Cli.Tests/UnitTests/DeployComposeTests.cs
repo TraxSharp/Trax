@@ -863,6 +863,14 @@ public partial class DeployComposeTests
         "*service 'migrate'*"
     )]
     [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "drain": { "project": "Orders/Orders.csproj" } } }""",
+        "*service 'drain'*not be database, rabbitmq, migrate, drain or resume*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "resume": { "project": "Orders/Orders.csproj" } } }""",
+        "*service 'resume'*"
+    )]
+    [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Nope/Nope.csproj" } } }""",
         "*'Nope/Nope.csproj'*does not exist*"
     )]

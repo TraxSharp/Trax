@@ -253,6 +253,19 @@ internal sealed partial class DeployFile
                 );
     }
 
+    /// <summary>
+    /// The names a deployment gives its own services, one-shots and Jobs, so no app service may take them: a second
+    /// compose service, podman file or Job label of the same name would collide.
+    /// </summary>
+    private static readonly string[] ReservedNames =
+    [
+        Kubernetes.KubernetesTarget.Database,
+        Kubernetes.KubernetesTarget.Broker,
+        Kubernetes.KubernetesTarget.MigrateName,
+        Kubernetes.KubernetesTarget.DrainName,
+        Kubernetes.KubernetesTarget.ResumeName,
+    ];
+
     private void CheckServices(string path)
     {
         string Problem(string what) => $"{path}: {what}";
@@ -263,11 +276,12 @@ internal sealed partial class DeployFile
         var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
         {
-            if (!Name.IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
+            if (!Name.IsMatch(name) || ReservedNames.Contains(name, StringComparer.Ordinal))
                 throw new InvalidOperationException(
                     Problem(
                         $"service '{name}' must be lower case, start with a letter, hold only letters, digits and "
-                            + "dashes, and not be database, rabbitmq or migrate, which the deployment uses itself."
+                            + $"dashes, and not be {string.Join(", ", ReservedNames[..^1])} or {ReservedNames[^1]}, "
+                            + "which the deployment uses itself."
                     )
                 );
             if (!File.Exists(Path.Combine(dir, service.Project)))
